@@ -1,0 +1,65 @@
+= FencedLock
+[[lock]]
+
+NOTE: `FencedLock` is a member of CP Subsystem API.
+For detailed information, see the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] chapter.
+
+`FencedLock` is a linearizable and distributed implementation of
+`java.util.concurrent.locks.Lock`, meaning that if you lock using a `FencedLock`,
+the critical section that it guards is guaranteed to be executed by only one thread
+in the entire cluster. Even though locks are great for synchronization, they can lead
+to problems if not used properly. Also note that Hazelcast Lock does not support fairness.
+
+NOTE: For detailed information and configuration, see the xref:cp-subsystem:fencedlock.adoc[FencedLock section]
+under the CP Subsystem chapter.
+
+[[using-try-catch-blocks-with-locks]]
+== Using Try-Catch Blocks with Locks
+
+Always use locks with *try*-*catch* blocks. This ensures that locks are
+released if an exception is thrown from
+the code in a critical section. Also note that the `lock` method is outside
+the *try*-*catch* block because we do not want to unlock
+if the lock operation itself fails.
+
+[source,java]
+----
+include::ROOT:example$/dds/lock/ExampleLock.java[tag=lock]
+----
+
+[[releasing-locks-with-trylock-timeout]]
+== Releasing Locks with tryLock Timeout
+
+If a lock is not released in the cluster, another thread that is trying to get the
+lock can wait forever. To avoid this, use `tryLock` with a timeout value. You can
+set a high value (normally it should not take that long) for `tryLock`.
+You can check the return value of `tryLock` as follows:
+
+[source,java]
+----
+if ( lock.tryLock ( 10, TimeUnit.SECONDS ) ) {
+  try {
+    // do some stuff here..
+  } finally {
+    lock.unlock();
+  }
+} else {
+  // warning
+}
+----
+
+[[understanding-lock-behavior]]
+== Understanding Lock Behavior
+
+* Locks are fail-safe. If a member holds a lock and some other members go down,
+the cluster will keep your locks safe and available.
+Moreover, when a member leaves the cluster, all the locks acquired by that
+dead member will be removed so that those
+locks are immediately available for live members.
+* Locks are not automatically removed. If a lock is not used anymore, Hazelcast
+does not automatically perform garbage collection in the lock.
+This can lead to an `OutOfMemoryError`. If you create locks on the fly,
+make sure they are destroyed.
+* Locks are re-entrant. The same thread can lock multiple times on the same lock.
+Note that for other threads to be able to require this lock, the owner of the lock
+must call `unlock` as many times as the owner called `lock`.

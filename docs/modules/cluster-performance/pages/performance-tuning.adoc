@@ -1,0 +1,650 @@
+= Performance Tuning
+
+To achieve a good performance in your Hazelcast deployment, it is crucial to tune your
+production environment. This section provides guidelines for tuning the performance.
+Of course, we also recommend to run performance and stress tests to evaluate the application performance.
+
+== Operating System Tuning
+
+=== Disabling Transparent Huge Pages (THP)
+
+Transparent Huge Pages (THP) is the Linux Memory Management
+feature which aims to improve the application performance by
+using the larger memory pages. In most of the cases it works fine
+but for databases and in-memory data grids it usually causes a significant performance drop.
+Since it's enabled on most of the Linux distributions, we do recommend disabling
+it when you run Hazelcast.
+
+Use the following command to check if it's enabled:
+
+```
+cat /sys/kernel/mm/transparent_hugepage/enabled
+cat /sys/kernel/mm/transparent_hugepage/defrag
+
+```
+
+Or an alternative command if you run RHEL:
+
+```
+cat /sys/kernel/mm/redhat_transparent_hugepage/enabled
+cat /sys/kernel/mm/redhat_transparent_hugepage/defrag
+```
+
+To disable it permanently, please see the corresponding documentation
+for the Linux distribution that you use. Here is an example of the instructions
+for RHEL: https://access.redhat.com/solutions/46111.
+
+=== Disabling Swap Usage
+
+Swapping behavior can be configured by setting the kernel parameter
+(`/proc/sys/vm/swappiness`) and can be turned off completely by executing
+`swapoff -a` as the root user in Linux systems. We highly recommend turning
+off the swapping on the machines that run Hazelcast. When your operating systems
+start swapping, garbage collection activities take much longer due to the low speed of disc access.
+
+The Linux kernel parameter, `vm.swappiness`, is a value from 0-100 that controls
+the swapping of application data from physical memory to virtual memory on disk.
+To prevent Linux kernel to start swapping memory to disk way too early,
+we need to set the default of 60 to value between 0 and 10.
+The higher the parameter value, the more aggressively inactive processes are
+swapped out from physical memory. The lower the value, the less they are swapped,
+forcing filesystem buffers to be emptied. In case swapping needs to be kept enabled,
+we recommend setting the value between 0 and 10 to prevent the Linux kernel
+to start swapping memory to disk way too early.
+
+```
+sudo sysctl vm.swappiness=10
+```
+
+== Network Tuning
+
+=== Dedicated Network Interface Controller for Hazelcast Members
+
+Provisioning a dedicated physical network interface controller (NIC) for
+Hazelcast members ensures smooth flow of data, including business
+data and cluster health checks, across servers. Sharing network interfaces
+between a Hazelcast member and another application could result in choking the port,
+thus causing unpredictable cluster behavior.
+
+=== TCP Buffer Size
+
+TCP uses a congestion window to determine how many packets it
+can send at one time; the larger the congestion window, the higher the throughput.
+The maximum congestion window is related to the amount of buffer
+space that the kernel allocates for each socket. For each socket,
+there is a default value for the buffer size, which you can change by using
+a system library call just before opening the socket. You can adjust
+the buffer sizes for both the receiving and sending sides of a socket.
+
+To achieve maximum throughput, it is critical to use the optimal TCP
+socket buffer sizes for the links you are using to transmit data.
+If the buffers are too small, the TCP congestion window will never open up fully,
+therefore throttling the sender. If the buffers are too large,
+the sender can overrun the receiver such that the sending host is
+faster than the receiving host, which causes the receiver to drop packets
+and the TCP congestion window to shut down.
+
+Hazelcast, by default, configures I/O buffers to 128KB; you can change these
+using the following properties:
+
+* `hazelcast.socket.receive.buffer.size`
+* `hazelcast.socket.send.buffer.size`
+
+Typically, you can determing the throughput by the following formulae: 
+
+* Transaction per second = buffer size / latency
+* Buffer size = Round trip time * network bandwidth
+
+To increase the TCP maximum buffer size in Linux, use the following properties:
+
+* `net.core.rmem.max`
+* `net.core.wmem.max`
+
+To increase TCP auto-tuning by Linux, see the following properties:
+
+* `net.ipv4.tcp.rmem`
+* `net.ipv4.tcp.wmem`
+
+== Virtual Machine Tuning
+
+=== Garbage Collection
+
+Keeping track of garbage collection (GC) statistics is vital to optimum performance,
+especially if you run the JVM with large heap sizes. Tuning the garbage collector
+for your use case is often a critical performance practice prior to deployment.
+Likewise, knowing what baseline GC behavior looks like and
+monitoring for behavior outside of normal tolerances will keep you aware of
+potential memory leaks and other pathological memory usage.
+
+=== Minimize Heap Usage
+
+The best way to minimize the performance impact of GC
+is to keep heap usage small. Maintaining a small heap saves countless
+hours of GC tuning and provides improved stability
+and predictability across your entire application.
+Even if your application uses very large amounts of data, you can still keep
+your heap small by using Hazelcast's High-Density Memory Store.
+Some common off-the-shelf GC tuning parameters for Hotspot and OpenJDK are as follows:
+
+```
+-XX:+UseParallelOldGC
+-XX:+UseParallelGC
+-XX:+UseCompressedOops
+```
+
+To enable GC logging, use the following JVM arguments for Java 8:
+
+```
+-verbose:gc
+-Xloggc:gc.log
+-XX:NumberOfGCLogFiles=10
+-XX:GCLogFileSize=10M
+-XX:+UseGCLogFileRotation
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-XX:+PrintTenuringDistribution
+-XX:+PrintGCApplicationConcurrentTime
+-XX:+PrintGCApplicationStoppedTime
+```
+
+The above arguments only work for Java 8. For Java 9+, you can use the following arguments:
+
+```
+-Xlog:safepoint,gc+age=debug,gc*=debug:file=gc.log:uptime,level,tags:filesize=10m,filecount=10
+```
+
+=== Azul Zing® and Zulu® Support
+
+Azul Systems, the industry’s only company exclusively focused on
+Java and the Java Virtual Machine (JVM), builds fully supported,
+certified standards-compliant Java runtime solutions that help
+enabling real-time business. Zing is a JVM designed for enterprise
+Java applications and workloads that require any combination of low
+latency, high transaction rates, large working memory, and/or consistent
+response times. Zulu and Zulu Enterprise are Azul’s certified, freely available
+open source builds of OpenJDK with a variety of flexible support options,
+available in configurations for the enterprise as well as custom and embedded systems. 
+Azul Zing is certified and supported in Hazelcast Enterprise. When deployed with Zing,
+Hazelcast gains performance, capacity, and operational efficiency within the same infrastructure.
+Additionally, you can directly use Hazelcast with Zulu without making any changes to your code.
+
+== Query Tuning
+
+=== Indexes for Queried Fields
+
+For queries on fields with ranges, you can use an ordered index.
+Hazelcast, by default, caches the deserialized form of the object under
+query in the memory when inserted into an index. This removes the overhead
+of object deserialization per query, at the cost of increased heap usage.
+??? Provide a link ???
+
+=== Composite Indexes
+
+Composite indexes are built on top of multiple map entry
+attributes; thus, increase the performance of complex queries significantly
+when used correctly.
+??? Provide a link ???
+
+=== Parallel Query Evaluation & Query Thread Pool
+
+Setting the `hazelcast.query.predicate.parallel.evaluation` property
+to `true` can speed up queries when using slow predicates or when there are huge
+amount of entries per member.
+
+If you're using queries heavily, you can benefit from increasing query thread pools.
+??? Provide link to the query thread pool content ???
+
+=== In-Memory Format for Queries
+
+Setting the queried entries' in-memory format to `OBJECT` forces the objects
+to be always kept in object format, resulting in faster access for queries, but also in
+higher heap usage. It will also incur an object serialization step on every remote get operation.
+??? Provide links to in-memory format content ???
+
+=== Portable Interface on Queried Objects
+
+The Portable interface allows individual fields to be accessed without
+the overhead of deserialization or reflection and supports query and
+indexing support without full-object deserialization.
+??? Provide links to https://hazelcast.com/blog/for-faster-hazelcast-queries/[Hazelcast Blog] and Portable serialization content ???
+
+== Serialization Tuning
+
+Hazelcast supports a range of object serialization mechanisms,
+each with their own costs and benefits. Choosing the best serialization
+scheme for your data and access patterns can greatly increase the performance
+of your cluster. Here is an at-a-glance summary:
+
+**java.io.Serializable**
+
+Benefits:
+
+* Standard Java
+* Does not require custom serialization implementation
+
+Costs:
+
+* Not as memory- or CPU-efficient as other options
+
+**java.io.Externalizable**
+
+Benefits over standard Java serialization:
+
+* Allows client-provided implementation
+
+Benefits:
+
+* Standard Java
+* More memory- and CPU-efficient than built-in Java serialization
+
+Costs:
+
+* Requires a custom serialization implementation
+
+**com.hazelcast.nio.serialization.DataSerializable**
+
+This is an optimization over standard Java Serialization
+which doesn’t store class metadata.
+
+Benefits:
+
+* More memory- and CPU-efficient than built-in Java serialization
+
+Costs:
+
+* Not standard Java
+* Requires a custom serialization implementation
+* Uses reflection
+
+**com.hazelcast.nio.serialization.IdentifiedDataSerializable**
+
+This is an optimization over standard Java Serialization
+which doesn’t use reflection.
+
+Benefits:
+
+* Can help manage object schema changes by making object instantiation
+into the new schema from the older version's instance explicit
+* More memory-efficient than built-in Java serialization, more CPU-efficient than `DataSerializable`
+
+Costs:
+
+* Not standard Java
+* Requires a custom serialization implementation
+* Requires configuration and implementation of a factory method
+
+**com.hazelcast.nio.serialization.Portable**
+
+This is an optimization over other serialization schemes
+which supports partial deserialization during queries.
+
+Benefits:
+
+* More CPU-efficient than other serialization schemes in cases where you don’t need access to the entire object
+* Doesn't use reflection
+* Supports versioning
+
+Costs:
+
+* Not standard Java
+* Requires a custom serialization implementation
+* Requires implementation of factory and class definition
+* Class definition (metadata) is sent with object data, but only once per class
+
+
+**Pluggable serialization libraries, e.g., Kryo**
+
+Benefits:
+
+* Convenient and flexible
+* Can be stream or byte-array based
+
+Costs:
+
+* Often requires serialization implementation
+* Requires plugin configuration. Sometimes requires class annotations
+
+[[serialization-opt-recommendations]]
+=== Serialization Optimization Recommendations
+
+* Use `IMap.set()` on maps instead of `IMap.put()` if you don’t
+need the old value. This eliminates unnecessary deserialization of the old value.
+* Set `use-native-byte-order` and `allow-unsafe` to `true` in Hazelcast's serialization configuration.
+Setting these properties to `true` enables fast copy of primitive
+arrays like `byte[]`, `long[]`, etc., in your object.
+* Compression is supported only by `Serializable` and
+`Externalizable`. It has not been applied to other serializable methods
+because it is much slower (around three orders of magnitude slower than
+not using compression) and consumes a lot of CPU. However, it can
+reduce binary object size by an order of magnitude.
+* When `enable-shared-object` is set to `true`, the Java serializer will
+back-reference an object pointing to a previously serialized instance.
+If set to `false`, every instance is considered unique and copied separately
+even if they point to the same instance. The default configuration is false.
+??? Provide link to the serialization conf wrap-up content ???
+
+[[exec-svc-opt]]
+== Compute Tuning
+
+Hazelcast executor service is an extension of Java’s built-in executor service
+that allows distributed execution and control of tasks. There are a number of
+options for Hazelcast executor service that have an impact on performance as summarized below.
+
+=== Number of Threads
+
+An executor queue may be configured to have a specific number of
+threads dedicated to executing enqueued tasks. Set the number of
+threads (`pool-size` property in the executor service configuration)
+appropriate to the number of cores available for execution.
+Too few threads will reduce parallelism, leaving cores idle, while too
+many threads will cause context switching overhead.
+??? Provide link to the executor service conf content ???
+
+=== Bounded Execution Queue
+
+An executor queue may be configured to have a maximum number
+of tasks (`queue-capacity` property in the executor service configuration).
+Setting a bound on the number of enqueued tasks
+will put explicit back pressure on enqueuing clients by throwing
+an exception when the queue is full. This will avoid the overhead
+of enqueuing a task only for it to be canceled because its execution
+takes too long. It will also allow enqueuing clients to take corrective
+action rather than blindly filling up work queues with tasks faster than they can be executed.
+??? Provide link to the executor service conf content ???
+
+=== Avoid Blocking Operations in Tasks
+
+Any time spent blocking or waiting in a running task is thread
+execution time wasted while other tasks wait in the queue.
+Tasks should be written such that they perform no potentially
+blocking operations (e.g., network or disk I/O) in their `run()` or `call()` methods.
+
+=== Locality of Reference
+
+By default, tasks may be executed on any member. Ideally, however,
+tasks should be executed on the same machine that contains
+the data the task requires to avoid the overhead of moving remote data to
+the local execution context. Hazelcast executor service provides a number of
+mechanisms for optimizing locality of reference.
+
+* Send tasks to a specific member: using `ExecutorService.executeOnMember()`,
+you may direct execution of a task to a particular member
+* Send tasks to a key owner: if you know a task needs to operate on a
+particular map key, you may direct execution of that task to the member
+that owns that key
+* Send tasks to all or a subset of members: if, for example, you need to operate
+on all the keys in a map, you may send tasks to all members such that each task
+operates on the local subset of keys, then return the local result for
+further processing
+
+=== Scaling Executor Services
+
+If you find that your work queues consistently reach their maximum
+and you have already optimized the number of threads and locality
+of reference, and removed any unnecessary blocking operations in your tasks,
+you may first try to scale up the hardware of the overburdened members
+by adding cores and, if necessary, more memory.
+
+When you have reached diminishing returns on scaling up
+(such that the cost of upgrading a machine outweighs the benefits of the upgrade),
+you can scale out by adding more members to your cluster.
+The distributed nature of Hazelcast is perfectly suited to scaling out,
+and you may find in many cases that it is as easy as just configuring and
+deploying additional virtual or physical hardware.
+
+=== Executor Services Guarantees
+
+In addition to the regular distributed executor service,
+Hazelcast also offers durable and scheduled executor services.
+Note that when a member failure occurs, durable and scheduled executor
+services come with "at least once execution of a task" guarantee,
+while the regular distributed executor service has none.
+??? Provide links to those executor services ???
+
+=== Work Queue Is Not Partitioned
+
+Each member-specific executor will have its own private work-queue.
+Once a job is placed on that queue, it will not be taken by another member.
+This may lead to a condition where one member has a lot of unprocessed
+work while another is idle. This could be the result of an application
+call such as the following:
+
+```
+for(;;){
+   iexecutorservice.submitToMember(mytask, member)
+}
+```
+
+This could also be the result of an imbalance caused by the application,
+such as in the following scenario: all products by a particular manufacturer
+are kept in one partition. When a new, very popular product gets released
+by that manufacturer, the resulting load puts a huge pressure on that
+single partition while others remain idle.
+
+=== Work Queue Has Unbounded Capacity by Default
+
+This can lead to `OutOfMemoryError` because the number of queued tasks
+can grow without bounds. This can be solved by setting the `queue-capacity` property
+in the executor service configuration. If a new task is submitted while the queue
+is full, the call will not block, but will immediately throw a
+`RejectedExecutionException` that the application must handle.
+
+=== No Load Balancing
+
+There is currently no load balancing available for tasks that can run
+on any member. If load balancing is needed, it may be done by creating an
+executor service proxy that wraps the one returned by Hazelcast.
+Using the members from the `ClusterService` or member information from
+`SPI:MembershipAwareService`, it could route "free" tasks to a specific member based on load.
+
+=== Destroying Executors
+
+An executor service must be shut down with care because it will
+shut down all corresponding executors in every member and subsequent
+calls to proxy will result in a `RejectedExecutionException`.
+When the executor is destroyed and later a `HazelcastInstance.getExecutorService`
+is done with the ID of the destroyed executor, a new executor will be created
+as if the old one never existed.
+
+=== Exceptions in Executors
+
+When a task fails with an exception (or an error), this exception
+will not be logged by Hazelcast by default. This comports with the
+behavior of Java’s thread pool executor service, but it can make debugging difficult.
+There are, however, some easy remedies: either add a try/catch in your runnable and
+log the exception, or wrap the runnable/callable in a proxy that does the logging;
+the last option keeps your code a bit cleaner.
+
+[[client-exec-pool-size]]
+=== Client Executor Pool Size
+
+Hazelcast clients use an internal executor service
+(different from the distributed executor service) to perform some of
+its internal operations. By default, the thread pool for that executor service
+is configured to be the number of cores on the client machine times five; e.g., on a 4-core
+client machine, the internal executor service will have 20 threads.
+In some cases, increasing that thread pool size may increase performance.
+
+??? Provide link to executor pool size content ???
+
+[[ep]]
+=== Entry Processors Performance Tuning
+
+Hazelcast allows you to update the whole or a
+part of map or cache entries in an efficient and a lock-free way using
+entry processors.
+
+By default the entry processor executes on a partition thread. A partition thread is responsible for handling
+one or more partitions. The design of entry processor assumes users have fast user code execution of the `process()` method.
+In the pathological case where the code is very heavy and executes in multi-milliseconds, this may create a bottleneck.
+
+We have a slow user code detector which can be used to log a warning
+controlled by the following system properties:
+
+* `hazelcast.slow.operation.detector.enabled` (default: true)
+* `hazelcast.slow.operation.detector.threshold.millis` (default: 10000)
+
+The defaults catch extremely slow operations but you should set this
+much lower, say to 1ms, at development time to catch entry processors
+that could be problematic in production. These are good candidates for our optimizations.
+
+We have two optimizations:
+
+* `Offloadable` which moves execution off the partition thread to an executor thread
+* `ReadOnly` which means we can avoid taking a lock on the key
+
+These are enabled very simply by implementing these interfaces in your entry processor.
+These optimizations apply to the following map methods only:
+
+* `executeOnKey(Object, EntryProcessor)`
+* `submitToKey(Object, EntryProcessor)`
+* `submitToKey(Object, EntryProcessor, ExecutionCallback)`
+
+??? Provide link to processing map entries ???
+
+[[tls-ssl-perf]]
+== TLS/SSL Tuning
+
+TLS/SSL can have a significant impact on performance. There are a few ways to
+increase the performance.
+
+The first thing that can be done is making sure that AES intrinsics are used.
+Modern CPUs (2010 or newer Westmere) have hardware support for AES encryption/decryption
+and if a Java 8 or newer JVM is
+used, the JIT automatically makes use of these AES intrinsics. They can also be
+explicitly enabled using `-XX:+UseAES -XX:+UseAESIntrinsics`,
+or disabled using `-XX:-UseAES -XX:-UseAESIntrinsics`.
+
+A lot of encryption algorithms make use of padding because they encrypt/decrypt in
+fixed sized blocks. If there is no enough data
+for a block, the algorithm relies on random number generation to pad. Under Linux,
+the JVM automatically makes use of `/dev/random` for
+the generation of random numbers. `/dev/random` relies on entropy to be able to
+generate random numbers. However, if this entropy is
+insufficient to keep up with the rate requiring random numbers, it can slow down
+the encryption/decryption since `/dev/random` will
+block; it could block for minutes waiting for sufficient entropy . This can be fixed
+by setting the `-Djava.security.egd=file:/dev/./urandom` system property.
+For a more permanent solution, modify the
+`<JAVA_HOME>/jre/lib/security/java.security` file, look for the
+`securerandom.source=/dev/urandom` and change it
+to `securerandom.source=file:/dev/./urandom`. Switching to `/dev/urandom` could
+be controversial because `/dev/urandom` will not
+block if there is a shortage of entropy and the returned random values could
+theoretically be vulnerable to a cryptographic attack.
+If this is a concern in your application, use `/dev/random` instead.
+
+Hazelcast's Java smart client automatically makes use of extra I/O threads
+for encryption/decryption and this have a significant impact on the performance.
+This can be changed using the `hazelcast.client.io.input.thread.count` and
+`hazelcast.client.io.output.thread.count` client system properties.
+By default it is 1 input thread and 1 output thread. If TLS/SSL is enabled,
+it defaults to 3 input threads and 3 output threads.
+Having more client I/O threads than members in the cluster does not lead to
+an increased performance. So with a 2-member cluster,
+2 in and 2 out threads give the best performance.
+
+[[partition-count]]
+== Partition Count
+
+Hazelcast's default partition count is 271. This is a good choice for clusters of
+up to 50 members and ~25–30 GB of data. Up to this threshold,
+partitions are small enough that any rebalancing of the partition map
+when members join or leave the cluster doesn’t disturb the smooth operation of the cluster.
+With larger clusters and/or bigger data sets, a larger partition count helps to
+maintain an efficient rebalancing of data across members.
+
+An optimum partition size is between 50MB – 100MB. Therefore,
+when designing the cluster, determine the size of the data that
+will be distributed across all members, and then determine the
+number of partitions such that no partition size exceeds 100MB.
+If the default count of 271 results in heavily loaded partitions,
+increase the partition count to the point where data load per-partition
+is under 100MB. Remember to factor in headroom for projected data growth.
+
+NOTE: If you change the partition count from the default of 271,
+be sure to use a prime number of partitions. This helps minimizing
+the collision of keys across partitions, ensuring more consistent lookup
+times.
+
+NOTE: If you are an Enterprise customer using the High-Density Memory Store
+with large data sizes, we recommend a large increase in partition count, starting with 5009 or higher.
+
+You cannot change the partition count after a cluster is created,
+so if you have a larger cluster, be sure to test and
+set an optimum partition count prior to deployment.
+If you need to change the partition count after a cluster is running,
+you will need to schedule a maintenance window to update the partition count
+and restart the cluster.
+
+=== Parallel Migrations
+
+Hazelcast can migrate the partitions for separate partitions in parallel.
+This significantly reduces the time needed for repartitioning.
+Having parallel migrations does have an impact on the heap memory and network utilization.
+The following properties control the number of parallel migrations/replications on a single member:
+
+* `hazelcast.partition.max.parallel.migrations` - Maximum number of partition migrations to be executed concurrently on a member.
+* `hazelcast.partition.max.parallel.replications` - Maximum number of parallel partition backup replication operations per member.
+
+The default value is 10 for both properties, and this should be fine for most setups.
+Care and consideration should be taken before altering either of these properties.
+Decreasing them will make the total migration time go up, and increasing them will
+create additional heap and network pressure.
+
+[[hd]]
+== High-Density Memory Store
+
+Hazelcast's High-Density Memory Store (HDMS) is an in-memory storage
+option that uses native, off-heap memory to store object data
+instead of the JVM heap. This allows you to keep data in the memory without
+incurring the overhead of garbage collection (GC). HDMS capabilities are supported by
+the map structure, JCache implementation, Near Cache, Hibernate caching, and Web Session replications.
+
+Available to Hazelcast Enterprise customers, HDMS is an ideal solution
+for those who want the performance of in-memory data, need the predictability
+of well-behaved Java memory management, and don’t want to spend time
+and effort on meticulous and fragile GC tuning.
+
+If you use HDMS with large data sizes,
+we recommend a large increase in partition count, starting with 5009 or higher. See the
+<<partition-count, Partition Count section>> above for more information. Also, if you intend
+to pre-load very large amounts of data into memory (tens, hundreds, or thousands of gigabytes),
+be sure to profile the data load time and to take that startup time into account prior to deployment.
+
+See the xref:storage:high-density-memory.adoc[HDMS section] to learn more.
+
+[[many-members]]
+== Clusters with Huge Amount of Members/Clients
+
+Very large clusters of hundreds of members are possible with Hazelcast,
+but stability depends heavily on your network infrastructure and
+ability to monitor and manage those many members. Distributed executions
+in such an environment will be more sensitive to your application's
+handling of execution errors, timeouts, and the optimization of task code.
+
+In general, you get better results with smaller clusters of Hazelcast members
+running on more powerful hardware and a higher number of Hazelcast clients.
+When running large numbers of clients, network stability is still a significant factor
+in overall stability. If you are running in Amazon EC2, hosting clients
+and members in the same zone is beneficial. Using Near Cache on read-mostly
+data sets reduces server load and network overhead. You may also try increasing
+the number of threads in the client executor pool (??? link ????.
+
+[[int-response-queue]]
+== Setting Internal Response Queue Idle Strategies
+
+You can set the response thread for internal operations both on the members and clients.
+By setting the backoff mode on and depending on the use case, you can get a
+5-10% performance improvement. However, this increases the CPU utilization.
+To enable backoff mode please set the following property for Hazelcast cluster members: 
+
+```
+-Dhazelcast.operation.responsequeue.idlestrategy=backoff  
+```
+
+For Hazelcast clients, please use the following property to enable backoff:
+
+```
+-Dhazelcast.client.responsequeue.idlestrategy=backoff
+```

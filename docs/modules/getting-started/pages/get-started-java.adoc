@@ -1,0 +1,297 @@
+= Start a Local Embedded Cluster
+:description: This tutorial introduces you to Hazelcast in an embedded topology. At the end of this tutorial, you'll know how to start a cluster in your Java application and store data in memory.
+:page-box-number: 2
+
+{description}
+
+++++
+<div id="userMap">
+<div class="content"><a href="install-hazelcast.html"><div class="box box1">Install Hazelcast</div></a></div>
+<div class="arrow">↓</div>
+<div class="content"><a href="get-started-binary.html"><div class="box box2">Start a Local Cluster</div></a></div>
+++++
+
+== Before You Begin
+
+To complete this tutorial, you need the following:
+
+[cols="1a,1a"]
+|===
+|Prerequisites|Useful resources
+
+|JDK 8+
+|
+xref:deploy:supported-jvms.adoc[Supported Java Virtual Machines]
+
+xref:deploy:running-in-modular-java.adoc[Using JDK 11+ with Modular Java]
+
+|Add Hazelcast to your project as a dependency
+|xref:install-hazelcast.adoc#use-java[Install Hazelcast for Java]
+|===
+
+== Step 1. Start a Hazelcast Cluster
+
+Hazelcast clusters consist of servers that we call members. These members communicate with each other to form a distributed network. It's these members that store and process your data in memory.
+
+In this step, you use the Java API to start a three-member cluster called `hello-world`.
+
+. Import the dependencies and create an `App` class.
++
+[source,java]
+----
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import java.util.Map;
+
+public class App {
+  public static void main(String[] args) {
+  }
+}
+----
+
+. To start a member in your JVM, create an instance of Hazelcast inside the `main()` method, using the `Hazelcast.newHazelcastInstance()` method.
++
+[source,java]
+----
+Config helloWorldConfig = new Config();
+helloWorldConfig.setClusterName("hello-world");
+
+HazelcastInstance hz = Hazelcast.newHazelcastInstance(helloWorldConfig);
+----
++
+Here, the cluster is configured with the name `hello-world`. A JVM can host multiple Hazelcast members, but each member can be a part of only one cluster.
+
+. To add more members to your `hello-world` cluster, create more instances of Hazelcast with the same configuration object.
++
+[source,java]
+----
+HazelcastInstance hz2 = Hazelcast.newHazelcastInstance(helloWorldConfig);
+HazelcastInstance hz3 = Hazelcast.newHazelcastInstance(helloWorldConfig);
+----
++
+When you run this program, your members will find and connect to each other automatically to form your `hello-world` cluster. You can learn more about how members do this in xref:clusters:discovery-mechanisms.adoc[].
+
+Now, you can use your Hazelcast instances to interact with the Hazelcast API such as by writing data to memory.
+
+== Step 2. Write Data to Memory
+
+Hazelcast has lots of distributed data structures available for writing data to memory on your cluster.
+
+One of the most popular ways of writing data to memory is to use a distributed map.
+
+Maps store key/value pairs called entries, which are replicated and distributed across a cluster.
+
+. Write data to a distributed map called `my-distributed-map`.
++
+[tabs] 
+==== 
+Map API:: 
++ 
+--
+[source,java]
+----
+Map<String, String> map = hz.getMap("my-distributed-map");
+map.put("1", "John");
+map.put("2", "Mary");
+map.put("3", "Jane");
+
+System.out.println(map.get("1"));
+System.out.println(map.get("2"));
+System.out.println(map.get("3"));
+----
+NOTE: The `Map` object is a distributed implementation of a Java map, which extends the standard `java.util.concurrent.ConcurrentMap` interface and hence the `java.util.Map` interface. As a result, Hazelcast maps make it easy for Java developers to perform operations like reading and writing, using the well known `map.get()` and `map.put()` methods.
+--
+SQL:: 
++ 
+--
+To use SQL in embedded mode, you must first do the following:
+
+- Add the `hazelcast-sql` dependency to your project.
+- xref:pipelines:job-security.adoc[Enable the Jet engine].
++
+[source,java]
+----
+JetConfig jetConfig = helloWorldConfig.getJetConfig();
+jetConfig.setEnabled(true);
+HazelcastInstance hz = Hazelcast.newHazelcastInstance(helloWorldConfig);
+----
+
+Then, pass any SQL statement to the SQL engine.
+
+[source,java]
+----
+SqlService sql = hz.getSql();
+String createMappingQuery = "CREATE MAPPING myDistributedMap\n"
+  + "TYPE IMap\n"
+  + "OPTIONS ('keyFormat'='varchar','valueFormat'='varchar')";
+// execute mapping query
+sql.execute(createMappingQuery);
+List<String> insertionQueries = Arrays.asList(
+  "SINK INTO myDistributedMap VALUES('1', 'John')",
+  "SINK INTO myDistributedMap VALUES('2', 'Mary')",
+  "SINK INTO myDistributedMap VALUES('3', 'Jane')"
+);
+// execute insertion queries
+for (String insertionQuery : insertionQueries) {
+  sql.execute(insertionQuery);
+}
+String scanQuery = "SELECT * FROM myDistributedMap";
+// execute the select/scan query and print the resulting rows
+try (SqlResult result = sql.execute(scanQuery)) {
+  int columnCount = result.getRowMetadata().getColumnCount();
+  for (SqlRow row : result) {
+    for (int colIdx = 0; colIdx < columnCount; colIdx++) {
+      System.out.print(row.getObject(colIdx) + " ");
+    }
+    System.out.println();
+  }
+}
+----
+--
+====
+
+. Execute the program.
++
+You should see something like the following in the console:
++
+```
+Members {size:3, ver:3} [
+	Member [192.168.1.164]:5701 - 672970d4-6cc1-48cc-8cfd-f71a1a05f4f6
+	Member [192.168.1.164]:5702 - f996e965-32be-4ad6-a623-5f134d632475 this
+	Member [192.168.1.164]:5703 - 079d8eed-8516-4137-b569-489666170f07
+]
+```
++
+Here, the local IP address of the cluster is 192.168.1.164, and 3 members are running on ports 5701, 5702, and 5703 respectively.
++
+Then, you should see the values in your map:
++
+```
+John
+Mary
+Jane
+```
+
+. Stop the program.
+
+== Complete Code Samples
+
+.Map API
+[source,java]
+----
+package org.example;
+
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+
+import java.util.Map;
+
+public class App {
+  public static void main(String[] args) {
+    Config helloWorldConfig = new Config();
+    helloWorldConfig.setClusterName("hello-world");
+
+    HazelcastInstance hz = Hazelcast.newHazelcastInstance(helloWorldConfig);
+    HazelcastInstance hz2 = Hazelcast.newHazelcastInstance(helloWorldConfig);
+    HazelcastInstance hz3 = Hazelcast.newHazelcastInstance(helloWorldConfig);
+
+    Map<String, String> map = hz.getMap("my-distributed-map");
+    map.put("1", "John");
+    map.put("2", "Mary");
+    map.put("3", "Jane");
+
+    System.out.println(map.size());
+    System.out.println(map.get("1"));
+    System.out.println(map.get("2"));
+    System.out.println(map.get("3"));
+
+  }
+}
+----
+
+.SQL
+[source,java]
+----
+package org.example;
+
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.sql.SqlResult;
+import com.hazelcast.sql.SqlRow;
+import com.hazelcast.sql.SqlService;
+import java.util.Arrays;
+import java.util.List;
+
+public class App {
+  public static void main(String[] args) {
+    Config helloWorldConfig = new Config();
+    helloWorldConfig.setClusterName("hello-world");
+
+    JetConfig jetConfig = helloWorldConfig.getJetConfig();
+    jetConfig.setEnabled(true);
+
+    HazelcastInstance hz = Hazelcast.newHazelcastInstance(helloWorldConfig);
+    HazelcastInstance hz2 = Hazelcast.newHazelcastInstance(helloWorldConfig);
+    HazelcastInstance hz3 = Hazelcast.newHazelcastInstance(helloWorldConfig);
+
+    SqlService sql = hz.getSql();
+
+    String createMappingQuery = "CREATE MAPPING myDistributedMap\n"
+            + "TYPE IMap\n"
+            + "OPTIONS ('keyFormat'='varchar','valueFormat'='varchar')";
+    sql.execute(createMappingQuery);
+
+    List<String> insertionQueries = Arrays.asList(
+            "SINK INTO myDistributedMap VALUES('1', 'John')",
+            "SINK INTO myDistributedMap VALUES('2', 'Mary')",
+            "SINK INTO myDistributedMap VALUES('3', 'Jane')"
+    );
+    for (String insertionQuery : insertionQueries) {
+        sql.execute(insertionQuery);
+    }
+
+    String scanQuery = "SELECT * FROM myDistributedMap";
+    try (SqlResult result = sql.execute(scanQuery)) {
+        int columnCount = result.getRowMetadata().getColumnCount();
+        for (SqlRow row : result) {
+            for (int colIdx = 0; colIdx < columnCount; colIdx++) {
+                System.out.print(row.getObject(colIdx) + " ");
+            }
+            System.out.println();
+        }
+    }
+  }
+}
+----
+
+TIP: For more code samples, see this link:https://github.com/hazelcast/hazelcast-code-samples[Hazelcast GitHub repository].
+
+== Next Steps
+
+Now that you have a local cluster, you can continue your journey with the following tutorials:
+
+- xref:query:get-started-sql.adoc[Get started with SQL] by learning how to query data in your cluster.
+
+- xref:pipelines:stream-processing-embedded.adoc[Get started with Data Processing] by learning how to use the Java Jet API.
+
+If you just want to go straight into deploying a production-ready cluster, see our xref:ROOT:production-checklist.adoc[production checklist].
+
+Explore the tools Hazelcast offers for the following use cases:
+
+- xref:cache:overview.adoc[Caching data]
+- xref:computing:distributed-computing.adoc[Distributed computing]
+- xref:query:overview.adoc[Distributed queries]
+- xref:ingest:overview.adoc[Ingesting data]
+
+Or, if you're interested in learning more about topics that we introduced in this tutorial, see the following resources:
+
+- xref:clients:java.adoc[]
+
+- Get detailed information about maps and other xref:data-structures:distributed-data-structures.adoc[data structures].
+
+- Learn more about how to use the xref:management-center:ROOT:index.adoc[Management Center].
+
+- Learn how Hazelcast can xref:network-partitioning:network-partitioning.adoc[handle network partitions] with a feature called split-brain protection.

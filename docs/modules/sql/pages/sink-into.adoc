@@ -1,0 +1,97 @@
+= INSERT INTO/SINK INTO
+:description: The INSERT INTO/SINK INTO statements write data to storage systems that are connected to Hazelcast through mappings.
+
+The `INSERT INTO/SINK INTO` statements write data to storage systems that are connected to Hazelcast through mappings.
+
+NOTE: When you submit a standard INSERT INTO/SINK INTO statement, its lifecycle is tied to the SQL client session. If the SQL client disconnects, the statement is canceled. To run these statements independently, use the xref:create-job.adoc[`CREATE JOB` statement].
+
+== Syntax Summary
+
+This code block is a quick reference with all the <<parameters, parameters>> that you can use with the `INSERT INTO/SINK INTO` statements.
+
+[source,sql]
+----
+[ INSERT | SINK ] INTO [schema_name.]table_name[(column_name [, ...])]
+{ SELECT ... | VALUES(expression, [, ...]) [, ...] }
+----
+
+== Parameters
+
+The `INSERT INTO/SINK INTO` statements accept the following parameters.
+
+[cols="1a,2a,1a"]
+|===
+|Parameter | Description | Example
+
+|table_name
+|The name of the table to write data to.
+|<<overwrite-data-in-an-map, Overwrite Data in a Map>>
+
+|===
+
+== Difference between INSERT INTO and SINK INTO
+
+The `INSERT INTO` statement works as defined by the SQL standard. This statement is append-only, meaning that you cannot overwrite existing data. For example, you cannot insert a duplicate key to a map.
+
+The `SINK INTO` statement is a custom query whose behavior depends on the underlying connector. For example, when writing to a map, the value associated with the key is overwritten, and one key can be overwritten multiple times.
+
+== Examples
+
+This section lists some example SQL queries that show you how to use the `INSERT INTO/SINK INTO` statements.
+
+=== Add Entries to a Map
+
+To add entries to an existing map, it must not be empty and each member must have at least one local entry. If you want to add entries to an empty map or create a mapping to a new map, use the xref:create-mapping.adoc[`CREATE MAPPING` statement].
+
+[source,sql]
+----
+CREATE MAPPING myMap (name varchar EXTERNAL NAME "__key", age INT EXTERNAL NAME "this") TYPE IMap OPTIONS ('keyFormat'='varchar','valueFormat'='int');
+----
+
+```
+OK
+```
+
+[source,sql]
+----
+SELECT * FROM myMap;
+----
+
+```
++--------------------+------------+
+|name                |         age|
++--------------------+------------+
++--------------------+------------+
+```
+
+Use the `INSERT INTO` statement to add an entry to the map.
+
+[source,sql]
+----
+INSERT INTO myMap VALUES('Jake', 29);
+----
+
+```
++--------------------+------------+
+|name                |         age|
++--------------------+------------+
+|Jake                |          29|
++--------------------+------------+
+```
+
+=== Overwrite Data in a Map
+
+Use the `SINK INTO` statement to overwrite the value of an existing key in a map.
+
+[source,sql]
+----
+SINK INTO myMap VALUES('Jake', 21);
+----
+
+```
++--------------------+------------+
+|name                |         age|
++--------------------+------------+
+|Jake                |          21|
++--------------------+------------+
+```

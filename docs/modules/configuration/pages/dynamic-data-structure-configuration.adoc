@@ -1,0 +1,140 @@
+= Dynamically Adding Data Structure Configuration on a Cluster
+:description: Dynamic configuration allows you to temporarily change the configuration of some data structures at runtime. This option is useful if you want to reconfigure a data structure without having to shut down cluster members.
+[[dynamically-adding-data-structure-configuration-on-a-cluster]]
+
+{description}
+
+To configure a data structure at runtime, you can use either a Hazelcast client or the member API. When you submit a dynamic configuration to a member, it is propagated across all cluster members as well as those that may join the cluster later.
+
+To add a configuration dynamically, you must invoke the `add*Config()` method on the Hazelcast instance's configuration object. 
+
+[tabs] 
+==== 
+Member API:: 
++ 
+-- 
+
+[source,java]
+----
+include::ROOT:example$/DynamicConfiguration.java[tag=dynconf]
+----
+--
+Java Client::
++
+--
+
+[source,java]
+----
+HazelcastInstance client = HazelcastClient.newHazelcastClient();
+MapConfig mCfg = new MapConfig("test");
+mCfg.setTimeToLiveSeconds(15);
+client.getConfig().addMapConfig(mCfg);
+HazelcastClient.shutdownAll();
+----
+--
+====
+
+NOTE: Dynamic configurations are not persisted, thus they are lost when a cluster restarts. This feature will be improved in future releases of Hazelcast.
+
+Dynamic configuration elements must be fully configured before the invocation
+of `add*Config()` method. At that point, the configuration object is delivered
+to every member of the cluster and added to each member's dynamic configuration,
+so mutating the configuration object after the `add*Config()` invocation does not have
+an effect.
+
+== Handling Partial Propagation
+
+Because dynamic configurations are propagated across all cluster
+members, failures may occur due to conditions such as timeout and network partition.
+The configuration propagation mechanism internally retries adding the configuration
+whenever a membership change is detected. However if an exception is thrown from the
+`add*Config()` method, the configuration may have been partially propagated to some
+cluster members and adding the configuration should be retried by the user.
+
+== Unsupported Configuration Methods
+
+Dynamic configuration is supported for all `add*Config()` methods except the following:
+
+* `SplitBrainProtectionConfig`: A new split-brain protection configuration cannot be dynamically added but other
+configuration can reference split-brain protections configured in the existing static configuration.
+* `WanReplicationConfig`: A new WAN replication configuration cannot be dynamically
+added, however existing static ones can be referenced from other configurations,
+e.g., a new dynamic `MapConfig` may include a `WanReplicationRef` to a statically
+configured WAN replication.
+* `ListenerConfig`: Listeners can be instead added at runtime via other API such as
+`HazelcastInstance.getCluster().addMembershipListener` and
+`HazelcastInstance.getPartitionService().addMigrationListener`.
+
+[[handling-configuration-conflicts]]
+== Handling Configuration Conflicts
+
+Attempting to add a dynamic configuration, when a static configuration for
+the same element already exists, throws `InvalidConfigurationException`. For example,
+assuming we start a member with the following fragment in `hazelcast.xml` configuration:
+
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="sessions">
+        ...
+    </map>
+    ...
+</hazelcast>
+----
+
+Then adding a dynamic configuration for a map with the name `sessions` throws
+a `InvalidConfigurationException`:
+
+[source,java]
+----
+HazelcastInstance instance = Hazelcast.newHazelcastInstance();
+
+MapConfig sessionsMapConfig = new MapConfig("sessions");
+
+// this will throw ConfigurationException:
+instance.getConfig().addMapConfig(sessionsMapConfig);
+----
+
+When attempting to add dynamic configuration for an element for which dynamic
+configuration has already been added, then if a configuration conflict is detected
+a `InvalidConfigurationException` is thrown. For example:
+
+[source,java]
+----
+HazelcastInstance instance = Hazelcast.newHazelcastInstance();
+
+MapConfig sessionsMapConfig = new MapConfig("sessions").setBackupCount(0);
+instance.getConfig().addMapConfig(sessionsMapConfig);
+
+MapConfig sessionsWithBackup = new MapConfig("sessions").setBackupCount(1);
+// throws ConfigurationException because the new MapConfig conflicts with existing one
+instance.getConfig().addMapConfig(sessionsWithBackup);
+
+MapConfig sessionsWithoutBackup = new MapConfig("sessions").setBackupCount(0);
+// does not throw exception: new dynamic config is equal to existing dynamic config of same name
+instance.getConfig().addMapConfig(sessionsWithoutBackup);
+----
+
+To ignore conflicts between dynamic configurations, set the xref:ROOT:system-properties.adoc#ignore-dynamic-conf-conflicts[`hazelcast.dynamicconfig.ignore.conflicts`] system property to `true`.
+
+== Dynamic Data Structure Configuration and User Customizations
+
+Dynamic configuration may reference
+user customizations such as a user-provided `MapLoader` implementation referenced
+by a `MapConfig`. User customizations can be usually configured using either of the following:
+
+* by specifying a class or factory class name, e.g., `MapStoreConfig.setClassName`, and letting the
+Hazelcast members instantiate the object
+* by providing an existing instance, e.g., `MapStoreConfig.setImplementation`.
+
+When dynamically adding new a data structure configuration with user customizations,
+take the following considerations into account:
+
+* For the user customizations submitted as a class name or factory class name, the referenced
+classes are resolved  lazily. Therefore, they should be either already on each member's local
+classpath or resolvable via xref:clusters:deploying-code-on-member.adoc[user code deployment].
+* When the user customizations are submitted as instances (or similarly factory instances),
+the instances themselves have to be serializable. This is because the entire configuration needs
+to be sent over the network to all cluster members, and their classes have to be available
+on each member's local classpath.

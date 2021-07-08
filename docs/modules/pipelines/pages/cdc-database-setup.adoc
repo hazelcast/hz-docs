@@ -1,0 +1,354 @@
+= Setting Up a Database for Change Data Capture
+
+When using xref:sources-sinks.adoc#change-data-capture-cdc[CDC data
+sources], you
+must also take care that the source databases are set up correctly,
+meaning they have all the features, required for change data capture,
+enabled.
+
+== MySQL
+
+=== Set Up a Database User
+
+The MySQL CDC source needs a MySQL database user which will be used for
+connecting to the database. For how to create one, see the "CREATE USER
+Statement" in the MySQL Reference Manual
+(link:https://dev.mysql.com/doc/refman/5.7/en/create-user.html[5.7],
+link:https://dev.mysql.com/doc/refman/8.0/en/create-user.html[8.0] - note
+that `mysql_native_password` is no longer the default authentication
+plugin in MySQL 8; you will need to specify it using the
+`IDENTIFIED WITH mysql_native_password BY '<password>'` construct).
+
+This database user will also need to have certain permissions enabled.
+Use the "GRANT Statement"
+(link:https://dev.mysql.com/doc/refman/5.7/en/grant.html[5.7],
+link:https://dev.mysql.com/doc/refman/8.0/en/grant.html[8.0]) to set them
+if missing. The needed permissions are following:
+
+* SELECT: enables selection of rows from tables (link:https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_select[5.7], link:https://dev.mysql.com/doc/refman/8.0/en/privileges-provided.html#priv_select[8.0])
+* RELOAD: enables usage of the FLUSH statement to clear or reload internal caches, flush tables or acquire locks (link:https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_reload[5.7], link:https://dev.mysql.com/doc/refman/8.0/en/privileges-provided.html#priv_reload[8.0])
+* SHOW DATABASES: enables usage of the SHOW DATABASES statement (link:https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_show-databases[5.7], link:https://dev.mysql.com/doc/refman/8.0/en/privileges-provided.html#priv_show-databases[8.0])
+* REPLICATION SLAVE: enables reading the server's binlog (source of the CDC events) (link:https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_replication-slave[5.7], link:https://dev.mysql.com/doc/refman/8.0/en/privileges-provided.html#priv_replication-slave[8.0])
+* REPLICATION CLIENT: enables usage of SHOW MASTER STATUS, SHOW SLAVE STATUS and SHOW BINARY LOGS statements (link:https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_replication-client[5.7], link:https://dev.mysql.com/doc/refman/8.0/en/privileges-provided.html#priv_replication-client[8.0])
+
+=== Enable Binary Logging
+
+Binary logging can be enabled by adding a couple of options to the MySQL
+config file. See MySQL Reference Manual on how to do that
+(link:https://dev.mysql.com/doc/refman/5.7/en/option-files.html[5.7],
+link:https://dev.mysql.com/doc/refman/8.0/en/option-files.html[8.0]). For
+example:
+
+```
+server-id         = 223344
+log_bin           = mysql-bin
+binlog_format     = ROW
+binlog_row_image  = FULL
+expire_logs_days  = 10
+```
+
+The semantics of these options are as follows:
+
+* **server-id**: must be unique withing the MySQL cluster (link:https://dev.mysql.com/doc/refman/5.7/en/replication-options.html#sysvar_server_id[5.7], link:https://dev.mysql.com/doc/refman/8.0/en/replication-options.html#sysvar_server_id[8.0])
+* **log_bin**: base name of the sequence of binlog files (link:https://dev.mysql.com/doc/refman/5.7/en/replication-options-binary-log.html#option_mysqld_log-bin[5.7], link:https://dev.mysql.com/doc/refman/8.0/en/replication-options-binary-log.html#option_mysqld_log-bin[8.0])
+* **binlog_format**: must be set to "ROW" in order for the CDC source to work properly (link:https://dev.mysql.com/doc/refman/5.7/en/replication-options-binary-log.html#sysvar_binlog_format[5.7], link:https://dev.mysql.com/doc/refman/8.0/en/replication-options-binary-log.html#sysvar_binlog_format[8.0])
+* **binlog_row_image**: must be set to "FULL" in order for the CDC source to work properly (link:https://dev.mysql.com/doc/refman/5.7/en/replication-options-binary-log.html#sysvar_binlog_row_image[5.7], link:https://dev.mysql.com/doc/refman/8.0/en/replication-options-binary-log.html#sysvar_binlog_row_image[8.0])
+* **expire_log_days**: number of days for automatic binlog file removal (link:https://dev.mysql.com/doc/refman/5.7/en/replication-options-binary-log.html#sysvar_expire_logs_days[5.7], link:https://dev.mysql.com/doc/refman/8.0/en/replication-options-binary-log.html#sysvar_expire_logs_days[8.0])
+
+While the database server is running, the active values of these
+variables can be checked with the help of the "SHOW VARIABLES Statement"
+(link:https://dev.mysql.com/doc/refman/5.7/en/show-variables.html[5.7],
+link:https://dev.mysql.com/doc/refman/8.0/en/show-variables.html[8.0]).
+It's worth pointing out that the names of the options sometimes differ
+from the names of the MySQL system variables they set. For example:
+
+```
+SHOW VARIABLES LIKE 'server_id';
+```
+
+=== Configure Session Timeouts
+
+When an initial consistent snapshot is made for large databases, your
+established connection could timeout while the tables are being read.
+You can prevent this behavior by configuring **interactive_timeout**
+(link:https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_interactive_timeout[5.0],
+link:https://dev.mysql.com/doc/refman/8.0/en/server-system-variables.html#sysvar_interactive_timeout[8.0])
+and **wait_timeout** (link:https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_wait_timeout[5.0],
+link:https://dev.mysql.com/doc/refman/8.0/en/server-system-variables.html#sysvar_wait_timeout[8.0]) in your MySQL configuration file.
+
+On how to work with the MySQL config file consult the Reference Manual
+(link:https://dev.mysql.com/doc/refman/5.7/en/option-files.html[5.7],
+link:https://dev.mysql.com/doc/refman/8.0/en/option-files.html[8.0]).
+
+=== PostgreSQL
+
+=== Check your Database Version
+
+The PostgreSQL change data capture connector works by exploiting the
+link:https://www.postgresql.org/docs/current/logicaldecoding-explanation.html[logical decoding] feature of the database, first introduced in version 9.4. This version
+however is no longer supported. Debezium recommends running change data
+capture on version link:https://www.postgresql.org/docs/9.6/index.html[9.6]
+or later.
+
+=== Install an Output Plug-In
+
+PostgreSQL's logical decoding feature is a mechanism which allows the
+extraction of the changes which were committed to the transaction log
+and the processing of these changes in a user-friendly manner via the
+help of an link:https://www.postgresql.org/docs/current/logicaldecoding-output-plugin.html[output plug-in].
+
+The output plug-ins currently available are:
+
+* link:https://github.com/debezium/postgres-decoderbufs[`decoderbufs`], maintained by the Debezium community, based on ProtoBuf
+* link:https://github.com/eulerto/wal2json[`wal2json`], maintained by the wal2json community, based on JSON
+* `pgoutput`, the standard logical decoding plug-in in PostgreSQL 10 and later, maintained by the Postgres community
+
+The `pgoutput` plug-in is always present and requires no explicit
+installation, for the other two follow the instructions provided by
+their maintainers.
+
+Note: for simplicity Debezium also provides a Docker image based on a
+vanilla link:https://github.com/debezium/docker-images/tree/master/postgres/9.6[PostgreSQL server image]
+on top of which it compiles and installs all above mentioned plugins.
+
+=== Configure the Database Server
+
+Running change data capture on a PostgreSQL server requires certain
+configuration options to be set accordingly. This can be done either by
+
+* editing the `postgresql.conf` file, or by
+* using the link:https://www.postgresql.org/docs/current/sql-altersystem.html[ALTER SYSTEM] command
+
+The important properties to set are:
+
+```properties
+# MODULES
+shared_preload_libraries = 'decoderbufs,wal2json'
+
+# REPLICATION
+wal_level = logical
+max_wal_senders = 1
+max_replication_slots = 1
+```
+
+`shared_preload_libraries` contains a comma separated list of installed
+output plug-ins. `wal_levels` is used to tell the server to use logical
+decoding with the write-ahead log.
+
+Logical decoding uses link:https://www.postgresql.org/docs/current/logicaldecoding-explanation.html#LOGICALDECODING-REPLICATION-SLOTS[replication slots].
+Replication slots retain WAL data even during connector outages. For
+this reason it is important to monitor and limit replication slots to
+avoid too much disk consumption and other conditions that can happen,
+such as catalog bloat if a slot stays unused for too long. This is why
+the `max_wal_sender` and `max_replication_slots` parameters are set with
+the smallest possible values.
+
+=== Set Replication Permissions
+
+Replication can only be performed by a database user (specifically the
+one we set up our CDC connector with) only if the user has appropriate
+permissions. The permissions needed are `REPLICATION` and `LOGIN`.
+
+For setting up database users/roles see the link:https://www.postgresql.org/docs/9.6/user-manag.html[PostgreSQL documentation], but
+basically the essential command is:
+
+```
+CREATE ROLE name REPLICATION LOGIN;
+```
+
+Note: database super-users already have all the permissions needed by
+replication too.
+
+=== Configure Client Authentication
+
+Replication can only be performed for a configured number of hosts. The
+PostgreSQL server needs to allow access from the host the CDC connector
+is running on. To specify such link:https://www.postgresql.org/docs/9.6/auth-pg-hba-conf.html[client authentication]
+options add following lines to the end of the `pg_hba.conf` file:
+
+```
+local   replication    user                    trust
+host    replication    user    127.0.0.1/32    trust
+host    replication    user    ::1/128         trust
+```
+
+This example tells the server to allow replication for the specified
+user locally or on `localhost`, using IPv4 or IPv6.
+
+== Other Databases
+
+Streaming CDC data from other databases supported by Debezium is
+possible in Hazelcast by using the link:https://jet-start.sh/javadoc/4.5/com/hazelcast/jet/cdc/DebeziumCdcSources.html[generic Debezium source].
+This deployment guide however only covers the databases we have first
+class support for. For the other ones pls. refer to the Debezium
+documentation:
+
+* link:https://debezium.io/documentation/reference/1.1/connectors/sqlserver.html#setting-up-sqlserver[SQL Server]
+* link:https://debezium.io/documentation/reference/1.1/connectors/mongodb.html#setting-up-mongodb[MongoDB]
+* link:https://debezium.io/documentation/reference/1.1/connectors/oracle.html#setting-up-oracle[Oracle]
+* link:https://debezium.io/documentation/reference/1.1/connectors/db2.html#setting-up-Db2[Db2]
+* link:https://debezium.io/documentation/reference/1.1/connectors/cassandra.html#setting-up-cassandra[Cassandra]
+
+== Connector Deployment
+
+=== MySQL
+
+==== Using Replicas
+
+Enabling the features needed for the MySQL CDC connector (in particular
+the binlog) has a performance impact on the database. From our
+measurements we estimated it to around 15%, but this is very dependent
+on your particular workload. What's certain is that it's not negligible.
+
+Enabling CDC requires pretty much the same settings as replication, so
+if you already have replication enabled, then there should be no further
+performance penalty. However the CDC source is an extra replication
+client, so if you already have replication you might consider connecting
+the CDC source to your replica, instead of the main database.
+
+Another reason why using a replica for CDC might be useful, is that for
+large databases the snapshot taken by the CDC source when it first
+starts can take a significant amount of time and will put heavy load on
+the database during that period. This might affect the performance of
+other transactions.
+
+==== Using Global Transaction IDs
+
+When using a replica for the CDC source and in general when the MySQL
+server cluster has multiple member it's a good idea to give yourself the
+option of connecting the CDC source to any one of the members. The
+source does track the transaction ids in the binlog and can connect to
+the binlog of another MySQL server on restart, but in order for the ids
+to match between servers Global Transaction Identifiers (GTIDs) must be
+enabled in them.
+
+This can be achieved by setting both of the **gtid_mode** (link:https://dev.mysql.com/doc/refman/5.7/en/replication-options-gtids.html#sysvar_gtid_mode[5.0], link:https://dev.mysql.com/doc/refman/8.0/en/replication-options-gtids.html#sysvar_gtid_mode[8.0])
+and **enforce_gtid_consistency**
+(link:https://dev.mysql.com/doc/refman/5.7/en/replication-options-gtids.html#sysvar_enforce_gtid_consistency[5.0],
+link:https://dev.mysql.com/doc/refman/8.0/en/replication-options-gtids.html#sysvar_enforce_gtid_consistency[8.0])
+options to "ON".
+
+On how to work with the MySQL config file consult the Reference Manual
+(link:https://dev.mysql.com/doc/refman/5.7/en/option-files.html[5.7],
+link:https://dev.mysql.com/doc/refman/8.0/en/option-files.html[8.0]).
+
+=== PostgreSQL
+
+==== Primary-Only Replication
+
+As we've mentioned in the <<postgresql, PostgreSQL database setup section>> the connector uses logical decoding replication
+slots. All PostgreSQL versions (up to 12) only support logical
+replication slots on *primary* servers.
+
+This means that it's not possible to limit the performance impact of
+running change data capture on replicas. This weakness is somewhat
+offset by the fact that the logical replication process seems quite
+limited as far as the amount of resources it can acquire. When measuring
+its output it behaves quite like a single threaded process, which can't
+saturate neither CPU nor the network.
+
+In our tests we didn't manage to make it output much more than 20,000
+records/second, so on a powerful server running the database it
+shouldn't affect normal operations too severely.
+
+==== Failure Tolerance
+
+PostgreSQL failure tolerance associated with replication slots is
+somewhat lacking in certain aspects. The CDC connector can quite nicely
+deal with its own restart or connection loss to the primary database,
+but only as long as replication slots remain intact. Replication
+slots are not themselves synced to physical replicas, so you can’t
+continue to use a slot after a master failure results in promotion
+of a standby.
+
+There are discussions in the PostgreSQL community around a feature
+called *failover slots* which would help mitigate this problem, but as
+of version 12 they have not been implemented yet.
+
+== Troubleshooting
+
+=== MySQL
+
+The general behaviour of the MySQL connector when loosing connection to
+the database is governed by a configurable reconnect strategy and a
+boolean flag specifying if state should be reset on reconnects or not.
+For details see the
+link:https://jet-start.sh/javadoc/4.5/com/hazelcast/jet/cdc/mysql/MySqlCdcSources.html[javadoc].
+
+There are however some discrepancies and peculiarities in the behavior.
+
+==== During Database Snapshotting
+
+If the connection to the database fails during the snapshotting phase
+then the connector is stuck in this state until the connection
+disruption is resolved externally (the database comes back online
+or the network outage passes). The connector will not initiate any
+reconnect attempts. It will just wait indefinitely until the problem
+disappears.
+
+This, unfortunately, is the case regardless of the reconnect strategy
+specified and is related to the peculiarities of the underlying
+implementation classes used.
+
+==== Database Goes Down
+
+If the database process/machine dies during the binlog trailing phase of
+the connector and the network is intact, allowing the connector to
+detect what happened, then reconnecting will work as specified by the
+reconnect strategy. The connector will initiate reconnect attempts by
+restarting itself with the configured timings and as many times as
+specified.
+
+==== Network Outage
+
+If there is a network outage during the binlog trailing phase of the
+connector, then the connector will detect the outage, and it will
+reconnect. The configured reconnect strategy will, however, be only
+partially applied. This is caused by the fact that such network outages
+are handled internally, by the connector's underlying implementation
+classes, and those mechanism are only capable of fixed period retrying
+without an upper limit on the number of attempts made.
+
+The length of the reconnect period will be taken from the reconnect
+strategy, and it will be equal to the delay the later has configured for
+the first reconnect attempt (more precisely what its `IntervalFunction`
+returns when applied to `1`). So for example, if we have reconnect
+periods with exponential backoff configured, then the backoff will not
+be applied.
+
+Just as the retry strategy is not fully taken into consideration when
+reconnection is handled in this manner, the state reset setting is also
+ignored. Internal reconnects will never reset the state.
+
+=== PostgreSQL
+
+The general behaviour of the PostgreSQL connector when losing connection
+to the database is governed by a configurable reconnect strategy and a
+boolean flag specifying if state should be reset on reconnects or not.
+For details see the
+link:https://jet-start.sh/javadoc/4.5/com/hazelcast/jet/cdc/postgres/PostgresCdcSources.html[javadoc].
+
+There are however some peculiarities to the behaviour.
+
+==== Replication Slot Must Be Intact
+
+The reconnect process can work automatically only as long as the
+Postgres replication slot, which it's based on, has not lost data. When
+the Postgres database cluster experiences failures and the source needs
+to be connected to a different database instance, manual intervention
+from an administrator might become necessary to ensure that the
+replication slot has been re-created properly, without data loss.
+
+==== No Active Outage Detection
+
+The Postgres connector does not have any active connection monitoring.
+Because of that, if there is any connection loss (database
+machine/process dies, network outage and so on), the connector notices
+the failure only after a long delay. It is basically at the mercy of
+timeouts at the level of the network stack. In many situations, these
+long delays need to be waited out before the reconnect process can
+start.
+
+If the connection loss is short and recovers on its own, the connector
+doesn't even notice and will work properly, due to replication slots
+ensuring the continuity of data.

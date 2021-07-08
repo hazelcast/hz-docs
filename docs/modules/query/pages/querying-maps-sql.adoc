@@ -1,0 +1,126 @@
+= Querying Maps with SQL
+:description: With SQL you can query the keys and values of maps in your local cluster.
+
+{description}
+
+== Querying Maps by Name
+
+The SQL service exposes map objects as tables in the predefined `partitioned`
+schema using exact names. This schema is in the SQL service search path so that
+you can access the map objects with or without the schema name.
+
+Schema names, table names, and field names are case-sensitive.
+
+For example, you can access the `employee` map
+as `employee` or `partitioned.employee`, but not as `Employee`:
+
+[source,sql]
+----
+SELECT * FROM employee
+SELECT * FROM partitioned.employee
+----
+
+== Querying Map Entries by Field
+
+The SQL service resolves fields in map entries automatically by reading the first local entry in the map. If the map does not have local entries on the member where
+the query is started, then the list of fields cannot be resolved, and an
+exception is thrown.
+
+=== Querying Primitive Entries
+
+A map entry consists of a key and a value. You can query the key through the `__key` alias and the value through the `this` alias.
+
+For example, if you have an map named `capital_cities`, you can query that map, using the following `SELECT` statement.
+
+[source,sql]
+----
+SELECT * FROM capital_cities;
+----
+
+```
++--------------------+------------+
+|     __key          |    this    |
++--------------------+------------+
+|        1           |   Tokyo    |
++--------------------+------------+
+```
+
+The `this` alias is returned by a query only if the value does not contain an object. For example, if the `capital_cities` value was an object that had a `name` and a `country` field, the query result would include those fields as columns and exclude the `this` column.
+
+```
++--------------------+------------+--------------+
+|     __key          |    name    |   country    |
++--------------------+------------+--------------+
+|        1           |   Tokyo    |    Japan     |
++--------------------+------------+--------------+
+```
+
+=== Querying Object Fields
+
+If you store objects in a map, you can query its fields only if the object is serialized using one of the following options:
+
+- For Java objects (xref:serialization:implementing-java-serializable.adoc[`Serializable`], xref:serialization:implementing-dataserializable.adoc[`DataSerializable`], xref:serialization:implementing-dataserializable.adoc#identifieddataserializable[`IdentifiedDataSerializable`]), only public fields and getters are available. A public field is available with its exact name. A getter is available with the JavaBean naming conventions.
+- For xref:serialization:implementing-portable-serialization.adoc[`Portable`] objects, the fields that are written in the `Portable.writePortable()` method are exposed using their exact names.
+- `HazelcastJsonValue`
+
+NOTE: You cannot query nested object fields using SQL.
+
+Consider an `Employee` class where the SQL service can access
+the following fields:
+
+[cols="1,1"]
+|===
+| Name
+| Type
+
+|`name`
+|`VARCHAR`
+
+|`age`
+|`integer`
+|===
+
+Together with the key and value objects, you may query the following fields from
+`IMap<Long, Employee>`:
+
+[source,sql]
+----
+SELECT __key, this, name, age FROM employee
+----
+
+If both the key and value have fields with the same name, you may only query the key's field and not the value's field.
+
+== Adding Different Values to Map Entries
+
+To query maps with SQL, make sure that they contain only entries with the same structure.
+
+For example, if an existing map contains multiple objects with varying set of keys, Hazelcast creates a mapping, using a
+random sample. If and a different sample could be used each time leading to
+a different column list each time.
+
+For example, let's say you have this in a JSON-valued map:
+
+[cols="m,m"]
+|===
+|key|value
+
+|1
+|{"name":"Alice","age":42}
+
+|2
+|{"name":"Bob","age":43,"petName":"Zaz"}
+|===
+
+If you map the column `petName`, it will have the value `null` for the
+entry with `key=1`.
+
+However, in future optimizations, we may break this support. Therefore, in this example, it's best to make sure that both entries contain the same fields.
+
+== Next Steps
+
+Learn the details of all the available xref:sql:sql-statements.adoc[SQL statements].
+
+See more examples of the xref:sql:select.adoc[`SELECT` statement].
+
+
+

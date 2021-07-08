@@ -1,0 +1,319 @@
+= SELECT
+:description: The SELECT statement reads data from tables, allowing you to query and process your data based on one or more parameters.
+:page-toclevel: 3
+:page-aliases: select-statement.adoc
+
+The `SELECT` statement reads data from tables, allowing you to query and process your data based on one or more parameters.
+
+== Syntax Summary
+
+This code block is a quick reference with all the <<parameters, parameters>> that you can use with the `SELECT` statement.
+
+TIP: For some practical examples, see << examples, Code Examples>>.
+
+[source,sql]
+----
+SELECT [ DISTINCT ] [ * | expression [ [ AS ] expression_alias ] [, ...] ]
+FROM from_item [, ...]
+[ WHERE condition ]
+[ GROUP BY { expression | expression_index } [, ...] ]
+[ HAVING condition [, ...] ]
+[ ORDER BY { column_name | column_position |expression } [, ...] ]
+----
+
+== Parameters
+
+The `SELECT` statement accepts the following parameters.
+
+Most of these parameters are optional, but you must provide an `expression` parameter and a `from_item` parameter.
+
+[cols="1a,2a,1a"]
+|===
+|Parameter | Description | Example
+
+|`DISTINCT`
+|The `SELECT DISTINCT` statement returns only unique rows, ignoring any duplicates.
+|<<get-columns, Get columns>>
+
+|`expression`
+|The columns to select such as names of columns or the `*` wildcard.
+|<<get-columns, Get columns>>
+
+|`from_item`
+|A table expression that can be one of the following:
+
+- `[schema_name.]table_name [ [ AS ] table_alias]`
+- `(SELECT ... ) AS table_alias`
+- `TABLE(function_name([ argument [, ...] ] ))`
+- `(VALUES (expression, [, ...]) [, ...] )`
+|<<get-columns, Get columns>>
+
+| `WHERE condition`
+|An optional clause that, if given, indicates the conditions that rows must satisfy to be selected. `condition` is an expression that is evaluated for each row. If the expression is `true`, the row is selected. This expression is evaluated before grouping.
+|<<filter-rows-by-condition, Filter rows by condition>>
+
+| `GROUP BY expression`
+|An optional clause that allows you to group results in a column by the given expression.
+|<<aggregate-data, Aggregate data>>
+
+
+| `HAVING condition`
+|An optional filter that selects only group rows that satisfy the condition. Unlike `WHERE` filters, the `HAVING` filter is applied to group rows created by a `GROUP BY` subquery or aggregate functions such as `SUM()`.
+|<<aggregate-data, Aggregate data>>
+
+|===
+
+== Examples
+
+This section lists some example SQL queries that show you how to use the `SELECT` statement.
+
+=== Get Columns by Name
+
+You can get columns by name, by adding them as a comma-separated list after the `SELECT` statement.
+
+[source,sql]
+----
+SELECT name, likes FROM csv_likes;
+----
+
+```
++--------------------+------------+
+|name                |       likes|
++--------------------+------------+
+|Jerry               |          13|
+|Greg                |         108|
+|Mary                |          73|
+|Jerry               |          88|
++--------------------+------------+
+```
+
+To get all columns from a table, use the `*` character.
+
+[source,sql]
+----
+SELECT * FROM csv_likes;
+----
+
+```
++------------+--------------------+------------+
+|          id|name                |       likes|
++------------+--------------------+------------+
+|           1|Jerry               |          13|
+|           2|Greg                |         108|
+|           3|Mary                |          73|
+|           4|Jerry               |          88|
++------------+--------------------+------------+
+```
+
+=== Filter Rows by Condition
+
+You can filter rows by using a `WHERE` clause to find columns according to a certain condition.
+
+[source,sql]
+----
+SELECT name FROM csv_likes WHERE likes > 20;
+----
+
+```
++--------------------+
+|name                |
++--------------------+
+|Greg                |
+|Mary                |
+|Jerry               |
++--------------------+
+```
+
+To filter rows on more than one condition, you can join conditions with the `AND`, `OR`, and `NOT` operators.
+
+[source,sql]
+----
+SELECT *
+FROM csv_likes
+WHERE likes > 20 AND name = 'Mary';
+----
+
+```
++------------+--------------------+------------+
+|          id|name                |       likes|
++------------+--------------------+------------+
+|           3|Mary                |          73|
++------------+--------------------+------------+
+```
+
+=== Sort and Limit Results
+
+You can use the standard SQL clauses `ORDER BY`, `LIMIT`, and `OFFSET` to sort and limit the result set of a query.
+
+NOTE: To use these clauses on map entries, the map entries must be indexed. See xref:query:indexing-maps.adoc[].
+
+NOTE: You cannot use these clauses in subqueries.
+
+The following statement gets the top five employees ordered by the
+`first_name` field and skips the first three results:
+
+[source,sql]
+----
+SELECT 
+    employee_id, first_name, last_name
+FROM
+    employees
+ORDER BY first_name
+LIMIT 5 OFFSET 3;
+----
+
+The following statement gets the top five employees with the highest salaries.
+
+[source,sql]
+----
+SELECT 
+    employee_id, first_name, last_name, salary
+FROM
+    employees
+ORDER BY salary DESC
+LIMIT 5;
+----
+
+=== Join Tables
+
+You can use the standard SQL `JOIN` clause to combines rows from two or more tables, based on a related column among them.
+
+This clause has the following limitatons:
+
+- At the moment, Hazelcast supports only `LEFT JOIN`, which returns all records from the left table as well as the matching records from the right table.
+
+- You cannot reorder the results of a join. Tables are always joined in the order they appear in the `FROM` clause.
+
+- On the right side of the join, you can use only a map. For example, you can do `FROM my_kafka_topic JOIN my_map`, but not `FROM my_map JOIN my_kafka_topic` even though these queries are equivalent.
+
+The following query gets the names of all employees that are managers and their departments.
+
+[source,sql]
+----
+SELECT
+    managers.department, employees.name
+FROM 
+    managers
+JOIN employees
+ON managers.manager_id = employees.employee_id
+----
+
+The following query is equivalent.
+
+[source,sql]
+----
+SELECT
+    managers.department, employees.name
+FROM 
+    managers, employees
+WHERE managers.manager_id = employees.employee_id
+----
+
+NOTE: In these examples, the `employee` table must be a map because it's on the right side of the join.
+
+=== Alias Columns in the Query Results
+
+If you are returning query results to a client, you may want to give the returned columns a new name.
+
+To alias a column in your query results, use the `AS` clause.
+
+NOTE: This clause does not rename the column in the table.
+
+[source,sql]
+----
+SELECT name AS popular_users, likes
+FROM csv_likes
+WHERE likes > 20;
+----
+
+```
++--------------------+------------+
+|popular_users       |       likes|
++--------------------+------------+
+|Greg                |         108|
+|Mary                |          73|
+|Jerry               |          88|
++--------------------+------------+
+```
+
+=== Aggregate Data
+
+To perform calculations on rows, use aggregate functions.
+
+For a complete list of available aggregate functions, see xref:expressions.adoc[Functions and Operators].
+
+include::partial$warnings.adoc[tag=aggregation-restrictions]
+
+To calculate the total number of likes for all names, use the `SUM()` function.
+
+[source,sql]
+----
+SELECT SUM(likes) AS total_likes FROM csv_likes;
+----
+
+```
++--------------------+
+|         total_likes|
++--------------------+
+|                 282|
++--------------------+
+```
+
+To filter for the names that have more than 100 likes, use the `HAVING` clause, which is equivalent to the `WHERE` clause but for aggregate groups.
+
+[source,sql]
+----
+SELECT name AS most_liked
+FROM csv_likes
+GROUP BY name HAVING SUM(likes) > 100;
+----
+
+```
++--------------------+
+|most_liked          |
++--------------------+
+|Jerry               |
+|Greg                |
++--------------------+
+```
+
+To pass a function only unique values, use the `DISTINCT` operator.
+
+NOTE: This operator is ignored in `MIN`/`MAX` functions.
+
+This query calculates the number of distinct colors of cars in a table.
+
+[source,sql]
+----
+SELECT COUNT(DISTINCT color)
+FROM cars
+----
+
+=== Generate Data
+
+To generate data and make it available as a table that you can use in your own statements, use xref:expressions.adoc#table-valued-functions[table-valued functions].
+
+To generate a table with numbers 1 to 3, use the `TABLE(generate_series())` table expression.
+
+[source,sql]
+----
+SELECT * FROM TABLE(generate_series(1,3));
+----
+
+```
++------------+
+|           v|
++------------+
+|           1|
+|           2|
+|           3|
++------------+
+```
+
+To generate a stream of data, use the `TABLE(generate_stream())` table expression. This example generates 100 numbers per second, starting from 0 and displays only multiples of 10 in the results.
+
+[source,sql]
+----
+SELECT * FROM TABLE(generate_stream(100))
+WHERE v / 10 * 10 = v;
+----

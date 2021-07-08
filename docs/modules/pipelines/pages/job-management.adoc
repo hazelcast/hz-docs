@@ -1,0 +1,223 @@
+= Managing Jobs
+:description: Once a job is submitted, it has its own lifecycle on the cluster which is distinct from the submitter. To manage the lifecycle of data pipelines, you can use either SQL or CLI commands to list, cancel, suspend, resume, and restart jobs.
+
+== Listing Jobs
+
+Use the `list-jobs` command to get a list of all jobs running in the
+cluster:
+
+[tabs] 
+==== 
+CLI:: 
++ 
+--
+[source,shell]
+----
+bin/hazelcast list-jobs
+----
+
+Example result:
+
+```
+ID                  STATUS             SUBMISSION TIME         NAME
+0401-9f77-b9c0-0001 RUNNING            2020-03-07T15:59:49.234 hello-world
+```
+
+You can also list completed jobs by adding the `-a` parameter:
+
+[source,shell]
+----
+bin/hazelcast list-jobs -a
+----
+
+Example result:
+
+```
+ID                  STATUS             SUBMISSION TIME         NAME
+0402-de9d-35c0-0001 RUNNING            2020-03-08T15:14:11.439 hello-world-v2
+0402-de21-7f00-0001 FAILED             2020-03-08T15:12:04.893 hello-world
+```
+--
+SQL:: 
++ 
+--
+[source,sql]
+----
+SHOW JOBS;
+----
+
+Example result:
+
+```
++--------------------+
+|name                |
++--------------------+
+|hello-world         |
++--------------------+
+```
+
+For more details about this statement, see the xref:sql:show-jobs.adoc[SQL reference documentation].
+--
+====
+
+== Canceling Jobs
+
+Streaming jobs run indefinitely until canceled. To stop a job, you must cancel it.
+
+[tabs] 
+==== 
+CLI:: 
++ 
+--
+[source,shell]
+----
+bin/hazelcast cancel hello-world
+----
+
+Example result:
+
+```
+Canceling job id=0402-de21-7f00-0001, name=hello-world, submissionTime=2020-03-08T15:12:04.893
+Job canceled.
+```
+
+When a job is canceled, the snapshot for the job is lost and the job
+can't be resumed. Canceled jobs have a `failed` status.
+--
+SQL:: 
++ 
+--
+[source,sql]
+----
+DROP JOB IF EXISTS hello-world;
+----
+
+Result:
+
+```
+OK
+```
+
+When a job is canceled, the snapshot for the job is lost and the job
+can't be resumed. Canceled jobs have a `failed` status.
+
+To save a snapshot of the job, use the `WITH SNAPSHOT` clause.
+
+For more details about this statement, see the xref:sql:drop-job.adoc[SQL reference documentation].
+
+--
+====
+
+== Suspending and Resuming Jobs
+
+Suspending and resuming jobs can be useful for example when you need to
+perform maintenance on a data source or sink without disrupting a
+running job.
+
+When a job is suspended, all the metadata about the job is kept in
+the cluster. A snapshot of the job's computational state is taken during a
+suspend operation and then once resumed, the job is gracefully started
+from the same snapshot.
+
+NOTE: To suspend and resume a job, it must be configured with a processing guarantee. To learn more about setting a processing guarantee, see xref:submitting-jobs.adoc#setting-processing-guarantees[Submitting Jobs].
+
+[tabs] 
+==== 
+CLI:: 
++ 
+--
+Use the `suspend <job_name_or_id>` and `resume <job_name_or_id>`
+commands to suspend and resume jobs:
+
+[source,shell]
+----
+bin/hazelcast suspend hello-world
+----
+
+Example result:
+
+```
+Suspending job id=0401-9f77-b9c0-0001, name=hello-world, submissionTime=2020-03-07T15:59:49.234...
+Job suspended.
+```
+
+[source,shell]
+----
+bin/hazelcast resume hello-world
+----
+
+Example result:
+
+```
+Resuming job id=0401-9f77-b9c0-0001, name=hello-world, submissionTime=2020-03-07T15:59:49.234...
+Job resumed.
+```
+
+To configure a job to be suspended automatically if its
+execution fails, see
+link:https://jet-start.sh/javadoc/4.5/com/hazelcast/jet/config/JobConfig.html#setSuspendOnFailure(boolean)[JobConfig.setSuspendOnFailure].
+--
+SQL:: 
++ 
+--
+
+Use the ALTER JOB statement to suspend and resume jobs:
+
+[source,sql]
+----
+ALTER JOB hello-world SUSPEND;
+----
+
+Result:
+
+```
+OK
+```
+
+[source,sql]
+----
+ALTER JOB hello-world RESUME;
+----
+
+For more details about this statement, see the xref:sql:alter-job.adoc[SQL reference documentation].
+--
+====
+
+== Restarting Jobs
+
+Restarting a job allows you to suspend and resume it in one step. This can be useful when you want to have control over when the job should be scaled. For example, if a job's xref:configuring-jobs.adoc[`auto-scaling` option] is disabled and you add 3 nodes to a cluster you can manually restart the job at the desired point to make sure that all the new nodes can run it.
+
+[tabs] 
+==== 
+CLI:: 
++ 
+--
+[source,shell]
+----
+bin/hazelcast restart hello-world
+----
+
+Example result:
+
+```
+Restarting job id=0401-9f77-b9c0-0001, name=hello-world, submissionTime=2020-03-07T15:59:49.234...
+```
+--
+SQL:: 
++ 
+--
+
+[source,sql]
+----
+ALTER JOB hello-world RESTART;
+----
+
+Result:
+
+```
+OK
+```
+
+For more details about this statement, see the xref:sql:alter-job.adoc[SQL reference documentation].
+--
+====

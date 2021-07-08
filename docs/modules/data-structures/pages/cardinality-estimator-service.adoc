@@ -1,0 +1,149 @@
+
+= Cardinality Estimator Service
+[[cardinality-estimator]]
+
+Hazelcast's cardinality estimator service is a data structure which implements
+Flajolet's HyperLogLog algorithm for estimating cardinalities of unique objects in theoretically huge data sets.
+The implementation offered by Hazelcast includes improvements from Google's
+version of the algorithm, i.e., HyperLogLog++.
+
+The cardinality estimator service does not provide any ways to configure
+its properties, but rather uses some well tested defaults:
+
+* `P`: Stands for precision with a default value of 14
+(using the 14 LSB of the hash for the index)
+* `M`: 2 ^ P = 16384 (16K) registers
+* `P'`: Stands for sparse precision with a default value of 25
+* `Durability`: Count of backups for each estimator with a default value of 2
+
+NOTE: It is important to understand that this data structure is not
+100% accurate, it is used to provide estimates. The error rate is typically
+a result of `1.04/sqrt(M)` which in our implementation is around 0.81% for high percentiles.
+
+The memory consumption of this data structure is close to 16K despite the
+size of elements in the source data set or stream.
+
+There are two phases in using the cardinality estimator.
+
+. Add objects to the instance of the estimator, e.g., for IPs `estimator.add("0.0.0.0.")`.
+The provided object is first serialized and then the byte array is used to
+generate a hash for that object.
++
+NOTE: Objects must be serializable in a form that Hazelcast understands.
++
+. Compute the estimate of the set so far `estimator.estimate()`.
+
+See the https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/cardinality/CardinalityEstimator.html[cardinality estimator Javadoc^]
+for more information on its API.
+
+The following is an example code.
+
+[source,java]
+----
+include::ROOT:example$/dds/ExampleCardinalityEstimator.java[tag=ces]
+----
+
+[[split-brain-protection-for-cardinality-estimator]]
+== Split-Brain Protection for Cardinality Estimator
+
+Cardinality Estimator can be configured to check for a minimum number of
+available members before applying its operations (see the xref:network-partitioning:split-brain-protection.adoc[Split-Brain Protection section]). This is a check to avoid performing successful queue
+operations on all parts of a cluster during a network partition.
+
+The following is a list of methods, grouped by the protection types, that support
+split-brain protection checks:
+
+* WRITE, READ_WRITE:
+** `add`
+** `addAsync`
+* READ, READ_WRITE:
+** `estimate`
+** `estimateAsync`
+
+**Configuring Split-Brain Protection**
+
+Split-brain protection for Cardinality Estimator can be configured
+programmatically using the method https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/config/CardinalityEstimatorConfig.html[setSplitBrainProtectionName()^],
+or declaratively using the element `split-brain-protection-ref`.
+Following is an example declarative configuration:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <cardinality-estimator name="default">
+        <split-brain-protection-ref>splitbrainprotection-name</split-brain-protection-ref>
+    </cardinality-estimator>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  cardinality-estimator:
+    default:
+      split-brain-protection-ref: splitbrainprotection-name
+----
+====
+
+The value of `split-brain-protection-ref` should be the split-brain protection configuration name
+which you configured under the `split-brain-protection` element as explained in the
+xref:network-partitioning:split-brain-protection.adoc[Split-Brain Protection section].
+
+**Configuring Merge Policy**
+
+While recovering from a split-brain syndrome, Cardinality Estimator
+in the small cluster merges into the bigger cluster based on a configured
+merge policy. When an estimator merges into the cluster, an estimator with
+the same name might already exist in the cluster.
+So the merge policy resolves these kinds of conflicts with different out-of-the-box strategies.
+It can be configured programmatically using the method
+https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/config/CardinalityEstimatorConfig.html[setMergePolicyConfig()^],
+or declaratively using the element `merge-policy`.
+Following is an example declarative configuration:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <cardinality-estimator name="default">
+        <merge-policy batch-size="102">HyperLogLogMergePolicy</merge-policy>
+    </cardinality-estimator>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  cardinality-estimator:
+      merge-policy:
+        batch-size: 102
+        class-name: HyperLogLogMergePolicy
+----
+====
+
+The following out-of-the-box merge policies are available:
+
+* `DiscardMergePolicy`: Estimator from the smaller cluster is discarded.
+* `HyperLogLogMergePolicy`: Estimator merges with the existing one,
+using the algorithmic merge for HyperLogLog. This is the default policy.
+* `PassThroughMergePolicy`: Estimator from the smaller cluster wins.
+* `PutIfAbsentMergePolicy`: Estimator from the smaller cluster wins if it doesn't exist in the cluster.

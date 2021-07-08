@@ -1,0 +1,60 @@
+= Security Hardening Recommendations
+[[security-hardening-recommendations]]
+
+Hazelcast does not encrypt data held in the memory since it is "data in use", NOT "data at rest".
+Similarly, the Hot Restart Store does not encrypt data. Finally, encryption passwords or
+Java keystore passwords are stored in `hazelcast.xml/yaml` and `hazelcast-client.xml/yaml`,
+which are on the file system. Management Center passwords are also stored on the Management Center host.
+
+An attacker with host access to either a Hazelcast member host or a Hazelcast client host
+with sufficient permission could, therefore, read data held either in the memory or disk
+and be in a position to obtain the key repository, though perhaps not the keys themselves.
+
+Memory contents should be secured by securing the host.
+Hazelcast assumes the host is already secured. If there is concern about dumping a process
+then the value can be encrypted before it is placed in the cache.
+
+In addition to the above, we recommend the following hardening recommendations for enhanced security:
+
+* Hazelcast members, clients or Management Center should not be deployed on internet-facing or non-secure networks
+or non-secure hosts.
+** If clients need to access the the cluster from an untrusted network, use the xref:clusters:advanced-network-configuration.adoc[advanced networking]
+feature to only provide access to the client protocol.
+* You should close any unused port, except the Hazelcast port (default is 5701).
+* If Memcache is not used, ensure Memcache is not enabled (disabled by default); see the
+xref:clients:memcache.adoc[Memcache Client section] to learn how to disable it.
+* If REST is not used, ensure REST is not enabled (disabled by default); ; see the
+xref:clients:rest.adoc[REST Client section] to learn how to disable it.
+* You can use configuration variables in declarative mode to access the values of the system properties you set;
+see the xref:configuration:using-variables.adoc[Using Variables section] on how to do it.
+* You can use the variable replacers to replace custom strings during loading the configuration.
+** For example, they can be used to mask sensitive information such as usernames and passwords.
+However, their usage is not limited to security related information.
+** See the xref:configuration:variable-replacers.adoc[Variable Replacers section] for more information about their usages and examples.
+* You can restrict the users and their roles in Management Center. The "Administrator role" in
+particular is a super user role that can access the "Scripting" and "Console" features of Management Center
+where they can reach and/or modify cluster data; this may be be restricted. The "Read-Write User role" also provides
+"Scripting" access which can be used to read or modify values in the cluster
+See the xref:management-center:ROOT:managing-users.adoc[Managing Users section] for more information.
+* By default, Hazelcast lets the system pick up an ephemeral port during a
+socket bind operation, but security policies/firewalls may require you to restrict
+outbound ports to be used by Hazelcast-enabled applications, including Management Center.
+To fulfill this requirement, you can configure Hazelcast to use only defined outbound ports.
+See the xref:clusters:network-configuration.adoc#outbound-ports[Outbound Ports section] for different configuration methods.
+* TCP/IP discovery is recommended where possible. See the xref:clusters:discovery-mechanisms.adoc[Discovery Mechanisms section] for other options.
+* Hazelcast allows you to intercept every remote operation executed by the client.
+This lets you add a very flexible custom security logic. See the xref:security:security-interceptor.adoc[Security Interceptor section] for more information.
+* Hazelcast by default transmits data between clients and members, and members and members in plain text.
+This configuration is not secure; you should enable TLS/SSL. See the xref:security:tls-ssl.adoc[TLS/SSL section].
+* With TLS Security, the keystore is used. The keystore password is in the `hazelcast.xml/yaml` configuration file,
+and, if clients are used, also in the `hazelcast-client.xml/yaml`. Access to these files should be restricted.
+* You can use a custom trust store by setting the trust store path in the TLS/SSL configuration, which then avoids using the default trust store.
+* We recommend that xref:security:tls-ssl.adoc#mutual-authentication[mutual TLS authentication] be enabled on a Hazelcast production cluster.
+* Hazelcast uses Java serialization for some objects transferred over the network.
+To avoid deserialization of objects from untrusted sources, Hazelcast offers some protection mechanisms; we recommend enabling
+xref:security:tls-ssl.adoc#mutual-authentication[mutual TLS authentication] and disabling xref:clusters:network-configuration.adoc#multicast-element[multicast join] configuration.
+We recommend using Java serialization filter configuration for whitelisting the set of trusted classes or
+packages which are allowed for deserialization.
+* You can disable script executions on the Hazelcast members. Scripts executed from Management center have access
+to system resources (files, etc.) with privileges of user running Hazelcast.
+We recommend that scripting be xref:management:management-center.adoc#toggle-scripting-support[disabled] on members.

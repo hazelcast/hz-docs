@@ -1,0 +1,197 @@
+= CREATE MAPPING
+:description: The CREATE MAPPING statement maps the data model of a storage system to tables in the public schema of the SQL service. Using this mapping, you can query your data as if it were in a local database table.
+
+The `CREATE MAPPING` statement maps the data model of a storage system to tables in the `public` schema of the SQL service. Using this mapping, you can query your data as if it were in a local SQL table.
+
+TIP: To find out more about SQL mappings, see xref:query:sql-overview.adoc[].
+
+NOTE: The SQL service can also access existing maps in a local cluster, and in that case the mapping implicitly exists in the `partitioned` schema.
+
+== Syntax Summary
+
+This code block is a quick reference with all the <<parameters, parameters>> that you can use with the `CREATE MAPPING` statement.
+
+TIP: For some practical examples, see << examples, Code Examples>>.
+
+[source,sql]
+----
+CREATE [OR REPLACE] MAPPING [IF NOT EXISTS] mapping_name
+[EXTERNAL NAME external_mapping_name]
+[ ( column_name column_type [EXTERNAL NAME external_column_name] [, ...] ) ]
+TYPE type_identifier
+[ OPTIONS ( 'option_name' = 'option_value' [, ...] ) ]
+----
+
+== Parameters
+
+The `CREATE MAPPING` statement accepts the following parameters.
+
+Most of these parameters are optional, but you must provide the following:
+
+- `mapping_name`
+- `type_identifier`
+- `'option_name'` and `'option_value'`
+
+[cols="1a,2a,1a"]
+|===
+|Parameter | Description | Example
+
+|`OR REPLACE`
+|Overwrite an existing mapping of the same name.
+|<<change-a-mapping, Change a Mapping>>
+
+|`IF NOT EXISTS`
+|Create a new mapping only if a mapping of the same name does not already exist.
+|-
+
+|`mapping_name`
+|Name of the mapping, which you can use to query the data.
+|<<create-a-mapping-to-a-map, Create a Mapping to a Map>>
+
+|`external_mapping_name`
+|An optional name that identifies the object in the external system. For example, for a Kafka connector the identifier is the topic name. By default, this parameter is equal to the mapping name.
+|-
+
+|`column_name`, `column_type`
+|The name and xref:data-types.adoc[type] of the column.
+|<<create-a-mapping-to-a-map, Create a Mapping to a Map>>
+
+|`external_column_name`
+|An optional name of a column. If omitted, Hazelcast assumes this name is equal to the `column_name` parameter.
+|<<create-a-mapping-to-a-map, Create a Mapping to a Map>>
+
+|`type_identifier`
+|The xref:connectors.adoc[connector] to use to map the data. For example, if you use the `IMap` type, data is mapped to a map.
+|<<create-a-mapping-to-a-map, Create a Mapping to a Map>>
+
+|`'option_name'`, `'option_value'`
+|Connector parameters. Check the xref:connectors.adoc[reference page] for your connector to find out what values you can use. These parameters must be enclosed in apostrophes.
+|<<create-a-mapping-to-a-map, Create a Mapping to a Map>>
+
+|===
+
+== Auto-resolving Columns and Options
+
+Some connectors can resolve the column names and values of an object either by using the options you provide or by sampling a random record in the input. For example, if you give Hazelcast the name of a map that contains Java objects, Hazelcast will resolve the columns by reflecting that class.
+
+If the connector fails to resolve the columns, the statement will fail. For details about how each connector handles auto-resolving, find each connector's documentation in xref:connectors.adoc[SQL Connectors].
+
+== Examples
+
+This section lists some example SQL queries that show you how to use the `CREATE MAPPING` statement.
+
+=== Create a Mapping to a Map
+
+To create a mapping to a map, use the xref:imap-connector.adoc[IMap connector].
+
+Map tables contain a `__key` column for the key and a `this` column for the value by default.
+
+[source,sql]
+----
+CREATE MAPPING myMap TYPE IMap OPTIONS ('keyFormat'='varchar','valueFormat'='int');
+----
+
+```
+OK
+```
+
+[source,sql]
+----
+SELECT * FROM myMap;
+----
+
+```
++--------------------+------------+
+|__key               |        this|
++--------------------+------------+
++--------------------+------------+
+```
+
+To rename the default columns, you must map the new column names to their external column names. Make sure to wrap the external column names in double quotes ("").
+
+[source,sql]
+----
+CREATE MAPPING myMap (name varchar EXTERNAL NAME "__key", age INT EXTERNAL NAME "this") TYPE IMap OPTIONS ('keyFormat'='varchar','valueFormat'='int');
+----
+
+```
+OK
+```
+
+[source,sql]
+----
+SELECT * FROM myMap;
+----
+
+```
++--------------------+------------+
+|name                |         age|
++--------------------+------------+
++--------------------+------------+
+```
+
+=== Adding Objects to a Map
+
+To add objects as entries to a map, you can use one of the following serialization options:
+
+[tabs] 
+==== 
+Portable:: 
++ 
+--
+[source,sql]
+----
+CREATE MAPPING my_map
+TYPE IMap
+OPTIONS (
+    'keyFormat' = 'portable',
+    'keyPortableFactoryId' = '123',
+    'keyPortableClassId' = '456',
+    'keyPortableVersion' = '0',  -- optional
+    'valueFormat' = 'portable',
+    'valuePortableFactoryId' = '123',
+    'valuePortableClassId' = '789',
+    'valuePortableVersion' = '0'  -- optional
+)
+----
+--
+JSON:: 
++ 
+--
+[source,sql]
+----
+CREATE MAPPING my_map(
+    __key BIGINT,
+    ticker VARCHAR,
+    amount INT)
+TYPE IMap
+OPTIONS (
+    'keyFormat' = 'bigint',
+    'valueFormat' = 'json')
+----
+--
+Java:: 
++ 
+--
+--
+==== 
+
+=== Create a Mapping to a Kafka Topic
+
+To create a mapping to a Kafka topic, use the xref:kafka-connector.adoc[Kafka connector].
+
+=== Create a Mapping to a File
+
+To create a mapping to a file, use the xref:file-connector.adoc[file connector].
+
+=== Change a Mapping
+
+If you want to overwrite an existing mapping, for example to change the names of its columns, use the `CREATE OR REPLACE MAPPING` statement.
+
+include::partial$warnings.adoc[tag=changing-or-removing-a-mapping]
+
+[source,sql]
+----
+CREATE OR REPLACE MAPPING myMap (id varchar EXTERNAL NAME "__key", this INT) TYPE IMap OPTIONS ('keyFormat'='varchar','valueFormat'='int');
+----
+

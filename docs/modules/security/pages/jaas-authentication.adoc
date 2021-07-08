@@ -1,0 +1,131 @@
+= JAAS authentication
+[[jaas-authentication]]
+
+== JAAS Principals used in Hazelcast
+
+Hazelcast works with the following JAAS https://docs.oracle.com/javase/8/docs/api/java/security/Principal.html[Principal^]
+implementations added to the https://docs.oracle.com/javase/8/docs/api/javax/security/auth/Subject.html[Subject^]:
+
+* `ClusterIdentityPrincipal`: Represents the name of authenticated party (usually
+one instance in the `Subject`).
+* `ClusterRolePrincipal`: Represents the role assigned to the authenticated party
+(usually zero or more instances in the `Subject`).
+* `ClusterEndpointPrincipal`: Represents the remote address of the authenticated
+party (usually one instance in the `Subject`).
+
+These implementations share a common abstract parent class `HazelcastPrincipal`,
+so it is simple to find them in the JAAS `Subject`.
+
+[source,java]
+----
+Set<HazelcastPrincipal> hazelcastPrincipals =
+            subject.getPrincipals(HazelcastPrincipal.class);
+----
+
+=== Callbacks Supported in Login Modules
+
+JAAS https://docs.oracle.com/javase/8/docs/api/javax/security/auth/callback/Callback.html[Callback^]
+instances are used for accessing different kinds of data from the
+http://docs.oracle.com/javase/8/docs/api/javax/security/auth/spi/LoginModule.html[LoginModule^]
+implementations. Hazelcast supports the following `Callback` types:
+
+* `javax.security.auth.callback.NameCallback`: Retrieves a name from `Credentials` object.
+* `javax.security.auth.callback.PasswordCallback`: Retrieves a password from `PasswordCredentials` object.
+* `com.hazelcast.security.CertificatesCallback`: Retrieves the TLS certificate chain (if any) of the connecting party.
+* `com.hazelcast.security.ClusterNameCallback`: Retrieves the cluster name used for the authentication.
+* `com.hazelcast.security.CredentialsCallback`: Retrieves `Credentials` used for authentication.
+* `com.hazelcast.security.ConfigCallback`: Retrieves the `Config` object of current Hazelcast member.
+* `com.hazelcast.security.EndpointCallback`: Retrieves the remote address of the connecting party.
+* `com.hazelcast.security.SerializationServiceCallback`: Retrieves `SerializationService` of current Hazelcast member.
+
+The callbacks are usually used in the `login()` method of a login module:
+
+[source,java]
+----
+include::ROOT:example$/CustomLoginModuleTest.java[tag=callback-sample]
+----
+
+== ClusterLoginModule
+
+Hazelcast has an abstract implementation of `LoginModule` that contains
+shared logic and cleanup operations. It automatically creates the
+`ClusterEndpointPrincipal` instance and it also provides the `addRole(String)`
+method which simplifies adding the `ClusterRolePrincipal` instances.
+
+`ClusterLoginModule` implements all methods from the `LoginModule`
+interface and makes them final. It provides protected methods with empty
+implementations, e.g., `onCommit()`, to align the logic to user needs.
+The module comes also with the following abstract methods:
+
+* `getName()`: It is used to retrieve the name of `ClusterIdentityPrincipal`.
+* `onLogin()`: Logic of the login method which needs to be provided.
+
+Extending the `ClusterLoginModule` is recommended instead of implementing
+all the required stuff from scratch.
+
+[source,java]
+----
+public abstract class ClusterLoginModule implements LoginModule {
+
+  protected abstract boolean onLogin() throws LoginException;
+  protected abstract String getName();
+
+  protected void onInitialize() {
+  }
+
+  protected boolean onCommit() throws LoginException {
+      return true;
+  }
+
+  protected boolean onAbort() throws LoginException {
+      return true;
+  }
+
+  protected boolean onLogout() throws LoginException {
+      return true;
+  }
+  // ...
+}
+----
+
+`ClusterLoginModule` supports a basic set of login module options,
+which allow skipping adding principals of a given type to the JAAS Subject.
+It allows, for instance, to have just one `ClusterIdentityPrincipal` in
+the `Subject` even if there are more login modules in the chain:
+
+[cols="1,1,3"]
+.ClusterLoginModule options
+|===
+| Option Name
+| Default Value
+| Description
+
+| `skipIdentity`
+| `false`
+| Don't add any `ClusterIdentityPrincipal` to the Subject.
+
+| `skipRole`
+| `false`
+| Don't add any `ClusterRolePrincipal` to the Subject.
+
+| `skipEndpoint`
+| `false`
+| Don't add any `ClusterEndpointPrincipal` to the Subject.
+|===
+
+== Enterprise Integration
+
+Using the above API, you can implement a `LoginModule` that performs
+authentication against the security system of your choice,
+such databases, directory services or some other corporate standard you might have.
+For example, you may wish to have your clients send an identification
+token in the `Credentials` object.
+This token can then be sent to your backend security system via the
+`LoginModule` that runs on the cluster side.
+
+Additionally, the same system may authenticate the user and also then
+return the roles that are attributed to the user. These roles can then
+be used for data structure authorization.
+
+NOTE: See the http://docs.oracle.com/javase/8/docs/technotes/guides/security/jaas/JAASRefGuide.html[JAAS Reference Guide^]
+for further information.

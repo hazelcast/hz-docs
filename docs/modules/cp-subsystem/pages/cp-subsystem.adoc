@@ -1,0 +1,136 @@
+= CP Subsystem Overview
+
+WARNING: **CP Subsystem operates in _the unsafe mode_ by default without
+the strong consistency guarantee.** See the
+xref:unsafe-mode.adoc[CP Subsystem Unsafe Mode] section for more
+information. You should set a positive number to the CP member count
+configuration to enable CP Subsystem and use it with the strong consistency
+guarantee. See the xref:configuration.adoc[CP Subsystem Configuration]
+section for details.
+
+CP Subsystem is a component of a Hazelcast cluster that builds a strongly
+consistent layer for a set of distributed data structures. Its APIs can be used
+for implementing distributed coordination use cases, such as leader election,
+distributed locking, synchronization, and metadata management. It is accessed
+via `HazelcastInstance.getCPSubsystem()`. Its data structures are _CP_ with
+respect to the http://awoc.wolski.fi/dlib/big-data/Brewer_podc_keynote_2000.pdf[_CAP_ principle^],
+i.e., they always maintain linearizability
+and prefer consistency over availability during network partitions. Besides
+network partitions, CP Subsystem withstands server and client failures.
+
+Currently, CP Subsystem contains only the implementations of Hazelcast's
+concurrency APIs. Since these APIs do not maintain large states, all members of
+a Hazelcast cluster do not necessarily take part in CP Subsystem. The number of
+Hazelcast members that take part in CP Subsystem is specified with
+`CPSubsystemConfig.setCPMemberCount(int)`. Say that it is configured as `N`.
+Then, when a Hazelcast cluster starts, the first `N` members form CP Subsystem.
+These members are called _CP members_ and they can also contain data for
+the other regular _AP_ Hazelcast data structures, such as `IMap`, `ISet`.
+
+Data structures in CP Subsystem run in _CP groups_. Each CP group elects its
+own Raft leader and runs the https://raft.github.io/[Raft consensus algorithm^]
+independently. CP Subsystem runs 2 CP groups by default:
+
+* The first one is _the METADATA CP group_ which is an internal CP group
+responsible for managing CP members and CP groups. It is initialized during
+cluster startup if CP Subsystem is enabled via `CPSubsystemConfig.setCPMemberCount(int)`.
+* The second CP group is _the DEFAULT CP group_, whose name is given in
+`CPGroup.DEFAULT_GROUP_NAME`. If a group name is not specified while creating
+a CP data structure proxy, that data structure is mapped to _the DEFAULT CP
+group_. For instance, when a CP `IAtomicLong` instance is created via
+`CPSubsystem.getAtomicLong("myAtomicLong")`, it is initialized on
+_the DEFAULT CP group_.
+
+Besides these 2 predefined CP groups, custom CP groups can be created at
+run-time while fetching the CP data structure proxies. For instance, if a CP
+`IAtomicLong` is created by calling `.getAtomicLong("myAtomicLong@myGroup")`,
+first a new CP group is created with the name `myGroup` and then `myAtomicLong`
+is initialized on this custom CP group.
+
+This design implies that each CP member can participate to more than one CP
+group. CP Subsystem runs a periodic background task to ensure that each CP
+member performs the Raft leadership role for roughly equal number of CP groups.
+For instance, if there are 3 CP members and 3 CP groups, each CP member becomes
+Raft leader for only 1 CP group. If one more CP group is created, then one of
+the CP members gets the Raft leader role for 2 CP groups. This is done because
+Raft is a leader-based consensus algorithm. A Raft leader member becomes
+responsible for handling incoming requests from callers and replicating them to
+follower members. If a CP member gets the Raft leadership role for too many CP
+groups compared to other CP members, it can turn into a bottleneck.
+
+CP member count of CP groups are specified via
+`CPSubsystemConfig.setGroupSize(int)`. Please note that this configuration does
+not have to be the same with the CP member count. Namely, the number of CP members in
+CP Subsystem can be larger than the configured CP group size. CP groups usually
+consist of an odd number of CP members between 3 and 7. Operations are
+committed and executed only after they are successfully replicated to
+the majority of CP members in a CP group. An odd number of CP members is more
+advantageous to an even number because of the quorum or majority calculations.
+For a CP group of `N` members, the majority is calculated as `N / 2 + 1`. For
+instance, in a CP group of 5 CP members, operations are committed when they are
+replicated to at least 3 CP members. This CP group can tolerate the failure of 2 CP
+members and remain available. However, if we run a CP group with 6 CP members,
+it can still tolerate the failure of 2 CP members because the majority of 6 is 4.
+Therefore, it does not improve the degree of fault tolerance compared to 5 CP
+members. In summary, CP subsystem remains available (and executes the operations)
+as long as the majority ((N/2) + 1) of the members are alive.
+
+CP Subsystem achieves horizontal scalability thanks to all
+the aforementioned CP group management capabilities. You can scale out
+the throughput and memory capacity by distributing your CP data structures to
+multiple CP groups, i.e., manual partitioning / sharding, and distributing
+those CP groups over CP members, i.e., choosing a CP group size that is smaller
+than the CP member count configuration. Nevertheless, the current set of CP
+data structures has quite low memory overheads. Moreover, related to the Raft
+consensus algorithm, each CP group makes use of internal heartbeat RPCs to
+maintain authority of the Raft leader and help lagging CP group members to make
+progress. Last, the new CP lock and semaphore implementations rely on a brand
+new session mechanism. In a nutshell, a Hazelcast server or a client starts
+a new session on the corresponding CP group when it makes its very first lock
+or semaphore acquire request, and then periodically commits session heartbeats
+to this CP group in order to indicate its liveliness. It means that if CP
+locks and semaphores are distributed to multiple CP groups, there will be
+a session management overhead on each CP group. See
+the xref:sessions.adoc[CP Sessions section] for more details. For these reasons,
+we recommend developers to use a minimal number of CP groups. For most use
+cases, _the DEFAULT CP group_ should be sufficient to maintain all CP data
+structure instances. Custom CP groups is recommended only when you benchmark
+your deployment and decide that performance of _the DEFAULT CP group_ is not
+sufficient for your workload.
+
+By default, CP Subsystem works only in memory without persisting any state to
+disk. It means that a crashed CP member is not able to join to the cluster back
+by restoring its previous state. Therefore, crashed CP members create a danger
+for gradually losing majority of CP groups and eventually cause the total loss
+of availability of CP Subsystem. To prevent such situations, crashed CP members
+can be removed from CP Subsystem and replaced in CP groups with other available
+CP members. This flexibility provides a good degree of fault tolerance at
+run-time. See the xref:configuration.adoc[CP Subsystem Configuration section]
+and xref:management.adoc[CP Subsystem Management section] for more
+details. Moreover, CP Subsystem Persistence enables more robustness. When it is
+enabled, CP members persist their local state to stable storage and can restore
+their state after crashes. See the xref:persistence.adoc[CP Subsystem Persistence section]
+for more details.
+
+**API Code Sample:**
+
+[source,java]
+----
+include::ROOT:example$/cp/CpSubsystemAPI.java[tag=apisample]
+----
+
+[WARNING]
+====
+The CP data structure proxies differ from the other data Hazelcast structure
+proxies in two aspects:
+
+* An internal commit is performed on _the METADATA CP group_ every time you
+fetch a proxy from this interface. Hence, the callers should cache the returned proxy
+objects.
+* If you call the `DistributedObject.destroy()` method on a CP data structure
+proxy, that data structure is terminated on the underlying CP group and cannot
+be reinitialized until the CP group is force-destroyed via
+`CPSubsystemManagementService.forceDestroyCPGroup(String)`. For this reason,
+please make sure that you are completely done with a CP data structure before
+destroying its proxy.
+====

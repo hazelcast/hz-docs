@@ -1,0 +1,87 @@
+= Accessing Portable Objects Without Domain Classes
+:page-beta: true
+[[accessing-domain-objects-without-domain-classes]]
+
+Usually, to access any fields in a xref:serialization:implementing-portable-serialization.adoc[portable object], you would need to have the class of that object on the member's classpath. However, you may not want to add classes on the member. In this case, Hazelcast can return a `GenericRecord` object to your *Java* application. This object gives you access to your portable object's fields without having to add a `PortableFactory` class to the classpath of your members.
+
+For example, to access the fields of a portable object in an entry processor, you could do the following:
+
+[source,java]
+----
+map.executeOnKey(key, (EntryProcessor<Object, Object, Object>) entry -> {
+  Object value = entry.getValue();
+  GenericRecord genericRecord = (GenericRecord) value;
+
+  int id = genericRecord.getInt("id");
+
+  return null;
+});
+----
+
+[NOTE]
+====
+An alternative approach introduced in the previous Hazelcast releases is the xref:clusters:deploying-code-on-member.adoc[User Code Deployment]
+feature to deploy the classes from the client to the cluster.
+However, it has a restriction: you cannot upload
+a new version of your class to the cluster if you use the portable versioning support.
+Loading two different versions of the same class on the JVM is not a problem that we want to solve: using `GenericRecord`,
+you can easily write different versions of your classes
+from the clients and access them without using the User Code Deployment feature.
+
+With the introduction of `GenericRecord`, User Code Deployment should be used only for functional objects like `Runnable`,
+`Callable` and `EntryProcessor`.
+====
+
+== Creating New Portable Objects
+
+To create a `GenericRecord` object in portable format, use the `GenericRecordBuilder.portable()` method:
+
+[source,java]
+----
+ClassDefinition classDefinition = new ClassDefinitionBuilder(PORTABLE_FACTORY_ID, EMPLOYEE_CLASS_ID)
+                        .addStringField("name").addIntField("id").build();
+
+GenericRecord namedRecord = GenericRecordBuilder.portable(classDefinition)
+                .setString("name", "foo")
+                .setInt("id", 123).build();
+----
+
+Note that the class definitions are better to be created once and
+used when creating different instances of the same `GenericRecord` object.
+
+== Adding and Changing Values in Portable Objects
+
+We have also added two convenience methods in `GenericRecord` for you to
+avoid passing a class definition. For example, if you want to modify a value and
+put it back using an entry processor, you don't need to create a class definition.
+Instead you can create a builder from the `GenericRecord` object which carries the same class definition as follows:
+
+[source,java]
+----
+map.executeOnKey("key", (EntryProcessor<Object, Object, Object>) entry -> {
+  GenericRecord genericRecord = (GenericRecord) entry.getValue();
+  GenericRecord modifiedGenericRecord = genericRecord.newBuilder()
+          .setString("name","Kermit")
+          .setLong("id", 4)
+          .setInt("age",20)
+          .setString("surname", "The Frog").build();
+  entry.setValue(modifiedGenericRecord);
+  return null;
+});
+----
+
+Another convenience method is `cloneWithBuilder()`. This is useful if you want to update only
+a couple of fields from the original `genericRecord`. In that case, the new builder carries
+both `classDefinition` and values from the original
+`genericRecord`. Here is the same example where we just update the age:
+
+[source,java]
+----
+map.executeOnKey("key", (EntryProcessor<Object, Object, Object>) entry -> {
+  GenericRecord genericRecord = (GenericRecord) entry.getValue();
+  GenericRecord modifiedGenericRecord = genericRecord.cloneWithBuilder()
+          .setInt("age",22).build();
+  entry.setValue(modifiedGenericRecord);
+  return null;
+});
+----

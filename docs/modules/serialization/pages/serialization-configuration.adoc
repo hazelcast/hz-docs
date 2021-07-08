@@ -1,0 +1,135 @@
+= Serialization Configuration Wrap-Up
+
+This section summarizes the configuration of serialization options, explained in the above sections,
+into all-in-one examples. The following are example serialization configurations.
+
+**Declarative Configuration:**
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <serialization>
+        <portable-version>0</portable-version>
+        <use-native-byte-order>false</use-native-byte-order>
+        <byte-order>BIG_ENDIAN</byte-order>
+        <data-serializable-factories>
+            <data-serializable-factory factory-id="1">com.hazelcast.examples.DataSerializableFactory
+            </data-serializable-factory>
+        </data-serializable-factories>
+        <portable-factories>
+            <portable-factory factory-id="1">com.hazelcast.examples.PortableFactory</portable-factory>
+        </portable-factories>
+        <serializers>
+            <global-serializer>com.hazelcast.examples.GlobalSerializerFactory</global-serializer>
+            <serializer type-class="com.hazelcast.examples.DummyType"
+                        class-name="com.hazelcast.examples.SerializerFactory"/>
+        </serializers>
+        <check-class-def-errors>true</check-class-def-errors>
+        <java-serialization-filter defaults-disabled="true">
+            <blacklist>
+                <class>com.acme.app.BeanComparator</class>
+            </blacklist>
+            <whitelist>
+                <class>java.lang.String</class>
+                <class>example.Foo</class>
+                <package>com.acme.app</package>
+                <package>com.acme.app.subpkg</package>
+                <prefix>com.hazelcast.</prefix>
+                <prefix>java</prefix>
+            </whitelist>
+        </java-serialization-filter>
+    </serialization>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  serialization:
+    portable-version: 0
+    use-native-byte-order: false
+    byte-order: BIG_ENDIAN
+    data-serializable-factories:
+      - factory-id: 1
+        class-name: com.hazelcast.examples.DataSerializableFactory
+    portable-factories:
+      - factory-id: 1
+        class-name: com.hazelcast.examples.PortableFactory
+    global-serializer:
+      class-name: com.hazelcast.examples.GlobalSerializerFactory
+    serializers:
+      - type-class: com.hazelcast.examples.DummyType
+        class-name: com.hazelcast.examples.SerializerFactory
+    check-class-def-errors: true
+    java-serialization-filter:
+      defaults-disabled: true
+      blacklist:
+        class:
+          - com.acme.app.BeanComparator
+      whitelist:
+        class:
+          - java.lang.String
+          - example.Foo
+        package:
+          - com.acme.app
+          - com.acme.app.subpkg
+        prefix:
+          - com.hazelcast.
+          - java
+----
+====
+
+**Programmatic Configuration:**
+
+[source,java]
+----
+Config config = new Config();
+SerializationConfig srzConfig = config.getSerializationConfig();
+srzConfig.setPortableVersion( "2" ).setUseNativeByteOrder( true );
+srzConfig.setAllowUnsafe( true ).setEnableCompression( true );
+srzConfig.setCheckClassDefErrors( true );
+
+GlobalSerializerConfig globSrzConfig = srzConfig.getGlobalSerializerConfig();
+globSrzConfig.setClassName( "abc.Class" );
+
+SerializerConfig serializerConfig = srzConfig.getSerializerConfig();
+serializerConfig.setTypeClass( "Employee" )
+                .setClassName( "com.EmployeeSerializer" );
+----
+
+Serialization configuration has the following elements.
+
+* `portable-version`: Defines versioning of the portable serialization.
+Portable version differentiates two of the same classes that have changes, such as adding/removing field or
+changing a type of a field.
+* `use-native-byte-order`: Set to `true` to use native byte order for the underlying platform.
+Its default value is `false`.
+* `byte-order`: Defines the byte order that the serialization uses: `BIG_ENDIAN` or `LITTLE_ENDIAN`.
+Its default value is `BIG_ENDIAN`.
+* `enable-compression`: Enables compression if default Java serialization is used.
+Its default value is `false`.
+* `enable-shared-object`: Enables shared object if default Java serialization is used.
+Its default value is `false`.
+* `allow-unsafe`: Set to `true` to allow `unsafe` to be used.
+Its default value is `false`.
+* `data-serializable-factory`: Custom classes implementing
+`com.hazelcast.nio.serialization.DataSerializableFactory` to be registered.
+These can be used to speed up serialization/deserialization of objects.
+* `portable-factory`: The `PortableFactory` class to be registered.
+* `global-serializer`: The global serializer class to be registered if no other serializer is applicable.
+This element has the optional boolean attribute `override-java-serialization`.
+If set to `true`, the Java serialization step is assumed to be handled by the global serializer.
+Java Serializable and Externalizable is prior to global serializer by default (`false`).
+* `serializer`: The class name of the serializer implementation.
+* `check-class-def-errors`: When set to `true`, the serialization system checks for
+class definitions error at start and throws a Serialization Exception with an error definition.
+* `java-serialization-filter`: Provides deserialization protection based on
+whitelisting and blacklisting the class/package names.

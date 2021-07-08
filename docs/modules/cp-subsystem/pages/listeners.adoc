@@ -1,0 +1,262 @@
+= CP Subsystem Listeners
+
+The CP Subsystem provides the following listeners:
+
+* CP membership listeners
+* CP group availability listeners
+
+The following sections explain each listener and
+how to register them.
+
+== CP Membership Listener
+
+`CPMembershipListener` is notified when a CP member is added to or removed
+from the CP Subsystem. Its signature is very similar to Hazelcast's usual
+xref:events:cluster-events.adoc#listening-for-member-events[`MembershipListener`].
+
+The listener interface has methods that are invoked for the following events:
+
+* `memberAdded`: A new CP member is added to the CP subsystem.
+* `memberRemoved`: An existing CP member is removed from the CP subsystem.
+
+To get notified for CP membership events, you implement the `CPMembershipListener` interface.
+
+The following is an example `CPMembershipListener` class:
+
+[source,java]
+----
+include::ROOT:example$/cp/event/CPMembershipListenerImpl.java[tag=impl]
+----
+
+=== Registering CP Membership Listeners
+
+`CPMembershipListener` can be defined in the configuration or can be registered
+in runtime via the `CPSubsystem` API.
+
+Below is an example registering the listener in runtime using the `CPSubsystem.addMembershipListener` method:
+
+[source,java]
+----
+// Either server or client
+HazelcastInstance hazelcastInstance = ...;
+hazelcastInstance.getCPSubsystem().addMembershipListener(new CPMembershipListenerImpl());
+----
+
+The following is an example programmatic configuration:
+
+[tabs] 
+==== 
+Server:: 
++ 
+-- 
+[source,java]
+----
+Config config = new Config();
+config.addListenerConfig(new ListenerConfig("com.yourpackage.CPMembershipListenerImpl"));
+----
+--
+
+Client::
++
+[source,java]
+----
+ClientConfig config = new ClientConfig();
+config.addListenerConfig(new ListenerConfig("com.yourpackage.CPMembershipListenerImpl"));
+----
+====
+
+The followings are examples of the equivalent declarative configurations:
+
+[tabs] 
+==== 
+Server XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <listeners>
+        <listener>
+            com.yourpackage.CPMembershipListenerImpl
+        </listener>
+    </listeners>
+    ...
+</hazelcast>
+----
+--
+
+Server YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  ...
+  listeners:
+    - com.yourpackage.CPMembershipListenerImpl
+----
+--
+
+Client XML::
++
+--
+[source,xml]
+----
+<hazelcast-client>
+    ...
+    <listeners>
+        <listener>
+            com.yourpackage.CPMembershipListenerImpl
+        </listener>
+    </listeners>
+    ...
+</hazelcast-client>
+----
+--
+
+Client YAML::
++
+[source,yaml]
+----
+hazelcast-client:
+  ...
+  listeners:
+    - com.yourpackage.CPMembershipListenerImpl
+----
+====
+
+== CP Group Availability Listener
+
+`CPGroupAvailabilityListener` is notified when the availability of a CP group decreases
+or it loses the majority completely.
+
+In general, the availability decreases when a CP member becomes unreachable because of process crash,
+network partition, out of memory, etc. Once a member is declared as unavailable
+by the Hazelcast's failure detector, that member is removed from the cluster.
+If it is also a CP member, ``CPGroupAvailabilityEvent``s are fired for each CP group
+that member belongs to.
+
+As a special case, `CPGroupAvailabilityListener` has a separate method to report
+the loss of majority. When the majority of a CP group is lost, that CP group cannot make
+progress anymore. Even a new CP member cannot join to this CP group
+since membership changes also go through the Raft consensus algorithm.
+
+When a CP group has lost its majority:
+
+* If the group is a non-METADATA CP group, it must be force-destroyed immediately,
+because it can block the METADATA CP group to perform membership changes on the CP Subsystem.
+* If the majority of the METADATA CP group permanently crashes, unfortunately
+it is equivalent to the permanent crash of the majority CP members of the whole CP Subsystem,
+even though other CP groups are running fine.
+
+The listener interface has methods that are invoked for the following events:
+
+* `availabilityDecreased`: A CP group's availability decreases,
+but still has the majority of members available.
+* `majorityLost`: A CP group has lost its majority.
+
+The following is an example `CPGroupAvailabilityListener` class:
+
+[source,java]
+----
+include::ROOT:example$/cp/event/CPGroupAvailabilityListenerImpl.java[tag=impl]
+----
+
+=== Registering CP Group Availability Listeners
+
+Similar to `CPMembershipListener`, a `CPGroupAvailabilityListener` can be defined
+in the configuration or can be registered in runtime via the `CPSubsystem` API.
+
+Below is an example registering the listener in runtime using the `CPSubsystem.addGroupAvailabilityListener` method:
+
+[source,java]
+----
+// Either server or client
+HazelcastInstance hazelcastInstance = ...;
+hazelcastInstance.getCPSubsystem().addGroupAvailabilityListener(new CPGroupAvailabilityListenerImpl());
+----
+
+The following is an example programmatic configuration:
+
+[tabs] 
+==== 
+Server:: 
++ 
+-- 
+[source,java]
+----
+Config config = new Config();
+config.addListenerConfig(new ListenerConfig("com.yourpackage.CPGroupAvailabilityListenerImpl"));
+----
+--
+
+Client::
++
+[source,java]
+----
+ClientConfig config = new ClientConfig();
+config.addListenerConfig(new ListenerConfig("com.yourpackage.CPGroupAvailabilityListenerImpl"));
+----
+====
+
+The followings are examples of the equivalent declarative configurations:
+
+[tabs] 
+==== 
+Server XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <listeners>
+        <listener>
+            com.yourpackage.CPGroupAvailabilityListenerImpl
+        </listener>
+    </listeners>
+    ...
+</hazelcast>
+----
+--
+
+Server YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  ...
+  listeners:
+    - com.yourpackage.CPGroupAvailabilityListenerImpl
+----
+--
+
+Client XML::
++
+--
+[source,xml]
+----
+<hazelcast-client>
+    ...
+    <listeners>
+        <listener>
+            com.yourpackage.CPGroupAvailabilityListenerImpl
+        </listener>
+    </listeners>
+    ...
+</hazelcast-client>
+----
+--
+
+Client YAML::
++
+[source,yaml]
+----
+hazelcast-client:
+  ...
+  listeners:
+    - com.yourpackage.CPGroupAvailabilityListenerImpl
+----
+====

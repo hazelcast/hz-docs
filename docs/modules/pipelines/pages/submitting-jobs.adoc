@@ -1,0 +1,143 @@
+= Submitting Jobs
+:description: Submit data pipelines to a Hazelcast cluster for execution.
+
+To execute a data pipeline it needs to be submitted to the cluster as a job. Once the job is submitted, it's distributed automatically to all the cluster members and will be executed on all members by default.
+
+To run a job, a Hazelcast member must have access to all classes that are used in the job. Depending on how you submit a job, you may also need to upload those classes to your cluster.
+
+NOTE: Hazelcast cannot check xref:security:native-client-security.adoc#permissions[client permissions] in code that's uploaded with a job. In uploaded code, clients can access data or features without permission.
+
+== Submitting a Job from the CLI
+
+The `hazelcast submit` command of the CLI allows you to upload all classes that are used in your job automatically.
+
+```bash
+bin/hazelcast submit <jar file>
+```
+
+To do so, your pipeline code must acquire a
+`JetService` using `Hazelcast.bootstrappedInstance()`.
+
+```java
+Pipeline pipeline = Pipeline.create();
+pipeline.readFrom(TestSources.items("the", "quick", "brown", "fox"))
+ .map(item -> item.toUpperCase())
+ .writeTo(Sinks.logger());
+
+HazelcastInstance hz = Hazelcast.bootstrappedInstance();
+JetService jet = hz.getJet();
+
+try {
+   jet.newJob(pipeline);
+} finally {
+   jet.shutdown();
+}
+```
+
+NOTE: The bootstrapped instance disables auto discovery, so we recommend not using this instance in embedded mode.
+
+By default, the `hazelcast submit` command  executes the `Main` class of the
+provided JAR file and submits the job to a member at `dev@localhost`.
+
+To execute a different class use the `--class` option of the `submit` command.
+
+```bash
+bin/hazelcast submit --class MainClass <jar file> [<arguments>...]
+```
+
+Or to submit the job to a member at a different address, use one of the following options of the `hazelcast` command:
+
+* `-t`: An optional name of the cluster and comma-separated member addresses to which you want to connect.
+* `-f`: Path to a client config file, which can be used instead of the `-t` option.
+
+The `submit` command has the following additional options:
+
+* `-v`: Verbose mode, which will show the connection logs and
+  exception stack traces, if any.
+* `-n`: Job name to use, will override the xref:configuring-jobs.adoc#setting-the-job-name[one set in the `JobConfig` object].
+* `-s`: Name of the initial xref:configuring-jobs.adoc#setting-a-processing-guarantee-for-streaming-jobs[snapshot] to start the job from.
+
+Example:
+
+```bash
+bin/hazelcast \
+  -t jet@192.168.1.100:5701,192.168.1.101:5701 \
+  submit \
+  -c <MainClass> \
+  <jar file> \
+  [<arguments>...]
+```
+
+== Submitting a Job using a Hazelcast Client or Embedded Mode
+
+If you are using a Hazelcast client as part of an application and need to
+submit jobs within that application, you can use the Hazelcast client
+to directly submit jobs:
+
+```java
+HazelcastInstance hz = HazelcastClient.newHazelcastClient();
+..
+hz.getJet().newJob(pipeline);
+```
+
+Or, if you're using Hazelcast in embedded mode, you can use the Hazelcast instance to directly submit jobs.
+
+```java
+HazelcastInstance hz = Hazelcast.newHazelcastInstance();
+..
+hz.getJet().newJob(pipeline);
+```
+
+=== Uploading Classes to Members
+
+When submitting a job using the Hazelcast client, no additional classes are
+sent with the job. Instead, you must upload those classes, using one of the following options:
+
+- Use the API
++
+```java
+HazelcastInstance hz = HazelcastClient.newHazelcastClient();
+hz.getJet().newJob(pipeline, new JobConfig().addClass(AppClass.class))
+```
++
+When adding classes this way, nested (inner and anonymous) classes are
+automatically added to the members' classpaths as well.
++
+It's also possible to add all the classes in a given package (and
+recursively in all its subpackages) using `JobConfig.addPackage()` or
+even a whole JAR file with `JobConfig.addJar()`.
+- Add JAR files to the `<HAZELCAST_HOME>/lib` folder.
++
+Hazelcast automatically picks up any dependencies placed in this folder during
+startup.
++
+NOTE: After making changes to the `lib` folder, you must restart the member before it will recognize the new files.
+- Add the path to your JAR files, using the `CLASSPATH=<path_to_jar>` environment variable when starting a Hazelcast member.
+
+[WARNING]
+====
+The following classes must be uploaded at the same time as the member starts. You cannot upload these classes using the API or the CLI.
+
+* xref:serialization:serialization.adoc#serialization-of-data-types[Custom Serializers]
+* Map features such as EntryProcessor or MapLoader and MapStore
+====
+
+== Submitting a Job using SQL
+
+To submit a job to the cluster, using SQL, use the xref:sql:create-job.adoc[`CREATE JOB` statement].
+
+TIP: For an example of how to use this statement, see xref:learn-sql.adoc[].
+
+=== Uploading Classes to Members
+
+You cannot use SQL to add classes to a member's classpath.
+
+If your job uses classes that aren't already in your members classpath, you can use one of the following options:
+
+- Add JAR files to the `<HAZELCAST_HOME>/lib` folder.
++
+Hazelcast automatically picks up any dependencies placed in this folder during
+startup.
++
+NOTE: After making changes to the `lib` folder, you must restart the member before it will recognize the new files.
+- Add the path to your JAR files, using the `CLASSPATH=<path_to_jar>` environment variable when starting a Hazelcast member.

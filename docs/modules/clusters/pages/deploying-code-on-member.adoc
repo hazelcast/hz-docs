@@ -1,0 +1,154 @@
+= Deploying User Code on the Member
+[[member-user-code-deployment]]
+
+Hazelcast can dynamically load your custom classes or domain classes from other
+members. A xref:management:cluster-utilities.adoc#enabling-lite-members[lite member] can be designated as a _class
+repository_, but any member can _provide_ classes to other members. For this
+purpose Hazelcast offers a distributed dynamic class loader.
+
+The following is a brief working mechanism of the User Code Deployment feature:
+
+. A new dynamic class loader is created to handle each operation.
+. It first checks locally available classes, i.e. the member's classpath. If
+the class is found, it is used.
+. Then it checks the _cache_ of classes loaded from remote members or clients
+(if caching is enabled on your local member, see the
+<<configuring-user-code-deployment>> section). If your class is found there, it
+is used.
+. Finally, the dynamic class loader checks configured remote members, one by
+one. If some member returns the class, it will be used. It can also put this
+class into the local class cache as mentioned in the previous step.
+. If the class is not found, `ClassNotFoundException` is thrown.
+. The dynamic class loader is released after the operation is handled. A next
+operation will load the class from the cache or re-fetch it.
+
+NOTE: Using the user code deployment feature is a fit for your functional objects
+like `Runnable`, `Callable` and `EntryProcessor`.
+For the domain objects, we recommend you to use the
+<<accessing-domain-objects-without-domain-classes, generic object interface>> (`GenericRecord`).
+
+[[configuring-user-code-deployment]]
+== Configuring User Code Deployment
+
+User Code Deployment feature is not enabled by default. You can control local
+caching of the classes loaded from other members, control classes to be
+provided to other members and create blacklists and whitelists of classes and
+packages.
+
+Following are example configuration snippets:
+
+**Declarative Configuration:**
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <user-code-deployment enabled="true">
+        <class-cache-mode>ETERNAL</class-cache-mode>
+        <provider-mode>LOCAL_AND_CACHED_CLASSES</provider-mode>
+        <blacklist-prefixes>com.foo,com.bar</blacklist-prefixes>
+        <whitelist-prefixes>com.bar.MyClass</whitelist-prefixes>
+        <provider-filter>HAS_ATTRIBUTE:lite</provider-filter>
+    </user-code-deployment>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  user-code-deployment:
+    enabled: true
+    class-cache-mode: ETERNAL
+    provider-mode: LOCAL_AND_CACHED_CLASSES
+    blacklist-prefixes: com.foo,com.bar
+    whitelist-prefixes: com.bar.MyClass
+    provider-filter: HAS_ATTRIBUTE:lite
+----
+====
+
+**Programmatic Configuration:**
+
+[source,java]
+----
+include::ROOT:example$/MemberUCD.java[tag=ucd]
+----
+
+User Code Deployment on the member has the following configuration:
+
+* `enabled`: Specifies whether dynamic class loading is enabled or not. Its
+default value is "false" and it's a mandatory attribute. If feature is
+disabled, the member will never load classes from other members or clients.
+* `<class-cache-mode>`: Controls the local caching behavior for the classes
+loaded from remote members (classes loaded from clients are always cached).
+Available values are:
+** `ETERNAL`: Cache the loaded classes locally. This is the default value and
+suitable when you load long-living objects, such as domain objects stored in a map.
+** `OFF`: Do not cache the loaded classes locally. It is suitable for loading
+runnables, callables, entry processors, etc.
+* `<provider-mode>`: Controls which classes are served to other cluster
+members. Available values are:
+** `LOCAL_AND_CACHED_CLASSES`: Serve classes loaded from both local classpath
+and from other members. This is the default value.
+** `LOCAL_CLASSES_ONLY`: Serve classes from the local classpath only. Classes
+loaded from other members are used locally, but they are not served to other members.
+** `OFF`: Never serve classes to other members.
+* `<blacklist-prefixes>`: Comma separated class/package name prefixes that
+the member will never attempt to load from other members and that the client
+won't be allowed to upload. For example, if you set it to "com.foo", remote
+loading of all classes from the "com.foo" package is prevented, including the
+classes from all its sub-packages. If you set it to "com.foo.Class", then
+"Class" and all classes starting with "Class" in the "com.foo" package are
+blacklisted. There are built-in prefixes which are always blacklisted.
+These are as follows:
+** `javax.`
+** `java.`
+** `sun.`
+** `com.hazelcast.`
+* `<whitelist-prefixes>`: Comma separated name prefixes of classes/packages
+only from which the classes are allowed to be loaded. It allows to quickly
+configure remote loading only for classes from selected packages. It can be
+used together with blacklisting. For example, you can whitelist the prefix
+"com.foo" and blacklist the prefix "com.foo.secret". If the list is empty, all
+classes are allowed.
+* `<provider-filter>`: Filter to constrain members that can be used for a class
+loading request when a class is not available locally. The value is in the
+format "HAS_ATTRIBUTE:foo". When it is set to "HAS_ATTRIBUTE:foo", the class
+loading request is only sent to the members which have "foo" as a
+xref:management:cluster-utilities.adoc#defining-member-attributes[member attribute]. Setting this to null allows
+loading of classes from all members. See an example in the next section.
+
+[[example-for-filtering-members]]
+== Example for Filtering of Members
+
+As described above, the configuration element `provider-filter` is used to
+limit members that can be used to load classes. The attribute required in the
+`provider-filter` must be set as a member attribute on the members from which
+the classes are to be loaded. See the following examples provided as
+programmatic configurations.
+
+The example configuration below allows the Hazelcast member to load classes
+only from members with the `class-provider` attribute set. It prevents from
+asking any other member to provide a locally unavailable class:
+
+[source,java]
+----
+include::ROOT:example$/MemberUCD.java[tag=hasAttributeConfig]
+----
+
+The example configuration below sets the attribute `class-provider` for a
+member. Therefore the above member will be able to load classes from this
+member:
+
+[source,java]
+----
+include::ROOT:example$/MemberUCD.java[tag=memberAttributeConfig]
+----

@@ -1,0 +1,411 @@
+= Partition Group Configuration
+[[partition-group-configuration]]
+
+Hazelcast distributes key objects into partitions using the consistent
+hashing algorithm. Multiple replicas are created for each partition and
+those partition replicas are distributed among Hazelcast members. An entry
+is stored in the members that own replicas of the partition to which the entry's
+key is assigned. The total partition count is 271 by default; you can change it
+with the configuration property `hazelcast.partition.count`. See the
+xref:ROOT:system-properties.adoc[System Properties appendix].
+
+Hazelcast member that owns the primary replica of a partition is called as
+the partition owner. Other replicas are called backups. Based on the configuration,
+a key object can be kept in multiple replicas of a partition. A member can hold at
+most one replica of a partition (ownership or backup).
+
+By default, Hazelcast distributes partition replicas randomly and equally among
+the cluster members, assuming all members in the cluster are identical. But what
+if some members share the same JVM or physical machine or chassis and you want
+backups of these members to be assigned to members in another machine or chassis?
+What if processing or memory capacities of some members are different and you
+do not want an equal number of partitions to be assigned to all members?
+
+To deal with such scenarios, you can group members in the same JVM (or physical machine)
+or members located in the same chassis. Or you can group members to create identical
+capacity. We call these groups **partition groups**. Partitions are assigned to those
+partition groups instead of individual members. Backup replicas of a partition which is
+owned by a partition group are located in other partition groups.
+
+[[grouping-types]]
+== Grouping Types
+
+When you enable partition grouping, Hazelcast presents the following choices
+for you to configure partition groups.
+
+=== HOST_AWARE
+
+You can group members automatically using the IP addresses of members, so members
+sharing the same network interface are grouped together. All members on the same
+host (IP address or domain name) form a single partition group. This helps to avoid
+data loss when a physical server crashes, because multiple replicas of the same
+partition are not stored on the same host. But if there are multiple network
+interfaces or domain names per physical machine, this assumption is invalid.
+
+The following are declarative and programmatic configuration snippets that
+show how to enable `HOST_AWARE` grouping:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <partition-group enabled="true" group-type="HOST_AWARE">
+        <member-group>
+            <interface>10.10.0.*</interface>
+            <interface>10.10.3.*</interface>
+            <interface>10.10.5.*</interface>
+    </partition-group>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  partition-group:
+    enabled: true
+    group-type: HOST_AWARE
+    member-group:
+      - - 10.10.0.*
+        - 10.10.3.*
+        - 10.10.5.*
+----
+
+Java::
++
+----
+Config config = ...;
+PartitionGroupConfig partitionGroupConfig = config.getPartitionGroupConfig();
+partitionGroupConfig.setEnabled( true )
+    .setGroupType( MemberGroupType.HOST_AWARE );
+
+----
+====
+
+=== ZONE_AWARE
+
+You can use ZONE_AWARE configuration with https://github.com/hazelcast/hazelcast-kubernetes[Hazelcast Kubernetes^],
+https://github.com/hazelcast/hazelcast-aws[Hazelcast AWS^],
+https://github.com/hazelcast/hazelcast-gcp[Hazelcast GCP^],
+https://github.com/hazelcast/hazelcast-jclouds[Hazelcast jclouds^] or
+https://github.com/hazelcast/hazelcast-azure[Hazelcast Azure^] Discovery Service plugins.
+
+As discovery services, these plugins put zone information to the Hazelcast
+xref:management:cluster-utilities.adoc#defining-member-attributes[member attributes] map during the discovery process.
+When ZONE_AWARE is configured as partition group type, Hazelcast creates the partition
+groups with respect to member attributes map entries that include zone information.
+That means backups are created in the other zones and each zone is accepted as one partition group.
+
+NOTE: When using the ZONE_AWARE partition grouping, a Hazelcast cluster spanning
+multiple AZs should have an equal number of members in each AZ. Otherwise,
+it results in uneven partition distribution among the members.
+
+The following is the list of supported attributes which is set by the
+Discovery Service plugins during a Hazelcast member start-up:
+
+* `hazelcast.partition.group.zone`: For the zones in the same area.
+* `hazelcast.partition.group.rack`: For different racks in the same zone.
+* `hazelcast.partition.group.host`: For a shared physical member if virtualization is used.
+
+NOTE: Hazelcast jclouds plugin offers rack or host information in addition to
+zone information based on the cloud provider. In such cases, Hazelcast looks for zone,
+rack and host information in the given order and create partition groups with available information.
+
+The following are declarative and programmatic configuration snippets
+that show how to enable `ZONE_AWARE` grouping:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <partition-group enabled="true" group-type="ZONE_AWARE" />
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  partition-group:
+    enabled: true
+    group-type: ZONE_AWARE
+----
+
+Java::
++
+[source,java]
+----
+Config config = ...;
+PartitionGroupConfig partitionGroupConfig = config.getPartitionGroupConfig();
+partitionGroupConfig.setEnabled( true )
+    .setGroupType( MemberGroupType.ZONE_AWARE );
+----
+====
+
+=== PLACEMENT_AWARE
+
+You can group members according to their placement metadata provided by the
+cloud providers. This metadata indicates the placement information, such as rack,
+fault domain, power sources, network, and resources of a virtual machine in a zone.
+
+This grouping provides a finer granularity than `ZONE_AWARE`
+and is useful for good redundancy when running members within a
+single availability zone; it provides availability within a single zone as high as possible
+by spreading the partitions and their replicas across different racks.
+
+This grouping is currently supported in
+https://github.com/hazelcast/hazelcast-aws[Hazelcast AWS Discovery plugin].
+See also AWS' https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/placement-groups.html[documentation^] on placement groups for more information.
+
+The following are declarative and programmatic configuration snippets
+that show how to enable `PLACEMENT_AWARE` grouping:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <partition-group enabled="true" group-type="PLACEMENT_AWARE" />
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  partition-group:
+    enabled: true
+    group-type: PLACEMENT_AWARE
+----
+
+Java::
++
+[source,java]
+----
+Config config = ...;
+PartitionGroupConfig partitionGroupConfig = config.getPartitionGroupConfig();
+partitionGroupConfig.setEnabled( true )
+    .setGroupType( MemberGroupType.PLACEMENT_AWARE );
+----
+====
+
+[[node-aware-partition-grouping]]
+=== NODE_AWARE
+
+You can use the NODE_AWARE configuration with https://github.com/hazelcast/hazelcast-kubernetes/tree/1.5.x[Hazelcast Kubernetes Discovery Service plugin].
+For container orchestration tools like Kubernetes and Docker Swarm, node is the term
+used to refer to the machine that containers/pods run on.
+
+As discovery services, these plugins put node information
+to the Hazelcast xref:management:cluster-utilities.adoc#defining-member-attributes[member attributes] map during the
+discovery process. When NODE_AWARE is configured as partition group type,
+Hazelcast creates the partition groups with respect to member attributes map's entries
+that include the node information. That means backups are created
+in the other nodes and each node is accepted as one partition group.
+
+NOTE: When using the NODE_AWARE partition grouping, the orchestration
+tool must distribute Hazelcast containers/pods equally
+between the nodes. Otherwise, it results in uneven partition
+distribution among the members.
+
+The following are declarative and programmatic configuration snippets that show how to enable `NODE_AWARE` grouping:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <partition-group enabled="true" group-type="NODE_AWARE" />
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  partition-group:
+    enabled: true
+    group-type: NODE_AWARE
+----
+
+Java::
++
+[source,java]
+----
+Config config = ...;
+PartitionGroupConfig partitionGroupConfig = config.getPartitionGroupConfig();
+partitionGroupConfig.setEnabled( true )
+    .setGroupType( MemberGroupType.NODE_AWARE );
+----
+====
+
+=== PER_MEMBER
+
+You can give every member its own group. Each member is a group of its own
+and primary and backup partitions are distributed randomly (not on the same
+physical member). This gives the least amount of protection and is the default
+configuration for a Hazelcast cluster. This grouping type provides good redundancy
+when Hazelcast members are on separate hosts. However, if multiple instances
+run on the same host, this type is not a good option.
+
+The following are declarative and programmatic configuration snippets that
+show how to enable `PER_MEMBER` grouping:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <partition-group enabled="true" group-type="PER_MEMBER" />
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  partition-group:
+    enabled: true
+    group-type: PER_MEMBER
+----
+
+Java::
++
+[source,java]
+----
+Config config = ...;
+PartitionGroupConfig partitionGroupConfig = config.getPartitionGroupConfig();
+partitionGroupConfig.setEnabled( true )
+    .setGroupType( MemberGroupType.PER_MEMBER );
+----
+====
+
+=== CUSTOM
+
+You can do custom grouping using Hazelcast's interface matching configuration.
+This way, you can add different and multiple interfaces to a group. You can also
+use wildcards in the interface addresses. For example, the users can create rack-aware
+or data warehouse partition groups using custom partition grouping.
+
+The following are declarative and programmatic configuration examples that show
+how to enable and use `CUSTOM` grouping:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <partition-group enabled="true" group-type="CUSTOM">
+        <member-group>
+            <interface>10.10.0.*</interface>
+            <interface>10.10.3.*</interface>
+            <interface>10.10.5.*</interface>
+        </member-group>
+        <member-group>
+            <interface>10.10.10.10-100</interface>
+            <interface>10.10.1.*</interface>
+            <interface>10.10.2.*</interface>
+        </member-group>
+    </partition-group>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  partition-group:
+    enabled: true
+    group-type: CUSTOM
+    member-group:
+      - - 10.10.0.*
+        - 10.10.3.*
+        - 10.10.5.*
+      - - 10.10.10.10-100
+        - 10.10.1.*
+        - 10.10.2.*
+----
+
+Java::
++
+[source,java]
+----
+include::ROOT:example$/PartitionGrouping.java[tag=partitiongrouping]
+----
+====
+
+NOTE: While your cluster was forming, if you configured your members to
+discover each other by their IP addresses, you should use the IP addresses
+for the `<interface>` element. If your members discovered each other by their
+host names, you should use host names.
+
+=== SPI
+
+You can provide your own partition group implementation using the SPI configuration.
+To create your partition group implementation, you need to first extend the
+`DiscoveryStrategy` class of the discovery service plugin, override the method
+`public PartitionGroupStrategy getPartitionGroupStrategy()` and return the `PartitionGroupStrategy`
+configuration in that overridden method.
+
+The following code covers the implementation steps mentioned in the above paragraph:
+
+[source,java]
+----
+public class CustomDiscovery extends AbstractDiscoveryStrategy {
+
+    public CustomDiscovery(ILogger logger, Map<String, Comparable> properties) {
+        super(logger, properties);
+    }
+
+    @Override
+    public Iterable<DiscoveryNode> discoverNodes() {
+        Iterable<DiscoveryNode> iterable = //your implementation
+        return iterable;
+    }
+
+    @Override
+    public PartitionGroupStrategy getPartitionGroupStrategy() {
+        return new CustomPartitionGroupStrategy();
+    }
+
+    private class CustomPartitionGroupStrategy implements PartitionGroupStrategy {
+        @Override
+        public Iterable<MemberGroup> getMemberGroups() {
+            Iterable<MemberGroup> iterable = //your implementation
+            return iterable;
+        }
+    }
+}
+----

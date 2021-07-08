@@ -1,0 +1,165 @@
+= Updating Jobs
+:description: Update streaming jobs without losing computation state.
+
+NOTE: This is an Enterprise feature.
+
+A streaming job can be running for days or months without disruptions
+and occasionally it may be necessary to update the job's pipeline while
+at the same preserving its state.
+
+For example, imagine a streaming job which does a windowed aggregation
+over a 24-hour window. Due to new business requirements, you may need to add an additional 1-hour window and a filter.  While implementing this requirement, you don't want to lose the current computational state because it includes data for the past day and in many cases we may not be able to replay this data fully.
+
+To update a job, you need to do the following:
+
+. Update the pipeline with your new workflow.
+. Export the state of your existing job into a snapshot.
+. Start you new job, using the saved state.
+
+== Updating the Pipeline
+
+The first step in updating a job is to update its pipeline.
+
+The new pipeline must be state-compatible with the old one, meaning
+that new pipeline must be able to work with the previous state.
+
+Once the job is started again from a snapshot, the
+following rules are applied:
+
+* If a transform was not in the previous version and is available in the
+  new version, the transform will be restored with an empty state.
+* If a transform was in the previous version and is not in the new
+  version, then its state will simply be ignored.
+* If the transform existed in the previous version and also exists in
+  the new version, then the state from the
+  previous version will be restored as the state of the new transform.
++
+NOTE: Stateful transforms in the original and the updated pipelines must have the same name for the state to be restored successfully.
+
+=== What you Can Do
+
+You can make any of the following changes and still keep your pipeline compatible with the saved state:
+
+* Adding new xref:transforms.adoc#stateful-transforms[stateful stages] and removing existing ones. This includes adding and removing a source or sink or adding a new aggregation path from existing sources.
+
+* Adding, removing or changing xref:transforms.adoc#stateless-transforms[stateless stages], such as `filter`, `map`, `flatMap`, non-transactional sinks, and more.
+
+* Adding new branches to existing pipeline stages.
+
+* Changing the connection parameters of sources and sinks.
+
+* Enabling and disabling early results for a window.
+
+* Changing the timeout of a session window.
++
+WARNING: When you change the session window timeout, you may lose events that were emitted during the update. Hazelcast does not split already aggregated events into different accumulators. However existing pre-aggregated values will be put into frames based on their end time. After all the data based on events that were processed before the update are emitted, the results will be correct again.
+
+* Changing the window size or the slide length of sliding windows or tumbling windows.
++
+WARNING: Hazelcast purges data used in windows that have already been emitted. As a result, your window may miss some data during the update because Hazelcast will need data that has already been purged.
++
+WARNING: When you change the window size or slide step, you may lose events that were emitted during the update. Hazelcast does not split already aggregated events into different accumulators. However existing pre-aggregated values will be put into frames based on their end time. After all the data based on events that were processed before the update are emitted, the results will be correct again.
+
+* Changing the eviction timeout for stateful map.
+
+* Changing the parameters of aggregate operations, such as changing the comparator of the `AggregateOperation.minBy()` method.
+
+* Changing the aggregate operation.
++
+NOTE: The accumulator type must stay the same.
+
+* Renaming a stateless stage.
+
+=== What you Cannot Do
+
+Making any of these changes will make your pipeline incompatible with the saved state:
+
+* Changing a sliding window to a session window.
+
+* Replacing an aggregation operation for another one with a different accumulator.
+
+* Renaming a stateful stage.
+
+== Exporting a Snapshot
+
+To update a job, the first thing we need to do is to take a snapshot of
+its current state and cancel it. This can be achieved by using the
+following command:
+
+[tabs] 
+==== 
+CLI:: 
++ 
+--
+[source,shell]
+----
+bin/hazelcast save-snapshot -C <job name or id> <snapshot name>
+----
+
+This will take an in-memory snapshot of the job state and cancel it. The
+job will not process any data after the snapshot was taken and is
+cleanly taken down. You can see a list of current exported snapshots in
+the cluster with the following command:
+
+[source,shell]
+----
+bin/hazelcast list-snapshots
+----
+
+Example result:
+
+```
+TIME                    SIZE (bytes)    JOB NAME                 SNAPSHOT NAME
+2020-03-15T14:37:01.011 1,196           hello-world              snapshot-v1
+```
+--
+SQL:: 
++ 
+--
+[source,sql]
+----
+DROP JOB IF EXISTS <job name or id> WITH SNAPSHOT <snapshot name>;
+----
+
+Result:
+
+```
+OK
+```
+
+This will take an in-memory snapshot of the job state and cancel it. The
+job will not process any data after the snapshot was taken and is
+cleanly taken down.
+
+You cannot list the current exported snapshots in SQL.
+
+For more details about this statement, see the xref:sql:drop-job.adoc[SQL reference documentation].
+--
+====
+
+NOTE: Internally, Hazelcast stores these snapshots in maps that are separate from the periodic snapshots that are taken as part of the job execution.
+Exporting snapshots requires enough available memory in the cluster to
+store the computation state.
+
+== Starting the Updated Job
+
+When submitting a job, you can specify an initial snapshot to
+use. The job will then start with processing state restored from the
+specified snapshot and as long as _state compatibility_ is maintained,
+it will continue running once the snapshot is restored. To submit a job
+starting from a specific snapshot you can use the following command:
+
+[tabs] 
+==== 
+CLI:: 
++ 
+[source,shell]
+----
+bin/hazelcast submit -s <snapshot name> <jar name>
+----
+--
+SQL:: 
++ 
+To start a new job from an exported snapshot as the starting point, use the xref:create-job.adoc[`CREATE JOB` statement] with the `initialSnapshotName` setting.
+--
+====

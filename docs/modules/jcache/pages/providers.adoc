@@ -1,0 +1,75 @@
+= JCache Providers
+
+Use JCache providers to create caches for a
+specification compliant implementation. Those
+providers abstract the platform
+specific behavior and bindings and provide the
+different JCache required features.
+
+Hazelcast has two types of providers. Depending on your
+application setup and the cluster topology,
+you can use the Client Provider (used by Hazelcast clients)
+or the Member Provider (used by cluster members).
+
+For more information on cluster topologies and Hazelcast
+clients, see the xref:overview:topology.adoc[Hazelcast Topology section].
+
+[[configuring-jcache-provider]]
+== Configuring JCache Provider
+
+Hazelcast provides three `CachingProvider` implementations:
+
+ * A member-side implementation: the ``CacheManager``s created by this provider are backed by
+member-side ``HazelcastInstance``s.
+ * A client-side implementation: the ``CacheManager``s created by this provider are backed by
+client-side ``HazelcastInstance``s.
+ * A delegating caching provider that can be configured to delegate to the member-
+or client-side implementation.
+
+When Hazelcast is the only JCache provider on the classpath, the default
+caching provider returned by `javax.cache.CachingProvider#getCachingProvider()` is
+the delegating `CachingProvider`.
+
+```java
+// provides the default delegating caching provider
+CachingProvider provider = javax.cache.Caching.getCachingProvider();
+```
+
+By default, the delegating caching provider chooses the client-side implementation,
+however it can be configured to explicitly pick the client- or member-side implementation.
+This is achieved by setting the `hazelcast.jcache.provider.type` system property to `client`
+or `member`. The legacy value `server` is also accepted as an alias for `member`, however its
+usage is discouraged as it will be removed in a future version.
+
+```java
+System.setProperty("hazelcast.jcache.provider.type", "member");
+// the returned provider will delegate to the member-side caching provider
+CachingProvider provider = javax.cache.Caching.getCachingProvider();
+```
+
+You can also configure the default `CachingProvider` by setting its fully qualified
+class name to the value of the `javax.cache.spi.CachingProvider` system property.
+The system property can be defined at the `java` command line (using
+`-Djavax.cache.spi.CachingProvider=<fully-qualified-class-name>`) or
+programmatically using `java.lang.System#setProperty(String, String)`.
+
+The JCache API also provides methods to explicitly request the instantiation of
+a specific `CachingProvider` by supplying its fully qualified class name. This is
+useful to explicitly choose Hazelcast as `CachingProvider` in case multiple
+implementations reside on the classpath.
+
+```java
+// provides the member-side caching provider
+CachingProvider provider = Caching.getCachingProvider("com.hazelcast.cache.HazelcastMemberCachingProvider");
+```
+
+Since Hazelcast 4.0.3 the fully qualified class names for Hazelcast's `CachingProvider` implementations are:
+
+ * Delegating `CachingProvider` (picks member- or client-side provider depending on configuration):
+`com.hazelcast.cache.HazelcastCachingProvider`
+ * Member-side: `com.hazelcast.cache.HazelcastMemberCachingProvider`. The legacy class name
+`com.hazelcast.cache.impl.HazelcastServerCachingProvider` is also accepted, however its usage is
+discouraged and will be removed in a future version.
+ * Client-side: `com.hazelcast.client.cache.HazelcastClientCachingProvider`. The legacy class name
+`com.hazelcast.client.cache.impl.HazelcastClientCachingProvider` is also accepted, however its usage is
+discouraged and will be removed in a future version.

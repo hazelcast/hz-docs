@@ -1,0 +1,428 @@
+= Docker
+[[installing-using-docker]]
+
+This section shows you how to use Hazelcast with Docker. We explain
+some options and parameters used in the examples, but otherwise assume
+you are familiar with Docker in general. Visit the https://docs.docker.com/get-started/[official documentation^] for a basic introduction.
+
+== Starting a Hazelcast Member and Cluster
+
+Paste the following into your command line:
+
+[tabs] 
+==== 
+hazelcast:: 
++ 
+-- 
+
+[source,shell]
+----
+docker run -p 5701:5701 hazelcast/hazelcast:$HAZELCAST_VERSION
+----
+--
+
+hazelcast-enterprise::
++
+--
+[source,shell]
+----
+docker run -e 5701:5701 HZ_LICENSE_KEY=<Your Enterprise License Key> hazelcast/hazelcast-enterprise:$HAZELCAST_VERSION
+----
+--
+
+hazelcast-enterprise-4-rhel8::
++
+[source,shell]
+----
+# You must be logged into Red Hat Container Registry
+
+docker run -e 5701:5701 HZ_LICENSE_KEY=<Your Enterprise License Key> registry.connect.redhat.com/hazelcast/hazelcast-enterprise-4-rhel8:$HAZELCAST_VERSION
+----
+====
+
+These commands pull Hazelcast Docker image and start a new Hazelcast member.
+
+On Linux, you can omit the `-p 5701:5701` part, but on other platforms
+you may need it if the container's network isn't directly exposed to the
+host machine.
+
+You should see a log on your terminal similar to this:
+
+[source,plain]
+----
+Members {size:1, ver:1} [
+	Member [172.17.0.2]:5701 - c0640efd-02ae-4595-aace-d944e1e1ad97 this
+]
+----
+
+The command line prompt doesn't return, which allows you to easily stop or restart
+Hazelcast. Note Hazelcast's IP address, you'll need it later.
+
+Now, you have a single Hazelcast member.
+To ensure your codes will work properly, you should test
+it locally in a cluster with multiple members as well; testing on a single member hides some
+common serialization issues your code may have. Let's start another
+Hazelcast container to have a second member so that a 2-member cluster will be formed.
+For this, run `docker run` from another terminal window, using a
+different port mapping than the first member you created:
+
+[tabs] 
+==== 
+hazelcast:: 
++ 
+-- 
+
+[source,shell]
+----
+docker run -p 5702:5701 hazelcast/hazelcast:$HAZELCAST_VERSION
+----
+--
+
+hazelcast-enterprise::
++
+--
+[source,shell]
+----
+docker run -e 5702:5701 HZ_LICENSE_KEY=<Your Enterprise License Key> hazelcast/hazelcast-enterprise:$HAZELCAST_VERSION
+----
+--
+
+hazelcast-enterprise-4-rhel8::
++
+[source,shell]
+----
+# You must be logged into Red Hat Container Registry
+
+docker run -e 5702:5701 HZ_LICENSE_KEY=<Your Enterprise License Key> registry.connect.redhat.com/hazelcast/hazelcast-enterprise-4-rhel8:$HAZELCAST_VERSION
+----
+====
+
+The two Hazelcast members will discover each other automatically. Wait for
+output like the following in the logs:
+
+[source,plain]
+----
+Members {size:2, ver:2} [
+    Member [172.17.0.2]:5701 - c0640efd-02ae-4595-aace-d944e1e1ad97
+    Member [172.17.0.3]:5701 - 011a9dd4-936f-4170-a7c6-622b7430b789 this
+]
+----
+
+
+You can start additional containers as described above to add
+more members to your cluster.
+
+You can use the IP of any Hazelcast member, for example, to submit a job. Hazelcast takes care of
+distributing it across the whole cluster.
+
+You can also start a Hazelcast cluster with Docker Compose. See the <<docker-compose, Using Docker Compose section>>.
+
+== Starting Management Center
+
+Hazelcast Management Center provides an easy way to monitor Hazelcast
+cluster and running jobs. See its https://docs.hazelcast.com/management-center/latest[documentation]
+for more information. Start it like this:
+
+[source,bash]
+----
+docker run -p 8081:8081 -e HAZELCAST_MEMBER_ADDRESS=172.17.0.2 hazelcast/management-center:$MANAGEMENT_CENTER_VERSION
+----
+
+After a few seconds you can access Management Center on
+\http://localhost:8081, the default
+username/password are admin/admin.
+
+== Submitting a Job
+
+The Hazelcast distribution contains an example pipeline called `hello-world`.
+You can use this pipeline to submit your first job using Docker.
+
+For this, you first need to download the Hazelcast distribution to have the example pipeline,
+then connect to the Hazelcast member you've started on Docker, and submit (deploy) a job to this member
+using the example pipeline. See the following steps:
+
+. Download the distribution, extract it, and go to the extracted directory using the below commands:
++
+[source,bash,subs="attributes+"]
+----
+wget {distribution-link-mac-linux} | tar xvzf -
+cd hazelcast-{page-component-version}
+----
+
+. Connect to the Hazelcast member and submit the `hello-world` job to it using the below command:
++
+[source,bash]
+----
+docker run -it -v "$(pwd)"/examples:/examples --rm hazelcast/hazelcast hazelcast -t 172.17.0.2 submit /examples/hello-world.jar
+----
++
+The Docker parameters are as follows:
++
+* `-it` tells Docker to start an interactive session, allowing you to
+  cancel the `submit` command with `Ctrl+C`
+* `-v "$(pwd)"/examples:/examples` mounts the folder `examples` from
+  your current directory as `/examples` inside the container
+* `--rm` tells Docker to remove the container from its local cache once
+  it exits
++
+These are the parameters for `hazelcast submit`:
++
+* `-t 172.17.0.2`, short for `--targets`, is the address of the Hazelcast
+  member to connect to
+* `/examples/hello-world.jar` is the JAR containing the code which will
+  create a pipeline and submit it
+
+. List the jobs running inside the cluster:
++
+[source,bash]
+----
+$ docker run --rm hazelcast/hazelcast hazelcast -t 172.17.0.2 list-jobs
+ID                  STATUS             SUBMISSION TIME         NAME
+045e-987c-1940-0001 RUNNING            2020-05-18T20:08:03.020 hello-world
+----
+
+To cancel the running job:
+
+[source,bash]
+----
+docker run --rm hazelcast/hazelcast hazelcast -t 172.17.0.2 cancel hello-world
+----
+
+== Configuration
+
+You can configure various aspects of your cluster and environment using Docker.
+
+=== Memory
+
+By default, Hazelcast configures the JVM with `-XX:MaxRAMPercentage=80.0`.
+This limits the JVM heap to 80% of the RAM available to the container.
+We recommend you leave this as-is and control Hazelcast's memory size with the
+Docker parameter `--memory`. For example, this will start Hazelcast with 1.6
+GB assigned to the JVM:
+
+[source,bash]
+----
+docker run --memory 2g --rm hazelcast/hazelcast
+----
+
+=== JAVA_OPTS
+
+To change the JVM parameters directly, use the `JAVA_OPTS` environment
+variable. Hazelcast passes it to the JVM when starting. For example:
+
+[source,bash]
+----
+docker run --memory 2g -e JAVA_OPTS="-XX:MaxRAMPercentage=85.0" --rm hazelcast/hazelcast
+----
+
+Make sure to leave enough free RAM for Metaspace and other overheads.
+
+=== Custom Hazelcast Configuration File
+
+You can configure Hazelcast with your own `hazelcast.yaml/xml`
+by replacing the default ones in the container at
+`/opt/hazelcast`. We recommend that you use the default
+configuration file as a starting point:
+
+[source,bash]
+----
+docker run --rm hazelcast/hazelcast cat /opt/hazelcast/hazelcast.yaml > hazelcast.yaml
+----
+
+Now edit the file and apply it when starting Hazelcast:
+
+[source,bash]
+----
+docker run -v "$(pwd)"/hazelcast.yaml:/opt/hazelcast/hazelcast.yaml hazelcast/hazelcast
+----
+
+=== Extend Hazelcast's CLASSPATH with Custom Jars and Files
+
+If you have to add more classes or files to Hazelcast's classpath, one way to
+do it is to put them in a folder, e.g., `ext`, mount it to the
+container, and set the `CLASSPATH` environment variable:
+
+[source,bash]
+----
+docker run -e CLASSPATH="/opt/hazelcast/ext/" -v /path/to/ext:/opt/hazelcast/ext hazelcast/hazelcast
+----
+
+If you have just one file to add, it's simpler to mount it directly into
+Hazelcast's `lib` folder:
+
+[source,bash]
+----
+docker run -v /path/to/my.jar:/opt/hazelcast-jet/lib/my.jar hazelcast/hazelcast
+----
+
+=== Changing Logging Level
+
+You can set the logging level using the `LOGGING_LEVEL` environment
+variable:
+
+[source,bash]
+----
+docker run -e LOGGING_LEVEL=DEBUG hazelcast/hazelcast
+----
+
+Available logging levels are (from highest to lowest): `FATAL`, `ERROR`,
+`WARN`, `INFO`, `DEBUG`, `TRACE`. The default logging level is `INFO`.
+
+If you need more control over logging, you can supply your own
+`log4j2.properties` file. Use the default one as the starting point:
+
+[source,bash]
+----
+docker run --rm hazelcast/hazelcast cat /opt/hazelcast/log4j2.properties > log4j2.properties
+----
+
+Edit the file and mount it when starting Hazelcast:
+
+[source,bash]
+----
+docker run -v /path/to/log4j2.properties:/opt/hazelcast/log4j2.properties hazelcast/hazelcast
+----
+
+== Using Docker Compose
+
+You can start a Hazelcast cluster managed by Docker Compose. This
+also makes it easier to customize Hazelcast with configuration files, mounted
+directories etc.
+
+Here's a simple `docker-compose.yml`:
+
+[source,xml]
+----
+version: '3'
+
+services:
+  hazelcast:
+    image: hazelcast/hazelcast
+    ports:
+      - "5701-5703:5701"
+----
+
+Now you can start a 3-member Hazelcast cluster:
+
+[source,bash]
+----
+docker-compose up --scale hazelcast=3
+----
+
+You should eventually see a 3-member cluster has formed:
+
+[source,plain]
+----
+Members {size:3, ver:3} [
+    Member [172.21.0.3]:5701 - 99d3de67-8c5d-452b-8165 -085a4cd1fcda
+    Member [172.21.0.2]:5701 - 64f5b01b-847e-49e0-87f2 -db2a6f7750b7
+    Member [172.21.0.4]:5701 - ffa362f9-617d-42bc-a74c -05ce857e8e48 this
+]
+----
+
+The `ports` section says that port 5701 from each container should be
+mapped to a port from the range 5701-5703. Increase the range if you
+want to start more than three instances.
+
+You can provide a custom `hazelcast.yaml/xml`
+configuration file by using a volume:
+
+[source,xml]
+----
+version: '3'
+
+services:
+
+  hazelcast:
+    image: hazelcast/hazelcast
+    ports:
+      - "5701-5703:5701"
+    volumes:
+      - ./hazelcast.yaml:/opt/hazelcast/hazelcast.yaml
+----
+
+== Using Dockerfile
+
+In addition to the aforementioned Docker methods,
+you can also create your own Docker image using Dockerfiles for these purposes
+to start Hazelcast and submit jobs.
+
+For example, let's create a Docker image with the code of the `hello-world` job
+from the <<submitting-a-job, Submitting a Job section>> and submit it to Hazelcast.
+
+For this, you first need to create the Dockerfile as follows:
+
+[source,dockerfile]
+----
+FROM hazelcast/hazelcast
+ADD examples/hello-world.jar /examples/
+ENV HAZELCAST_MEMBER_ADDRESS 172.17.0.2
+CMD ["sh", "-c", "hazelcast -t $HAZELCAST_MEMBER_ADDRESS submit /examples/hello-world.jar"]
+----
+
+The Hazelcast address is exposed through the `HAZELCAST_MEMBER_ADDRESS` environment
+variable, with the default value of `172.17.0.2`. This makes it easy to
+pass a different address with `docker run -e HAZELCAST_MEMBER_ADDRESS=<another.one>`.
+
+Then, you create your own Docker image using the following command, giving it the name `hazelcast-hello-world`:
+
+[source,bash]
+----
+docker build . -t hazelcast-hello-world
+----
+
+You will see an output similar to the following:
+
+[source,bash]
+----
+Sending build context to Docker daemon  77.35MB
+...
+Successfully built 6bc0f527b69c
+Successfully tagged hazelcast-hello-world:latest
+----
+
+Finally, you submit the job as follows:
+
+[source,bash]
+----
+docker run -it hazelcast-jet-hello-world
+----
+
+== Building a Custom Image from the Slim Image
+
+Hazelcast offers a slim Docker image that
+contains just the core Hazelcast engine. When image size is a concern, you can use it
+as the starting point to build your custom image with just the
+extensions you need.
+
+Let's create and start a Docker image for Hazelcast with the Kafka extension.
+In an empty directory, create a Dockerfile with the following content:
+
+[source,dockerfile,subs="attributes+"]
+----
+FROM hazelcast:{page-component-version}-slim
+ARG HZ_HOME=/opt/hazelcast
+ARG REPO_URL=https://repo1.maven.org/maven2/com/hazelcast
+ADD $REPO_URL/hazelcast-kafka/5.0/hazelcast-kafka-5.0-jar-with-dependencies.jar $HZ_HOME/lib/
+# ... more ADD statements ...
+----
+
+NOTE: To find the available extensions and their URLs, open the
+https://repo1.maven.org/maven2/com/hazelcast/hazelcast[Maven
+URL] in your browser.
+
+Build the image from the above Dockerfile using the following command, giving it the name `hazelcast-with-kafka`:
+
+[source,bash]
+----
+docker build . -t hazelcast-with-kafka
+----
+
+Start the Docker image as follows:
+
+[source,bash]
+----
+docker run -p 5701:5701 hazelcast-with-kafka
+----
+
+For more information on Dockerfile, go to its https://docs.docker.com/engine/reference/builder/[documentation].

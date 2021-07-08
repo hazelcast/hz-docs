@@ -1,0 +1,98 @@
+= CP Subsystem's Fault Tolerance Capabilities
+
+CP Subsystem's fault tolerance capabilities are summarized in this section.
+For the sake of simplicity, let's assume that both the CP member count and CP
+group size configurations are configured as the same and we use only
+_the DEFAULT CP group_. **In the list below, "a permanent crash" means that
+a CP member either crashes while CP Subsystem Persistence is disabled, hence
+it cannot be recovered with its CP identity and data, or it crashes while CP
+Subsystem Persistence is enabled but its CP data cannot be recovered, for
+instance, due to a total server crash or a disk failure.**
+
+* If a CP member leaves the Hazelcast cluster, it is not automatically removed
+from CP Subsystem because CP Subsystem cannot certainly determine if that
+member has actually crashed or just disconnected from the cluster. Therefore,
+absent CP members are still considered in majority calculations and cause a
+danger for the availability of CP Subsystem. If you know for sure that
+an absent CP member is crashed, you can remove that CP member from CP Subsystem
+via `CPSubsystemManagementService.removeCPMember(String)`. This API call
+removes the given CP member from all CP groups and recalculates their majority
+values. If there is another available CP member in CP Subsystem, the removed CP
+member is replaced with that one, or you can promote an AP member of
+the Hazelcast cluster to the CP role via
+`CPSubsystemManagementService.promoteToCPMember()`.
+* There might be a small window of unavailability after a CP member crash even
+if the majority of CP members are still online. For instance, if a crashed CP
+member is the Raft leader for some CP groups, those CP groups run a new leader
+election round to elect a new leader among remaining CP group members. CP
+Subsystem API calls that internally hit those CP groups are retried until they
+have new Raft leaders. If a failed CP member has the Raft follower role, it
+causes a very minimal disruption since Raft leaders are still able to replicate
+and commit operations with the majority of their CP group members.
+* If a crashed CP member is restarted after it is removed from CP Subsystem,
+its behavior depends on whether CP Subsystem Persistence is enabled or disabled. If
+enabled, a restarted CP member is not able to
+restore its CP data from disk because after it joins back to the cluster it
+notices that it is no longer a CP member. Because of that, it fails its startup
+process and prints an error message. The only thing to do in this case is
+manually delete its CP persistence directory since its data is no longer
+useful. On the other hand, if CP Subsystem Persistence is disabled, a failed CP
+member cannot remember anything related to its previous CP identity, hence it
+restarts as a new AP member.
+* A CP member can encounter a network issue and disconnect from
+the cluster. If you remove this CP member from CP Subsystem even though it
+is actually alive but only disconnected, you should terminate it
+to prevent any accidental communication with the other CP members in
+CP Subsystem.
+* If a network partition occurs, behavior of CP Subsystem depends on how CP
+members are divided in different sides of the network partition and to which
+sides Hazelcast clients are connected. Each CP group remains available on
+the side that contains the majority of its CP members. If a Raft leader falls
+into the minority side, its CP group elects a new Raft leader on the other side
+and callers that are talking to the majority side continue to make successful
+API calls on CP Subsystem. However, callers that are talking to the minority
+side fail with operation timeouts. When the network problem is resolved, CP
+members reconnect to each other and CP groups continue their operation
+normally.
+* CP Subsystem can tolerate failure of the minority of CP members (less than
+ `N / 2 + 1`) for availability. If `N / 2 + 1` or more CP members crash, CP
+Subsystem loses its availability. If CP Subsystem Persistence is enabled and
+the majority of CP members become online by successfully restarting some of
+failed CP members, CP Subsystem regains its availability back. **Otherwise, it
+means that CP Subsystem has lost its majority irrevocably.** In this case,
+the only solution is to wipe-out the whole CP Subsystem state by performing
+a force-reset via `CPSubsystemManagementService.reset()`.
+
+**When `CPSubsystemConfig.getCPMemberCount()` is greater than
+`CPSubsystemConfig.getGroupSize()`, CP groups are formed by selecting a subset
+of CP members. In this case, each CP group can have a different set of CP
+members, therefore different fault tolerance and availability conditions.** In
+the following list, CP Subsystem's additional fault tolerance capabilities are
+discussed for this configuration case.
+
+* When the majority of a _non-METADATA CP group_ permanently crash, that CP
+group cannot make progress anymore, even though other CP groups in CP Subsystem
+are running fine. Even a new CP member cannot join to this CP group, because
+membership changes also go through the Raft consensus algorithm. For this
+reason, the only option is to force-destroy this CP group via
+`CPSubsystemManagementService.forceDestroyCPGroup(String)`. When this API is
+called, the CP group is terminated non-gracefully without the Raft mechanics.
+After this API call, all existing CP data structure proxies that talk to this
+CP group fail with `CPGroupDestroyedException`. However, if a new proxy is
+created afterwards, then this CP group is re-created from scratch with a new
+set of CP members. Losing majority of a _non-METADATA CP group_ can be likened
+to partition-loss scenario of AP Hazelcast. Please note that _non-METADATA CP
+groups_ that have lost their majority must be force-destroyed immediately,
+because they can block _the METADATA CP group_ to perform membership changes on
+CP Subsystem.
+* If the majority of _the METADATA CP group_ permanently crash, unfortunately
+it is equivalent to the permanent crash of the majority CP members of the whole
+CP Subsystem, even though other CP groups are running fine. In fact, existing
+CP groups continue serving to incoming requests, but since the _METADATA CP
+group_ is not available anymore, no management tasks can be performed on CP
+Subsystem. For instance, a new CP group cannot be created. In this case,
+the only solution is to wipe-out the whole CP Subsystem state by performing
+a force-reset via `CPSubsystemManagementService.reset()`.
+
+See xref:management.adoc#cp-subsystem-management-apis[CP Subsystem Management APIs section] for
+more details.

@@ -1,0 +1,204 @@
+= List of Hazelcast Metrics
+[[appendix]]
+
+== Cluster-Wide Metrics
+
+[cols="h,a,a"]
+|===
+|Name|Description|Tags
+
+|blockingWorkerCount
+|Number of non-cooperative workers employed.
+.6+|_none_
+
+Each Hazelcast member will have one instance of this metric.
+
+|jobs.submitted
+|Number of computational jobs submitted.
+
+|jobs.completedSuccessfully
+|Number of computational jobs successfully completed.
+
+|jobs.completedWithFailure
+|Number of computational jobs that have failed.
+
+|jobs.executionStarted
+|Number of computational job executions started. Each job can
+execute multiple times, for example when it’s restarted or
+suspended and then resumed.
+
+|jobs.executionTerminated
+|Number of computational job executions finished. Each job can
+execute multiple times, for example when it’s restarted or
+suspended and then resumed.
+
+|iterationCount
+|The total number of iterations the driver of tasklets in
+cooperative thread N made. It should increase by at least 250
+iterations/s. Lower value means some of the cooperative
+processors blocks for too long. Somewhat lower value is normal
+if there are many tasklets assigned to the processor. Lower
+value affects the latency.
+.2+|_cooperativeWorker_
+
+Each Hazelcast member will have one of this metric for each of its
+cooperative worker threads.
+
+|taskletCount
+|The number of assigned tasklets to cooperative thread N.
+
+|===
+
+== Job-specific Metrics
+
+All job specific metrics have their `job=<jobId>` and
+`exec=<executionId>` tags set and most also have the
+`vertex=<vertexName>` tag set (with very few exceptions). This means
+that most of these metrics will have at least one instance for each
+vertex of each current job execution.
+
+Additionally, if the vertex sourcing them is a data source or data sink,
+then the `source` or `sink` tags will also be set to true.
+
+[cols="h,a,a"]
+|===
+|Names|Description|Tags
+
+|executionStartTime
+|Start time of the current execution of the job (epoch time in milliseconds).
+.2+|_job, exec_
+
+
+There will be a single instance of these metrics for each job
+execution.
+
+|executionCompletionTime
+|Completion time of the current execution of the job (epoch time
+in milliseconds).
+
+|snapshotBytes
+|Total number of bytes written out in the last snapshot.
+.2+|_job, exec, vertex_
+
+There will be a single instance of these metrics for each
+vertex.
+
+|snapshotKeys
+|Total number of keys written out in the last snapshot.
+
+|distributedBytesIn
+|Total number of bytes received from remote members.
+.4+|_job, exec, vertex, ordinal_
+
+Each Hazelcast member will have an instance of these metrics for each
+ordinal of each vertex of each job execution.
+
+Note: These metrics are only present for distributed edges (ie.
+edges producing network traffic).
+
+|distributedBytesOut
+|Total number of bytes sent to remote members.
+
+|distributedItemsIn
+|Total number of items received from remote members.
+
+|distributedItemsOut
+|Total number of items sent to remote members.
+
+|topObservedWm
+|This value is equal to the highest coalescedWm on any input edge
+of this processor.
+.6+|_job, exec, vertex, proc_
+
+Each Hazelcast member will have one instances of these metrics for
+each processor instance N, the N denotes the global processor
+index. Processor is the parallel worker doing the work of the
+vertex.
+
+|coalescedWm
+|The highest watermark received from all inputs that was sent to
+the processor to handle.
+
+|lastForwardedWm
+|Last watermark emitted by the processor to output.
+
+|lastForwardedWmLatency
+|The difference between <i>lastForwardedWn</i> and the system
+time at the moment when metrics were collected.
+
+|queuesCapacity
+|The total capacity of input queues.
+
+|queuesSize
+|The total number of items waiting in input queues.
+
+|topObservedWm
+|The highest received watermark from any input on edge N.
+.5+|_job, exec, vertex, proc, ordinal_
+
+Each Hazelcast member will have one instance of these metrics for each
+edge M (input or output) of each processor N. N is the global
+processor index and M is either the ordinal of the edge or has
+the value snapshot for output items written to state snapshot.
+
+|coalescedWm
+|The highest watermark received from all upstream processors on
+edge N.
+
+|emittedCount
+|The number of emitted items. This number includes watermarks,
+snapshot barriers etc. Unlike _distributedItemsOut_, it
+includes items emitted items to local processors.
+
+|receivedCount
+|The number of received items. This number does not include
+watermarks, snapshot barriers etc. It’s the number of items the
+Processor.process method will receive.
+
+|receivedBatches
+|The number of received batches. `Processor.process`
+receives a batch of items at a time, this is the number of such
+batches. By dividing _receivedCount_ by
+_receivedBatches_, you get the average batch size. It will
+be 1 under low load.
+
+|numInFlightOps
+|The number of pending (in flight) operations when using
+asynchronous mapping processors. See
+https://jet-start.sh/javadoc/4.5/com/hazelcast/jet/core/processor/Processors.html#mapUsingServiceAsyncP-com.hazelcast.jet.pipeline.ServiceFactory-int-boolean-com.hazelcast.function.FunctionEx-com.hazelcast.function.BiFunctionEx-[Processors.mapUsingServiceAsyncP].
+.6+|_job, exec, vertex, proc, procType_
+
+Processor specific metrics, only certain types of processors
+have them. The _procType_ tag can be used to identify the
+exact type of processor sourcing them. Like all processor
+metrics, each Hazelcast member will have one instances of these
+metrics for each processor instance N, the N denotes the global
+processor index.
+
+|totalKeys
+|The number of active keys being tracked by a session window
+processor.
+
+
+|totalWindows
+|The number of active windows being tracked by a session window
+processor. See
+https://jet-start.sh/javadoc/4.5/com/hazelcast/jet/core/processor/Processors.html#aggregateToSessionWindowP-long-long-java.util.List-java.util.List-com.hazelcast.jet.aggregate.AggregateOperation-com.hazelcast.jet.core.function.KeyedWindowResultFunction-[Processors.aggregateToSessionWindowP].
+
+
+|totalFrames
+|The number of active frames being tracked by a sliding window processor.
+
+
+|totalKeysInFrames
+|The number of grouping keys associated with the current active
+frames of a sliding window processor. See
+https://jet-start.sh/javadoc/4.5/com/hazelcast/jet/core/processor/Processors.html#aggregateToSlidingWindowP-java.util.List-java.util.List-com.hazelcast.jet.core.TimestampKind-com.hazelcast.jet.core.SlidingWindowPolicy-long-com.hazelcast.jet.aggregate.AggregateOperation-com.hazelcast.jet.core.function.KeyedWindowResultFunction-[Processors.aggregateToSlidingWindowP].
+
+
+|lateEventsDropped
+|The number of late events dropped by various processor, due to
+the watermark already having passed their windows.
+
+
+|===

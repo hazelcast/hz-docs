@@ -1,0 +1,69 @@
+= FencedLock
+
+`FencedLock` is a linearizable & distributed & reentrant implementation of
+`j.u.c.locks.Lock`. `FencedLock` is accessed via `CPSubsystem.getLock(String)`.
+It is CP with respect to the CAP principle. It works on top of the Raft
+consensus algorithm. It offers linearizability during crash-stop failures and
+network partitions. If a network partition occurs, it remains available on at
+most one side of the partition.
+
+`FencedLock` works on top of CP sessions. Please see xref:sessions.adoc[CP Sessions]
+section for more information about CP sessions.
+
+By default, `FencedLock` is reentrant. Once a caller acquires the lock, it can
+acquire the lock reentrantly as many times as it wants in a linearizable manner.
+You can configure the reentrancy behavior via `FencedLockConfig`. For instance,
+reentrancy can be disabled and `FencedLock` can work as a non-reentrant mutex.
+You can also set a custom reentrancy limit. When the reentrancy limit is
+already reached, `FencedLock` does not block a lock call. Instead, it fails
+with `LockAcquireLimitReachedException` or a specified return value. Please
+check the locking methods to see details about the behavior and
+xref:configuration.adoc#fencedlock-configuration[FencedLock Configuration section] for
+the configuration.
+
+Distributed locks are unfortunately *not equivalent* to single-node mutexes
+because of the complexities in distributed systems, such as uncertain
+communication patterns, and independent and partial failures.
+In an asynchronous network, no lock service can guarantee mutual exclusion,
+because there is no way to distinguish between a slow and a crashed process.
+Consider the following scenario, where a Hazelcast client acquires
+a `FencedLock`, then hits a long GC pause. Since it will not be able to commit
+session heartbeats while paused, its CP session will be eventually closed.
+After this moment, another Hazelcast client can acquire this lock. If the first
+client wakes up again, it may not immediately notice that it has lost ownership
+of the lock. In this case, multiple clients think they hold the lock. If they
+attempt to perform an operation on a shared resource, they can break
+the system. To prevent such situations, you can choose to use an infinite
+session timeout, but this time probably you are going to deal with liveliness
+issues. For the scenario above, even if the first client actually crashes,
+the requests sent by two clients can be reordered in the network and hit
+the external resource in the reverse order.
+
+There is a simple solution for this problem. Lock holders are ordered by a
+monotonic fencing token, which increments each time the lock is assigned to a
+new owner. This fencing token can be passed to external services or resources
+to ensure sequential execution of the side effects performed by lock holders.
+
+The following diagram illustrates the idea. Client-1 acquires the lock first
+and receives `1` as its fencing token. Then, it passes this token to
+the external service, which is our shared resource in this scenario. Just after
+that, Client-1 hits a long GC pause and eventually loses ownership of the lock
+because it misses to commit CP session heartbeats. Then, Client-2 chimes in and
+acquires the lock. Similar to Client-1, Client-2 passes its fencing token to
+the external service. After that, once Client-1 comes back alive, its write
+request will be rejected by the external service, and only Client-2 will be
+able to safely talk to it.
+
+image:ROOT:FencedLock.png[Fenced Lock]
+
+You can read more about the fencing token idea in Martin Kleppmann's
+https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html[How to do distributed locking]
+blog post and Google's https://ai.google/research/pubs/pub27897[Chubby paper].
+`FencedLock` integrates this idea with the `j.u.c.locks.Lock` abstraction,
+excluding `j.u.c.locks.Condition`. `newCondition()` is not implemented and
+throws `UnsupportedOperationException`.
+
+All of the API methods in the new `FencedLock` abstraction offer exactly-once
+execution semantics. For instance, even if a `lock()` call is internally
+retried because of a crashed CP member, the lock is acquired only once.
+The same rule also applies to the other methods in the API.

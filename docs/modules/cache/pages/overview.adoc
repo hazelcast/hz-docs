@@ -1,0 +1,139 @@
+= Caching Data
+:description: Hazelcast provides APIs and plugins for building distributed caches for your data, including web sessions, database queries, and compute results. Get familiar with Hazelcast as a cache and find useful resources for your use case.
+:url-spring-hazelcast: https://docs.spring.io/spring-boot/docs/current/reference/htmlsingle/#features.hazelcast
+:url-github-hibernate: https://github.com/hazelcast/hazelcast-hibernate
+:url-github-tomcat: https://github.com/hazelcast/hazelcast-tomcat-sessionmanager
+:url-github-hazelcast-wm: https://github.com/hazelcast/hazelcast-wm
+:url-hibernate: http://hibernate.org
+:url-spring: https://spring.io/projects/spring-framework
+:url-jetty: https://www.eclipse.org/jetty/documentation/current/configuring-sessions-hazelcast.html
+:blog-caching-patterns: https://hazelcast.com/blog/a-hitchhikers-guide-to-caching-patterns/
+:blog-intel: https://hazelcast.com/blog/in-memory-computing-and-intel-optane/
+:glossary-hibernate: https://hazelcast.com/glossary/hibernate-second-level-cache/
+:use-cases-jcache: https://hazelcast.com/use-cases/jcache-provider/
+:guides-spring-boot: https://guides.hazelcast.org/hazelcast-embedded-springboot/
+:guides-spring-boot-caching: https://guides.hazelcast.org/caching-springboot/
+:guides-spring-boot-web-sessions: https://guides.hazelcast.org/caching-springboot/
+:guides-hibernate: https://guides.hazelcast.org/springboot-hibernate/
+:guides-tomcat: https://guides.hazelcast.org/springboot-tomcat-session-replication
+
+{description}
+
+== What is a Cache?
+
+A cache is a secondary data store that's faster to read than the data’s primary store (also known as the source of truth).
+
+The purpose of a cache is to improve the performance of your applications by doing the following:
+
+- Reducing network calls to a primary data store.
+- Saving the results of queries or computations to avoid resubmitting them.
+
+Data stored in a cache is often kept in random-access memory (RAM) because its faster to read. However, other storage solutions are also available such as link:{blog-intel}[Intel Optane].
+
+In Hazelcast, the RAM of all cluster members is combined into a single in-memory data store to provide fast access to data. This distributed model is called a _cache cluster_, and it makes your data fault-tolerant and scalable. If a member goes down, your data is repartitioned across the remaining members. And, if you need more or fewer resources, you can add or remove members as necessary.
+
+image:distributed-cache.webp[A distributed cache, which is accessed by multiple applications and connected to one or more databases]
+
+== Caching Topologies
+
+To use Hazelcast as a distributed cache, you can choose one of the following topologies:
+
+- Embedded mode: In this mode, the application and the cached data are stored on the same device. When a new entry is written to the cache, Hazelcast takes care of distributing it to the other members.
+
+- Client/server mode: In this mode, the cached data is separated from the application. Hazelcast members run on dedicated servers and applications connect to them through clients.
+
+[cols="a,a,a"]
+|===
+|Topology|Advantages|Disadvantages
+
+|Embedded
+|Data access is faster because applications don’t need to send a request to the cache cluster over the network.
+|Hazelcast can be embedded only in Java applications.
+
+Each new instance of your application adds a new member to the cluster even if you don't it.
+
+|Client/server
+|Supports independent scaling of the application and the cache cluster.
+
+Allows you to write polyglot applications that can all connect to the same cache cluster.
+|To read from a cache or write to it, clients need to make network requests, which leads to higher latency than embedded mode.
+
+|===
+
+For more information on topologies, see xref:ROOT:topologies.adoc[].
+
+== Caching Data on the Client-Side
+
+If you use the client-server topology, your application will request cached data from your cluster over a network.
+
+To reduce these network requests, you can enable a near cache on the client.
+
+A near cache is a local cache that is created on the client. When an application wants to read data, first it looks for the data in the near cache. If the near cache doesn't have the data, the application requests it from the cache cluster and adds it to the near cache to use for future requests.
+
+For information about how to use a near cache, see xref:performance:near-cache.adoc[].
+
+== Caching Patterns
+
+The way in which an application interacts with a cache is called a caching pattern. Many patterns exist and each one has its pros and cons.
+
+For an in-depth discussion on caching patterns in Hazelcast, see our blog link:{blog-caching-patterns}[A Hitchhiker’s Guide to Caching Patterns].
+
+== Using Hazelcast as a Cache in Spring Applications
+
+link:{url-spring}[Spring] is a framework that comes with out-of-the-box modules for developing Java applications.
+
+To allow you to easily plug a cache cluster into your Spring application, Hazelcast includes a Spring integration.
+
+For more information on caching in Spring applications, see the following:
+
+* link:{url-spring-hazelcast}[Spring Reference Documentation]
+* link:{guides-spring-boot}[Getting Started with Hazelcast using Spring Boot]
+* link:{guides-spring-boot-caching}[Caching in SpringBoot Microservices]
+* link:{guides-spring-boot-web-sessions}[Session Replication with Spring Boot]
+
+== Using Hazelcast as a Second-Level Cache for Hibernate
+
+link:{url-hibernate}[Hibernate] is a framework for mapping an object-oriented domain model to a relational database in Java applications.
+
+To make it faster to read data, Hibernate uses a multilevel caching scheme:
+
+- First-level cache: A mandatory cache that stores the `Session` object until the session is closed.
+- Second-level cache: An optional cache that's mainly responsible for caching objects across sessions.
+
+To use Hazelcast as a second-level cache, see the following:
+
+- link:{url-github-hibernate}[Hazelcast Hibernate documentation]
+- link:{guides-hibernate}[Getting Started with Hazelcast and Hibernate Second-Level Cache]
+
+== Using Hazelcast as a Cache Manager in JCache
+
+JCache is a standard caching API for the Java programming language.
+
+To find out more about JCache and how to use Hazelcast as the caching provider, see xref:jcache:overview.adoc[].
+
+== Caching Web Sessions in Hazelcast
+
+To support more users, web applications often consist of multiple instances running at the same time. This way, traffic can be routed to different instances through load balancers to maximize speed and reliability.
+
+However, in this architecture, if a server fails and the load balancer redirects the user to a new server, the session data is lost because sessions are stored on specific application servers. 
+
+The solution to this problem is to provide web session clustering (also known as web session replication) which allows any application server to access the same system-wide cache of web session data.
+
+image:web-session-clustering.png[A browser sends requests to a web server, using a web session ID]
+
+Hazelcast provides native integration for the Apache Tomcat and Eclipse Jetty application servers as well as for generic application servers through the use of filters.
+
+To use Hazelcast for web session replication, see the following resources:
+
+- link:{url-github-hazelcast-wm}[Filter-Based Web Session Replication]
+- link:{url-github-tomcat}[Tomcat-Based Web Session Replication]
+  * link:{guides-tomcat}[Tomcat Session Replication with Spring Boot and Hazelcast]
+- link:{url-jetty}[Jetty-Based Web Session Replication]
+
+== Building a Custom Database Cache
+
+To build your own database cache, use the Java xref:data-structures:map.adoc#loading-and-storing-persistent-data[MapLoader/MapStore API].
+
+== Related Resources
+
+For all Hazelcast integrations, see xref:plugins:hazelcast-plugins.adoc[].

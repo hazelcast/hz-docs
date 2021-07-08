@@ -1,0 +1,180 @@
+= List
+[[list]]
+
+Hazelcast List (`IList`) is similar to Hazelcast Set, but it also
+allows duplicate elements.
+
+* Besides allowing duplicate elements, Hazelcast List preserves the order of elements.
+* Hazelcast List is a non-partitioned data structure where values and each
+backup are represented by their own single partition.
+* Hazelcast List cannot be scaled beyond the capacity of a single machine.
+* All items are copied to local and iteration occurs locally.
+
+
+[[getting-a-list-and-putting-items]]
+== Getting a List and Putting Items
+
+Use the ``HazelcastInstance``s `getList` method to get the List,
+then use the `add` method to put items into it.
+
+[source,java]
+----
+include::ROOT:example$/dds/list/ExampleList.java[tag=list]
+----
+
+Hazelcast List uses `ItemListener` to listen to events that occur when
+items are added to and removed from the List. See the xref:events:object-events.adoc#listening-for-item-events[Listening for Item Events section] for information on how to create an item listener
+class and register it.
+
+[[configuring-list]]
+== Configuring List
+
+The following are the example Hazelcast List configurations.
+
+**Declarative Configuration:**
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <list name="default">
+        <statistics-enabled>false</statistics-enabled>
+        <backup-count>1</backup-count>
+        <async-backup-count>0</async-backup-count>
+        <max-size>10</max-size>
+        <item-listeners>
+            <item-listener>
+                com.hazelcast.examples.ItemListener
+            </item-listener>
+        </item-listeners>
+        <split-brain-protection-ref>splitbrainprotection-name</split-brain-protection-ref>
+    </list>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  list:
+    default:
+      statistics-enabled: false
+      backup-count: 1
+      async-backup-count: 0
+      max-size: 10
+      item-listeners:
+        - class-name: com.hazelcast.examples.ItemListener
+      split-brain-protection-ref: splitbrainprotection-name
+----
+====
+
+**Programmatic Configuration:**
+
+[source,java]
+----
+include::ROOT:example$/dds/list/ListConfiguration.java[tag=lc]
+----
+
+Hazelcast List configuration has the following elements:
+
+* `statistics-enabled`: True (default) if statistics gathering is
+enabled on the list, false otherwise.
+* `backup-count`: Number of synchronous backups. List is a non-partitioned
+data structure, so all entries of a List reside in one partition. When this
+parameter is '1', there will be one backup of that List in another member in
+the cluster. When it is '2', two members will have the backup.
+* `async-backup-count`: Number of asynchronous backups.
+* `max-size`: The maximum number of entries for this List.
+* `item-listeners`: Lets you add listeners (listener classes) for the list items.
+You can also set the attribute `include-value` to `true` if you want the item event
+to contain the item values. You can set the attribute `local` to `true` if you want
+to listen the items on the local member.
+* `split-brain-protection-ref`: Name of the split-brain protection configuration that you want this List to use.
+See the <<split-brain-protection-for-ilist-and-transactionallist, Split-Brain Protection for IList and TransactionalList section>>.
+
+[[split-brain-protection-for-ilist-and-transactionallist]]
+== Split-Brain Protection for IList and TransactionalList
+
+IList & TransactionalList can be configured to check for a minimum
+number of available members before applying queue operations (see the xref:network-partitioning:split-brain-protection.adoc[Split-Brain Protection section]).
+This is a check to avoid performing successful queue operations on all parts of a cluster during a network partition.
+
+The following is a list of methods, grouped by the protection types, that support split-brain protection checks:
+
+IList:
+
+* WRITE, READ_WRITE:
+** `add`
+** `addAll`
+** `clear`
+** `remove`
+** `removeAll`
+** `set`
+* READ, READ_WRITE:
+** `add`
+** `contains`
+** `containsAll`
+** `get`
+** `indexOf`
+** `isEmpty`
+** `iterator`
+** `lastIndexOf`
+** `listIterator`
+** `size`
+** `subList`
+** `toArray`
+
+
+TransactionalList:
+
+* WRITE, READ_WRITE:
+** `add`
+** `remove`
+* READ, READ_WRITE:
+** `size`
+
+
+**Configuring Split-Brain Protection**
+
+Split-brain protection for IList can be configured programmatically using
+the method https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/config/ListConfig.html[setSplitBrainProtectionName()^],
+or declaratively using the element `split-brain-protection-ref`. Following is an example declarative configuration:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <list name="default">
+        <split-brain-protection-ref>splitbrainprotection-name</split-brain-protection-ref>
+    </list>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  list:
+    default:
+      split-brain-protection-ref: splitbrainprotection-name
+----
+====
+
+The value of `split-brain-protection-ref` should be the split-brain protection configuration name which you
+configured under the `split-brain-protection` element as explained in the xref:network-partitioning:split-brain-protection.adoc[Split-Brain Protection section].

@@ -1,0 +1,203 @@
+= Rolling Upgrades
+:description:
+[[rolling-upgrades]]
+
+{description}
+
+[blue]*Hazelcast Enterprise Feature*
+
+This chapter explains the procedure of upgrading the version of Hazelcast members in a running cluster without interrupting the operation of the cluster.
+
+[[terminology]]
+== Terminology
+
+* **Minor version**: A version change after the decimal point, e.g.,
+4.1 and 4.2.
+* **Patch version**: A version change after the second decimal point,
+e.g., 4.2.1 and 4.2.2.
+* **Member codebase version**: The `major.minor.patch` version of the
+Hazelcast binary on which the member executes. For example, when running
+on `hazelcast-4.2.jar`, your member's codebase version is `4.2.0`.
+* **Cluster version**: The `major.minor` version at which the cluster
+operates. This ensures that cluster members are able to communicate using
+the same cluster protocol and
+determines the feature set exposed by the cluster.
+
+[[hazelcast-members-compatibility-guarantees]]
+== Hazelcast Members Compatibility Guarantees
+
+Hazelcast members operating on binaries of the same major and minor
+version numbers are compatible regardless of patch version.
+For example, in a cluster with members running on version 4.2.1,
+it is possible to perform a rolling upgrade to 4.2.2 by shutting
+down, upgrading to `hazelcast-4.2.2.jar` binary and starting each
+member one by one. Rolling upgrade for patch versions
+is supported in the open source and Enterprise editions of Hazelcast.
+
+Also, each minor version is compatible with the previous one. Rolling upgrade for minor versions is supported in the
+Enterprise edition of Hazelcast.
+
+The compatibility guarantees described above are given in the context of
+rolling member upgrades and only apply to GA (general availability) releases.
+It is never advisable to run a cluster with members running on different 
+patch or minor versions for prolonged periods of time.
+
+[[rolling-upgrade-procedure]]
+== Rolling Upgrade Procedure
+
+NOTE: The version numbers used in this chapter are examples.
+
+Let's assume a cluster with four members running on codebase version
+`4.1.0` with cluster version `4.1`, that should be upgraded to codebase version
+`4.2.0` and cluster version `4.2`. The rolling upgrade process for this cluster,
+i.e., replacing existing `4.1.0` members one by one with an upgraded
+one at version `4.2.0`, includes the following steps which should be repeated for each member:
+
+* Gracefully shut down an existing `4.1.0` member.
+* Wait until all partition migrations are completed; during migrations,
+membership changes (member joins or removals) are not allowed.
+* Update the member with the new `4.2.0` Hazelcast binaries.
+* Start the member and wait until it joins the cluster. You should
+see something like the following in your logs:
++
+```
+ ...
+ INFO: [192.168.2.2]:5701 [cluster] [4.2] Hazelcast Enterprise 4.2 (20170630 - a67dc3a) starting at [192.168.2.2]:5701
+ ...
+ INFO: [192.168.2.2]:5701 [cluster] [4.2] Cluster version set to 4.1
+```
+
+The version in brackets (`[4.2]`) still denotes the member's codebase version
+(running on the hypothetical `hazelcast-enterprise-4.2.jar` binary).
+Once the member locates the existing cluster members, it sends its join request to the master.
+The master validates that the new member is allowed to join the cluster and
+lets the new member know that the cluster is currently operating at `4.1` cluster version.
+The new member sets `4.1` as its cluster version and starts operating normally.
+
+At this point all members of the cluster have been upgraded to codebase version `4.2.0`
+but the cluster still operates at cluster version `4.1`. In order to use `4.2` features
+the cluster version must be changed to `4.2`.
+
+NOTE: Rolling upgrade can be used for one version at a time,
+e.g., 4.n to 4.n+1. You cannot upgrade
+your members, for example, from 4.1 to 4.3 in a single rolling upgrade session.
+
+[[upgrading-cluster-version]]
+== Upgrading Cluster Version
+
+You have the following options to upgrade the cluster version:
+
+* Using xref:management-center:monitor-imdg:cluster-administration.adoc#rolling-upgrade[Management Center].
+* Using the xref:management:cluster-utilities.adoc#using-the-script-cluster-sh[cluster.sh] script.
+* Allow the cluster to <<enabling-auto-upgrading, auto-upgrade>>.
+
+Note that you need to enable the REST API to use either of the above methods
+to upgrade your cluster version. For this, enable the `CLUSTER_WRITE`
+REST endpoint group (its default is disabled). See the
+xref:management:rest-endpoint-groups.adoc[Using the REST Endpoint Groups section] section on how to enable them.
+
+Also note that you need to upgrade your Management Center version *before* upgrading the member version if you want to
+change the cluster version using Management Center. Management Center is compatible with the previous minor version of
+Hazelcast. For example, Management Center 4.2 works with both Hazelcast
+4.1 and 4.2. To change your cluster version to 4.2, you need Management Center 4.2.
+
+== Enabling Auto-Upgrading
+
+The cluster can automatically upgrade its version. As soon as it detects 
+that all its members have a version higher than the current cluster 
+version, it upgrades the cluster version to match it. This feature is
+disabled by default. To enable it, set the system property 
+`hazelcast.cluster.version.auto.upgrade.enabled` to `true`.
+
+There is one tricky detail here: as you are shutting down and upgrading 
+the members one by one, when you shut down the last one, all the members 
+in the remaining cluster have the newer version, but you don't want the 
+auto-upgrade to kick in before you have successfully upgraded the last
+member as well. To avoid this, you can use the 
+`hazelcast.cluster.version.auto.upgrade.min.cluster.size` system
+property. You should 
+set it to the size of your cluster, and then Hazelcast will wait for the
+last member to join before it can proceed with the auto-upgrade.
+
+[[network-partitions-and-rolling-upgrades]]
+== Network Partitions and Rolling Upgrades
+
+In the event of network partitions which split your cluster into two subclusters,
+split-brain handling works as explained in the
+xref:network-partitioning:network-partitioning.adoc[Network Partitioning chapter],
+with the additional constraint that two subclusters only merge as long as they operate
+on the same cluster version. This is a requirement to ensure that all members participating
+in each one of the subclusters are able to operate as members of the merged cluster at
+the same cluster version.
+
+With regards to rolling upgrades, the above constraint implies that if a network
+partition occurs while a change of cluster version is in progress, then with some
+unlucky timing, one subcluster may be upgraded to the new cluster version and another
+subcluster may have upgraded members but still operate at the old cluster version.
+
+In order for the two subclusters to merge, it is necessary to change the cluster
+version of the subcluster that still operates on the old cluster version, so that
+both subclusters will be operating at the same, upgraded cluster version and able
+to merge as soon as the network partition is fixed.
+
+[[rolling-upgrade-faq]]
+== Rolling Upgrade FAQ
+
+The following provide answers to the frequently asked questions related to rolling member upgrades.
+
+**How is the cluster version set?**
+
+When a new member starts, it is not yet joined to a cluster; therefore its
+cluster version is still undetermined. In order for the cluster version to be
+set, one of the following must happen:
+
+* the member cannot locate any members of the cluster to join or is configured
+without a joiner: in this case, the member appoints itself as the master of a
+new single-member cluster and its cluster version is set to the `major.minor` version
+of its own codebase version. So a standalone member running on codebase version `4.2.0`
+sets its own cluster version to `4.2`.
+* the member that is starting locates members of the cluster and identifies which is
+the master: in this case, the master validates that the joining member's codebase version
+is compatible with the current cluster version. If it is found to be compatible, then
+the member joins and the master sends the cluster version, which is set on the joining
+member. Otherwise, the starting member fails to join and shuts down.
+
+**What if a new Hazelcast minor version changes fundamental cluster protocol communication, like join messages?**
+
+NOTE: The version numbers used in the paragraph below are only used as an example.
+
+On startup, as answered in the above question (How is the cluster version set?),
+the cluster version is not yet known to a member that has not joined any cluster.
+By default the newly started member uses the cluster protocol that corresponds to
+its codebase version until this member joins a cluster
+(so for codebase `4.2.0` this means implicitly assuming cluster version `4.2`).
+If, hypothetically, major changes in discovery & join operations
+have been introduced which do not allow the member to join a `4.1` cluster,
+then the member should be explicitly configured to start
+assuming a `4.1` cluster version.
+
+
+**Do I have to upgrade clients to work with rolling upgrades?**
+
+Clients which implement the Open Binary Client Protocol
+are compatible with Hazelcast version 3.6 and newer minor versions.
+Thus older client versions are compatible with next minor versions. Newer clients
+connected to a cluster operate at the lower version of capabilities until
+all members are upgraded and the cluster version upgrade occurs.
+
+
+**Can I stop and start multiple members at once during a rolling member upgrade?**
+
+It is not recommended due to potential network partitions.
+It is advised to always stop and start one member in each upgrade step.
+
+
+**Can I upgrade my business app together with Hazelcast while doing a rolling member upgrade?**
+
+Yes, but make sure to make the new version of your app compatible with the old
+one since there will be a timespan when both versions interoperate.
+Checking if two versions of your app are compatible includes verifying
+binary and algorithmic compatibility and some other steps.
+
+It is worth mentioning that a business app upgrade is orthogonal to a
+rolling member upgrade. A rolling business app upgrade may be done without upgrading the members.

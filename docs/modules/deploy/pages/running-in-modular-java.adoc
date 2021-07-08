@@ -1,0 +1,65 @@
+= Running in Modular Java
+[[running-in-modular-java]]
+
+If you're using JDK 11 or later, you can use Hazelcast as a module in the http://openjdk.java.net/projects/jigsaw/[Java Platform Module System].
+
+To run your application with Hazelcast
+libraries on the modulepath, use the following module name:
+
+* `com.hazelcast.core` for `hazelcast-{page-component-version}.jar` and
+`hazelcast-enterprise-{page-component-version}.jar`
+
+Don't use `hazelcast-all-{page-component-version}.jar` or
+`hazelcast-enterprise-all-{page-component-version}.jar` on the modulepath as it could
+lead to problems in module dependencies for your application. You can
+still use them on the classpath.
+
+The Java Module System comes with stricter visibility rules. It affects
+Hazelcast which uses internal Java API to reach the best performance results.
+
+Hazelcast needs the `java.se` module and access to the following Java
+packages for a proper work:
+
+* `java.base/jdk.internal.ref`
+* `java.base/java.nio` _(reflective access)_
+* `java.base/sun.nio.ch` _(reflective access)_
+* `java.base/java.lang` _(reflective access)_
+* `jdk.management/com.ibm.lang.management.internal` _(reflective access)_
+* `jdk.management/com.sun.management.internal` _(reflective access)_
+* `java.management/sun.management` _(reflective access)_
+
+You can provide the access to the above mentioned packages by using
+`--add-exports` and `--add-opens` (for the reflective access) Java arguments.
+
+**Example: Running a member on the classpath**
+
+[source,bash,subs="attributes+"]
+----
+java --add-modules java.se \
+  --add-exports java.base/jdk.internal.ref=ALL-UNNAMED \
+  --add-opens java.base/java.lang=ALL-UNNAMED \
+  --add-opens java.base/java.nio=ALL-UNNAMED \
+  --add-opens java.base/sun.nio.ch=ALL-UNNAMED \
+  --add-opens java.management/sun.management=ALL-UNNAMED \
+  --add-opens jdk.management/com.ibm.lang.management.internal=ALL-UNNAMED \
+  --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED \
+  -jar hazelcast-{page-component-version}.jar
+----
+
+**Example: Running a member on the modulepath**
+
+[source,bash]
+----
+java --add-modules java.se \
+  --add-exports java.base/jdk.internal.ref=com.hazelcast.core \
+  --add-opens java.base/java.lang=com.hazelcast.core \
+  --add-opens java.base/java.nio=com.hazelcast.core \
+  --add-opens java.base/sun.nio.ch=com.hazelcast.core \
+  --add-opens java.management/sun.management=com.hazelcast.core \
+  --add-opens jdk.management/com.ibm.lang.management.internal=com.hazelcast.core \
+  --add-opens jdk.management/com.sun.management.internal=com.hazelcast.core \
+  --module-path lib \
+  --module com.hazelcast.core/com.hazelcast.core.server.HazelcastMemberStarter
+----
+
+_This example expects `hazelcast-{page-component-version}.jar` placed in the `lib` directory._

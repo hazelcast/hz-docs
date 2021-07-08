@@ -1,0 +1,352 @@
+= Discovery SPI
+
+By default, Hazelcast is bundled with multiple ways to define and find other members in the same network.
+Commonly used, especially with development, is the Multicast discovery.
+This sends out a multicast request to a network segment and awaits other members to
+answer with their IP addresses. In addition, Hazelcast supports a number of built-in discovery strategies described in
+the xref:clusters:discovery-mechanisms.adoc[Discovery Mechanisms] section.
+
+Since there is an ever growing number of public and private cloud environments,
+as well as numerous Service Discovery systems in the wild,
+Hazelcast provides cloud or service discovery vendors with the option to
+implement their own discovery strategy.
+
+Over the course of this section, we will build a simple
+discovery strategy based on the `/etc/hosts` file.
+
+== Discovery SPI Interfaces and Classes
+
+The Hazelcast Discovery SPI (Member Discovery Extensions) consists of
+multiple interfaces and abstract classes. In the following subsections,
+we will have a quick look at all them and shortly introduce the idea and usage behind them.
+The example will follow in the next section, <<discovery-strategy, Discovery Strategy>>.
+
+=== DiscoveryStrategy: Implement
+
+The `com.hazelcast.spi.discovery.DiscoveryStrategy` interface is
+the main entry point for vendors to implement their corresponding member discovery strategies.
+Its main purpose is to return discovered members on request.
+The `com.hazelcast.spi.discovery.DiscoveryStrategy` interface also offers
+light lifecycle capabilities for setup and teardown logic (for example, opening or closing sockets or REST API clients).
+
+``DiscoveryStrategy``s can also do automatic registration / de-registration on
+service discovery systems if necessary.
+You can use the provided `DiscoveryNode` that is passed to
+the factory method to retrieve local addresses and ports, as well as metadata.
+
+=== AbstractDiscoveryStrategy: Abstract Class
+
+The `com.hazelcast.spi.discovery.AbstractDiscoveryStrategy` is a convenience abstract class meant to
+ease the implementation of strategies. It basically provides additional support for
+reading / resolving configuration properties and empty implementations of lifecycle methods if unnecessary.
+
+=== DiscoveryStrategyFactory: Factory Contract
+
+The `com.hazelcast.spi.discovery.DiscoveryStrategyFactory` interface describes
+the factory contract that creates a certain `DiscoveryStrategy`.
+`DiscoveryStrategyFactory` s are registered automatically at startup of
+a Hazelcast member or client whenever they are found in the classpath.
+For automatic discovery, factories need to announce themselves as
+SPI services using a resource file according to the
+https://docs.oracle.com/javase/tutorial/sound/SPI-intro.html[Java Service Provider Interface^].
+The service registration file must be part of the JAR file, located under
+`META-INF/services/com.hazelcast.spi.discovery.DiscoveryStrategyFactory`, and consist of
+a line with the full canonical class name of the `DiscoveryStrategy` per provided strategy implementation.
+
+=== DiscoveryNode: Describe a Member
+
+The `com.hazelcast.spi.discovery.DiscoveryNode` abstract class describes a member in the Discovery SPI.
+It is used for multiple purposes, since it will be returned from strategies for discovered members.
+It is also passed to ``DiscoveryStrategyFactory``s factory method to define
+the local member itself if created on a Hazelcast member; on Hazelcast clients, null is passed.
+
+=== SimpleDiscoveryNode: Default DiscoveryNode
+
+`com.hazelcast.spi.discovery.SimpleDiscoveryNode` is a default implementation of the `DiscoveryNode`.
+It is meant for convenience use of the Discovery SPI and can be returned from
+vendor implementations if no special needs are required.
+
+=== NodeFilter: Filter Members
+
+You can configure `com.hazelcast.spi.discovery.NodeFilter` before startup and
+you can implement logic to do additional filtering of members.
+This might be necessary if query languages for discovery strategies are not
+expressive enough to describe members or to overcome inefficiencies of strategy implementations.
+
+NOTE: The `DiscoveryStrategy` vendor does not need to take possibly configured filters into account
+as their use is transparent to the strategies.
+
+=== DiscoveryService: Support In Integrator Systems
+
+A `com.hazelcast.spi.discovery.integration.DiscoveryService` is part of the integration domain.
+`DiscoveryStrategy` vendors do not need to implement `DiscoveryService` because
+it is meant to support the Discovery SPI in situations where vendors integrate Hazelcast into
+their own systems or frameworks. Certain needs might be necessary as part of the classloading or
+https://docs.oracle.com/javase/tutorial/sound/SPI-intro.html[Java Service Provider Interface^] lookup.
+
+=== DiscoveryServiceProvider: Provide a DiscoveryService
+
+Use the `com.hazelcast.spi.discovery.integration.DiscoveryServiceProvider` to provide
+a `DiscoveryService` to the Hazelcast discovery subsystem. Configure the provider with the Hazelcast configuration API.
+
+=== DiscoveryServiceSettings: Configure DiscoveryService
+
+A `com.hazelcast.spi.discovery.integration.DiscoveryServiceSettings` instance is passed to
+the `DiscoveryServiceProvider` at creation time to configure the `DiscoveryService`.
+
+=== DiscoveryMode: Member or Client
+
+The `com.hazelcast.spi.discovery.integration.DiscoveryMode` enum tells if
+a created `DiscoveryService` is running on a Hazelcast member or client to change the behavior accordingly.
+
+== Discovery Strategy
+
+This subsection walks through the implementation of a simple `DiscoveryStrategy` and its necessary setup.
+
+=== Discovery Strategy Example
+
+The example strategy uses the local `/etc/hosts` (and on Windows it uses
+the equivalent to the `*nix` hosts file named `%SystemRoot%\system32\drivers\etc\hosts`) to
+lookup IP addresses of different hosts. The strategy implementation expects hosts to be configured with
+hostname sub-groups under the same domain. So far to theory, let's get into it.
+
+The full example's source code can be found https://github.com/hazelcast/hazelcast-code-samples[here^].
+
+=== Configuring Site Domain
+
+As a first step we do some basic configuration setup. We want the user to be able to
+configure the site domain for the discovery inside the hosts file, therefore we define
+a configuration property called `site-domain`. The configuration is not optional:
+you need to configure it before the creation of the `HazelcastInstance`, either
+via Hazelcast's declarative or programmatic configuration.
+
+It is recommended that you keep all defined properties in a separate configuration class as
+public constants (`public static final`) with sufficient documentation.
+This allows users to easily look up possible configuration values.
+
+[source,java]
+----
+include::ROOT:example$/extendinghazelcast/HostsDiscoveryConfiguration.java[tag=hdc]
+----
+
+An additional `ValueValidator` could be passed to the definition to make sure
+the configured value looks like a domain or has a special format.
+
+=== Creating Discovery
+
+As the second step we create the very simple `DiscoveryStrategyFactory` implementation class.
+To keep things clear we are going to name the discovery strategy after its purpose:
+looking into the hosts file.
+
+[source,java]
+----
+include::ROOT:example$/extendinghazelcast/HostsDiscoveryStrategyFactory.java[tag=hdsf]
+----
+
+This factory now defines properties known to the discovery strategy implementation and
+provides a clean way to instantiate it. While creating the `HostsDiscoveryStrategy` we ignore
+the passed `DiscoveryNode` since this strategy does not support automatic registration of new members.
+In cases where the strategy does not support registration, the environment has to handle this in some provided way.
+
+NOTE: Remember that, when created on a Hazelcast client, the provided `DiscoveryNode` is null, as there is no
+local member in existence.
+
+Next, we register the `DiscoveryStrategyFactory` to make Hazelcast pick it up automatically at startup.
+As described earlier, this is done according to the
+https://docs.oracle.com/javase/tutorial/sound/SPI-intro.html[Java Service Provider Interface^] specification.
+The filename is the name of the interface itself. Therefore we create a new resource file called
+`com.hazelcast.spi.discovery.DiscoveryStrategyFactory` and place it under `META-INF/services`.
+The content is the full canonical class name of our factory implementation.
+
+```
+com.hazelcast.examples.spi.discovery.HostsDiscoveryStrategyFactory
+```
+
+If our JAR file contains multiple factories, each consecutive line can define another
+full canonical `DiscoveryStrategyFactory` implementation class name.
+
+=== Implementing Discovery Strategy
+
+Now comes the interesting part. We are going to implement the discovery itself.
+The previous parts we did are normally pretty similar for all strategies aside from the configuration properties itself.
+However, implementing the discovery heavily depends on the way the strategy has to come up with
+IP addresses of other Hazelcast members.
+
+=== Extending The `AbstractDiscoveryStrategy`
+
+For ease of implementation, we back our implementation by extending the `AbstractDiscoveryStrategy` and
+only implementing the absolute minimum ourselves.
+
+[source,java]
+----
+include::ROOT:example$/extendinghazelcast/HostsDiscoveryStrategy.java[tag=hds]
+----
+
+=== Overriding Discovery Configuration
+
+So far our implementation retrieves the configuration property for the `site-domain`.
+Our implementation offers the option to override the value from the configuration
+(declarative or programmatic) right from the system environment or JVM properties.
+That can be useful when the `hazelcast.xml` defines a setup for an developer system (like `cluster.local`) and
+operations wants to override it for the real deployment.
+By providing a prefix (in this case `discovery.hosts`) we created an
+external property named `discovery.hosts.site-domain` which can be set as an
+environment variable or passed as a JVM property from the startup script.
+
+The lookup priority is explained in the following list, priority is from top to bottom:
+
+* JVM properties (or under the `properties` element in `hazelcast.xml`)
+* System environment
+* Configuration properties
+
+=== Implementing Lookup
+
+Since we have the value for our property now, we can implement the actual lookup and
+mapping as already prepared in the `discoverNodes` method.
+The following part is very specific to this special discovery strategy;
+for completeness we are showing it anyways.
+
+[source,java]
+----
+private static final String HOSTS_NIX = "/etc/hosts";
+private static final String HOSTS_WINDOWS =
+                   "%SystemRoot%\\system32\\drivers\\etc\\hosts";
+
+private List<String> filterHosts() {
+    String os = System.getProperty( "os.name" );
+
+    String hostsPath;
+    if ( os.contains( "Windows" ) ) {
+        hostsPath = HOSTS_WINDOWS;
+    } else {
+    hostsPath = HOSTS_NIX;
+    }
+
+    File hosts = new File( hostsPath );
+
+    // Read all lines
+    List<String> lines = readLines( hosts );
+
+    List<String> assignments = new ArrayList<String>();
+    for ( String line : lines ) {
+        // Example:
+        // 192.168.0.1   host1.cluster.local
+        if ( matchesDomain( line ) ) {
+            assignments.add( line );
+        }
+    }
+    return assignments;
+}
+----
+
+=== Mapping to DiscoveryNode
+
+After we have collected the address assignments configured in the hosts file,
+we can go to the final step and map those to the ``DiscoveryNode``s to return
+them from our strategy.
+
+[source,java]
+----
+private Iterable<DiscoveryNode> mapToDiscoveryNodes( List<String> assignments ) {
+  Collection<DiscoveryNode> discoveredNodes = new ArrayList<DiscoveryNode>();
+
+    for ( String assignment : assignments ) {
+        String address = sliceAddress( assignment );
+        String hostname = sliceHostname( assignment );
+
+        Map<String, Object> attributes =
+          Collections.singletonMap( "hostname", hostname );
+
+        InetAddress inetAddress = mapToInetAddress( address );
+        Address addr = new Address( inetAddress, NetworkConfig.DEFAULT_PORT );
+
+        discoveredNodes.add( new SimpleDiscoveryNode( addr, attributes ) );
+    }
+    return discoveredNodes;
+}
+----
+
+With that mapping, we now have a full discovery, executed whenever Hazelcast asks for IPs.
+So why don't we read them in once and cache them?
+The answer is simple: it might happen that members go down or come up over time.
+Since we expect the hosts file to be injected into the running container,
+it also might change over time. We want to get the latest available
+members, therefore we read the file on request.
+
+=== Configuring DiscoveryStrategy
+
+To actually use the new `DiscoveryStrategy` implementation we need to
+configure it like in the following example:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <!-- activate Discovery SPI -->
+    <properties>
+        <property name="hazelcast.discovery.enabled">true</property>
+    </properties>
+    <network>
+        <join>
+            <!-- activate our discovery strategy -->
+            <discovery-strategies>
+
+                <!-- class equals to the DiscoveryStrategy not the factory! -->
+                <discovery-strategy enabled="true"
+                    class="com.hazelcast.examples.spi.discovery.HostsDiscoveryStrategy">
+                    <properties>
+                        <property name="site-domain">cluster.local</property>
+                    </properties>
+                </discovery-strategy>
+            </discovery-strategies>
+        </join>
+    </network>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  properties:
+    hazelcast.discovery.enabled: true
+  network:
+    join:
+      discovery-strategies:
+        discovery-strategy:
+          - class: com.hazelcast.examples.spi.discovery.HostsDiscoveryStrategy
+            enabled: true
+            properties:
+              site-domain: cluster.local
+----
+====
+
+To find out further details, please have a look at the
+https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/spi/discovery/package-summary.html[Discovery SPI Javadoc].
+
+== DiscoveryService (Framework integration)
+
+Since the `DiscoveryStrategy` is meant for cloud vendors or implementors
+of service discovery systems, the `DiscoveryService` is meant for integrators.
+In this case, integrators mean people integrating Hazelcast into their own systems or frameworks.
+In those situations, there may be special requirements on
+how to lookup framework services like the discovery strategies or similar services.
+Integrators can extend or implement their own `DiscoveryService` and
+`DiscoveryServiceProvider` and inject them using the
+`com.hazelcast.config.DiscoveryConfig` configuration API prior to instantiating the `HazelcastInstance`.
+In any case, integrators might have to remember that a `DiscoveryService` might have to change
+behavior based on the runtime environment (Hazelcast member or client) and
+then the `DiscoveryServiceSettings` should provide information about the started `HazelcastInstance`.
+
+Since the implementation heavily depends on one's needs,
+there is no reason to provide an example of how to implement your own `DiscoveryService`.
+However, Hazelcast provides a default implementation which can be a good example to get started.
+This default implementation is `com.hazelcast.spi.discovery.impl.DefaultDiscoveryService`.

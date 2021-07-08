@@ -1,0 +1,232 @@
+= Hazelcast Quickstart
+:description: Follow this five-minute tutorial to set up a Hazelcast cluster for testing or evaluation purposes. In five minutes, you will learn how to install Hazelcast, start a local cluster, write data to memory and visualize that data.
+
+[[getting-started]]
+
+++++
+<script type="application/ld+json">
+{
+"@context": "http://schema.org",
+"@type": "HowTo",
+"name": "Hazelcast Quickstart",
+"description": "Follow this five-minute tutorial to set up a Hazelcast cluster for testing or evaluation purposes. In five minutes, you will learn how to install Hazelcast, start a local cluster member, write data to memory and visualize that data.",
+"totalTime": "PT5M"
+"step":[
+    {
+        "@type": "HowToStep",
+        "text": "Install the Hazelcast CLI.",
+    }, {
+        "@type": "HowToStep",
+        "text": "Start a local cluster.",
+    }, {
+        "@type": "HowToStep",
+        "text": "Connect to Management Center.",
+    }, {
+        "@type": "HowToStep",
+        "text": "Write data to memory.",
+    }]
+}
+</script>
+++++
+
+{description}
+
+[.interactive-button]
+xref:interactive-quickstart.adoc[Try the interactive example,window=_blank]
+
+TIP: If you're looking for a more in-depth introduction to Hazelcast, try our xref:install-hazelcast.adoc[Getting Started tutorial].
+
+== Step 1. Install Hazelcast
+
+In this step, you install the Hazelcast
+https://github.com/hazelcast/hazelcast-command-line[command line interface (CLI)^]: A development tool that allows you to start a hazelcast member with one command.
+
+. To install the CLI, use one of the following package managers for your operating system:
++
+[tabs] 
+==== 
+Mac:: 
++ 
+--
+
+To install the CLI on macOS, use the Homebrew package manager.
+
+[source,bash]
+----
+brew tap hazelcast/hz
+brew install hazelcast
+----
+--
+
+Linux::
++
+--
+
+To install the CLI on Linux, you can use either of these package managers, depending on your Linux distribution:
+
+.Debian
+[source,shell]
+----
+wget -qO - https://repository.hazelcast.com/api/gpg/key/public | sudo apt-key add -
+echo "deb https://repository.hazelcast.com/debian stable main" | sudo tee -a /etc/apt/sources.list
+sudo apt update && sudo apt install hazelcast
+----
+
+.RPM
+[source,shell]
+----
+wget https://repository.hazelcast.com/rpm/hazelcast-rpm.repo -O hazelcast-rpm.repo
+sudo mv hazelcast-rpm.repo /etc/yum.repos.d/
+sudo yum install hazelcast
+----
+--
+Windows::
++
+--
+At the moment, Hazelcast does not support any Windows package managers.
+
+To get started with Hazelcast on Windows, see xref:install-hazelcast.adoc[] where you can get started with Docker, the binary distribution, or Java.
+--
+====
+
+. Check that the CLI is installed.
++
+[source,shell]
+----
+hz -V
+----
++
+You should see your installed versions of the CLI, Hazelcast, and Management Center:
++
+[source,shell,subs="attributes+"]
+----
+CLI tool: {page-latest-supported-cli}
+Hazelcast: {page-component-version}
+Hazelcast Management Center: {page-latest-supported-mc}
+----
+
+== Step 2. Start a Local Cluster
+
+Hazelcast clusters consist of servers that we call members. These members communicate with each other to form a distributed network. It's these members that store and process your data.
+
+. To start a standalone Hazelcast member, use the following command:
++
+[source,shell]
+----
+hz start
+----
++
+You should see the following in the console:
++
+[source,shell,subs="attributes+"]
+----
+INFO: [192.168.1.164]:5701 [dev] [{page-component-version}] <1>
+
+Members {size:1, ver:1} [ <2>
+	Member [192.168.1.164]:5701 - 4221d540-e34e-4ff2-8ad3-41e060b895ce this
+]
+----
++
+<1> The local IP address of your Hazelcast member followed by the default cluster name (dev) and the version of Hazelcast that you are running.
+<2> The size of your cluster. Here, you just have one member, so the size is 1.
+
+. To add one more member to the cluster, open another terminal window and run the `start` command again.
++
+[source,shell]
+----
+hz start
+----
++
+The members
+discover each other automatically and form a two-member cluster. You should see
+the following in the console:
++
+[source,shell]
+----
+Members {size:2, ver:2} [
+    Member [127.0.0.1]:5701 - e40081de-056a-4ae5-8ffe-632caf8a6cf1 this
+    Member [127.0.0.1]:5702 - 93e82109-16bf-4b16-9c87-f4a6d0873080
+]
+----
+
+NOTE: These members use the default configuration, which is defined in the `hazelcast.xml` file. The location of this file is printed on the first line of
+the output of the `start` command.
+
+== Step 3. Connect the Management Center
+
+Management Center is a user interface for managing and monitoring your cluster.
+
+In this step, you start a local instance of Management Center and connect it to your cluster.
+
+. To start Management Center, use the following command:
++
+[source,shell]
+----
+hz mc start
+----
+
+. In a web browser, go to localhost:8080 to open Managment Center.
+
+. On the landing page of Management Center, enable dev mode.
++
+image:mc-dev-mode.png[Enabling dev mode in Management center]
+
+. Create a connection, using the default settings.
++
+You should see that you cluster is in an active state and has a single member. An active cluster is stable and operating without restrictions.
++
+image:mc-active-cluster-default.png[An active cluster in Management Center]
+
+== Step 4. Write Data to Memory
+
+Hazelcast has lots of distributed data structures available for writing data to memory on your cluster. One of the most popular ways of writing data to memory is to use a distributed map. Maps store key/value pairs called entries, which are replicated and distributed across a cluster.
+
+The quickest way to write some data to a map is to use the CLI console.
+
+. To start the console, use the following command:
++
+[source,shell]
+----
+hz console
+----
+
+. Enter the following to create a map and write some data to it:
++
+- `ns my-distributed-map`
+- `m.put "1" "John"`
+- `m.put "2" "Mary"`
+- `m.put "3" "Jane"`
++
+You'll see that each of the `m.put` lines returns `null`, which means that the data was written to the map.
+
+. In Management Center, go to *Storage* > *Maps*.
++.
+You should see that your cluster has a map called `my-distributed-map` with three entries (keys and values). You'll also see the total amount of memory that those entries are taking up in your cluster.
+
+== Next Steps
+
+In this quickstart, you have learnt how to start a local cluster,
+write data to it and visualize that data in Management Center. To continue your journey through Hazelcast, check the following resources:
+
+- xref:install-hazelcast.adoc[See the Getting Started section] for a complete introduction to Hazelcast.
+
+- Learn more about the xref:data-structures:map.adoc[map data structure].
+
+- Find out more about how members automatically discover each other in xref:clusters:discovery-mechanisms.adoc[].
+
+- Explore xref:management-center::index.adoc[Management Center].
+
+- Get started with one of the available client libraries:
+
+  ** xref:clients:java.adoc[Java client]
+  ** https://github.com/hazelcast/hazelcast-cpp-client[C++ client]
+  ** https://github.com/hazelcast/hazelcast-csharp-client[C# client]
+  ** https://github.com/hazelcast/hazelcast-nodejs-client[Node.js client]
+  ** https://github.com/hazelcast/hazelcast-python-client[Python client]
+  **  https://github.com/hazelcast/hazelcast-python-client[Python client]
+  ** https://github.com/hazelcast/hazelcast-go-client[Go client]
+
+- Go straight into deploying a production-ready cluster with our xref:ROOT:production-checklist.adoc[production checklist].
+
+If you need some help, reach out to us on https://slack.hazelcast.com/[Slack^],
+https://groups.google.com/forum/#!forum/hazelcast[Mail Group^] or http://www.stackoverflow.com[StackOverflow^].

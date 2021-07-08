@@ -1,0 +1,91 @@
+= Encryption
+
+Hazelcast offers features which allow to reach a required privacy on
+communication level by enabling encryption. Encryption is based on
+http://java.sun.com/javase/6/docs/technotes/guides/security/crypto/CryptoSpec.html[Java Cryptography Architecture^] (JCA).
+
+There are two different encryption features:
+
+. TLS protocol
+** transport level encryption
+** supported by members and clients
+** TCP-only, i.e., multicast join messages are not encrypted
++
+More details in the xref:security:tls-ssl.adoc[TLS/SSL section]
++
+. Symmetric encryption for Hazelcast member protocol
+** only supported by the members; communication with clients is not encrypted
+** multicast join messages are encrypted, too
+
+The preferred and recommended feature is the TLS protocol as it's a
+standard way how to protect communication on transport level:
+Both TLS and symmetric encryption are for encrypting the network traffic.
+TLS is already superior to symmetric encryption on more than one aspects as seen
+above. Symmetric encryption is only supported in member-member communication while
+TLS can encrypt client communications as well. When there is no specific reason to use
+symmetric encryption, we recommend you to use the TLS protocol.
+
+Symmetric encryption for Hazelcast member protocol can be configured
+with cipher algorithms implemented by security providers and accessed
+through Java Cryptography Architecture.
+Check documentation of your Java version to learn about supported algorithm
+names. The following are some examples:
+
+* `AES`
+* `PBEWithMD5AndDES`
+* `DES/ECB/PKCS5Padding`
+* `Blowfish`
+
+Hazelcast uses `MD5` message-digest algorithm as the cryptographic
+hash function. You can also use the salting process by giving a salt
+and password which are then concatenated and processed with `MD5`, and
+the resulting output is stored with the salt.
+
+In symmetric encryption, each member uses the same key, so the key is
+shared. Here is an example configuration for symmetric encryption.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+
+[source,xml]
+----
+<hazelcast>
+    ...
+    <network>
+        <symmetric-encryption enabled="true">
+            <algorithm>AES</algorithm>
+            <salt>thesalt</salt>
+            <password>thepass</password>
+            <iteration-count>175</iteration-count>
+        </symmetric-encryption>
+    </network>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  network:
+    symmetric-encryption:
+      enabled: true
+      algorithm: AES
+      salt: thesalt
+      password: thepass
+      iteration-count: 175
+----
+====
+
+You set the encryption algorithm, the salt, password and the iteration count to be used
+for generating the secret key. You also need to set the `enabled` attribute to `true`.
+Note that all members should have the same encryption configuration.
+
+Since symmetric encryption relies on JCA, you can additionally benefit from the
+algorithms provided by the Bouncy Castle Crypto APIs. For this,
+you need to set the `hazelcast.security.bouncy.enabled` property to `true`.

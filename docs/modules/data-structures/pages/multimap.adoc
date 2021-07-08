@@ -1,0 +1,215 @@
+= MultiMap
+[[multimap]]
+
+Hazelcast `MultiMap` is a specialized map where you can store multiple values
+under a single key. Just like any other distributed data structure implementation in
+Hazelcast, `MultiMap` is distributed and thread-safe.
+
+Hazelcast `MultiMap` is not an implementation of `java.util.Map` due to the difference
+in method signatures. It supports most features of Hazelcast Map except for indexing,
+predicates and MapLoader/MapStore. The entries are almost evenly
+distributed onto all cluster members. However, this distribution is based on the entry keys:
+if there are multiple entries having the same key but different values,
+such entries are stored on the same member, otherwise they are distributed among the members.
+When a new member joins the cluster, the same
+ownership logic used in the distributed map applies.
+
+[[getting-a-multimap-and-putting-an-entry]]
+== Getting a MultiMap and Putting an Entry
+
+The following example creates a MultiMap and puts items into it:
+
+[source,java]
+----
+include::ROOT:example$/dds/multimap/ExampleMultiMap.java[tag=mm]
+----
+
+We use the `getMultiMap` method to create the MultiMap and then use the `put`
+method to put an entry into it.
+
+Now let's print the entries in this MultiMap using the following code:
+
+[source,java]
+----
+include::ROOT:example$/dds/multimap/PrintMember.java[tag=pm]
+----
+
+After you run `ExampleMultiMap`, run `PrintMember`. You will see the key **`a`** has
+two values, as shown below:
+
+`b -> [3]`
+
+`a -> [2, 1]`
+
+Hazelcast MultiMap uses `EntryListener` to listen to events which occur when
+entries are added to, updated in or removed from the MultiMap. See the
+xref:events:object-events.adoc#listening-for-multimap-events[Listening for MultiMap Events section]
+for information on how to create an entry listener class and register it.
+
+[[configuring-multimap]]
+== Configuring MultiMap
+
+When using MultiMap, the collection type of the values can be either **Set** or **List**.
+Configure the collection type with the `valueCollectionType` parameter. If you choose
+`Set`, duplicate and null values are not allowed in your collection and ordering is irrelevant.
+If you choose `List`, ordering is relevant and your collection can include duplicate but not null values.
+
+You can also enable statistics for your MultiMap with the `statisticsEnabled` parameter.
+If you enable `statisticsEnabled`, statistics can be retrieved with `getLocalMultiMapStats()` method.
+
+
+NOTE: Currently, eviction is not supported for the MultiMap data structure.
+
+
+The following are the example MultiMap configurations.
+
+**Declarative Configuration:**
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <multimap name="default">
+        <backup-count>0</backup-count>
+        <async-backup-count>1</async-backup-count>
+        <value-collection-type>SET</value-collection-type>
+        <entry-listeners>
+            <entry-listener include-value="false" local="false" >com.hazelcast.examples.EntryListener</entry-listener>
+        </entry-listeners>
+        <split-brain-protection-ref>split-brain-protection-name</split-brain-protection-ref>
+    </multimap>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  multimap:
+    default:
+      backup-count: 0
+      async-backup-count: 1
+      value-collection-type: SET
+      entry-listeners:
+        - class-name: com.hazelcast.examples.EntryListener
+          include-value: false
+          local: false
+      split-brain-protection-ref: split-brain-protection-name
+----
+====
+
+**Programmatic Configuration:**
+
+[source,java]
+----
+include::ROOT:example$/dds/multimap/MultiMapConfiguration.java[tag=mmc]
+----
+
+
+The following are the configuration elements and their descriptions:
+
+* `backup-count`: Defines the number of synchronous backups. For example,
+if it is set to 1, backup of a partition will be
+placed on one other member. If it is 2, it will be placed on two other members.
+* `async-backup-count`: The number of asynchronous backups. Behavior is the
+same as that of the `backup-count` element.
+* `statistics-enabled`: Specifies whether the statistics gathering is enabled for your MultiMap.
+If set to `false`, you cannot collect statistics in your implementation
+(using `getLocalMultiMapStats()`) and also
+xref:management-center:monitor-imdg:monitor-dds.adoc#monitoring-multimaps[Hazelcast Management Center]
+will not show them. Its default value is `true`.
+* `value-collection-type`: Type of the value collection. It can be `SET` or `LIST`.
+* `entry-listeners`: Lets you add listeners (listener classes) for the map entries.
+You can also set the attribute
+`include-value` to `true` if you want the item event to contain the entry values.
+You can set
+`local` to `true` if you want to listen to the entries on the local member.
+* `split-brain-protection-ref`: Name of the split-brain protection configuration that you want this MultiMap to use.
+See the xref:network-partitioning:split-brain-protection.adoc#split-brain-protection-for-multimap-and-transactionalmultimap[Split-Brain Protection for MultiMap and TransactionalMultiMap section].
+
+[[split-brain-protection-for-multimap-and-transactionalmultimap]]
+== Split-Brain Protection for MultiMap and TransactionalMultiMap
+
+MultiMap & TransactionalMultiMap can be configured to check for a minimum number of
+available members before applying their operations (see the xref:network-partitioning:split-brain-protection.adoc[Split-Brain Protection section]).
+This is a check to avoid performing successful queue operations on all parts of a cluster during a network partition.
+
+The following is a list of methods that support split-brain protection checks. The list is grouped by the protection types.
+
+MultiMap:
+
+* WRITE, READ_WRITE:
+** `clear`
+** `forceUnlock`
+** `lock`
+** `put`
+** `remove`
+** `tryLock`
+** `unlock`
+* READ, READ_WRITE:
+** `containsEntry`
+** `containsKey`
+** `containsValue`
+** `entrySet`
+** `get`
+** `isLocked`
+** `keySet`
+** `localKeySet`
+** `size`
+** `valueCount`
+** `values`
+
+TransactionalMultiMap:
+
+* WRITE, READ_WRITE:
+** `put`
+** `remove`
+* READ, READ_WRITE:
+** `size`
+** `get`
+** `valueCount`
+
+**Configuring Split-Brain Protection**
+
+Split-brain protection for MultiMap can be configured programmatically using
+the method https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/config/MultiMapConfig.html[setSplitBrainProtectionName()^],
+or declaratively using the element `split-brain-protection-ref`. Following is an example declarative configuration:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <multimap name="default">
+        <split-brain-protection-ref>splitbrainprotection-name</split-brain-protection-ref>
+    </multimap>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  multimap:
+    default:
+      split-brain-protection-ref: splitbrainprotection-name
+----
+====
+
+The value of `split-brain-protection-ref` should be the split-brain protection configuration name which you configured
+under the `split-brain-protection` element as explained in the xref:network-partitioning:split-brain-protection.adoc[Split-Brain Protection section].

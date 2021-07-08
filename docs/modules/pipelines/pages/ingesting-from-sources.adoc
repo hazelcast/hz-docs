@@ -1,0 +1,42 @@
+= Ingesting Data from Sources
+:description: In order to process data, you first need to ingest it into your pipeline, using one or more sources.
+
+{description}
+
+== What is a Source?
+
+A source is a bridge between a local or remote data system and your Hazelcast cluster, which allows you to ingest data into Hazelcast for processing or storage.
+
+Hazelcast comes with many xref:sources-sinks.adoc[built-in sources], which we refer to as _connectors_. Or you can xref:sources-sinks.adoc#custom-sources-and-sinks[build your own custom source], using the Jet API.
+
+== Types of Source
+
+In Hazelcast, each source defines which type of processing it supports:
+
+- Stream source: Reads from an infinite source that never ends.
+- Batch source: Reads from a finite source.
+
+Stream sources can have either an xref:configuring-jobs.adoc#setting-a-processing-guarantee-for-streaming-jobs[at-least-once or exactly-once processing guarantee] in case of a member failure. But, batch sources do not support these guarantees, instead pipelines that use these sources should just be restarted in case of a member failure.
+
+== Merging Data from Two or More Sources
+
+If a pipeline pulls data from multiple sources, you can use both stream sources and batch sources in the same pipeline. And, you can use the following joining transforms to merge the branches:
+
+- xref:transforms.adoc#stateless-transforms#hashjoin[hash-join()]: Enrich data from a streaming source with data from a batch source.
+- xref:transforms.adoc#stateful-transforms#co-group--join[co-group()]: Merge two data streams on a shared key.
+- xref:transforms.adoc#stateless-transforms#merge[merge()]: Merge data from two streaming sources.
+
+For example, you can merge data from two sources into one by using the `merge()` method:
+
+```java
+Pipeline pipeline = Pipeline.create();
+
+BatchSource<String> leftSource = TestSources.items("the", "quick", "brown", "fox");
+BatchSource<String> rightSource = TestSources.items("jumps", "over", "the", "lazy", "dog");
+
+BatchStage<String> left = pipeline.readFrom(leftSource);
+BatchStage<String> right = pipeline.readFrom(rightSource);
+
+left.merge(right)
+    .writeTo(Sinks.logger());
+```

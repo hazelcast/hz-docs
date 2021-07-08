@@ -1,0 +1,458 @@
+= Declarative Configuration
+[[configuring-declaratively]]
+
+This is the configuration option where you use an XML or a YAML configuration
+file. When you download and unzip `hazelcast-{page-component-version}.zip`,
+you see the following files present in the  `/bin` folder, which are
+standard configuration files:
+
+* `hazelcast-default.xml`: Default declarative XML configuration file for Hazelcast.
+The configuration for Hazelcast's storage and streaming engines in this XML file should
+be fine for most of the Hazelcast users. If not, you can tailor this XML file according
+to your needs by adding/removing/modifying properties. You can browse through the Clustering Configurations
+section to learn about configuring Hazelcast's several aspects including xref:clusters:network-configuration.adoc[networking]
+and xref:configuration:jet-configuration.adoc[Jet engine].
+* `hazelcast-default.yaml`: Default YAML configuration file identical to `hazelcast.xml` in content.
+* `hazelcast-full-example.xml`: Configuration file which includes all Hazelcast configuration
+elements and attributes with their descriptions. It is the "superset" of `hazelcast.xml`.
+You can use `hazelcast-full-example.xml` as a reference document to learn about any element
+or attribute, or you can change its name to `hazelcast.xml` and start to use it as your
+Hazelcast configuration file.
+* `hazelcast-full-example.yaml`: YAML configuration file identical to
+`hazelcast-full-example.xml` in content.
+* `hazelcast-client-full-example.xml`: Complete Hazelcast Java client example configuration
+file which includes all configuration elements and attributes with their descriptions. Read
+more about Java client configuration xref:clients:java.adoc#configuring-java-client[here].
+* `hazelcast-client-full-example.yaml`: YAML configuration file identical to
+`hazelcast-client-full-example.xml` in content.
+* `hazelcast-client-failover-full-example.xml`: Complete Hazelcast client failover example
+configuration file which includes all Hazelcast client failover configuration elements and
+attributes with their descriptions. Read about Blue-Green Deployment and Disaster Recovery
+xref:clients:java.adoc#blue-green-deployment-and-disaster-recovery[here].
+* `hazelcast-client-failover-full-example.yaml`: YAML configuration file identical to
+`hazelcast-client-failover-full-example.xml` in content.
+
+A part of the default XML/YAML configurations is shown as an example below.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <cluster-name>dev</cluster-name>
+    <management-center scripting-enabled="false" />
+    <network>
+        <port auto-increment="true" port-count="100">5701</port>
+        <outbound-ports>
+            <!--
+            Allowed port range when connecting to other members.
+            0 or * means the port provided by the system.
+            -->
+            <ports>0</ports>
+        </outbound-ports>
+        <join>
+            <multicast enabled="true">
+                <multicast-group>224.2.2.3</multicast-group>
+                <multicast-port>54327</multicast-port>
+	    </multicast>
+	    <tcp-ip enabled="false">
+	        <interface>127.0.0.1</interface>
+                <member-list>
+                    <member>127.0.0.1</member>
+                </member-list>
+            </tcp-ip>
+        </join>
+    </network>
+    <map name="default">
+        <time-to-live-seconds>0</time-to-live-seconds>
+    </map>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  ...
+  cluster-name: dev
+  management-center:
+    scripting-enabled: false
+  network:
+    port:
+      auto-increment: true
+      port-count: 100
+      port: 5701
+    outbound-ports:
+      # Allowed port range when connecting to other members.
+      # 0 or * means use system provided port.
+      - 0
+    join:
+      multicast:
+        enabled: true
+        multicast-group: 224.2.2.3
+        multicast-port: 54327
+      tcp-ip:
+        enabled: false
+        interface: 127.0.0.1
+        member-list:
+          - 127.0.0.1
+  map:
+    default:
+      time-to-live-seconds: 0
+    ...
+----
+====
+
+[[composing-declarative-configuration]]
+== Composing Declarative Configuration
+
+You can compose the declarative configuration of your Hazelcast member or
+Hazelcast client from multiple declarative
+configuration snippets. In order to compose a declarative configuration, you
+can `import` different
+declarative configuration files. Composing configuration files is supported both
+in XML and YAML configurations with the
+limitation that only configuration files written in the same language can be composed.
+
+Let's say you want to compose the declarative configuration for Hazelcast out of two
+XML configurations: `development-cluster-config.xml` and `development-network-config.xml`.
+These two configurations are shown below.
+
+`development-cluster-config.xml`:
+
+[source,xml]
+----
+<hazelcast>
+    <cluster-name>dev</cluster-name>
+</hazelcast>
+----
+
+`development-network-config.xml`:
+
+[source,xml]
+----
+<hazelcast>
+    <network>
+        <port auto-increment="true" port-count="100">5701</port>
+        <join>
+            <multicast enabled="true">
+                <multicast-group>224.2.2.3</multicast-group>
+                <multicast-port>54327</multicast-port>
+            </multicast>
+        </join>
+    </network>
+</hazelcast>
+----
+
+To get your example Hazelcast declarative configuration out of the above two,
+use the `<import/>` element as shown below.
+
+[source,xml]
+----
+<hazelcast>
+    <import resource="development-group-config.xml"/>
+    <import resource="development-network-config.xml"/>
+</hazelcast>
+----
+
+The above example using the YAML configuration files looks like the following:
+
+`development-cluster-config.yaml`:
+
+[source,yaml]
+----
+hazelcast:
+  cluster-name: dev
+----
+
+`development-network-config.yaml`:
+
+[source,yaml]
+----
+hazelcast:
+  network:
+    port:
+      auto-increment: true
+      port-count: 100
+      port: 5701
+    join:
+      multicast:
+        enabled: true
+        multicast-group: 224.2.2.3
+        multicast-port: 54327
+----
+
+Composing the above two YAML configuration files needs them to be imported as shown below.
+
+[source,yaml]
+----
+hazelcast:
+  import:
+    - development-group-config.yaml
+    - development-network-config.yaml
+----
+
+
+This feature also applies to the declarative configuration of Hazelcast client.
+See the following examples.
+
+
+`client-cluster-config.xml`:
+
+[source,xml]
+----
+<hazelcast-client>
+    <cluster-name>dev</cluster-name>
+</hazelcast-client>
+----
+
+`client-network-config.xml`:
+
+[source,xml]
+----
+<hazelcast-client>
+    <network>
+        <cluster-members>
+            <address>127.0.0.1:7000</address>
+        </cluster-members>
+    </network>
+</hazelcast-client>
+----
+
+To get a Hazelcast client declarative configuration from the above two examples,
+use the `<import/>` element as shown below.
+
+[source,xml]
+----
+<hazelcast-client>
+    <import resource="client-cluster-config.xml"/>
+    <import resource="client-network-config.xml"/>
+</hazelcast-client>
+----
+
+The same client configuration using the YAML language is shown below.
+
+
+`client-cluster-config.yaml`:
+
+[source,yaml]
+----
+hazelcast-client:
+  cluster-name: dev
+----
+
+`client-network-config.yaml`:
+
+[source,yaml]
+----
+hazelcast-client:
+  network:
+    cluster-members:
+      - 127.0.0.1:7000
+----
+
+Composing a Hazelcast client declarative configuration by importing the above two examples is shown below.
+
+[source,yaml]
+----
+hazelcast-client:
+  import:
+    - client-cluster-config.yaml
+    - client-network-config.yaml
+----
+
+
+NOTE: Use `<import/>` element on top level of the XML hierarchy.
+
+NOTE: Use the `import` mapping on top level of the YAML hierarchy.
+
+Resources from the classpath and file system may also be used to compose a declarative configuration:
+
+[source,xml]
+----
+<hazelcast>
+    <import resource="file:///etc/hazelcast/development-cluster-config.xml"/> <!-- loaded from filesystem -->
+    <import resource="classpath:development-network-config.xml"/>  <!-- loaded from classpath -->
+</hazelcast>
+----
+
+[source,yaml]
+----
+hazelcast:
+  import:
+    # loaded from filesystem
+    - file:///etc/hazelcast/development-cluster-config.yaml
+    # loaded from classpath
+    - classpath:development-network-config.yaml
+----
+
+Importing resources with variables in their names is also supported. See the following example snippets:
+
+[source,xml]
+----
+<hazelcast>
+    <import resource="${environment}-cluster-config.xml"/>
+    <import resource="${environment}-network-config.xml"/>
+</hazelcast>
+----
+
+[source,yaml]
+----
+hazelcast:
+  import:
+    - ${environment}-cluster-config.yaml
+    - ${environment}-network-config.yaml
+----
+
+NOTE: See the xref:using-variables.adoc[Using Variables section] to learn how you can set
+the configuration elements with variables.
+
+[[configuring-declaratively-yaml]]
+== Configuring Declaratively with YAML
+
+You can configure the Hazelcast members and Java clients declaratively with YAML configuration files in
+installations of Hazelcast running on Java runtime version 8 or above.
+
+The structure of the YAML configuration follows the structure of the XML configuration.
+
+In the YAML declarative configuration, mappings are used in which the name of the mapping node
+needs to be unique within its enclosing mapping. See the following example of configuring two maps in the same configuration file.
+
+In the XML configuration files, we have two `<map>` elements as shown below.
+
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="map1">
+        <!-- map1 configuration -->
+    </map>
+    <map name="map2">
+        <!-- map2 configuration -->
+    </map>
+    ...
+</hazelcast>
+----
+
+In the YAML configuration, the map can be configured under a mapping `map` as shown in
+the following example.
+
+[source,yaml]
+----
+hazelcast:
+    ...
+    map:
+        map1:
+          # map1 configuration
+        map2:
+          # map2 configuration
+    ...
+----
+
+The XML and YAML configurations above define the same maps `map1` and `map2`.
+Please note that in the YAML configuration file
+there is no `name` node, instead, the name of the map is used as the name of the
+mapping for configuring the given map.
+
+There are other configuration entries that have no unique names and are listed in the
+same enclosing entry. Examples to this
+kind of configurations are listing the member addresses, interfaces in the networking
+configurations and defining listeners. The
+following example configures listeners to illustrate this.
+
+[source,xml]
+----
+<hazelcast>
+    ...
+    <listeners>
+        <listener>com.hazelcast.examples.MembershipListener</listener>
+        <listener>com.hazelcast.examples.MigrationListener</listener>
+        <listener>com.hazelcast.examples.PartitionLostListener</listener>
+    </listeners>
+    ...
+</hazelcast>
+----
+
+In the YAML configuration, the listeners are defined as a sequence.
+
+[source,yaml]
+----
+hazelcast:
+  ...
+  listeners:
+    - com.hazelcast.examples.MembershipListener
+    - com.hazelcast.examples.MigrationListener
+    - com.hazelcast.examples.PartitionLostListener
+  ...
+----
+
+Another notable difference between XML and YAML is the lack of the attributes in the
+case of YAML. Everything that can be
+configured with an attribute in the XML configuration is a scalar node in the YAML
+configuration with the same name. See the
+following example.
+
+[source,xml]
+----
+<hazelcast>
+    ...
+    <network>
+        <join>
+            <multicast enabled="true">
+                <multicast-group>1.2.3.4</multicast-group>
+                <!-- other multicast configuration options -->
+            </multicast>
+        </join>
+    </network>
+    ...
+</hazelcast>
+----
+
+In the identical YAML configuration, the `enabled` attribute of the XML
+configuration is a scalar node on the same level with
+the other items of the multicast configuration.
+
+[source,yaml]
+----
+hazelcast:
+  ...
+  network:
+    join:
+      multicast:
+        enabled: true
+        multicast-group: 1.2.3.4
+        # other multicast configuration options
+  ...
+----
+
+You can refer to the full example YAML configuration files placed in the `/bin` folder
+of the downloadable `hazelcast-{page-component-version}.zip` after unzipping it. Please see the
+complete list of the full example YAML configurations link:https://github.com/hazelcast/hazelcast/blob/master/hazelcast/src/main/resources/hazelcast-full-example.yaml[here^].
+
+== Setting the Path to a Configuration File
+
+Before looking for configuration files either in your working directory or in the classpath, Hazelcast checks the `hazelcast.config` system property. For details about precedence, see xref:understanding-configuration.adoc#configuration-precedence[Configuration Precedence].
+
+You may want to use this option if you have configuration files for different environments and you want to start members with different configurations. For example, you may have a test configuration file and a production configuration file.
+
+```
+-Dhazelcast.config=`*`<path to the hazelcast.xml or hazelcast.yaml>
+```
+
+The path can be a regular one or a classpath reference with the prefix `classpath:`.
+
+[NOTE]
+====
+The suffix of the filename is used to determine the language of the configuration.
+If the suffix is `.xml` the
+configuration file is parsed as an
+XML configuration file. If it is `.yaml`, the configuration file is parsed as a
+YAML configuration file.
+====

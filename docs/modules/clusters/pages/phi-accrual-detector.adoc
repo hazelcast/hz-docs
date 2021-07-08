@@ -1,0 +1,91 @@
+= Phi Accrual Failure Detector
+
+This is the failure detector based on
+https://www.computer.org/csdl/proceedings/srds/2004/2239/00/22390066-abs.html[The Phi Accrual Failure Detector' by Hayashibara et al.^]
+
+Phi Accrual Failure Detector keeps track of the intervals between heartbeats
+in a sliding window of time and measures the mean and variance of these
+samples and calculates a value of suspicion level (Phi). The value of phi
+increases when the period since the last heartbeat gets longer. If the network
+becomes slow or unreliable, the resulting mean and variance increase, there needs
+to be a longer period for which no heartbeat is received before the member is suspected. 
+
+The `hazelcast.heartbeat.interval.seconds` and `hazelcast.max.no.heartbeat.seconds`
+properties still can be used as period of heartbeat messages and deadline of
+heartbeat messages. Since _Phi Accrual Failure Detector_ is adaptive to network
+conditions, a much lower `hazelcast.max.no.heartbeat.seconds` can be defined than
+_Deadline Failure Detector_'s timeout.
+
+In addition to the above two properties, _Phi Accrual Failure Detector_ has the
+following configuration properties:
+
+* `hazelcast.heartbeat.phiaccrual.failuredetector.threshold`: This is the phi
+threshold for suspicion. After calculated phi exceeds this threshold, a member
+is considered as unreachable and marked as suspected. A low threshold allows to
+detect member crashes/failures faster but can generate more mistakes and cause
+wrong member suspicions. A high threshold generates fewer mistakes but is slower
+to detect actual crashes/failures.
++
+`phi = 1` means likeliness that we will make a mistake is about `10%`. The likeliness
+is about `1%` with `phi = 2`, `0.1%` with `phi = 3` and so on. Default phi threshold is 10.
++
+* `hazelcast.heartbeat.phiaccrual.failuredetector.sample.size`: Number of samples
+to keep for history. Its default value is 200.
+* `hazelcast.heartbeat.phiaccrual.failuredetector.min.std.dev.millis`: Minimum
+standard deviation to use for the normal distribution used when calculating phi.
+Too low standard deviation might result in too much sensitivity.
+
+To use _Phi Accrual Failure Detector_, configuration property
+`hazelcast.heartbeat.failuredetector.type` should be set to `"phi-accrual"`.
+
+**Declarative Configuration:**
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <properties>
+        <property name="hazelcast.heartbeat.failuredetector.type">phi-accrual</property>
+        <property name="hazelcast.heartbeat.interval.seconds">1</property>
+        <property name="hazelcast.max.no.heartbeat.seconds">60</property>
+        <property name="hazelcast.heartbeat.phiaccrual.failuredetector.threshold">10</property>
+        <property name="hazelcast.heartbeat.phiaccrual.failuredetector.sample.size">200</property>
+        <property name="hazelcast.heartbeat.phiaccrual.failuredetector.min.std.dev.millis">100</property>
+    </properties>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  properties:
+    hazelcast.heartbeat.failuredetector.type: phi-accrual
+    hazelcast.heartbeat.interval.seconds: 1
+    hazelcast.max.no.heartbeat.seconds: 60
+    hazelcast.heartbeat.phiaccrual.failuredetector.sample.size: 200
+    hazelcast.heartbeat.phiaccrual.failuredetector.min.std.dev.millis: 100
+----
+====
+
+**Programmatic Configuration:**
+
+[source,java]
+----
+Config config = ...;
+config.setProperty("hazelcast.heartbeat.failuredetector.type", "phi-accrual");
+config.setProperty("hazelcast.heartbeat.interval.seconds", "1");
+config.setProperty("hazelcast.max.no.heartbeat.seconds", "60");
+config.setProperty("hazelcast.heartbeat.phiaccrual.failuredetector.threshold", "10");
+config.setProperty("hazelcast.heartbeat.phiaccrual.failuredetector.sample.size", "200");
+config.setProperty("hazelcast.heartbeat.phiaccrual.failuredetector.min.std.dev.millis", "100");
+[...]
+----

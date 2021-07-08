@@ -1,0 +1,178 @@
+= SQL
+:description: You can use SQL to query map entries in Hazelcast as well as real-time event streams and data at rest in other data stores. Learn the essentials of SQL in Hazelcast and find out all the ways in which you can query your data.
+
+{description}
+
+== Using SQL
+
+To use SQL, you have the following options, all of which support all <<supported-queries, types of query>>:
+
+- For fast prototyping, xref:pipelines:learn-sql.adoc[use the SQL shell].
+
+- For Java applications, link:https://hazelcast.com/blog/jdbc-driver-4-2-is-released/[use the JDBC driver] or the link:https://docs.hazelcast.org/docs/{page-latest-supported-java-client}/javadoc[Java client].
+
+- For other applications, use either the link:http://hazelcast.github.io/hazelcast-nodejs-client/api/{page-latest-supported-nodejs-client}/docs/[Node.js], or link:https://hazelcast.readthedocs.io/en/v{page-latest-supported-python-client}/index.html[Python] client.
+
+NOTE: You cannot run SQL queries on xref:ROOT:glossary.adoc#lite-member[lite members]. This limitation will be removed in future releases.
+
+== Supported Queries
+
+With SQL you can run various types of queries to get insight from your data:
+
+- Ad-hoc queries, also known as point queries or online transactional processing (OLTP) queries.
+- Batch queries, also known as online analytical processing (OLAP) queries.
+- Streaming queries, also known as continuous queries.
+- Federated queries
+
+NOTE: For custom queries, you can build a data pipeline, using the xref:pipelines:building-pipelines.adoc[Java Jet API].
+
+=== Ad-Hoc Queries
+
+Ad-hoc queries allow you to retrieve a small subset of data from a large dataset. Usually these queries are simple and you can have many of them running concurrently in a Hazelcast cluster.
+
+A common use case for ad-hoc queries is individual business transactions where you need to get or update data.
+
+For example, a hotel may use Hazelcast to cache its bookings in a map. To find out which rooms are available, the staff could use the following query:
+
+[source,sql]
+----
+SELECT room, booking_date FROM hotel_bookings;
+----
+
+=== Batch Queries
+
+Batch queries allow you to query large datasets either in a single or multiple systems and/or run aggregations on them to get deeper insights. Usually these queries are complex and you can run a small number of them concurrently in a Hazelcast cluster.
+
+Common uses of OLAP include business reporting functions such as financial analysis, budgeting, and forecast planning.
+
+For example:
+
+[source,sql]
+----
+SELECT COUNT(DISTINCT color) FROM cars;
+----
+
+For a list of available aggregations, see xref:sql:expressions.adoc[].
+
+If you need more control over how your data is being transformed and aggregated, you may want to xref:pipelines:overview.adoc[build a pipeline with the Jet API].
+
+=== Streaming Queries
+
+Streaming queries are those that continuously produces results. These queries get data from unbounded sources such as real-time event streams. Results can be delivered to your app, stored in Hazelcast (in a map) or can be sent downstream to a remote data system such as a database.
+
+A simple example of a streaming query:
+
+[source,sql]
+----
+SELECT * FROM TABLE(generate_stream(100)) WHERE v / 10 * 10 = v;
+----
+
+This query will generate an infinite stream of values and will perform a query with a filter on it. In SQL, a stream is like a table with infinitely many rows which you can only access sequentially and thus never reach the end. For example, you will get an error if you try to aggregate the whole stream.
+
+TIP: For a tutorial on building a data pipeline with a streaming query, see xref:pipelines:learn-sql.adoc[].
+
+== Federated Queries
+
+Federated queries are those that join tables from different datasets. Normally, querying in SQL is database or dataset-specific. However Hazelcast comes with built-in xref:sql:connectors.adoc[connectors] to allow you to pull information from different sources and present a more complete picture of the data.
+
+To allow you to query data in sources other than distributed maps in a cluster, Hazelcast uses the concept of mappings.
+
+A mapping is a connection to a data source about which tells Hazelcast about the source's data model, data access patterns, and serialization formats. Hazelcast uses these mappings to access resources in these data sources as if they were SQL tables.
+
+Hazelcast provides connectors that allow you to create mappings to Apache Kafka, your local file system, and distributed maps. Using these mappings, you can run SQL queries against data in these data sources.
+
+For example, this query creates a mapping to a Kafka topic that streams trading data as JSON:
+
+```sql
+CREATE MAPPING trades(
+    __key BIGINT,
+    ticker VARCHAR,
+    amount INT)
+TYPE Kafka
+OPTIONS (
+    'keyFormat' = 'bigint',
+    'valueFormat' = 'json',
+    'bootstrap.servers' = '127.0.0.1:9092');
+```
+
+
+The following query gets the full company name for each ticker from a Hazelcast map called `companies`.
+
+[source,sql]
+----
+SELECT
+    trades.ticker, trades.amount, companies.name
+FROM 
+    trades
+JOIN companies
+ON trades.ticker = companies.ticker;
+----
+
+The following query is equivalent.
+
+[source,sql]
+----
+SELECT
+    trades.ticker, trades.amount, companies.name
+FROM 
+    trades, companies
+WHERE trades.ticker = companies.ticker;
+----
+
+For details of how to create mappings, see the xref:sql:create-mapping.adoc[`CREATE MAPPING` statement].
+
+For more information about using SQL joins, see the xref:sql:select.adoc[`SELECT` statement].
+
+== Querying Existing Maps
+
+All existing maps in a local Hazelcast cluster include an implicit mapping that allows you to query local map entries in SQL.
+
+Hazelcast resolves the mapping by reading a random entry from a local member. If an entry isn't found, the query fails. Therefore if your map is empty, you must create a mapping with the the xref:sql:create-mapping.adoc[`CREATE MAPPING` statement].
+
+For example, this query creates a mapping to a new map called `MyMap`, which stores the JSON values `ticker` and `amount`:
+
+```sql
+CREATE MAPPING my_map(
+    __key BIGINT,
+    ticker VARCHAR,
+    amount INT)
+TYPE IMap
+OPTIONS (
+    'keyFormat' = 'bigint',
+    'valueFormat' = 'json');
+```
+
+For more details about querying maps, see xref:querying-maps-sql.adoc[].
+
+=== Schemas
+
+To separate existing map data in your cluster from the data that you map using the `CREATE MAPPING` statement, the SQL service uses the following schemas:
+
+- `partitioned`: For querying objects in existing maps.
+
+- `public`: For querying objects that were mapped using the `CREATE MAPPING` statement.
+
+If you don't name a schema in your query, Hazelcast first looks for the object in the `public` schema and then in the `partitioned` schema.
+
+== Supported Statements
+
+Hazelcast supports a subset of standard SQL statements as well as some custom ones.
+
+For a list of supported statements, see xref:sql:sql-statements.adoc[].
+
+== How Hazelcast Executes SQL Statements
+
+When an SQL statement is submitted for execution, the SQL service parses and
+optimizes it using link:https://calcite.apache.org/[Apache Calcite]. The result is an executable plan that
+is cached and reused by subsequent executions of the same statement.
+
+The plan contains a tree of query fragments. A query fragment is a tree of
+operators that could be executed on a single member independently. Child
+fragments supply data to parent fragments, possibly over a network, until
+the root fragment is reached. The root fragment returns the query results.
+
+== Next Steps
+
+xref:get-started-sql.adoc[Get started] with SQL queries.
+
+See more examples of the xref:sql:select.adoc[`SELECT` statement].

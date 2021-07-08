@@ -1,0 +1,234 @@
+= Creating Custom Query Attributes
+
+Custom attributes allow you to use the Predicates API to query fields, using complex calculations.
+
+For example, imagine a map whose values are `Person` objects that contain a list of children in a `children` field.
+
+```pseudocode
+class Person {
+  String name;
+  String[] children;
+}
+```
+
+You may want to query for `Person` objects that have more than one child. But, you neither have a field with the total number of childen nor does the Predicates API have a `count()` method that you can call.
+
+In this case, you can create a custom attribute called `childrenCount` that returns the number of children for each `Person` object.
+
+== Implementing a ValueExtractor
+
+A custom attribute is a "synthetic" attribute that does not exist as a field or a getter in the object that it is extracted from.
+Thus, it is necessary to define the policy on how the attribute is supposed to be extracted.
+
+In order to implement a `ValueExtractor`, implement the
+`com.hazelcast.query.extractor.ValueExtractor` interface
+and the `extract()` method. This method does not return any values
+since the extracted value is collected by the `ValueCollector`.
+In order to return multiple results from a single extraction, invoke the
+`ValueCollector.collect()` method
+multiple times, so that the collector collects all results.
+
+See the https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/query/extractor/ValueExtractor.html[ValueExtractor^] and
+https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/query/extractor/ValueCollector.html[ValueCollector^] Javadocs.
+
+NOTE: Custom attributes are compatible with all Hazelcast xref:serialization:comparing-interfaces.adoc[serialization methods].
+
+=== ValueExtractor with Portable Serialization
+
+Portable serialization is a special kind of serialization where there
+is no need to have the class of the serialized object on the
+classpath of a member in order to read its attributes. That is the reason why the
+target object passed to the `ValueExtractor.extract()`
+method is not of the exact type that has been stored. Instead, an instance
+of a `com.hazelcast.query.extractor.ValueReader` is passed.
+`ValueReader` enables reading the attributes of a Portable object in a
+generic and type-agnostic way.
+It contains two methods:
+
+* `read(String path, ValueCollector<T> collector)` - enables passing all
+results directly to the `ValueCollector`.
+* `read(String path, ValueCallback<T> callback)` - enables filtering, transforming
+and grouping the result of the read operation and manually passing it to the
+`ValueCollector`.
+
+See the https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/query/extractor/ValueReader.html[ValueReader^] Javadoc.
+
+=== Returning Multiple Values from a Single Extraction
+
+It sounds counter-intuitive, but a single extraction may return multiple
+values when arrays or collections are
+involved.
+Let's have a look at the following data structure in pseudo-code:
+
+[source,java]
+----
+class Motorbike {
+    Wheel[] wheel;
+}
+
+class Wheel {
+    String name;
+}
+----
+
+Let's assume that we want to extract the names of all wheels from a
+single motorbike object. Each motorbike has two
+wheels so there are two names for each bike. In order to return both
+values from the extraction operation, collect them
+separately using the `ValueCollector`. Collecting multiple values in
+this way allows you to operate on these multiple
+values as if they were single values during the evaluation of the predicates.
+
+Let's assume that we registered a custom extractor with the name `wheelName`
+and executed the following query:
+`wheelName = front-wheel`.
+
+The extraction may return up to two wheel names for each `Motorbike` since
+each `Motorbike` has up to two wheels.
+In such a case, it is enough if a single value evaluates the predicate's
+condition to true to return a match, so
+it returns a `Motorbike` if "any" of the wheels matches the expression.
+
+== Extraction Arguments
+
+A `ValueExtractor` may use a custom argument if it is specified in the query.
+The custom argument may be passed within the square brackets located after the
+name of the custom attribute,
+e.g., `customAttribute[argument]`.
+
+Let's have a look at the following query: `currency[incoming] == EUR`
+The `currency` is a custom attribute that uses a `com.test.CurrencyExtractor`
+for extraction.
+
+The string `incoming` is an argument that is passed to the `ArgumentParser`
+during the extraction.
+The parser parses the string according to its custom logic and it returns a
+parsed object.
+The parsed object may be a single object, array, collection, or any arbitrary
+object.
+It is up to the `ValueExtractor` implementation to understand the semantics of
+the parsed argument object.
+
+For now it is *not* possible to register a custom `ArgumentParser`, thus a
+default parser is used.
+It follows a `pass-through` semantic, which means that the string located in
+the square brackets is passed "as is" to
+the `ValueExtractor.extract()` method.
+
+Please note that using square brackets within the argument string are not allowed.
+
+== Configuring a Custom Attribute Programmatically
+
+The following snippet demonstrates how to define a custom attribute using a `ValueExtractor`.
+
+[source,java]
+----
+AttributeConfig attributeConfig = new AttributeConfig();
+attributeConfig.setName("currency");
+attributeConfig.setExtractorClassName("com.bank.CurrencyExtractor");
+
+MapConfig mapConfig = new MapConfig();
+mapConfig.addAttributeConfig(attributeConfig);
+----
+
+`currency` is the name of the custom attribute that will be extracted using
+the `CurrencyExtractor` class.
+
+Keep in mind that an extractor may not be added after the map has been instantiated.
+All extractors have to be defined upfront in the map's initial configuration.
+
+== Configuring a Custom Attribute Declaratively
+
+The following snippet demonstrates how to define a custom attribute in the
+Hazelcast XML Configuration.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="trades">
+        <attributes>
+            <attribute extractor-class-name="com.bank.CurrencyExtractor">currency</attribute>
+        </attributes>
+    </map>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  map:
+    trades:
+      attributes:
+        currency:
+          extractor-class-name: com.bank.CurrencyExtractor
+----
+====
+
+Analogous to the example above, `currency` is the name of the custom attribute
+that will be extracted using the
+`CurrencyExtractor` class.
+
+Please note that an attribute name may begin with an ASCII letter [A-Za-z] or
+digit [0-9] and may contain
+ASCII letters [A-Za-z], digits [0-9] or underscores later on.
+
+== Indexing Custom Attributes
+
+You can create an index using a custom attribute.
+
+The name of the attribute used in the index definition has to match the one
+used in the attributes configuration.
+
+Defining indexes with extraction arguments is allowed, as shown in the example
+below:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <indexes>
+        <!-- custom attribute without an extraction argument -->
+        <index>
+            <attributes>
+                <attribute>currency</attribute>
+            </attributes>
+        </index>
+        <!-- custom attribute using an extraction argument -->
+        <index>
+            <attributes>
+                <attribute>currency[incoming]</attribute>
+            </attributes>
+        </index>
+    </indexes>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  ...
+  indexes:
+    attributes:
+      - "currency"
+      - "currency[incoming]"
+----
+====

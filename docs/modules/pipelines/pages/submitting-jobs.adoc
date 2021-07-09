@@ -61,7 +61,7 @@ Example:
 
 ```bash
 bin/hazelcast \
-  -t jet@192.168.1.100:5701,192.168.1.101:5701 \
+  -t dev@192.168.1.100:5701,192.168.1.101:5701 \
   submit \
   -c <MainClass> \
   <jar file> \
@@ -140,3 +140,70 @@ startup.
 +
 NOTE: After making changes to the `lib` folder, you must restart the member before it will recognize the new files.
 - Add the path to your JAR files, using the `CLASSPATH=<path_to_jar>` environment variable when starting a Hazelcast member.
+
+== Options for Packaging Dependencies
+
+A pipeline is built with several transform which typically consist
+of lambda expressions. During the job submission, the pipeline is
+serialized and sent to the cluster, which must be
+able to execute these expressions on each member. Imagine the simple
+mapping pipeline below:
+
+```java
+class MyJob {
+
+  public static void main(String[] args) {
+    Pipeline p = Pipeline.create();
+    p.readFrom(TestSources.items(1, 2, 3, 4))
+     .map(x -> x * x)
+     .writeTo(Sinks.logger());
+
+     HazelcastInstance hz = Hazelcast.bootstrappedInstance();
+     hz.getJet().newJob(p).join();
+  }
+}
+```
+
+The lambda `x -> x * x` will get compiled by Java into an anonymous
+class with a name like `MyJob$$Lambda$30/0x00000008000a1840`. These and
+other classes which may be depend by these functions need to present
+on the members that will be executing the job. Hazelcast supports several ways to make these classes available on the members.
+
+=== Uber JAR
+
+The easiest way to get additional dependencies to the cluster is to
+bundle it as a so-called uber JAR, which contains all the required
+dependencies inside.
+
+To build an uber JAR, there are several options:
+
+* link:https://maven.apache.org/plugins/maven-assembly-plugin[Maven Assembly Plugin]
+* link:https://maven.apache.org/plugins/maven-shade-plugin[Maven Shade Plugin]
+* link:https://imperceptiblethoughts.com/shadow/introduction[Gradle Shadow Plugin].
+
+=== Adding to Member Classpaths
+
+Some dependencies may either be large or may be required to be present
+on classpath during application startup.
+
+The convention is to add these dependencies to `$HZ_HOME/lib` folder.
+Hazelcast automatically picks up any dependencies placed on this folder during
+startup. Several out-of-the-box modules (such as connectors for
+Kafka, Hadoop) are already available in the `lib` folder and can simply
+be used. Any changes to `lib` folder
+requires the node to be restarted to take effect.
+
+Alternatively, you can use the `CLASSPATH` environment variable
+to add additional classes:
+
+```bash
+CLASSPATH=<path_to_jar> bin/hazelcast-start
+```
+
+[WARNING]
+====
+You cannot upload the following classes using the API or the CLI. These classes must be uploaded at the same time as the member starts.
+
+* xref:serialization:serialization.adoc#serialization-of-data-types[Custom Serializers]
+* Map features such as EntryProcessor or MapLoader and MapStore
+====

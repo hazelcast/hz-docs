@@ -1,0 +1,169 @@
+= Actions and Remedies for Alerts
+:description: Find advice for remedies for the Hazelcast alerts.
+
+When an alert fires on a Hazelcast cluster member,
+it’s important to gather as much data about the ailing
+member as possible to take the suitable action. For this,
+you can use the following options.
+
+== Hazelcast Logs
+
+You can collect Hazelcast logs from all members. If you run Hazelcast with
+a client-server topology, also collect client application logs before a restart.
+See the xref:maintain-cluster:monitoring.adoc#logging[Logging section] for details.
+
+== Garbage Collection Logs
+
+You can use `jstat` to retrieve garbage collection (GC) logs for a JVM as shown below:
+
+[source,sh]
+----
+jstat -gcutil -t JAVA_PID 1000 1
+----
+
+`JAVA_PID` is the ID of the Hazelcast process which you can find using, e.g., the `top` command.
+
+You can also enable GC logging settings as shown below in your JVM options configuration:
+
+[source,plain]
+----
+-verbose:gc
+-Xloggc:gc.log
+-XX:NumberOfGCLogFiles=10
+-XX:GCLogFileSize=10M
+-XX:+UseGCLogFileRotation
+-XX:+PrintGCDetails
+-XX:+PrintGCDateStamps
+-XX:+PrintTenuringDistribution
+-XX:+PrintGCApplicationConcurrentTime
+-XX:+PrintGCApplicationStoppedTime
+----
+
+Also, instead of the default Java 8 ParallelGC, it is recommended to switch to CMS GC,
+since it ensures a good tradeoff between the operations throughput and GC pauses. For this,
+add the following lines to your JVM options configuration file:
+
+[source,plain]
+----
+-XX:CMSInitiatingOccupancyFraction=65
+-XX:+UseParNewGC
+-XX:+UseConcMarkSweepGC
+----
+
+You can use the following parameter to specify the location for the GC log file:
+
+[source,plain]
+----
+-Xloggc:/path/to/your/log/directory/gc.log
+----
+
+The JVM options configuration file (`jvm.options`) is located under the `config/` folder
+of your Hazelcast distribution. See the xref:configuration:jvm-parameters.adoc[Configuring JVM parameters section] for more information on JVM configuration.
+
+See the https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/toc.html[GC Tuning guide] by Oracle for more information on the garbage collection in JVMs.
+
+== Thread Dumps
+
+Make sure you take thread dumps of the ailing member using either the
+Management Center (see the Monitoring Members chapters of the Management Center documentation), `jstack`, tools such as visualVM, or a script. Take multiple snapshots of thread dumps
+at 3–4 second intervals.
+
+Let's use a script to generate a Java thread dump:
+
+. Note the process ID number of the Java process (`JAVA_PID`), e.g., using `top`.
+. Prepare a shell script with the content as shown below; name the script as `threaddump.sh`:
++
+```
+ #!/bin/sh #
+# Takes the Target Java Process PID as an argument. #
+# Create thread dumps a specified number of times and INTERVAL. Thread dumps
+# will be in the file where stdout was redirected or in console output. #
+# Usage: sh ./threaddump.sh #
+# Number of times to collect data.
+LOOP=6
+# Interval in seconds between data points. INTERVAL=20
+  for ((i=1; i <= $LOOP; i++))
+  do
+kill -3 $1
+echo "thread dump #" $i if [ $i -lt $LOOP ]; then
+echo "Sleeping..."
+        sleep $INTERVAL
+     fi
+done
+```
++
+. Make the script executable using `chmod 755`. This example script captures
+a series of 6 thread dumps spaced 20 seconds apart (modify as needed),
+passing in the Java process ID as an argument.
+. Kill the process using the `kill -QUIT` or `kill -3` command:
++
+```
+kill -3 JAVA_PID
+```
++
+. Run the script as follows:
++
+```
+sh ./threaddump.sh JAVA_PID
+```
+
+Be sure to test the script before the issue happens to make sure it runs properly in your environment.
+
+You can also use `jstack` to generate thread dumps if you run Hazelcast on OpenJDK, or Sun JDK 1.6 or newer (just be sure that your JVM configuration does not include the `-Xrs` parameter):
+
+. Note the process ID number of the Java process (`JAVA_PID`), e.g., using `top`.
+. Kill the process using the `kill -QUIT` or `kill -3` command:
++
+```
+kill -3 JAVA_PID
+```
++
+. Run the following command to write the thread dump to the `jstack.out` file:
++
+```
+jstack -l JAVA_PID > jstack.out
+```
+
+Alternatively, you can always use the following tools to generate thread dumps:
+
+* http://openjdk.java.net/tools/svc/jconsole/[JConsole^]
+* https://visualvm.github.io/[VisualVM^]
+* https://github.com/glowroot/glowroot[GlowRoot^]
+* http://www.yourkit.com/[YourKit^]
+* http://www.ej-technologies.com/products/jprofiler/overview.html[JProfiler^]
+
+== Heap Dumps
+
+Make sure you take heap dumps and histograms of the ailing JVM. For this, you can use the JDK's
+`jmap` tool:
+
+. Note the process ID number of the Java process (`JAVA_PID`), e.g., using `top`.
+. Run the following command:
++
+```
+jmap -dump:live,file=<file-path> JAVA_PID
+```
++
+`file=file-path` specifies the name and path of the file where heap dump will be written.
+
+You can also create and run a script, an example content of which is shown below:
+
+[source,plain]
+----
+if [ "x$MIN_HEAP_SIZE" != "x" ]; then
+JAVA_OPTS="$JAVA_OPTS -Xms${MIN_HEAP_SIZE}"
+
+fi
+if [ "x$MAX_HEAP_SIZE" != "x" ]; then
+JAVA_OPTS="$JAVA_OPTS -Xmx${MAX_HEAP_SIZE}"
+fi
+
+JAVA_OPTS="$JAVA_OPTS -XX:+UseG1GC -XX:+UseCompressedOops -XX:+UseGCLogFileRotation -XX:NumberOfGCLogFiles=10 -XX:GCLogFileSize=20M -XX:+PrintGCDetails -XX:+PrintGCDateStamps -Xloggc:/path/to/your/log/directory/hazelcast-gc.log.`date +%Y- %m-%d-%H-%M` -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/path/to/your/log/directory/ -verbose:gc -Dlog4j.configuration=file:/path/to/your/log/directory/log4j.properties -Djava.security.egd=file:/dev/./urandom -Djava.io.tmpdir=/path/to/your/tmp/directory/tmp/"
+----
+
+== Additional Resources
+
+* What to do in case of an OOME: http://blog.hazelcast.com/out-of-memory/
+* What to do when one or more partitions become unbalanced, e.g., a partition becomes so large,
+it can’t fit in memory: https://hazelcast.com/blog/controlled-partitioning/
+* What to do when a queue store has reached its memory limit: http://blog.hazelcast.com/overflow-queue-store/

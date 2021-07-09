@@ -4,13 +4,109 @@ This section describes Hazelcast's Jet engine specific configuration.
 See the xref:configuration:understanding-configuration.adoc[Configuration Options section]
 to learn more about the configuration files and options.
 
+== Enabling the Jet Engine
+
+You can enable Hazelcast's Jet engine using the following configurations:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <jet enabled="true" ...>
+    ...
+    </jet>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  ...
+  jet:
+    enabled: true
+    ...
+----
+
+Java::
++
+[source,java]
+----
+...
+Config config = new Config();
+config.getJetConfig().setEnabled(true);
+HazelcastInstance instance = createHazelcastInstance(config);
+...
+----
+====
+
+Note that, Hazelcast's Jet engine is disabled by default when you use Hazelcast
+within the Java context, i.e., `hazelcast.jar`. When using Hazelcast ZIP/TAR distributions
+or Docker and Kubernetes distribution, Jet engine is enabled by default. See the
+Xref:secure-cluster:security-defaults.adoc[Security Defaults section] for information on
+the enabled/disabled features for different Hazelcast distributions.
+
+== Enabling Resource Uploading
+
+You can enable resource uploading for Jet engine jobs using the following configurations:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <jet enabled="true" resource-upload-enabled="true">
+    ...
+    </jet>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  ...
+  jet:
+    enabled: true
+    resource-upload-enabled: true
+    ...
+----
+
+Java::
++
+[source,java]
+----
+...
+Config config = new Config();
+config.getJetConfig().setEnabled(true).setResourceUploadEnabled(true);
+HazelcastInstance instance = createHazelcastInstance(config);
+...
+----
+====
+
+By default, resource uploading for Jet engine jobs is disabled.
+
 == List of Configuration Options
 
-The file `hazelcast-full-example.yaml/xml` in your distribution
-includes  a description of all configuration options.
+The Hazelcast full example configuration files (https://github.com/hazelcast/hazelcast/blob/master/hazelcast/src/main/resources/hazelcast-full-example.yaml#L3509[YAML],
+https://github.com/hazelcast/hazelcast/blob/master/hazelcast/src/main/resources/hazelcast-full-example.xml#L3612[XML]) in your distribution
+includes a description of all configuration options.
 Jet engine configuration options are listed below:
 
-[cols="4,2,4"]
+[cols="4a,2a,4a"]
 |===
 |Option|Default|Description
 
@@ -41,11 +137,101 @@ joins the cluster. It has no effect on jobs with auto scaling disabled.
 |false
 |Specifies whether the Lossless Cluster Restart feature is enabled.
 With this feature, you can restart the whole cluster without losing the
-jobs and their state. It is implemented on top of Hazelcast's Hot Restart Persistence
+jobs and their state. It is implemented on top of Hazelcast's Persistence
 feature, which persists the data to disk. You need to have
-the Hazelcast Enterprise edition and configure Hazelcast's Hot Restart Persistence to
+the Hazelcast Enterprise edition and configure Hazelcast's Persistence to
 use this feature. The default value is `false`, i.e., disabled.
+
+|`instance/max-processor-accumulated-records`
+|`Long.MAX_VALUE`
+|Specifies the maximum number of records that can be accumulated by any single
+processor instance. Operations like grouping, sorting or joining require certain amount of
+records to be accumulated before they can proceed. You can set this option
+to reduce the probability of `OutOfMemoryError`.
+This option applies to each processor instance separately, hence the
+effective limit of records accumulated by each cluster member is influenced
+by the vertex's localParallelism and the number of jobs in the cluster.
+Currently, this configuration option limits the:
+
+* number of items sorted by the sort operation
+* number of distinct keys accumulated by aggregation operations
+* number of entries in each hash-join lookup table
+* number of entries in stateful transforms
+* number of distinct items in distinct operation.
+
+NOTE: This limit does not apply to streaming aggregations.
+
+|`edge-defaults/queue-size`
+|
+|Sets the capacity of processor-to-processor concurrent queues. The value
+is rounded upwards to the next power of 2.
+
+|`edge-defaults/packet-size-limit`
+|
+|For a distributed edge, data is sent to a remote member via Hazelcast network
+packets. Each packet is dedicated to the data of a single edge, but may contain
+any number of data items. This setting limits the size of the packet in bytes.
+Packets should be large enough to drown out any fixed overheads, but small enough
+to allow good interleaving with other packets.
+
+|`edge-defaults/receive-window-multiplier`
+|
+|Sets the scaling factor used by the adaptive receive window sizing
+function.
 |===
+
+The following is an example declarative configuration:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <jet enabled="true" resource-upload-enabled="true">
+        <instance>
+            <cooperative-thread-count>4</cooperative-thread-count>
+            <flow-control-period>100</flow-control-period>
+            <backup-count>1</backup-count>
+            <scale-up-delay-millis>10000</scale-up-delay-millis>
+            <lossless-restart-enabled>false</lossless-restart-enabled>
+            <max-processor-accumulated-records>1000000000</max-processor-accumulated-records>
+        </instance>
+        <edge-defaults>
+            <queue-size>1024</queue-size>
+            <packet-size-limit>16384</packet-size-limit>
+            <receive-window-multiplier>3</receive-window-multiplier>
+        </edge-defaults>
+    </jet>
+
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  jet:
+    enabled: true
+    resource-upload-enabled: true
+    instance:
+      cooperative-thread-count: 4
+      flow-control-period: 100
+      backup-count: 1
+      scale-up-delay-millis: 10000
+      lossless-restart-enabled: false
+      max-processor-accumulated-records: 1000000000
+    edge-defaults:
+      queue-size: 1024
+      packet-size-limit: 16384
+      receive-window-multiplier: 3
+----
+====
+
 
 == List of Configuration Properties
 

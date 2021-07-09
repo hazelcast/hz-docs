@@ -19,7 +19,6 @@ We recommend you to always benchmark your setup before deploying it to
 production. We prepared an <<benchmarking-and-sizing-example, example>>
 that you can use as a starting point.
 
-See also the https://hazelcast.com/resources/hazelcast-deployment-operations-guide/[Hazelcast Deployment and Operations Guide].
 Your cluster will run both data processing and data storage
 workloads, so you should plan for it.
 
@@ -104,10 +103,10 @@ the remaining members. For this reason, we recommend that you plan to use only
 60% of available memory, with 40% headroom to handle member failure or shutdown.
 
 NOTE: When configuring High-Density Memory usage, please keep in mind that
-`metadata-space-percentage` is by default 12.5% but when xref:storage:hot-restart-persistence.adoc[Hot Restart]
+`metadata-space-percentage` is by default 12.5% but when xref:storage:persistence-persistence.adoc[Persistence]
 is used, it should be increased to 30%. Metadata space keeps Hazelcast memory manager's
 internal data, i.e., metadata for map/cache data structures that are off heap.
-When hot restart is used, it keeps hot restart metadata as well.
+When Persistence is used, it keeps Persistence metadata as well.
 
 If you're using jobs, all operational data must fit to
 the memory. This design leads to a predictable performance but requires
@@ -154,6 +153,54 @@ there is no specific advantage of using non-homogeneous cluster
 members, we do not recommend using lite members as they increase
 network calls and thus increase the latency. See the xref:management:cluster-utilities.adoc#enabling-lite-members[Cluster Utilities]
 for information on lite members. 
+
+[[partition-count]]
+== Partition Count
+
+Hazelcast's default partition count is 271. This is a good choice for clusters of
+up to 50 members and ~25–30 GB of data. Up to this threshold,
+partitions are small enough that any rebalancing of the partition map
+when members join or leave the cluster doesn’t disturb the smooth operation of the cluster.
+With larger clusters and/or bigger data sets, a larger partition count helps to
+maintain an efficient rebalancing of data across members.
+
+An optimum partition size is between 50MB – 100MB. Therefore,
+when designing the cluster, determine the size of the data that
+will be distributed across all members, and then determine the
+number of partitions such that no partition size exceeds 100MB.
+If the default count of 271 results in heavily loaded partitions,
+increase the partition count to the point where data load per-partition
+is under 100MB. Remember to factor in headroom for projected data growth.
+
+NOTE: If you change the partition count from the default of 271,
+be sure to use a prime number of partitions. This helps minimizing
+the collision of keys across partitions, ensuring more consistent lookup
+times.
+
+NOTE: If you are an Enterprise customer using the High-Density Memory Store
+with large data sizes, we recommend a large increase in partition count, starting with 5009 or higher.
+
+You cannot change the partition count after a cluster is created,
+so if you have a larger cluster, be sure to test and
+set an optimum partition count prior to deployment.
+If you need to change the partition count after a cluster is running,
+you will need to schedule a maintenance window to update the partition count
+and restart the cluster.
+
+=== Parallel Migrations
+
+Hazelcast can migrate the partitions for separate partitions in parallel.
+This significantly reduces the time needed for repartitioning.
+Having parallel migrations does have an impact on the heap memory and network utilization.
+The following properties control the number of parallel migrations/replications on a single member:
+
+* `hazelcast.partition.max.parallel.migrations` - Maximum number of partition migrations to be executed concurrently on a member.
+* `hazelcast.partition.max.parallel.replications` - Maximum number of parallel partition backup replication operations per member.
+
+The default value is 10 for both properties, and this should be fine for most setups.
+Care and consideration should be taken before altering either of these properties.
+Decreasing them will make the total migration time go up, and increasing them will
+create additional heap and network pressure.
 
 == Scaling Maximums
 
@@ -552,7 +599,7 @@ pause length under such conditions.
 If you aim for very low latencies (anything below 10 ms), you can
 achieve it with G1 as well, but you will probably have to use the
 `-XX:MaxNewSize` flag in order to constrain the Minor GC pause duration.
-In our ??????https://jet-start.sh/blog/2020/08/05/gc-tuning-for-jet[test]?????? we found the values
+In our https://jet-start.sh/blog/2020/08/05/gc-tuning-for-jet[test] we found the values
 `100m`-`200m` to work best over our range of throughputs, lower values
 being better for lower throughputs.
 

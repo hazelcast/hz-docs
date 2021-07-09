@@ -14,7 +14,49 @@ We suggest at least 8 CPUs or equivalent per member, as well as running a single
 
 == Operating System Recommendations
 
-At operating system level, we recommend turning off the swapping.
+Hazelcast works in many operating environments and some environments
+have unique considerations. These are highlighted below.
+
+As a general suggestion, we recommend turning off the swapping at operating system level.
+
+=== Solaris Sparc
+
+Hazelcast is certified for Solaris Sparc. If you are using the former Hazelcast IMDG
+with versions older than 3.6, there is a known issue with High-Density Memory Store
+due to the Sparc architecture not supporting unaligned memory access.
+
+=== VMWare ESX
+
+Hazelcast is certified on VMWare VSphere 5.5/ESXi 6.0.
+Generally speaking, Hazelcast can use all of the resources on a full machine.
+Splitting a single physical machine into multiple virtual machines and
+thereby dividing resources are not required.
+
+Consider the following for VMWare ESX:
+
+* Avoid over-committing memory. Always use dedicated physical memory for guests running Hazelcast.
+* Do not use memory ballooning.
+* Be careful over-committing the CPU, too. Watch for the CPU steal time.
+* Do not move guests while Hazelcast is running; disable vMotion. If you want to use vMotion (live migration),
+first stop the Hazelcast cluster and restart it after the migration.
+* Always enable verbose garbage collection (GC) logs; when "Real" time is higher than "User" time,
+then it may indicate some virtualization issues. JVM is off-CPU during GC (and probably waiting for I/O).
+* Note VMWare guests network types.
+* Use pass-through hard disks/partitions; do not to use image files.
+* Configure partition groups to use a separate underlying physical machine for partition backups.
+* If you want to use automatic snapshots, first stop the Hazelcast cluster and restart it after the snapshot.
+* Network performance issues, including timeouts, might occur with LRO (Large Receive Offload)
+enabled on Linux virtual machines and ESXi/ESX hosts. We have specifically had
+this reported in VMware environments, but it could potentially impact other environments as well.
+We strongly recommend disabling LRO when running in virtualized environments, see https://kb.vmware.com/s/article/1027511.
+
+=== Windows
+
+According to a reported rare case, I/O threads can consume a lot of CPU cycles
+unexpectedly, even in an idle state. This can lead to CPU usage going up to 100%.
+This is reported not only for Hazelcast but for other GitHub projects as well.
+Workaround for such cases is to supply the system property `-Dhazelcast.io.selectorMode=selectwithfix` on JVM startup.
+See the related https://github.com/hazelcast/hazelcast/issues/7943#issuecomment-218586767[GitHub^] issue for more details.
 
 == JVM Recommendations
 

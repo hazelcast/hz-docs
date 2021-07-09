@@ -1,14 +1,13 @@
 = Monitoring
 :description: Options available for monitoring the health and operations of Hazelcast clusters.
 
-
 [[monitoring-best-practices]]
 == Best Practices
 
 Please review Hazelcast Health Monitor logs regularly to understand
-you system runtime stability. Monitor Hazelcast logs and scan for failure
+the system runtime stability. Monitor Hazelcast logs and scan for failure
 messages regularly. Any incidences should be investigated and documented so as 
-o understand your network better and find ways to provision, configure and manage
+to understand your network better and find ways to provision, configure and manage
 your network more efficiently.
 
 Hazelcast provides multi-level tolerance configurations in a cluster:
@@ -35,6 +34,38 @@ Splunk or similar to monitor GC behavior. Back-to-back full GCs and anything
 above 90% heap occupancy after a full GC should be cause for alarm.
 Hazelcast dumps a set of information into the console of each instance that
 may further be used to create alerts.
+
+=== Basic Steps for Monitoring and Auditing
+
+* Make sure that all members are reachable by every other member in the cluster
+and are also accessible by the clients (ports, network, etc).
+* Start Hazelcast member instances first. While not mandatory, this is a best practice
+to avoid clients timing out or complaining that no Hazelcast member is found, which can happen
+if the clients are started before the members.
+* Enable/start a system monitor tool, e.g., http://nmon.sourceforge.net/pmwiki.php[nmon^].
+* To add more members to an already running cluster, start a member with a similar configuration
+to the other members with the possible addition of the IP address of the new member.
+A maintenance window is not required to add more members to an already running Hazelcast cluster.
+** When a member is added to or removed from a Hazelcast cluster, the clients may see a
+little pause time, but this is normal. This is essentially the time required by Hazelcast members
+to rebalance the data upon the arrival or departure of a member.
+** There is no need to change anything on the clients when adding more members to the
+running cluster. The clients update themselves automatically to connect to the new member
+once it has successfully joined the cluster.
+** Rebalancing of data (primary plus backup) on arrival or departure (forced or unforced)
+of a member is an automated process and no manual intervention is required.
+** You can promote your lite members to become data members. To do this, either use the
+xref:management:cluster-utilities.adoc#promoting-lite-members-to-data-member[Cluster API] or Management Center.
+** Setting `hazelcast.initial.min.cluster.size` to 4 and starting members one by one (empty cluster, no operation)
+can result in unexpected cluster partitioning behavior: After reaching `hazelcast.initial.min.cluster.size`,
+partition table arrangement is initialized even though there’s no data. When used in large clusters (>100),
+this adds an unnecessary overhead of partition assignment on each member addition.
+* Check that you have configured an adequate backup count based on your SLAs.
+* When using distributed computing features such as executor service or entry processors,
+any change in the client application logic or in the implementation of these must also be applied on
+the members. All the members must be restarted after the new code is deployed using the typical cluster
+re-deployment process: first shutdown the members, then deploy the new application JARs in the members' classpath,
+and start the members.
 
 == Management Center
 
@@ -2218,7 +2249,9 @@ com.hazelcast.sql.HazelcastSqlException: Cannot resolve IMap schema because it d
 xref:maintain-cluster:monitoring.adoc#prometheus-2[Prometheus section] for details.
 
 Besides the above channels, you can also benefit from Hazelcast logging mechanism as an indirect
-way of getting alerts. See the xref:maintain-cluster:monitoring.adoc#logging[Logging section] for details. 
+way of getting alerts. See the xref:maintain-cluster:monitoring.adoc#logging[Logging section] for details.
+
+To learn the possible actions on the alerts, see the xref:troubleshoot:remedies-for-alerts.adoc[Actions and Remedies for Alerts section].
 
 == Integrating with 3rd Party Tools
 

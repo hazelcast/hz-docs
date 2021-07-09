@@ -13,6 +13,10 @@ successor TLS (Transport Layer Security).
 NOTE: It is NOT recommended to reuse the key stores and trust stores
 for external applications.
 
+NOTE: Using TLS/SSL may have an impact on the cluster performance.
+See the <<tls-ssl-perf, TLS/SSL Tuning section>> for more information
+on the performance considerations. 
+
 == TLS/SSL for Hazelcast Members
 
 Hazelcast allows you to encrypt socket level communication between
@@ -340,44 +344,3 @@ the others.
 You can configure TLS/SSL for WAN replication using the advanced network configuration.
 See the xref:wan:advanced-features.adoc#securing-wan-connections.adoc[Securing the Connections for WAN Replication section]
 for the details.
-
-== TLS/SSL Performance Improvements for Java
-
-TLS/SSL can have a significant impact on performance. There are a few ways to
-increase the performance.
-
-The first thing that can be done is making sure that AES intrinsics are used.
-Modern CPUs (2010 or newer Westmere) have hardware support for AES encryption/decryption
-and if a Java 8 or newer JVM is
-used, the JIT automatically makes use of these AES intrinsics. They can also be
-explicitly enabled using `-XX:+UseAES -XX:+UseAESIntrinsics`,
-or disabled using `-XX:-UseAES -XX:-UseAESIntrinsics`.
-
-A lot of encryption algorithms make use of padding because they encrypt/decrypt in
-fixed sized blocks. If there is no enough data
-for a block, the algorithm relies on random number generation to pad. Under Linux,
-the JVM automatically makes use of `/dev/random` for
-the generation of random numbers. `/dev/random` relies on entropy to be able to
-generate random numbers. However, if this entropy is
-insufficient to keep up with the rate requiring random numbers, it can slow down
-the encryption/decryption since `/dev/random` will
-block; it could block for minutes waiting for sufficient entropy . This can be fixed
-by setting the `-Djava.security.egd=file:/dev/./urandom` system property.
-For a more permanent solution, modify the
-`<JAVA_HOME>/jre/lib/security/java.security` file, look for the
-`securerandom.source=/dev/urandom` and change it
-to `securerandom.source=file:/dev/./urandom`. Switching to `/dev/urandom` could
-be controversial because `/dev/urandom` will not
-block if there is a shortage of entropy and the returned random values could
-theoretically be vulnerable to a cryptographic attack.
-If this is a concern in your application, use `/dev/random` instead.
-
-Hazelcast's Java smart client automatically makes use of extra I/O threads
-for encryption/decryption and this have a significant impact on the performance.
-This can be changed using the `hazelcast.client.io.input.thread.count` and
-`hazelcast.client.io.output.thread.count` client system properties.
-By default it is 1 input thread and 1 output thread. If TLS/SSL is enabled,
-it defaults to 3 input threads and 3 output threads.
-Having more client I/O threads than members in the cluster does not lead to
-an increased performance. So with a 2-member cluster,
-2 in and 2 out threads give the best performance.

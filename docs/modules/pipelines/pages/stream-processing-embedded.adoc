@@ -15,6 +15,8 @@ To complete this tutorial, you need the following:
 |xref:getting-started:get-started-java.adoc[Start a Local Cluster]
 |===
 
+NOTE: To use Hazelcast as a data processing engine, you must use the Java API.
+
 == Step 1. Write a Stream Processing Pipeline
 
 With Hazelcast, you can specify data processing steps, using the Jet API. This API creates a series of tasks that can be submitted to a Hazelcast cluster as a job.
@@ -56,29 +58,20 @@ called _compute stages_ and expect you to attach further stages to them.
 
 After creating a pipeline, you can tell Hazelcast to run it by submitting it to Hazelcast, using the `JetService` object.
 
-. Add this code to your `main()` method:
+. Add this code to the bottom of your `main()` method:
 +
 [source,java]
 ----
-<1>
-Config config = new Config();
-JetConfig jetConfig = config.getJetConfig();
-jetConfig.setEnabled(true);
-HazelcastInstance hz = Hazelcast.newHazelcastInstance(config);
+Pipeline evenNumberStream = buildEvenNumberStreamPipeline();
 
-Pipeline evenNumberStream = buildEvenNumberStreamPipeline(); <2>
+JetService jet = hz.getJet();
 
 try {
-    hz.getJet().newJob(evenNumberStream); <3>
+    jet.newJob(evenNumberStream);
 } finally {
-    hz.shutdown(); <4>
+    hz.shutdown();
 }
 ----
-+
-<1> xref:pipelines:job-security.adoc[Enable the Jet engine].
-<2> Get a reference to the pipeline.
-<3> xref:pipelines:submitting-jobs.adoc[Submit the job] to the Hazelcast member.
-<4> Shut down the member when the job is canceled.
 
 . Execute the code.
 
@@ -140,10 +133,7 @@ import java.util.Map;
 
 public class App {
     public static void main(String[] args) {
-        Config config = new Config();
-        JetConfig jetConfig = config.getJetConfig();
-        jetConfig.setEnabled(true).setResourceUploadEnabled(true);
-        HazelcastInstance hz = Hazelcast.newHazelcastInstance(config);
+        HazelcastInstance hz = Hazelcast.newHazelcastInstance();
 
         Pipeline evenNumberStream = buildEvenNumberStreamPipeline();
 

@@ -14,6 +14,14 @@ https://jet-start.sh/blog/[Jet release notes].
 
 == Breaking Changes
 
+* Removed the following properties that were used in the former Jet product, since it
+is now part of Hazelcast 5.0:
+** `jet.home`
+** `jet.imdg.version.mismatch.check.disabled`
++
+https://github.com/hazelcast/hazelcast/pull/18999[#18999]
+* Changed the type of `YEAR` field in the SQL client protocol from `short` to `int`.
+https://github.com/hazelcast/hazelcast/pull/18984[#18984]
 * Since the `HOST` and `RACK` metadata were deprecated in the previous Hazelcast
 release, these information are removed from the `ZONE_AWARE` partition grouping
 configuration.
@@ -25,10 +33,81 @@ https://github.com/hazelcast/hazelcast/pull/18475[#18475]
 
 == Enhancements
 
+* The Jet engine jobs submitted in a Hazelcast cluster are now cancelled
+when you upgrade your Hazelcast version since the Jet engine doesn't provide backwards compatibility.
+https://github.com/hazelcast/hazelcast/pull/19012[#19012]
+* Consolidated the scripts delivered with the former IMDG and Jet distributions.
+See the xref:migrate:upgrade.adoc#scripts[Changes in Distribution Packaging section].
+https://github.com/hazelcast/hazelcast/pull/18999[#18999]
+* Added support of default serializers for the following classes
+which has been necessary for non-Java clients to use these:
+** `LocalDate`
+** `LocalTime`
+** `LocalDateTime`
+** `OffsetDatetime`
++
+https://github.com/hazelcast/hazelcast/pull/18983[#18983]
+* Introduced the simple authentication configuration; it allows to have users and
+their assigned roles stored together with other Hazelcast configurations. See the example:
++
+[source,yaml]
+----
+hazelcast:
+  security:
+    enabled: true
+    realms:
+      - name: simpleRealm
+        authentication:
+          simple:
+            users:
+              - username: test
+                password: 'a1234'
+                roles:
+                  - monitor
+                  - hazelcast
+              - username: root
+                password: 'secret'
+                roles:
+                  - admin
+----
++
+https://github.com/hazelcast/hazelcast/pull/18948[#18948]
+* Added support of the `putIfAbsentAsync()` method for maps on the member side;
+which is required for the usage of `INSERT INTO` statements in SQL queries.
+https://github.com/hazelcast/hazelcast/pull/18946[#18946]
+* Added support of returning nested fields without having to
+deserialize them, which enables you to use `Portable` in client/server
+deployments without touching the server side; for example, SQL queries
+can now return columns without having the class on the server-side classpath.
+https://github.com/hazelcast/hazelcast/pull/18922[#18922]
+* Added support of the `UPDATE` and `INSERT` SQL query for maps.
+https://github.com/hazelcast/hazelcast/pull/18940[#18940],
+https://github.com/hazelcast/hazelcast/pull/18910[#18910]
+* Added Merkle tree support for the `ICache` data structure.
+https://github.com/hazelcast/hazelcast/pull/18898[#18898]
+* Even when the factory configuration is missing on the member but
+the map is configured to have the the in-memory format as `OBJECT`, Hazelcast now can store
+portables as `PortableGenericRecord` and still query them
+without needing to convert them to Object/Data.
+https://github.com/hazelcast/hazelcast/pull/18891[#18891]
 * Standardized the `TIME` and `TIMESTAMP` temporal formats for the
 SQL engine: You can now use `TIME` without leading zeroes and `TIMESTAMP`
-with space instead of the `T` symbol.
-https://github.com/hazelcast/hazelcast/pull/18881[#18881]
+with space instead of the `T` symbol. Also added support of leading non-zero
+characters for the `DATE` formats.
+https://github.com/hazelcast/hazelcast/pull/18881[#18881],
+https://github.com/hazelcast/hazelcast/pull/18842[#18842]
+* Added support of `OFFSET` for SQL queries.
+https://github.com/hazelcast/hazelcast/pull/18866[#18866]
+* Added the `ClientConsole` entry point to the Hazelcast command line
+interface.
+https://github.com/hazelcast/hazelcast/pull/18857[#18857]
+* Changed the `since` tags in Jet engine API and its extension modules
+from  `@since x.y` to `@since Jet x.y`.
+https://github.com/hazelcast/hazelcast/pull/18832[#18832]
+* Enhanced the `getPartitionGroupStrategy()` method to have cluster members
+as arguments so that useful partitioning strategies can be implemented by accessing
+the members using this method.
+https://github.com/hazelcast/hazelcast/pull/18794[#18794]
 * Implemented a basic memory management for the SQL engine
 so that number of records accumulated by it can be limited
 to avoid out of memory failures. You can use the `max-processor-accumulated-records`
@@ -82,7 +161,9 @@ https://github.com/hazelcast/hazelcast/pull/18479[#18479]
 ** `POSITION`
 ** `COALESCE`
 ** `NULLIF`
+** `TO_EPOCH_MILLIS`
 +
+https://github.com/hazelcast/hazelcast/pull/18900[#18900],
 https://github.com/hazelcast/hazelcast/pull/18510[#18510],
 https://github.com/hazelcast/hazelcast/pull/18487[#18487],
 https://github.com/hazelcast/hazelcast/pull/18450[#18450],
@@ -90,6 +171,18 @@ https://github.com/hazelcast/hazelcast/pull/18424[#18424],
 https://github.com/hazelcast/hazelcast/pull/18405[#18405]
 * Added support of plan caching for Jet engine based queries.
 https://github.com/hazelcast/hazelcast/pull/18446[#18446]
+* Introduced the following properties:
+** `hazelcast.partition.rebalance.mode`: It determines whether cluster
+membership change triggers partition rebalancing automatically (`auto`) or
+explicit action is required for rebalancing to occur (`manual`). Its default is `auto`.
+** `hazelcast.partition.rebalance.delay.seconds`: it specifies the time in seconds
+to wait before triggering automatic partition
+rebalancing after a member leaves the cluster unexpectedly. Unexpectedly in this
+context means that a member leaves the cluster by programmatic termination, a
+process crash or network partition. Its default is 0, which means rebalancing is
+triggered immediately.
++
+https://github.com/hazelcast/hazelcast/pull/18425[#18425]
 * Added support of plus and minus operations for interval types (date, time, etc.) for
 the SQL engine.
 https://github.com/hazelcast/hazelcast/pull/18390[#18390]
@@ -109,9 +202,31 @@ https://github.com/hazelcast/hazelcast/pull/18067[#18067]
 
 == Fixes
 
+* SQL expressions now does not fail when used with trailing semicolons.
+https://github.com/hazelcast/hazelcast/pull/18976[]
+* Fixed an issue where the health monitor was incorrectly showing the value for
+free metadata memory.
+https://github.com/hazelcast/hazelcast/pull/18951[#18951]
+* Some merge policies like `LatestUpdateMergePolicy` for the map and WAN replication
+configurations require the per-entry statistics to be enabled. Previously, this
+configuration inconsistency was causing the related member to fail at runtime.
+Now, the Hazelcast member fails to start, i.e., fast fails, in such a case.
+https://github.com/hazelcast/hazelcast/pull/18928[#18928]
+* Fixed an issue where the maximum size policy for a map was being ignored
+when the policy is `PER_NODE` and the cluster is scaled down (due to losing or killing a member).
+https://github.com/hazelcast/hazelcast/pull/18927[#18927]
+* The LRU eviction policy now takes last access time value into account to
+prevent premature removal of the lately added but not yet accessed map entries.
+https://github.com/hazelcast/hazelcast/pull/18909[#18909]
+* Fixed an issue where the map’s Near Cache was setting its maximum
+size as 10.000 even if the configured eviction policy is `NONE`.
+https://github.com/hazelcast/hazelcast/pull/18835[#18835]
 * Fixed a regression issue where a job using map reader/writer could not be completed
 when the target map has a configured Near Cache.
 https://github.com/hazelcast/hazelcast/pull/18696[#18696]
+* Fixed an issue where the updates made to a persistent map store might be lost when the
+write coalescing is enabled.
+https://github.com/hazelcast/hazelcast/pull/18686[#18686]
 * Fixed a reconnection flood when members are separated by a proxy: When a member is disconnected
 from the cluster, the alive cluster members still try to reconnect to it if the dying member
 connection is not closed explicitly. In the cases where the connection is explicitly closed with a cause
@@ -146,9 +261,19 @@ https://github.com/hazelcast/hazelcast/issues/17834[#17834]
 
 * Former `Jet`, `JetInstance` and `JetCacheManager` classes have been deprecated.
 See xref:migrate:upgrade.adoc#depreciation-of-the-jet-and-jetinstance-classes[here]
-for details.
+for details. Accordingly `JetInstance` has been removed from Hazelcast's command line
+interface (CLI) and Jet engine tests (also the name of CLI has been changed to `HazelcastCommandLine`).
+https://github.com/hazelcast/hazelcast/pull/18829[#18829],
+https://github.com/hazelcast/hazelcast/pull/18775[#18775],
+https://github.com/hazelcast/hazelcast/pull/18667[#18667]
 * Former Hazelcast Jet's `bootstrappedInstance()` has been deprecated. Instead, you can use `Hazelcast.bootstrappedInstance()`.
 See xref:migrate:upgrade.adoc#depreciation-of-the-jet-and-jetinstance-classes[here] for details.
+* The support of `NULLS FIRST` and `NULLS LAST` has been removed from the SQL engine;
+the indices treat `NULL` as the smallest value in ordering, therefore we needed to disable temporarily these constructs.
+https://github.com/hazelcast/hazelcast/pull/19031[#19031]
+* The configuration element `hot-restart-persistence` has been deprecated.
+You can use `persistence` instead.
+https://github.com/hazelcast/hazelcast/pull/19004[#19004]
 
 == Contributors
 

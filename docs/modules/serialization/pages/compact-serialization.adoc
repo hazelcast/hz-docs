@@ -1,0 +1,289 @@
+= Compact Serialization (BETA)
+
+As an enhancement to existing serialization methods, Hazelcast offers a BETA version
+of the Compact serialization, with the following main features
+
+* Separates the schema from the data and stores it per type, not per object which
+results in less memory and bandwidth usage compared to other formats
+* Does not require a class to implement an interface or change the source code of
+the class in any way
+* Supports schema evolution which permits adding or removing fields, or changing
+the types of fields
+* Can work with no configuration or any kind of factory/serializer registration
+* Platform and language independent
+* Supports partial deserialization of fields, without deserializing the whole objects during
+queries or indexing
+
+Hazelcast achieves these features by having a well-known schema of objects and replicating
+them across the cluster which enables members and clients to fetch schemas they don't
+have in their local registries. Each serialized object caries just a schema identifier and
+relies on the schema distribution service or configuration to match identifiers with the
+actual schema. Once the schemas are fetched, they are cached locally on the members and clients
+so that the next operations that use the schema do not incur extra costs.
+
+Schemas help Hazelcast to identify the locations of the fields on the serialized binary data.
+With this information, Hazelcast can deserialize individual fields of the data, without reading
+the whole binary. This results in a better query and indexing performance.
+
+Schemas can evolve freely by adding or removing fields. Even, the types of the fields can be changed.
+Multiple versions of the schema may live in the same cluster and both the old and new readers
+may read the compatible parts of the data. This feature is especially useful in rolling upgrade
+scenarios.
+
+The Compact serialization does not require any changes in the user classes as it doesn't need
+a class to implement a particular interface. Serializers might be implemented and registered
+separately from the classes.
+
+It also supports zero-configuration use cases by automatically extracting schemas out of the
+classes using reflection, which is cached and reused later, with no extra cost.
+
+The underlying format of the compact serialized objects is platform and language independent.
+Native client supports will be added shortly after promoting this feature to stable status.
+
+Note that, currently, the feature is in BETA state and Hazelcast does not guarantee behavior or API
+compatibility.
+
+During the BETA period, Compact serialization has to be enabled explicitly as shown in the
+<<compactserializationconfig, CompactSerializationConfig section>>.
+
+== Using Compact Serialization With Zero-Configuration
+
+Compact Serialization can be used without a configuration or serializer
+registration. As described in the xref:interface-types.adoc[Serialization Interface Types],
+Hazelcast tries to find a serializer for any object. Before this feature, if
+there were no serializers associated with a certain class, we were throwing an
+exception indicating that there is no suitable serializer for it. Now, as
+a last effort, Hazelcast tries to use Compact serialization. To do this, Hazelcast tries
+to extract a schema out of the class using reflection. If successful, it registers the
+reflective serializer associated with the extracted schema and uses it while
+serializing/deserializing instances of that class. If the automatic schema
+extraction fails, Hazelcast throws an exception as before.
+
+Currently, Hazelcast supports extracting schemas out of the classes that have the following
+field types.
+
+* Primitive types: boolean`, `byte`, `short`, `char`, `integer`, `long`, `float`, and `double`.
+* `String`
+* `java.time.LocalDate`, `java.time.LocalTime`, `java.time.LocalDateTime`, and `java.time.OffsetDateTime`
+* `java.math.BigDecimal`
+* Arrays of the types shown above
+* Nested classes that contain the fields above and arrays of them
+
+For example, assume that we have the same `Employee` class as above.
+If we don't perform any kind of configuration change and use the instances of the class
+directly, there won't be any exceptions thrown. Hazelcast will generate a schema out of the
+`Employee` class the first time we try to serialize an object, cache it, and reuse it
+for the subsequent serializations/deserializations.
+
+For reflective schema extraction and serializer to work, the class must have an empty
+public constructor.
+
+[source,java]
+----
+ClientConfig config = new ClientConfig();
+config.getSerializationConfig()
+        .getCompactSerializationConfig()
+        .setEnabled(true); // Required during BETA
+
+HazelcastInstance client = HazelcastClient.newHazelcastClient(config);
+IMap<Long, Employee> map = client.getMap("employees");
+Employee employee = new Employee(1, "John Doe");
+map.set(1L, employee);
+Employee employeeFromMap = map.get(1L);
+----
+
+NOTE: Since the Compact Serialization feature is in BETA, to use zero-configuration, ironically,
+you have to enable it with the `CompactSerializationConfig` as shown below. This limitation will
+be removed once the BETA period ends, and Hazelcast will enable Compact serialization by default.
+Once this happens, zero-configuration will work as promised, without requiring any kind of
+configuration.
+
+== Implementing CompactSerializer
+
+Another way to use Compact serialization is to implement the `CompactSerializer` interface for a class
+and register it to the configuration.
+
+Assume that we have the following `Employee` class.
+
+[source,java]
+----
+public class Employee {
+    private long id;
+    private String name;
+
+    public Employee() {
+    }
+
+    public Employee(long id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    public long getId() {
+        return id;
+    }
+
+    public String getName() {
+        return name;
+    }
+}
+----
+
+Then, a Compact serializer can be implemented as such.
+
+[source,java]
+----
+class EmployeeSerializer implements CompactSerializer<Employee> {
+    @Override
+    public Employee read(CompactReader reader) {
+        long id = reader.readLong("id");
+        String name = reader.readString("name");
+        return new Employee(id, name);
+    }
+
+    @Override
+    public void write(CompactWriter writer, Employee employee) {
+        writer.writeLong("id", employee.getId());
+        writer.writeString("name", employee.getName());
+    }
+}
+----
+
+The last step is to register the serializer to the `CompactSerializationConfig`.
+Below is the programmatic configuration for this step.
+
+[source,java]
+----
+SerializationConfig serializationConfig = new SerializationConfig();
+serializationConfig.
+        getCompactSerializationConfig()
+        .setEnabled(true) // Required during BETA
+        .register(Employee.class, "employee", new EmployeeSerializer());
+----
+
+A schema will be created from the serializer, and a unique schema identifier will be
+assigned to it automatically.
+
+From now on, Hazelcast will serialize instances of the `Employee` class using the `EmployeeSerializer`.
+
+== Schema Evolution
+
+Compact serialization permits schemas and classes to evolve by adding or removing fields, or
+by changing the types of fields. More than one version of a class may live in the same cluster
+and different clients or members might use different versions of the class.
+
+Hazelcast handles the versioning internally. So, you don't have to change anything in the classes
+or serializers apart from the added, removed, or changed fields.
+
+Hazelcast achieves this by identifying each version of the class by a unique fingerprint. Any change
+in a class results in a different fingerprint. Hazelcast uses 64 bits
+https://en.wikipedia.org/wiki/Rabin_fingerprint[Rabin Fingerprint] to assign identifiers to schemas, which
+has an extremely low collision rate.
+
+Different versions of the schema with different identifiers are replicated in the cluster and can be
+fetched by clients or members internally. That allows old readers to read fields of the classes they
+know when they try to read data serialized by a new writer. Similarly, new readers might read
+fields of the classes available in the data, when they try to read data serialized by an old writer.
+
+Assume that the two versions of the following `Employee` class lives in the cluster.
+
+[source,java]
+----
+class Employee {
+    long id;
+    String name;
+}
+----
+
+[source,java]
+----
+class Employee {
+    private long id;
+    private String name;
+    private int age; // Newly added field
+}
+----
+
+Then, when faced with binary data serialized by the new writer, old readers will be able to
+read the following fields.
+
+[source,java]
+----
+public Employee read(CompactReader reader) {
+    long id = reader.readLong("id");
+    String name = reader.readString("name");
+    // The new "age" field is there, but the old reader does not
+    // know anything about it. Hence, it will simply ignore that field.
+    return new Employee(id, name);
+}
+----
+
+Then, when faced with binary data serialized by the old writer, new readers will be able to
+read the following fields. Also, Hazelcast provides convenient APIs to read default values
+when there is no such field in the data.
+
+[source,java]
+----
+public Employee read(CompactReader reader) {
+    long id = reader.readLong("id");
+    String name = reader.readString("name");
+    // Read the "age" if it exists, or the default value 0.
+    // reader.readInt("age") would throw if the "age" field
+    // does not exist in data.
+    int age = reader.readInt("age", 0);
+    return new Employee(id, name, age);
+}
+----
+
+Note that, when an old reader reads data written by an old writer, or a new reader reads a data
+written by a new writer, they will be able to read all fields.
+
+== CompactSerializationConfig
+
+Currently, `CompactSerializationConfig` only supports programmatic configuration. The support
+for the declarative configuration will be added shortly.
+
+During the BETA period, Compact serialization has to be enabled explicitly as shown below.
+
+[source,java]
+----
+SerializationConfig serializationConfig = new SerializationConfig();
+serializationConfig.
+        getCompactSerializationConfig()
+        .setEnabled(true);
+----
+Apart from that, the configuration can be used to register either
+
+- an explicit `CompactSerializer`
+- a reflective serializer for a class.
+
+In both of these cases, you can either
+
+- supply a type name for the class
+- or let Hazelcast choose the fully qualified class name for you.
+
+Choosing a type name will associate that name with the schema and will make the polyglot
+use cases where there are multiple clients from different languages easier.
+
+Below is the way to register an explicit serializer for a certain class.
+
+[source,java]
+----
+SerializationConfig serializationConfig = new SerializationConfig();
+serializationConfig.
+        getCompactSerializationConfig()
+        .setEnabled(true)
+        .register(Foo.class, "foo", new FooSerializer()); // Use the "foo" as the type name
+----
+
+Lastly, the following is a sample configuration that registers reflective
+serializer for a certain class, without implementing an explicit serializer.
+
+[source,java]
+----
+SerializationConfig serializationConfig = new SerializationConfig();
+serializationConfig.
+        getCompactSerializationConfig()
+        .setEnabled(true)
+        .register(Bar.class); // Use the fully qualified class name as the type name
+----

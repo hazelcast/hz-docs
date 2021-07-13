@@ -81,6 +81,10 @@ NOTE: Support for JCache data will be available in the full 5.0 release.
 
 === Delaying Migrations
 
+If you have lots of persisted data and you are concerned about how long it may take for your cluster to migrate data after a member crashes, you can configure a rebalance delay to stop members from migrating persisted data too soon.
+
+WARNING: Do not use this option if your cluster also stores in-memory data. This option stops the cluster from migrating in-memory data. As a result any data that is not persisted will be lost if the member restarts, including backups. 
+
 Assume the following:
 
 * A cluster consisting of members A, B and C with Persistence enabled.
@@ -91,11 +95,9 @@ If member B restarts within the timeframe configured in the `hazelcast.partition
 
 While the member is down, operations on data owned by that member will be retried until they either timeout or the member restarts and executes the requested operation. As a result, this option is best when you prefer a latency spike rather than migrating data over the network.
 
-WARNING: Do not use this option if your cluster also stores in-memory data. This option stops the cluster from migrating in-memory data. As a result any data that is not persisted will be lost if the member restarts, including backups. 
-
-If a member restarts after the the timeframe configured in the `hazelcast.partition.rebalance.after.member.left.delay.seconds` cluster property, the cluster recovers member B's data from backups and
-redistribute the data among the remaining members (members A and C
-in this case). If merkle trees are enabled on any maps, migrations use those to request only missing persisted data.
+If a member restarts after the timeframe configured in the `hazelcast.partition.rebalance.after.member.left.delay.seconds` cluster property, the cluster recovers member B's data from backups and
+redistributes the data among the remaining members (members A and C
+in this case). When member B is later restarted, it recovers its potentially stale persisted data from disk and brings it up-to-date with data from members A and C. If Merkle trees are enabled on any maps, migrations use those to request only missing persisted data. For details about how members use Merkle trees, see <<synchronizing-persisted-data-faster, Synchronizing Persisted Data Faster>>.
 
 === Synchronizing Persisted Data Faster
 

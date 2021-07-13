@@ -94,6 +94,7 @@ Env::
 ----
 HZ_JET_RESOURCE-UPLOAD-ENABLED=true
 ----
+--
 Java:: 
 + 
 --
@@ -124,8 +125,7 @@ To restrict clients, you can set the following permissions:
 - `cancel`: Cancel a running job.
 - `read`: Get or list information about a job (by ID or name) such as job configuration, job status, and
 submission time.
-- `suspend`: Suspend a running job.
-- `resume`: Resume a suspended job.
+- `restart`: Suspend and resume a running job.
 - `export-snapshot`: Export the snapshot.
 - `add-resources`: Upload resources and classes as well as jobs to members.
 +
@@ -152,6 +152,62 @@ You can set the following permissions for each connector:
 - `read`: Read data from sources.
 - `write`: Write data to sinks.
 - `all`: Enable all actions.
+
+You can also give different permissions to different folders. For example:
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<connector-permission name="file:/home/user/source" principal="dev">
+  <actions>
+    <action>read</action>
+  </actions>
+</connector-permission>
+<connector-permission name="file:/home/user/sink" principal="dev">
+  <actions>
+    <action>write</action>
+  </actions>
+</connector-permission>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+connector:
+  - name: "file:/home/user/source"
+    actions:
+      - action: read
+connector:
+  - name: "file:/home/user/sink"
+    actions:
+      - action: write
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+SecurityConfig securityConfig = config.getSecurityConfig();
+securityConfig.setEnabled(true);
+securityConfig.addClientPermissionConfig(
+  new PermissionConfig(PermissionConfig.PermissionType.CONNECTOR, "file:/home/user/source", "dev")
+  .addAction(ActionConstants.ACTION_READ)
+);
+securityConfig.addClientPermissionConfig(
+  new PermissionConfig(PermissionConfig.PermissionType.CONNECTOR, "file:/home/user/sink", "dev")
+  .addAction(ActionConstants.ACTION_WRITE)
+);
+----
+--
+====
 
 NOTE: If you use the data structure connectors such as the IMap connector, you must also have certain xref:security:native-client-security.adoc[permissions] on those data structures. For example, to read from map sources, you must add the `create` and `read` permissions for those maps. If you use the IMap connector to write to map sinks, you must add the `create` and `put` permissions for those maps.
 

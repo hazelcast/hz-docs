@@ -26,6 +26,24 @@ The SQL service resolves fields in map entries automatically by reading the firs
 the query is started, then the list of fields cannot be resolved, and an
 exception is thrown.
 
+Because Hazelcast looks for one random entry in a map, you should make sure that all entries contain the same fields.
+
+For example, in this JSON-valued map, Hazelcast may take the first entry at random and resolve the fields `name` and `age` :
+
+[cols="m,m"]
+|===
+|key|value
+
+|1
+|{"name":"Alice","age":42}
+
+|2
+|{"name":"Bob","age":43,"petName":"Zaz"}
+|===
+
+If you try to query the `petName` field, it will have the value `null` for the
+entry with `key=1`. However, in future optimizations we may throw an error instead of returning `null`. Therefore, it's best to make sure that all entries contain the same fields.
+
 === Querying Primitive Entries
 
 A map entry consists of a key and a value. You can query the key through the `__key` alias and the value through the `this` alias.
@@ -89,32 +107,6 @@ SELECT __key, this, name, age FROM employee
 ----
 
 If both the key and value have fields with the same name, you may only query the key's field and not the value's field.
-
-== Adding Different Values to Map Entries
-
-To query maps with SQL, make sure that they contain only entries with the same structure.
-
-For example, if an existing map contains multiple objects with varying set of keys, Hazelcast creates a mapping, using a
-random sample. If and a different sample could be used each time leading to
-a different column list each time.
-
-For example, let's say you have this in a JSON-valued map:
-
-[cols="m,m"]
-|===
-|key|value
-
-|1
-|{"name":"Alice","age":42}
-
-|2
-|{"name":"Bob","age":43,"petName":"Zaz"}
-|===
-
-If you map the column `petName`, it will have the value `null` for the
-entry with `key=1`.
-
-However, in future optimizations, we may break this support. Therefore, in this example, it's best to make sure that both entries contain the same fields.
 
 == Next Steps
 

@@ -1,7 +1,7 @@
 package storage;
 
 import com.hazelcast.config.EncryptionAtRestConfig;
-import com.hazelcast.config.HotRestartPersistenceConfig;
+import com.hazelcast.config.PersistenceConfig;
 import com.hazelcast.config.JavaKeyStoreSecureStoreConfig;
 import com.hazelcast.config.SSLConfig;
 import com.hazelcast.config.SecureStoreConfig;
@@ -13,9 +13,9 @@ public class SampleEncryptionAtRestConfiguration {
 
     public static void main(String[] args) throws Exception{
         //tag::encryptionatrest[]
-        HotRestartPersistenceConfig hotRestartPersistenceConfig = new HotRestartPersistenceConfig();
+        PersistenceConfig PersistenceConfig = new PersistenceConfig();
         EncryptionAtRestConfig encryptionAtRestConfig =
-                hotRestartPersistenceConfig.getEncryptionAtRestConfig();
+                PersistenceConfig.getEncryptionAtRestConfig();
         encryptionAtRestConfig.setEnabled(true)
                 .setAlgorithm("AES/CBC/PKCS5Padding")
                 .setSalt("thesalt")

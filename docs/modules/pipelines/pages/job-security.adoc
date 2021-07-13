@@ -87,6 +87,14 @@ jet:
   enabled: false
 ----
 --
+Env:: 
++ 
+--
+[source,shell]
+----
+HZ_JET_RESOURCE-UPLOAD-ENABLED=true
+----
+--
 Java:: 
 + 
 --
@@ -113,24 +121,22 @@ When the <<disabling-code-uploads, code uploads>> and the <<disabling-the-jet-en
 
 To restrict clients, you can set the following permissions:
 
-- `create`: Submit a new job, without uploading resources.
-- `destroy`: Cancel a running job.
-- `read`: Get information about a job (by ID or name) such as job configuration, job status, and
+- `submit`: Submit a new job, without uploading resources.
+- `cancel`: Cancel a running job.
+- `read`: Get or list information about a job (by ID or name) such as job configuration, job status, and
 submission time.
-- `list`: List all jobs.
-- `suspend`: Suspend a running job.
-- `resume`: Resume a suspended job.
-- `export`: Export the snapshot.
-- `upload`: Upload resources and classes as well as jobs to members.
+- `restart`: Suspend and resume a running job.
+- `export-snapshot`: Export the snapshot.
+- `add-resources`: Upload resources and classes as well as jobs to members.
 +
 NOTE: Hazelcast cannot check permissions in code that's uploaded with a job, If you enable this permission, clients can upload custom code that ignores any configured permissions.
 - `all`: Enable all actions.
 
-NOTE: All actions for job permissions also enable the `read` action. For example if you enable the `create` action, the `read` action is automatically enabled as well.
+NOTE: All actions for job permissions also enable the `read` action. For example if you enable the `submit` action, the `read` action is automatically enabled as well.
 
 === Connector Permissions
 
-By default, connectors can read and write data that you may want to keep secure.
+By default, xref:sources-sinks.adoc[connectors] can read and write data that you may want to keep secure.
 
 For example, the file connector gives jobs access to all files on your members' local filesystems. As a result, a job could use this connector to read SSH keys and log them to the console.
 
@@ -146,6 +152,64 @@ You can set the following permissions for each connector:
 - `read`: Read data from sources.
 - `write`: Write data to sinks.
 - `all`: Enable all actions.
+
+You can also give different permissions to different folders. For example:
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<connector-permission name="file:/home/user/source" principal="dev">
+  <actions>
+    <action>read</action>
+  </actions>
+</connector-permission>
+<connector-permission name="file:/home/user/sink" principal="dev">
+  <actions>
+    <action>write</action>
+  </actions>
+</connector-permission>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+connector:
+  - name: "file:/home/user/source"
+    actions:
+      - action: read
+connector:
+  - name: "file:/home/user/sink"
+    actions:
+      - action: write
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+SecurityConfig securityConfig = config.getSecurityConfig();
+securityConfig.setEnabled(true);
+securityConfig.addClientPermissionConfig(
+  new PermissionConfig(PermissionConfig.PermissionType.CONNECTOR, "file:/home/user/source", "dev")
+  .addAction(ActionConstants.ACTION_READ)
+);
+securityConfig.addClientPermissionConfig(
+  new PermissionConfig(PermissionConfig.PermissionType.CONNECTOR, "file:/home/user/sink", "dev")
+  .addAction(ActionConstants.ACTION_WRITE)
+);
+----
+--
+====
+
+NOTE: If you use the data structure connectors such as the IMap connector, you must also have certain xref:security:native-client-security.adoc[permissions] on those data structures. For example, to read from map sources, you must add the `create` and `read` permissions for those maps. If you use the IMap connector to write to map sinks, you must add the `create` and `put` permissions for those maps.
 
 == Related Resources
 

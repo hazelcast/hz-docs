@@ -1,21 +1,15 @@
 = Persistence
+:description: Allow individual members and whole clusters to recover faster by persisting map entries and JCache data on disk. Members can use persisted data to recover during restarts.
 
 [blue]*Hazelcast Enterprise Feature*
 
-This chapter explains Hazelcast's Persistence feature. It provides fast
-cluster restarts by storing the states of the cluster members on the disk.
-This feature is currently provided for the Hazelcast map data structure and Hazelcast JCache implementation.
+{description}
 
 == Persistence Overview
 
-Persistence enables you to get your cluster up and running swiftly
-after a cluster restart. A restart can be caused by a planned shutdown
-(including rolling upgrades) or a sudden cluster-wide crash, e.g., power outage.
-For Persistence, required states for Hazelcast clusters and members are
-introduced. See the xref:management:cluster-utilities.adoc#managing-cluster-and-member-states[Managing Cluster and Member States section]
-for information on the cluster and member states. The purpose of the Persistence
-is to provide a maintenance window for member operations and restart the cluster
-in a fast way. It is not meant to recover the catastrophic shutdown of one member.
+Persistence enables you to get your cluster up and running faster
+after a cluster restart or a single member failure. A restart can be caused by a planned shutdown
+(including rolling upgrades), a sudden cluster-wide crash, or a single member failure.
 
 Persistence supports optional data encryption. See the <<encryption-at-rest, Encryption at Rest section>>
 for more information.
@@ -29,11 +23,10 @@ The Persistence feature is supported for the following restart types:
 previous setup and data.
 +
 You can shut down the cluster completely using the `HazelcastInstance.getCluster().shutdown()`
-method or you can manually change the cluster state to `PASSIVE` and then shut
-down each member one by one. When you send the command to shut the cluster down, i.e.,
-`HazelcastInstance.getCluster().shutdown()`, the members that are not in the `PASSIVE`
+method or you can manually change the xref:management:cluster-utilities.adoc#managing-cluster-and-member-states[cluster state] to `PASSIVE` and then shut
+down each member one by one. When you send the command to xref:maintain-cluster:shutdown.adoc[shut down the cluster], the members that are not in the `PASSIVE`
 state temporarily change their states to `PASSIVE`. Then, each member shuts itself down
-by calling the method `HazelcastInstance.shutdown()`.
+by calling the `HazelcastInstance.shutdown()` method.
 +
 Difference between explicitly changing state to `PASSIVE` before shutdown and shutting
 down cluster directly via `HazelcastInstance.getCluster().shutdown()` is, on the latter
@@ -52,8 +45,9 @@ restarted, it rejoins the running cluster. After all members are restarted, the
 cluster state can be changed back to `ACTIVE`.
 * **Restart after a cluster crash**: The cluster is restarted after all its members
 crashed at the same time due to a power outage, networking interruptions, etc.
+* **Restart after a single member crash**: A single member is restarted after a crash.
 
-== Restart Process
+== Cluster-Wide Restart Process
 
 During the restart process, each member waits to load data until all the members in the
 partition table are started. During this process, no operations are allowed. Once all
@@ -65,8 +59,7 @@ restored cluster state.
 If a member fails to either start, join the cluster in time (within the timeout), or
 load its data, then that member is terminated immediately. After the problems causing
 the failure are fixed, that member can be restarted. If the cluster start cannot be
-completed in time, then all members fail to start. See the <<configuring-persistence,
-Configuring Persistence section>> for defining timeouts.
+completed in time, then all members fail to start. See the <<configuring-persistence, Configuring Persistence section>> for defining timeouts.
 
 In the case of a restart after a cluster crash, the Persistence feature realizes that
 it was not a clean shutdown and Hazelcast tries to restart the cluster with the last
@@ -74,34 +67,51 @@ saved data following the process explained above. In some cases, specifically wh
 cluster crashes while it has an ongoing partition migration process, currently it is
 not possible to restore the last saved state.
 
-=== Restart of a Member in Running Cluster
+== Recovering a Single Member after a Restart
+
+When a single member restarts, its persisted data may become stale compared to the rest of the active cluster. To handle stale data, you have the following options:
+
+- <<delaying-migrations, Stop the rest of the cluster from migrating data>> until a certain amount of time has passed by setting the `hazelcast.partition.rebalance.after.member.left.delay.seconds` cluster property.
++
+WARNING: Do not use this option if your cluster also stores in-memory data. This option stops the cluster from migrating in-memory data. As a result any data that is not persisted will be lost if the member restarts, including backups.
+
+- <<synchronzing-persisted-data-faster, Enable the member to synchronize its persisted map data faster>> while also allowing the cluster to continue migrations as usual.
++
+NOTE: Support for JCache data will be available in the full 5.0 release.
+
+=== Delaying Migrations
 
 Assume the following:
 
-* You have a cluster consisting of members A, B and C with Persistence enabled,
-which is initially stable.
+* A cluster consisting of members A, B and C with Persistence enabled.
 * Member B is killed.
 * Member B restarts.
 
-Since only a single member has failed, the cluster performed the standard
-High Availability routine by recovering member B's data from backups and
-redistributing the data among the remaining members (the members A and C
-in this case). Member B's persisted Persistence data is completely irrelevant.
+If member B restarts within the timeframe configured in the `hazelcast.partition.rebalance.after.member.left.delay.seconds` cluster property, all its persisted data will be restored from disk and no migrations will take place.
 
-Furthermore, when a member starts with existing Persistence data,
-it expects to find itself within a cluster that has been shut down
-as a whole and is now restarting as a whole. Since the reality is that
-the cluster has been running all along, member B's persisted cluster state
-does not match the actual state. Depending on the <<configuring-persistence,
-automatic removal of stale data (`auto-remove-stale-data`)>> configuration:
+While the member is down, operations on data owned by that member will be retried until they either timeout or the member restarts and executes the requested operation. As a result, this option is best when you prefer a latency spike rather than migrating data over the network.
 
-* If `auto-remove-stale-data` is enabled, member B automatically deletes its
+WARNING: Do not use this option if your cluster also stores in-memory data. This option stops the cluster from migrating in-memory data. As a result any data that is not persisted will be lost if the member restarts, including backups. 
+
+If a member restarts after the the timeframe configured in the `hazelcast.partition.rebalance.after.member.left.delay.seconds` cluster property, the cluster recovers member B's data from backups and
+redistribute the data among the remaining members (members A and C
+in this case). If merkle trees are enabled on any maps, migrations use those to request only missing persisted data.
+
+=== Synchronizing Persisted Data Faster
+
+If you have lots of persisted map entries as well as in-memory data that you don't want to lose, you can <<per-data-structure-persistence-configuration, configure your maps with Persistence and a Merkle tree>>.
+
+The Merkle tree stores the state of persisted data in a way that other cluster members can quickly read and check what is missing. This way, after a restart, the member can send the Merkle tree to cluster and request only the missing persisted data, reducing the amount of data sent over the network.
+
+The way in which a cluster handles a single member failure, depends on whether the cluster detects that the member crashed:
+
+* If the cluster detects that a member has crashed and is restarting, the cluster’s master will allow the member to send its partition table for validation. If the cluster master validates that the partition table was current at the time the member crashed, the member continues to load its persisted data from disk.
+* If the cluster cannot determine if the member crashed and <<configuring-persistence, automatic removal of stale data (`auto-remove-stale-data`)>> is enabled, the crashed member automatically deletes its
 Persistence directory inside the <<configuring-persistence, base directory>>
 (`base-dir`) and starts as a fresh, empty member. The cluster assigns some
 partitions to it, unrelated to the partitions it owned before going down.
-* Otherwise, member B aborts the initialization and shuts down. To be able
-to join the cluster, Persistence directory previously used by member B inside
-the <<configuring-persistence, base directory>> (`base-dir`) must be deleted manually.
+* Otherwise, the crashed member aborts the initialization and shuts down. To be able
+to join the cluster, the <<configuring-persistence, Persistence directory>> previously used by the crashed member must be deleted manually. You can do so, using a <<force-start, force start>>.
 
 == Force Start
 
@@ -296,6 +306,11 @@ device when a write operation returns successful response to the caller. By defa
 `fsync` is turned off (`false`). That means data is persisted to the disk device
 eventually, instead of on every disk write. This generally provides a better performance.
 
+As well as these options, maps also have the following elements:
+
+- `merkle-tree`
+  * `depth`: The depth of the Merkle tree. The deeper the tree, the more accurate the difference detection and the more space is needed to store the Merkle tree in memory.
+
 === Persistence Configuration Examples
 
 The following are example configurations for a Hazelcast map and JCache implementation.
@@ -322,6 +337,9 @@ XML::
     </persistence>
     ...
     <map name="test-map">
+        <merkle-tree enabled="true" >
+            <depth>12</depth>
+        </merkle-tree>
         <persistence enabled="true">
             <fsync>false</fsync>
         </persistence>
@@ -351,6 +369,9 @@ hazelcast:
     cluster-data-recovery-policy: FULL_RECOVERY_ONLY
   map:
     test-map:
+      merkle-tree:
+        enabled: true
+        depth: 12
       persistence:
         enabled: true
         fsync: false
@@ -801,7 +822,7 @@ config.setPersistenceConfig(PersistenceConfig);
 Once configured, you can initiate a new backup via API or from the Management Center.
 The backup is started transactionally and cluster-wide. This means that either
 all or none of the members start the same backup. The member which receives the backup
-request determines a new backup sequence ID and send that information to all members.
+request determines a new backup sequence ID and sends that information to all members.
 If all members respond that no other backup is currently in progress and that
 no other backup request has already been made, then the coordinating member commands
 the other members to start the actual backup process. This creates a directory under
@@ -848,10 +869,10 @@ with the name `backup-<backupSeq>`, where `backupSeq` is the given sequence.
 
 As mentioned in the previous section, hot backup process creates subdirectories
 named `backup-<backupSeq>` under the configured <<configuring-hot-backup, hot backup directory>>
-(i.e., `backup-dir`). When starting your cluster with data from a hot backup, you need to set
-the <<global-persistence-configuration, base directory>> (i.e., `base-dir`) to the desired backup subdirectory.
+(`backup-dir`). When starting your cluster with data from a hot backup, you need to set
+the <<global-persistence-configuration, base directory>> (`base-dir`) to the desired backup subdirectory.
 
-Let's say you have configured your hot backup directory as follows:
+For example:
 
 [tabs] 
 ==== 
@@ -882,10 +903,8 @@ hazelcast:
 ----
 ====
 
-And let's say you have a subdirectory named `backup-2018Oct24` under the
-backup directory `/mnt/hot-backup`. When you want to start your cluster with data
-from this backup (`backup-2018Oct24`), here is the configuration you should have
-for the `base-dir` while starting the cluster:
+To start a cluster with data from a backup in a subdirectory named `/mnt/hot-backup/backup-2018Oct24`, here is the configuration you should have
+for the `base-dir`:
 
 [tabs] 
 ==== 

@@ -1,10 +1,16 @@
-= Accessing Portable Objects Without Domain Classes
+= Accessing Domain Objects Without Domain Classes
 :page-beta: true
 [[accessing-domain-objects-without-domain-classes]]
 
-Usually, to access any fields in a xref:serialization:implementing-portable-serialization.adoc[portable object], you would need to have the class of that object on the member's classpath. However, you may not want to add classes on the member. In this case, Hazelcast can return a `GenericRecord` object to your *Java* application. This object gives you access to your portable object's fields without having to add a `PortableFactory` class to the classpath of your members.
+Usually, to access any fields in a domain objects, you would need to have the class of that object on the member's
+classpath. However, you may not want to add classes on the member. In this case, Hazelcast can return a `GenericRecord`
+object to your *Java* application. This object gives you access to your domain object's fields without having to
+add a factory class to the classpath of your members or register a serializer for them.
 
-For example, to access the fields of a portable object in an entry processor, you could do the following:
+Hazelcast is able to represent xref:serialization:implementing-portable-serialization.adoc[Portable] and
+xref:serialization:compact-serialization.adoc[Compact serialized] objects as `GenericRecord`.
+
+For example, to access the fields of a domain object in an entry processor, you could do the following:
 
 [source,java]
 ----
@@ -49,12 +55,28 @@ GenericRecord namedRecord = GenericRecordBuilder.portable(classDefinition)
 Note that the class definitions are better to be created once and
 used when creating different instances of the same `GenericRecord` object.
 
-== Adding and Changing Values in Portable Objects
+== Creating New Compact Objects
+
+To create a `GenericRecord` object in compact serialization format, use the `GenericRecordBuilder.compact()` method:
+
+[source,java]
+----
+GenericRecord namedRecord = GenericRecordBuilder.compact("employee")
+        .setString("name", "foo")
+        .setInt("id", 123)
+        .build();
+----
+
+Note that there is no need to create a class definition, or a schema in this case. A schema will be created
+from the fields of the builder automatically.
+
+== Adding and Changing Values in Domain Objects
 
 We have also added two convenience methods in `GenericRecord` for you to
-avoid passing a class definition. For example, if you want to modify a value and
-put it back using an entry processor, you don't need to create a class definition.
-Instead you can create a builder from the `GenericRecord` object which carries the same class definition as follows:
+avoid passing a class definition or re-calculating schema. For example, if you want to modify a value and
+put it back using an entry processor, you don't need to create a class definition or pay the cost of re-calculating
+a schema. Instead, you can create a builder from the `GenericRecord` object which carries the same class definition
+or schema as follows:
 
 [source,java]
 ----
@@ -72,7 +94,7 @@ map.executeOnKey("key", (EntryProcessor<Object, Object, Object>) entry -> {
 
 Another convenience method is `cloneWithBuilder()`. This is useful if you want to update only
 a couple of fields from the original `genericRecord`. In that case, the new builder carries
-both `classDefinition` and values from the original
+both `classDefinition` or `schema` and values from the original
 `genericRecord`. Here is the same example where we just update the age:
 
 [source,java]

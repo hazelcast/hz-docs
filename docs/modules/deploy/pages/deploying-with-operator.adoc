@@ -3,25 +3,40 @@
 
 NOTE: Hazelcast Enterpise Operator is currently in the early alpha preview stage, but it will soon become the preferred way of installing Hazelcast in Kubernetes/OpenShift environments.
 
-The simplest way of installing and operating your Hazelcast cluster in the Kubernetes (and OpenShift) environments is to use Hazelcast Enterprise Operator.
+The simplest way of installing and operating your Hazelcast Enterprise cluster in the Kubernetes (and OpenShift) environments is to use Hazelcast Enterprise Operator.
 
 == Deploy Hazelcast Enterprise Operator
 
-You can deploy Hazelcast Enterprise Operator with the following `bundle.yaml` file.
+You can deploy Hazelcast Enterprise Operator by creating the following `bundle.yaml` file.
 
 [source,yaml]
 ----
-include::ROOT:example$/bundle.yaml[tag=operator-bundle]
+include::ROOT:example$/operator/bundle.yaml[]
 ----
 
-After you create `bundle.yaml`, you can apply it to your Kubernetes cluster with the following command.
+Then, you can apply it to your Kubernetes cluster with the following command.
 
 [source,shell]
 ----
 kubectl apply -f bundle.yaml
 ----
 
-Note that by default Hazelcast Operator is installed into the `default` namespace. If you want to change it, you can either replace all `namespace: default` parameters in `bundle.yaml` or use https://kustomize.io/[Kustomize] to achieve it, for example, by creating the following `kustomization.yaml` file.
+At this point, your Hazelcast Enteprise Operator should be up and running. You can check it with the following command.
+
+[source,shell]
+----
+kubectl logs deployment.apps/hazelcast-enterprise-controller-manager
+
+2021-07-14T09:03:40.713Z        INFO    setup   Watching namespace: default
+2021-07-14T09:03:41.524Z        INFO    controller-runtime.metrics      metrics server is starting to listen    {"addr": ":8080"}
+2021-07-14T09:03:41.524Z        INFO    setup   starting manager
+2021-07-14T09:03:41.525Z        INFO    controller-runtime.manager      starting metrics server {"path": "/metrics"}
+...
+----
+
+== Customize namespace
+
+By default, Hazelcast Operator is installed into the `default` namespace. If you want to change it, you can either replace all `namespace: default` parameters in `bundle.yaml` or use https://kustomize.io/[Kustomize] to achieve it, for example, by creating the following `kustomization.yaml` file.
 
 [source,yaml]
 ----
@@ -37,19 +52,6 @@ Then, use Kustomize to apply `bundle.yaml` with namespace changed.
 kubectl apply -k .
 ----
 
-At this point, your Hazelcast Enteprise Operator should be up and running. You can check it with the following commands.
-
-[source,shell]
-----
-kubectl logs deployment.apps/hazelcast-enterprise-controller-manager
-
-2021-07-14T09:03:40.713Z        INFO    setup   Watching namespace: default
-2021-07-14T09:03:41.524Z        INFO    controller-runtime.metrics      metrics server is starting to listen    {"addr": ":8080"}
-2021-07-14T09:03:41.524Z        INFO    setup   starting manager
-2021-07-14T09:03:41.525Z        INFO    controller-runtime.manager      starting metrics server {"path": "/metrics"}
-...
-----
-
 == Create Secret with Hazelcast License Key
 
 Hazelcast Enteprise requires having the license key specified as Kubernetes Secret.
@@ -61,18 +63,18 @@ kubectl create secret generic hazelcast-license-key --from-literal=license-key=<
 
 == Start Hazelcast Enterprise Cluster
 
-Finally, you can create `Hazelcast` Custom Resource file as `hazelcast-cr.yaml`.
+Finally, you can create `Hazelcast` Custom Resource file as `hazelcast.yaml`.
 
 [source,yaml]
 ----
-include::ROOT:example$/hazlecast-cr.yaml[tag=hazelcast-cr]
+include::ROOT:example$/operator/hazelcast.yaml[]
 ----
 
 Apply it with the following command to start the Hazelcast cluster.
 
 [source,shell]
 ----
-kubectl apply -f hazelcast-cr.yaml
+kubectl apply -f hazelcast.yaml
 ----
 
 After a moment, you can verify that Hazelcast cluster is up and running by checking the Hazelcast member logs.

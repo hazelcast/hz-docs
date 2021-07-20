@@ -1,5 +1,5 @@
-= Deploying Hazelcast on Amazon AWS
-:description: Deploy Hazelcast clusters on Amazon AWS EC2 and AWS ECS/Fargate environments.
+= Deploying a Cluster on Amazon AWS
+:description: Deploy Hazelcast clusters on Amazon AWS EC2 and AWS ECS/Fargate environments and allow them to discover each other automatically.
 
 {description}
 
@@ -7,23 +7,26 @@
 
 Before deploying Hazelcast on AWS, you must have the following:
 
-* Hazelcast 3.6+
-* Linux Kernel 3.19+ (TCP connections may get stuck when used with older Kernel versions, resulting in undefined timeouts)
-* Versions compatibility:
-  ** hazelcast-aws 3+ is compatible with hazelcast 4+
-  ** hazelcast-aws 2.4 is compatible with hazelcast 3.12.x
-  ** hazelcast-aws 2.3 is compatible with hazelcast 3.11.x
-  ** hazelcast-aws 2.2 is compatible with older hazelcast versions
+* Linux Kernel 3.19+
++
+TCP connections may get stuck when used with older Kernel versions, resulting in undefined timeouts.
 
-== Understanding Member Discovery Strategies
+== Discovering Members Automatically
+
+To make it easier to set up clusters on Amazon AWS, Hazelcast allows members to discover each other automatically, using discovery strategies.
 
 When a member starts on AWS, it fetches a list of all running instances filtered by the member's AWS configuration settings. Then, each instance is checked one-by-one with its IP and each of the ports defined in the `hz-port` property. When a member is discovered under `IP:PORT`, then it joins the cluster.
 
-Note that this plugin supports xref:clusters:partition-group-configuration.adoc#zone_aware[Hazelcast Zone Aware] feature.
+Choose from one of the following environments to configure a discovery strategy:
+
+- EC2
+- ECS/Fargate
+- ECS/EC2
+- AWS Elastic Beanstalk
 
 == EC2 Configuration
 
-The plugin works both for *Hazelcast Member Discovery* and *Hazelcast Client Discovery*.
+You can configure both Hazelcast members and Hazelcast clients to discover clusters automatically.
 
 === EC2 Hazelcast Member Discovery
 
@@ -87,13 +90,14 @@ The following optional properties can be configured:
 * `connection-retries`: number of retries while connecting to AWS API; default to `3`
 * `hz-port`: a range of ports where the plugin looks for Hazelcast members; default is `5701-5708`
 
-Note that if you don't specify any of the properties, then the plugin uses the IAM Role assigned to EC2 Instance and forms a cluster from all Hazelcast members running in same region.
+Note that if you don't specify any of the properties, then Hazelcast uses the IAM Role assigned to the EC2 Instance to form a cluster from all Hazelcast members running in same region.
 
 === EC2 Hazelcast Client Configuration
 
 Hazelcast Client discovery parameters are the same as mentioned above.
 
 If Hazelcast Client is run *outside AWS*, then you need to always specify the following parameters:
+
 - `access-key`, `secret-key` - IAM role cannot be used from outside AWS
 - `region` - it cannot be detected automatically
 - `use-public-ip` - must be set to `true`
@@ -325,26 +329,22 @@ While deploying your application into the Java Platform, please make sure your E
 * IAM instance profile contains IAM role which has `ec2:DescribeInstances` permission (or your Hazelcast configuration contains `access-key` and `secret-key`)
 * Deployment policy is `Rolling` (instead of the default `All at once` which may cause the whole Hazelcast members to restart at the same time and therefore lose data)
 
-== High Availability
+== Preventing Data Loss
 
 By default, Hazelcast distributes partition replicas (backups) randomly and equally among cluster members. However, this is not safe in terms of high availability when a partition and its replicas are stored on the same rack, using the same network, or power source. To deal with that, Hazelcast offers logical partition grouping, so that a partition
-itself and its backup(s) would not be stored within the same group. This way Hazelcast guarantees that a possible failure
-affecting more than one member at a time will not cause data loss. The details of partition groups can be found in the
-documentation: 
-xref:clusters:partition-group-configuration.adoc[Partition Group Configuration].
+itself and its backups would not be stored within the same group. This way Hazelcast guarantees that a possible failure
+affecting more than one member at a time will not cause data loss. For more details about partition groups, see xref:clusters:partition-group-configuration.adoc[Partition Group Configuration].
 
 In addition to two built-in grouping options `ZONE_AWARE` and `PLACEMENT_AWARE`, you can customize the formation of
-these groups based on the network interfaces of members. See more details on custom groups in the documentation:
+these groups based on the network interfaces of members. For more details about custom groups, see
 xref:clusters:partition-group-configuration.adoc[Custom Partition Groups].
-
 
 === Multi-Zone Deployments
 
-If `ZONE_AWARE` partition group is enabled, the backup(s) of a partition is always stored in a different availability
-zone. Hazelcast AWS Discovery plugin supports ZONE_AWARE feature for both EC2 and ECS.
+If `ZONE_AWARE` partition group is enabled, the backups of a partition are always stored in a different availability
+zone. Hazelcast supports the `ZONE_AWARE` feature for both EC2 and ECS.
 
-NOTE: When using the `ZONE_AWARE` partition grouping, a cluster spanning multiple Availability Zones (AZ)
-should have an equal number of members in each AZ. Otherwise, it will result in uneven partition distribution among
+NOTE: When using the `ZONE_AWARE` partition grouping, a cluster spanning multiple Availability Zones (AZ) should have an equal number of members in each AZ. Otherwise, it will result in uneven partition distribution among
 the members.
 
 [tabs] 
@@ -444,8 +444,8 @@ config.getPartitionGroupConfig()
 
 Hazelcast is prepared to work correctly within the autoscaling environments. Note that there are two specific requirements to prevent Hazelcast from losing data:
 
-* the number of members must change by 1 at the time
-* when a member is launched or terminated, the cluster must be in the safe state
+* The number of members in a cluster must not change by more than one at a time
+* When a member is launched or terminated, the cluster must be in a safe state
 
 Read about details in the blog post: link:https://hazelcast.com/blog/aws-auto-scaling-with-hazelcast/[AWS Auto Scaling with Hazelcast].
 

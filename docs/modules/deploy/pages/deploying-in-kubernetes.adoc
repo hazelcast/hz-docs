@@ -1,19 +1,16 @@
-= Deploying on Kubernetes/OpenShift
-:description: Deploy Hazelcast clusters in Kubernetes-based environments.
+= Deploying a Cluster on Kubernetes/OpenShift
+:description: Deploy Hazelcast clusters in Kubernetes environments and allow them to discover each other automatically.
 
 [[deploying-in-kubernetes]]
 
 {description}
+
 == Prerequisites
 
 Before deploying Hazelcast on Kubernetes, consider the following:
 
-* Your Java Runtime Environment must support TLS 1.2 (which is the case for most modern JREs).
-* Hazelcast versions compatibility:
-  ** hazelcast-kubernetes 2.0+ is compatible with hazelcast 4+
-  ** hazelcast-kubernetes 1.3+ is compatible with hazelcast 3.11.x, 3.12.x
-  ** For older hazelcast versions you need to use hazelcast-kubernetes 1.2.x.
-* The recommendation is to use StatefulSet for managing Hazelcast PODs; in case of using Deployment (or ReplicationController), the Hazelcast cluster may start with Split Brain (which will anyway re-form to one consistent cluster in a few minutes).
+* Your Java Runtime Environment (JRE) must support TLS 1.2, which is the case for most modern JREs.
+* We recommend using Kubernetes link:https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/[StatefulSet^] for managing Hazelcast Pods. If you use Deployment (or ReplicationController), your Hazelcast cluster may start with a split brain, but will eventually recover to form one consistent cluster within a few minutes.
 
 == Quickstart
 
@@ -63,11 +60,11 @@ Since all the Operators mentioned above are generated from Helm Charts, their fu
 
 Hazelcast Enterprise Operator is currently in the early alpha preview stage, but it will soon become the preferred way of installing Hazelcast in Kubernetes/OpenShift environments. For details, please check xref:deploy:deploying-with-operator.adoc[].
 
-== Discovering Members in Kubernetes Automatically
+== Discovering Members Automatically
 
-To make it easier to set up clusters in Kubernetes, Hazelcast comes a plugin that allows members to discover each other automatically.
+To make it easier to set up clusters in Kubernetes, Hazelcast allows members to discover each other automatically, using discovery modes.
 
-=== Understanding Discovery Modes
+=== Discovery Modes
 
 The following table summarizes the differences between the discovery modes: **Kubernetes API** and **DNS Lookup**.
 
@@ -75,7 +72,7 @@ The following table summarizes the differences between the discovery modes: **Ku
 |===
 | | Kubernetes API  | DNS Lookup
 
-|Description    | Uses REST calls to Kubernetes Master to fetch IPs of PODs | Uses DNS to resolve IPs of PODs related to the given service
+|Description    | Uses REST calls to Kubernetes master to fetch IP addresses of Pods | Uses DNS to resolve IPs of Pods related to the given service
 
 | Pros           | Flexible, supports **3 different options**:
 
@@ -89,20 +86,22 @@ The following table summarizes the differences between the discovery modes: **Ku
 
 == Using Kubernetes in API Mode
 
-**Kubernetes API** mode means that each node makes a REST call to Kubernetes Master in order to discover IPs of PODs (with Hazelcast members).
+In **Kubernetes API** mode, each node makes a REST call to the Kubernetes master to discover the IP addresses of any Hazelcast members running in Pods.
 
 === Granting Permissions to use Kubernetes API
 
-Using Kubernetes API requires granting certain permissions. To grant them for 'default' service account in 'default' namespace execute the following command.
+To use the Kubernetes API, you must grant certain permissions.
+
+To grant them for 'default' service account in 'default' namespace execute the following command.
 
 [source,shell]
 ----
 kubectl apply -f https://raw.githubusercontent.com/hazelcast/hazelcast-kubernetes/master/rbac.yaml
 ----
 
-=== Creating Service
+=== Creating a Service
 
-Hazelcast Kubernetes Discovery requires creating a service to PODs where Hazelcast is running. In case of using Kubernetes API mode, the service can be of any type.
+Hazelcast Kubernetes Discovery requires creating a link:https://kubernetes.io/docs/concepts/services-networking/service/[service] of any type in any Pods where Hazelcast is running.
 
 ```yaml
 apiVersion: v1
@@ -151,13 +150,13 @@ config.getNetworkConfig().getJoin().getKubernetesConfig().setEnabled(true)
 --
 ====
 
-There are several properties to configure the plugin, all of them are optional.
+There are several properties to configure, all of which are optional.
 
-* `namespace`: Kubernetes Namespace where Hazelcast is running; if not specified, the value is taken from the environment variables `KUBERNETES_NAMESPACE` or `OPENSHIFT_BUILD_NAMESPACE`. If those are not set, the namespace of the POD will be used (retrieved from `/var/run/secrets/kubernetes.io/serviceaccount/namespace`).
-* `service-name`: service name used to scan only PODs connected to the given service; if not specified, then all PODs in the namespace are checked
+* `namespace`: Kubernetes Namespace where Hazelcast is running; if not specified, the value is taken from the environment variables `KUBERNETES_NAMESPACE` or `OPENSHIFT_BUILD_NAMESPACE`. If those are not set, the namespace of the Pod will be used (retrieved from `/var/run/secrets/kubernetes.io/serviceaccount/namespace`).
+* `service-name`: service name used to scan only Pods connected to the given service; if not specified, then all Pods in the namespace are checked
 * `service-label-name`, `service-label-value`: service label and value used to tag services that should form the Hazelcast cluster together
 * `pod-label-name`, `pod-label-value`: pod label and value used to tag pods that should form the Hazelcast cluster together
-* `resolve-not-ready-addresses`: if set to `true`, it checks also the addresses of PODs which are not ready; `true` by default
+* `resolve-not-ready-addresses`: if set to `true`, it checks also the addresses of Pods which are not ready; `true` by default
 * `use-node-name-as-external-address`: if set to `true`, uses the node name to connect to a `NodePort` service instead of looking up the external IP using the API; `false` by default
 * `kubernetes-api-retries`: number of retries in case of issues while connecting to Kubernetes API; defaults to `3` 
 * `kubernetes-master`: URL of Kubernetes Master: `https://kubernetes.default.svc` by default
@@ -167,11 +166,11 @@ There are several properties to configure the plugin, all of them are optional.
  
 You can use one of `service-name`,`service-label`(`service-label-name`, `service-label-value`) and `pod-label`(`pod-label-name`, `pod-label-value`) based discovery mechanisms, configuring two of them at once does not make sense.
 
-NOTE: If you don't specify any property at all, then the Hazelcast cluster is formed using all PODs in your current namespace. In other words, you can look at the properties as a grouping feature if you want to have multiple Hazelcast clusters in one namespace.
+NOTE: If you don't specify any property at all, then the Hazelcast cluster is formed using all Pods in your current namespace. In other words, you can look at the properties as a grouping feature if you want to have multiple Hazelcast clusters in one namespace.
 
 == Using Kubernetes in DNS Lookup Mode
 
-**DNS Lookup** mode uses a feature of Kubernetes that **headless** (without cluster IP) services are assigned a DNS record which resolves to the set of IPs of related PODs.
+**DNS Lookup** mode uses a feature of Kubernetes that **headless** (without cluster IP) services are assigned a DNS record which resolves to the set of IPs of related Pods.
 
 === Creating Headless Service
 
@@ -229,13 +228,17 @@ There are 3 properties to configure the plugin:
 * `service-dns-timeout` (optional): custom time for how long the DNS Lookup is checked
 * `service-port` (optional): the Hazelcast port; if specified with a value greater than 0, it overrides the default (default port = `5701`)
 
-== High Availability
+== Preventing Data Loss
+
+By default, Hazelcast distributes partition replicas (backups) randomly and equally among cluster members. However, this is not safe in terms of high availability when a partition and its replicas are stored on the same rack, using the same network, or power source. To deal with that, Hazelcast offers logical partition grouping, so that a partition
+itself and its backups would not be stored within the same group. This way Hazelcast guarantees that a possible failure
+affecting more than one member at a time will not cause data loss. For more details about partition groups, see xref:clusters:partition-group-configuration.adoc[Partition Group Configuration].
 
 === Zone Aware
 
 When using `ZONE_AWARE` configuration, backups are created in the other availability zone. This feature is available only for the Kubernetes API mode.
 
-NOTE: Your Kubernetes cluster must orchestrate Hazelcast Member PODs equally between the availability zones, otherwise Zone Aware feature may not work correctly.
+NOTE: Your Kubernetes cluster must orchestrate Hazelcast Member Pods equally between the availability zones, otherwise Zone Aware feature may not work correctly.
 
 [tabs] 
 ==== 
@@ -263,9 +266,9 @@ Note the following aspects of `ZONE_AWARE`:
 
 * Kubernetes cluster must provide the link:https://kubernetes.io/docs/reference/kubernetes-api/labels-annotations-taints/#failure-domainbetakubernetesiozone[well-known Kubernetes annotations]
 * Retrieving Zone Name uses Kubernetes API, so <<granting-permissions-to-use-kubernetes-api, RBAC must be configured>>
-* `ZONE_AWARE` feature works correctly when Hazelcast members are distributed equally in all zones, so your Kubernetes cluster must orchestrate PODs equally
+* `ZONE_AWARE` feature works correctly when Hazelcast members are distributed equally in all zones, so your Kubernetes cluster must orchestrate Pods equally
  
- Note also that retrieving Zone Name assumes that your container's hostname is the same as POD Name, which is almost always true. If you happen to change your hostname in the container, then please define the following environment variable:
+ Note also that retrieving Zone Name assumes that your container's hostname is the same as Pod Name, which is almost always true. If you happen to change your hostname in the container, then please define the following environment variable:
  
 ```yaml
 env:
@@ -279,7 +282,7 @@ env:
 
 When using `NODE_AWARE` configuration, backups are created in the other Kubernetes nodes. This feature is available only for the Kubernetes API mode.
 
-NOTE: Your Kubernetes cluster must orchestrate Hazelcast Member PODs equally between the nodes, otherwise Node Aware feature may not work correctly.
+NOTE: Your Kubernetes cluster must orchestrate Hazelcast Member Pods equally between the nodes, otherwise Node Aware feature may not work correctly.
 
 ==== YAML Configuration
 
@@ -300,9 +303,9 @@ config.getPartitionGroupConfig()
 Note the following aspects of `NODE_AWARE`:
 
 * Retrieving name of the node uses Kubernetes API, so <<granting-permissions-to-use-kubernetes-api, RBAC must be configured>>
-* `NODE_AWARE` feature works correctly when Hazelcast members are distributed equally in all nodes, so your Kubernetes cluster must orchestrate PODs equally.
+* `NODE_AWARE` feature works correctly when Hazelcast members are distributed equally in all nodes, so your Kubernetes cluster must orchestrate Pods equally.
  
-Note also that retrieving name of the node assumes that your container's hostname is the same as POD Name, which is almost always true. If you happen to change your hostname in the container, then please define the following environment variable:
+Note also that retrieving name of the node assumes that your container's hostname is the same as Pod Name, which is almost always true. If you happen to change your hostname in the container, then please define the following environment variable:
  
  ```yaml
 env:
@@ -312,9 +315,9 @@ env:
         fieldPath: metadata.name
  ``` 
 
-== Hazelcast Client Configuration
+== Discovering Members from Hazelcast Clients
 
-Depending on whether your Hazelcast Client runs inside or outside the Kubernetes cluster, its configuration looks different.
+Depending on whether your Hazelcast client runs inside or outside the Kubernetes cluster, its configuration looks different.
 
 === Inside Kubernetes Cluster
 
@@ -355,7 +358,7 @@ To use **Hazelcast Dummy Client** (`<smart-routing>false</smart-routing>`) you d
 
 To configure **Hazelcast Smart Client**, you need to perform the following steps:
 
-* Expose each Hazelcast Member POD with a separate LoadBalancer or NodePort service (the simplest way to do it is to install link:https://metacontroller.app/[Metacontroller] and link:https://github.com/GoogleCloudPlatform/metacontroller/tree/master/examples/service-per-pod[service-per-pod] Decorator Controller)
+* Expose each Hazelcast Member Pod with a separate LoadBalancer or NodePort service (the simplest way to do it is to install link:https://metacontroller.app/[Metacontroller] and link:https://github.com/GoogleCloudPlatform/metacontroller/tree/master/examples/service-per-pod[service-per-pod] Decorator Controller)
 * Configure ServiceAccount with ClusterRole having at least `get` and `list` permissions to the following resources: `endpoints`, `pods`, `nodes`, `services`
 * Use credentials from the created ServiceAccount in the Hazelcast Client configuration (credentials can be fetched with `kubectl get secret <sevice-account-secret> -o jsonpath={.data.token} | base64 --decode` and `kubectl get secret <sevice-account-secret> -o jsonpath={.data.ca\\.crt} | base64 --decode`)
 

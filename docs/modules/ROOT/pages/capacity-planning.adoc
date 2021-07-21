@@ -1,52 +1,56 @@
 = Capacity Planning
-:description: Capacity planning involves estimating and validating the capacity of a cluster for a feasible performance.
+:description: Capacity planning involves estimating and validating the capacity of a cluster in order to determine which recommendations and best practices can help that cluster achieve its best reasonable performance.
 [[capacity-planning]]
 
-{description} The estimations should also include spare capacity for
-growth in cluster and demands, and failures. Planning also ensures the limits
-are not exceeded when and if they are set.
+{description} These estimations should also include spare capacity to allow growth for
+future demands and create insurance against possible failures. Planning also ensures
+that any limits which are determined are also enforced during implementation.
 
 == Cluster Sizing
 
-A Hazelcast cluster is a network of members that run Hazelcast.
+A Hazelcast cluster is a network of members that run Hazelcast software.
 The cluster performance depends on multiple factors, including data size,
-number of backups, queries, and other features used. Therefore,
-planning the cluster remains a complex task that requires the knowledge of
-Hazelcast's architecture and concepts. Here, we introduce you to a basic guideline
-that helps you sizing your cluster.
+number of backups, queries, and which features are used. Therefore,
+planning the cluster remains a complex task that requires knowledge of
+Hazelcast's architecture and concepts. Here, we introduce some basic guidelines
+that help to properly size a cluster.
 
-We recommend you to always benchmark your setup before deploying it to
-production. We prepared an <<benchmarking-and-sizing-example, example>>
+We recommend always benchmarking your setup before deploying it to
+production. We also recommend that bechmarking systems resemble the
+production system as much as possible to avoid unexpected results.
+We provide a <<benchmarking-and-sizing-example, bechmarking example>>
 that you can use as a starting point.
 
-Your cluster will run both data processing and data storage
-workloads, so you should plan for it.
+Hazelcast clusters will run both data processing and data storage
+workloads, so planning for both types of workload is important.
 
-Having the answers to the following questions helps sizing the cluster for your use case:
+In order to correctly size the cluster for your use case, answers to as many of the 
+following questions as possible are necessary:
 
 * How much data you want to keep in the in-memory store at any given time?
-* How many copies of backup do you require?
-* Are you going to use sync or async backups?
-* When running queries how many indexes or index fields for each object you will have?
-* What is your read/write ratio?
-** Based on the read/write ratio and TPS, you can learn about the amount of memory
+* How many copies (or xref:data-structures:map.adoc#backing-up-maps["backups"]) of that data do you require?
+* Are you going to use xref:data-structures:map.adoc#creating-sync-backups[synchronous] 
+or xref:data-structures:map.adoc#creating-async-backups[asynchronous] backups?
+* When running queries how many indexes or index fields for each object will you have?
+* What is your read/write ratio? (Example: 70% of time is spent reading data, 30% is spent writing)
+** Based on the read/write ratio and Transactions Per Second (TPS), you can learn about the amount of memory
 required to accommodate the data, both existing and new. Usually an eviction mechanism keeps
 the map/cache size in check, but the eviction itself does not always clear the memory almost
 immediately. Therefore, the answers to this question gives a good insight.
-* Are you using multiple clusters (which may involve WAN replication)?
+* Are you using multiple clusters (which may involve xref:wan:wan.adoc[WAN Replication])?
 * What are the throughput and latency requirements?
 ** The answer should be about Hazelcast access, not the application throughput.
-For example, an application may have a TPS of 10,000 users but each user
+For example, an application may plan for 10,000 user TPS but each user
 transaction may need to use Hazelcast 3 times during the execution. So the
-actual Hazelcast throughput becomes 30,000. Similarly, for latency; the answer
+actual Hazelcast throughput would need to be 30,000 TPS. Similarly for latency, the answer
 should not be about end-to-end latency but the application-to-Hazelcast latency.
-* How many concurrent Hazelcast jobs will the cluster run?
+* How many concurrent Hazelcast xref:configuration:jet-configuration.adoc[jobs] will the cluster run?
 * What is the approximation duration of a job?
 * When you use stream processing, what is the average approximation latency for processing of a single event?
-* What is the intended sink for your jobs (database, dashboard, file system, etc.)?
-** If the sink is a Hazelcast map, then the standard caching questions will take effect, i.e.,
+* What is the intended xref:pipelines:sources-sinks.adoc[sink] for your jobs (database, dashboard, file system, etc.)?
+** If the sink is a Hazelcast map, then the standard caching questions apply, i.e.,
 the maximum number of results stored in the map at any given time, eviction, etc.
-* What is the shape of the pipelines (operations used, external systems involved)?
+* What is the shape of the xref:pipelines:overview.adoc[pipelines] (operations used, external systems involved)?
 * What are the capacities of your Jet sources and sinks?
 
 Once you know the size, access patterns, throughput, latency,
@@ -62,17 +66,18 @@ hosted jobs and increases resilience.
 
 To make fault tolerance possible, your cluster must have at least three
 members. Generally, you need `n+1` cluster members to tolerate `n`
-simultaneous member failures, and the number must be odd for split-brain
+simultaneous member failures, and the number of members must be odd for split-brain
 detection to work.
 
-If you use Jet, it can use hundreds of CPU cores efficiently by exploiting data and
+If you use the Jet stream processing engine, it can use hundreds of CPU cores 
+efficiently by exploiting data and
 task parallelism. When you add more members to the cluster, the capacity
 for CPU-bound computation rises. You can achieve better performance by
 distributing the data partitions across the cluster to process them in
 parallel.
 
 Benchmark your jobs in a clustered setup to see the differences in
-performance, see the <<benchmarking-and-sizing-example, sizing example>>.
+performance, as in the <<benchmarking-and-sizing-example, sizing example>>.
 
 == Memory Considerations
 
@@ -105,28 +110,28 @@ the remaining members. For this reason, we recommend that you plan to use only
 NOTE: When configuring High-Density Memory usage, please keep in mind that
 `metadata-space-percentage` is by default 12.5% but when xref:storage:persistence.adoc[Persistence]
 is used, it should be increased to 30%. Metadata space keeps Hazelcast memory manager's
-internal data, i.e., metadata for map/cache data structures that are off heap.
+internal data ("metadata") for map/cache data structures that are off heap.
 When Persistence is used, it keeps Persistence metadata as well.
 
-If you're using jobs, all operational data must fit to
-the memory. This design leads to a predictable performance but requires
-enough RAM not to run out of memory. Estimate the memory requirements
+If you're using jobs, all operational data must fit within
+available memory. This design leads to a predictable performance but requires
+enough RAM not to run out. Estimate the memory requirements
 and plan with a headroom of 25% for normal memory fragmentation. For
-fault-tolerant operations, we recommend reserving an extra memory to
-survive the failure. See <<sizing-for-failures, sizing for failures>>.
+fault-tolerant operations, we recommend reserving extra memory to
+survive any failures. See <<sizing-for-failures, sizing for failures>>.
 
 If your computation is memory-bound, consider:
 
-* Moving data out of Hazelcast cluster, e.g., don't use the distributed data
+* Moving data out of the Hazelcast cluster, e.g., don't use the distributed data
 structures of the Hazelcast cluster and use the remote Hazelcast cluster
 instead.
 * Scaling out, e.g., adding more members to the cluster.
 
 Memory consumption is affected by:
 
-* **Resources deployed with your job:** Considerable when attaching big
-files such as models for ML inference pipelines.
-* **State of the running jobs:** Varies as it's affected by the shape of
+* **Resources deployed with your job:** Attaching big
+files such as models for ML inference pipelines can consume significant resources.
+* **State of the running jobs:** This varies, as it's affected by the shape of
 your pipeline and by the data being processed. Most of the memory is
 consumed by operations that aggregate and buffer data. Typically the
 state also scales with the number of distinct keys seen within the
@@ -134,9 +139,9 @@ time window. Learn how the operations in the pipeline store its state.
 Operators coming with Jet provide this information in the javadoc.
 * **State back-up:** For jobs configured as fault-tolerant, the state of
 the running jobs is regularly snapshotted and saved in the cluster.
-Cluster keeps two consecutive snapshots at a time (old one is kept
+The cluster keeps two consecutive snapshots at a time (an old one is kept
 until the new one is successfully created). Both current and previous
-snapshot can be saved in multiple replicas to increase data safety.
+snapshots can be saved in multiple replicas to increase data safety.
 The memory required for state back-up can be calculated as
 `(Snapshot size * 2 * Number of replicas) / Cluster member count`.
 The snapshot size is displayed in the Management Center. You might
@@ -144,12 +149,12 @@ want to keep some state snapshots residing in the cluster as points of
 recovery, so plan the memory requirements accordingly.
 * **Data stored inside Hazelcast cluster**: Any data hosted in the
 cluster. Notably the IMap and ICache Journal to store the streaming
-data. See the https://hazelcast.com/resources/hazelcast-deployment-operations-guide/[Hazelcast Deployment and Operations Guide].
+data.
 
-Hazelcast offers lite members to prevent the memory usage on 
+Hazelcast offers lite members to prevent memory usage on 
 these members. Lite members do not own any partitions, but they can
 access partitions that are owned by other members in the cluster. If
-there is no specific advantage of using non-homogeneous cluster
+there is no specific advantage to using non-homogeneous cluster
 members, we do not recommend using lite members as they increase
 network calls and thus increase the latency. See the xref:management:cluster-utilities.adoc#enabling-lite-members[Cluster Utilities]
 for information on lite members. 
@@ -172,6 +177,8 @@ If the default count of 271 results in heavily loaded partitions,
 increase the partition count to the point where data load per-partition
 is under 100MB. Remember to factor in headroom for projected data growth.
 
+To change the partition count, use the system property `hazelcast.partition.count`.
+
 NOTE: If you change the partition count from the default of 271,
 be sure to use a prime number of partitions. This helps minimizing
 the collision of keys across partitions, ensuring more consistent lookup
@@ -180,17 +187,18 @@ times.
 NOTE: If you are an Enterprise customer using the High-Density Memory Store
 with large data sizes, we recommend a large increase in partition count, starting with 5009 or higher.
 
-You cannot change the partition count after a cluster is created,
-so if you have a larger cluster, be sure to test and
-set an optimum partition count prior to deployment.
-If you need to change the partition count after a cluster is running,
-you will need to schedule a maintenance window to update the partition count
-and restart the cluster.
+NOTE: The partition count cannot be eaily changed after a cluster is created, so if you have a large cluster 
+be sure to test and set an optimum partition count prior to deployment. If you need to change th partition 
+count after a cluster is already running, you will need to schedule a maintenance window to entirely bring 
+the cluster down. If your cluster uses xref:storage:persistence.adoc[Persistence] or xref:cp-subsystem:persistence.adoc[CP Persistence] 
+features, those persistent files will need to be removed after the cluster is shut down, as they contain 
+references to the previous partition count. Once all member configurations are updated, and any persistent 
+data structure files are removed, the cluster can be safely restarted.
 
 === Parallel Migrations
 
-Hazelcast can migrate the partitions for separate partitions in parallel.
-This significantly reduces the time needed for repartitioning.
+Hazelcast can migrate separate partitions in parallel, which significantly
+reduces the time needed for repartitioning.
 Having parallel migrations does have an impact on the heap memory and network utilization.
 The following properties control the number of parallel migrations/replications on a single member:
 
@@ -216,6 +224,7 @@ use higher limits.
 
 Multi-socket clients are the smart clients which maintain a connection to each member.
 Unisocket clients have a single connection to the entire cluster.
+You can find more information about these two modes here: xref:clients:java.adoc#java-client-operation-modes[Java Client Operation Modes]
 
 == Uniform Hardware
 
@@ -227,7 +236,7 @@ of the whole cluster.
 === Minimal Configuration
 
 Hazelcast is a lightweight framework and is reported to run well on devices
-such as Raspberry Pi Zero (1GHz single-core CPU, 512MB RAM).
+such as the Raspberry Pi Zero (1GHz single-core CPU, 512MB RAM).
 
 === Recommended Configuration
 
@@ -255,41 +264,47 @@ Don't rely just on CPU usage when benchmarking your cluster. Simulate
 production workload and measure the throughput and latency instead. The
 task manager of Hazelcast can be configured to use the CPU aggressively.
 As an example, see https://hazelcast.com/blog/idle-green-threads-in-jet/[this benchmark]: the CPU usage was close to 20% with just 1000 events/s. At 1m items/s
-the CPU usage was 100% even though Jet still could push around 5m
+the CPU usage was 100% even though Jet still could push around 5 million
 items/s on that machine.
 
 === Network
 
 Hazelcast uses the network internally to shuffle data and to replicate the
-back-ups. Network is also used to read input data from and to write
+backups. The network is also used to read input data from and to write
 results to remote systems or to do RPC calls when enriching. In fact a
-lot of Hazelcast jobs are network-bound. Using a 10 Gbit or faster network
+lot of Hazelcast jobs are network-bound. A 1Gbit network connection is a 
+recommended minimum, but using a 10 Gbit or faster network
 can improve application performance. Also consider scaling the cluster
 out (adding more members to the cluster) to distribute the load.
 
 Consider collocating a Hazelcast cluster with the data source and sink to avoid
-moving data back and forth over the wire. Co-locate Hazelcast with source
-rather than a sink if you have to choose. Processed results are often
+moving data back and forth over the wire. If you must choose between colocating 
+Hazelcast with the source or sink, choose the source. Processed results are often
 aggregated, so the size is reduced.
 
-Hazelcast cluster is designed to run in a single LAN. Deploying Hazelcast cluster to
-a network with high or varying latencies leads to unpredictable
-performance.
+A Hazelcast cluster is designed to run in a single LAN and can encounter unexpected 
+performance problems if a single cluster is split across multiple different networks. 
+Latency is the strongest constraint in most network scenarios, so deploying Hazelcast 
+clusters to a network with high or varying latencies (even on the same LAN) can lead 
+to unpredictable performance results.
 
 === Disk
 
 Hazelcast is an in-memory framework. Cluster disks aren't involved in regular
 operations except for logging and thus are not critical for the cluster
-performance.
+performance. There are optional features of Hazelcast (such as Persistence and 
+CP Persistence) which may utilize disk space, but even when they are in use a 
+Hazelcast system is primarily in-memory.
 
 Consider using more performant disks if you use the following Hazelcast features:
 
 * xref:pipelines:sources-sinks.adoc[The file connector] for reading or writing to files on the cluster's file system.
 * xref:storage:persistence.adoc[Persistence] for saving map data to disk.
+* xref:cp-subsystem:persistence.adoc[CP Persistence] for strong resiliency guarantees when using the CP Subsystem
 
 == Size for Failures
 
-Hazelcast cluster is elastic to deal with failures and performance spikes.
+Hazelcast clusters are elastic to deal with failures and performance spikes.
 
 When a cluster member fails, this reduces available resources and
 increases stress on the remaining members until recovery. The data
@@ -302,7 +317,7 @@ To tolerate the failure of one member, we recommend sizing your cluster
 so it can operate well with `n-1` members.
 
 Another approach to improve fault-tolerance is to separate the concerns
-of data storage and computation into two separate clusters. Use one
+of data storage and computation into two separate clusters. As an example, you could use one
 cluster for Hazelcast IMaps and their event journals and another one for running
 Hazelcast jobs. This way a single failure doesn't simultaneously hurt both
 the storage and the computation capacity.
@@ -331,13 +346,14 @@ reads the data from the sources and writes the results to the sinks. The
 capacity of all components of the data pipeline must be balanced to
 avoid bottlenecks.
 
-If a data sink is slow, Hazelcast applies backpressure all the way to the
+If a data sink is slow, Hazelcast applies xref:cluster-performance:best-practices.adoc#back-pressure[backpressure] 
+all the way to the
 source, slowing down data consumption. The data sources should be
 designed to participate by reducing the pace of data production or by
 buffering the data.
 
-On the other hand, if the data source can't produce or transmit the
-data fast enough, adding more resources to the Hazelcast cluster won't bring
+On the other hand, if the data source is slow (i.e. it can't produce or transmit the
+data fast enough), adding more resources to the Hazelcast cluster won't bring
 any performance benefits.
 
 == Processed Data
@@ -350,11 +366,12 @@ production data, notably:
 
 Hazelcast splits the data across the cluster to process it in parallel. It is
 designed to perform well under the assumption of balanced partitions.
-Imbalanced partitions may create a hot spot in your cluster. Factors
+Imbalanced partitions may create a "hot spot" (a segment of data accessed far 
+more often than other data) in your cluster. Factors
 that affect partitioning are the data source and the grouping keys
 used in the Hazelcast application.
 
-A frequent source of the partition imbalance are special cases: in a
+A frequent source of a partition imbalance are special cases. For example, in a
 payment processing application, there might be a small number of
 accounts with very high activity. Imagine a retail company account with
 thousands of payments per minute vs. personal accounts with just a few
@@ -365,7 +382,7 @@ and the test datasets.
 == Benchmarking and Sizing Examples
 
 See the following caching and streaming use cases to see sample benchmarking
-and sizing examples.
+and sizing exercises.
 
 === Caching Use Case
 
@@ -393,7 +410,11 @@ Since we have 50 GB of active data, our total memory footprint will be:
 
 * 50 GB + 50 GB * 2 (backup count) = 150 GB. 
 
-Add 40% memory headroom and you will need a total of 250 GB of RAM for data.
+Add 40% memory headroom by assuming 150GB is 60% of a cluster's total space:
+
+* 150 / 0.6 = 250
+
+and you will need a total of 250 GB of RAM for data.
 
 To satisfy this use case, you will need three Hazelcast members, each
 running a 4 GB heap with ~84 GB of data off-heap in the High-Density Data Store.
@@ -404,18 +425,18 @@ will create the maximum number of backup copies possible. For example, Hazelcast
 will only create two backup copies in a cluster of three members, even if the
 backup count is set equal to or higher than three.
 
-NOTE: No member in a Hazelcast cluster will store primary as well as its own backup.
+NOTE: No member in a Hazelcast cluster will store both primary data and that data's backup.
 
 ==== Cluster Size Using Only Heap Memory
 
-Since it’s not practical to run JVMs with greater than a 4 GB heap, you
-will need a minimum of 42 JVMs, each with a 4 GB heap to store 150 GB of
-active and backup data as a 4 GB JVM would give approximately 3.5 GB of storage space.
+Since it’s not practical to run JVMs with greater than a 16 GB heap, you
+will need a minimum of 11 JVMs, each with a 16 GB heap to store 150 GB of
+active and backup data as a 16 GB JVM would give approximately 14 GB of storage space.
 Add the 40% headroom discussed earlier, for a total of 250 GB of usable heap, then
-you will need ~72 JVMs, each running with four GB heap for active and backup data.
+you will need ~18 JVMs, each running with a 16 GB heap for active and backup data.
 Considering that each JVM has some memory overhead and Hazelcast’s rule of thumb for
 CPU sizing is eight cores per Hazelcast server instance, you will need at least
-576 cores and upwards of 300 GB of memory.
+144 cores and upwards of 300 GB of memory.
 
 ==== Summary 
 
@@ -429,8 +450,8 @@ High-Density Memory Store:
 
 Heap-only:
 
-* 72 Hazelcast members
-* 576 cores
+* 18 Hazelcast members
+* 144 cores
 * 300 GB RAM
 
 === Streaming Use Case
@@ -443,7 +464,7 @@ data structure in the cluster. The analytical job reads the IMap
 Event Journal and writes the processed results to a rolling file.
 
 The job is configured to be xref:pipelines:configuring-jobs.adoc#setting-a-processing-guarantee[fault-tolerant]
-with the exactly-once processing guarantee.
+with the xref:pipelines:configuring-jobs.adoc#job-configuration-options[exactly-once] processing guarantee.
 
 The cluster is expected to process 50k trade events per second with 10k
 trade symbols (distinct keys).

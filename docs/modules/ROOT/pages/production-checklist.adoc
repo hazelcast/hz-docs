@@ -10,7 +10,7 @@ All Hazelcast members forming a cluster should be on a minimum 1Gbps Local Area 
 
 == Hardware Recommendations
 
-We suggest at least 8 CPUs or equivalent per member, as well as running a single Hazelcast member per host.
+We suggest at least 8 CPU cores or equivalent per member, as well as running a single Hazelcast member per host.
 
 == Operating System Recommendations
 
@@ -19,11 +19,11 @@ have unique considerations. These are highlighted below.
 
 As a general suggestion, we recommend turning off the swapping at operating system level.
 
-=== Solaris Sparc
+=== Solaris SPARC
 
-Hazelcast is certified for Solaris Sparc. If you are using the former Hazelcast IMDG
+Hazelcast is certified for Solaris SPARC. If you are using the former Hazelcast IMDG
 with versions older than 3.6, there is a known issue with High-Density Memory Store
-due to the Sparc architecture not supporting unaligned memory access.
+due to the SPARC architecture not supporting unaligned memory access.
 
 === VMWare ESX
 
@@ -34,17 +34,16 @@ thereby dividing resources are not required.
 
 Consider the following for VMWare ESX:
 
+* Avoid sharing one Network Interface Card (NIC) between multiple virtual machine environments. A Hazelcast cluster is a distributed system and can be very network-intensive. Trying to share one physical NIC between multiple VMs may cause network-related performance problems.
 * Avoid over-committing memory. Always use dedicated physical memory for guests running Hazelcast.
 * Do not use memory ballooning.
-* Be careful over-committing the CPU, too. Watch for the CPU steal time.
-* Do not move guests while Hazelcast is running; disable vMotion. If you want to use vMotion (live migration),
-first stop the Hazelcast cluster and restart it after the migration.
-* Always enable verbose garbage collection (GC) logs; when "Real" time is higher than "User" time,
-then it may indicate some virtualization issues. JVM is off-CPU during GC (and probably waiting for I/O).
+* Be careful overcommitting CPU cores. Monitor CPU steal time metrics.
+* Do not move guests while Hazelcast is running - for ESX this means disabling vMotion. If you want to use vMotion (live migration), first stop the Hazelcast cluster then restart it after the migration completes.
+* Always enable verbose garbage collection (GC) logs in the Java Virtual Machine. When "Real" time is higher than "User" time, this may indicate virtualization issues. The JVM is not using the CPU to execute application code during garbage collection, and is probably waiting on input/output (I/O) operations.
 * Note VMWare guests network types.
-* Use pass-through hard disks/partitions; do not to use image files.
+* Use pass-through hard disks/partitions; do not use image files.
 * Configure partition groups to use a separate underlying physical machine for partition backups.
-* If you want to use automatic snapshots, first stop the Hazelcast cluster and restart it after the snapshot.
+* If you want to use automatic snapshots, first stop the Hazelcast cluster then restart it after the snapshot.
 * Network performance issues, including timeouts, might occur with LRO (Large Receive Offload)
 enabled on Linux virtual machines and ESXi/ESX hosts. We have specifically had
 this reported in VMware environments, but it could potentially impact other environments as well.
@@ -55,26 +54,24 @@ We strongly recommend disabling LRO when running in virtualized environments, se
 According to a reported rare case, I/O threads can consume a lot of CPU cycles
 unexpectedly, even in an idle state. This can lead to CPU usage going up to 100%.
 This is reported not only for Hazelcast but for other GitHub projects as well.
-Workaround for such cases is to supply the system property `-Dhazelcast.io.selectorMode=selectwithfix` on JVM startup.
+The workaround for such cases is to supply the system property `-Dhazelcast.io.selectorMode=selectwithfix` on JVM startup.
 See the related https://github.com/hazelcast/hazelcast/issues/7943#issuecomment-218586767[GitHub^] issue for more details.
 
 == JVM Recommendations
 
-In most cases, we don't recommend more than 16 GB per JVM heap to avoid long garbage collection (GC)
-pauses and latencies. If High-Density memory is available, no more than 8 GB heap is recommended. Otherwise,
-horizontal scaling should be considered rather than vertical.
+In order to avoid long garbage collection (GC) pauses and latencies from the Java Virtual Machine (JVM), we recommend 16GB or less of maximum JVM heap. If xref:storage:high-density-memory.adoc[High-Density Memory] is enabled, no more than 8GB of maximum JVM heap is recommended. Horizontal scaling of JVM memory is recommended over vertical scaling if you wish to exceed these numbers.
 
-General recommendations;
+General recommendations:
 
 * GC logs should be enabled
 * Minimum and maximum heap size should be equal
 
-For Java 9+;
+For Java 9+:
 
 * G1GC is the default recommended GC policy
 * No tuning is recommended unless needed
 
-For Java 8;
+For Java 8:
 
 * Recommended GC policies are CMS and ParNewGC:
 ** `-XX:CMSInitiatingOccupancyFraction=65`
@@ -84,33 +81,23 @@ For Java 8;
 
 == Data Size Calculation Recommendations
 
-The total data size should be calculated based on primary and backup data
-and you should increase the partition count accordingly to make sure a partition size does not exceed 50MB.
+Total data size should be calculated based on the combination of primary data and backup data. For example, if you have configured your cluster with a backup count of 2, then total memory consumed is actually 3x larger than the primary data size (primary + backup + backup). Partition sizes of 50MB or less are recommended.
 
 == Partition Size/Count Calculation Recommendations
 
+The number of internal partitions a Hazelcast member uses can be xref:ROOT:capacity-planning.adoc#partition-count[configured], but must be uniform across all members in the cluster.
 An optimal partition count and size establish a balance between the
-number partitions on each member and the data amount on each partition.
+number of partitions on each member and the data amount on each partition.
 You can consider the following when deciding on a partition count.
 
-* The partition count should be a prime number. This helps minimizing the collision of keys across
+* The partition count should be a prime number. This helps to minimize the collision of keys across
 partitions, ensuring more consistent lookup times.
-* A too low partition count is constraining; it should
+* A partition count which is too low constrains the cluster. The count should
 be large enough for a balanced data or task distribution so that each member
 does not manage too few partitions.
-* A partition size not exceeding 50MB typically ensures a good performance. For larger
-clusters, you can use the 50MB-100MB range; keep in mind that cluster performance may be affected
-adversely since larger heaps with more overhead space are required in this case.
+* A partition size of 50MB or less typically ensures good performance. Larger clusters may be able to use up to 100MB partition sizes, but will likely also require larger JVM heap sizes to accomodate the increase in data flow.
 
 If you are a Hazelcast Enterprise customer using the High-Density Data Store with large data sizes,
 we recommend a large increase in partition count, starting with 5009 or higher.
 
-The partition count cannot be changed after a cluster is created, so if you have
-a larger cluster, be sure to test and set an optimum partition count prior to deployment.
-If you need to change the partition count after a cluster is running, you will need to
-schedule a maintenance window to update the partition count and restart the cluster.
-
-== Large Cluster Configuration Recommendations
-
-You may need to increase the partition count relative to the number of Hazelcast members in the cluster and
-the data amount on each partition.
+The partition count cannot be eaily changed after a cluster is created, so if you have a large cluster be sure to test and set an optimum partition count prior to deployment. If you need to change th partition count after a cluster is already running, you will need to schedule a maintenance window to entirely bring the cluster down. If your cluster uses xref:storage:persistence.adoc[Persistence] or xref:cp-subsystem:persistence.adoc[CP Persistence] features, those persistent files will need to be removed after the cluster is shut down, as they contain references to the previous partition count. Once all member configurations are updated, and any persistent data structure files are removed, the cluster can be safely restarted.

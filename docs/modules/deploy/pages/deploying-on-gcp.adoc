@@ -1,0 +1,188 @@
+= Deploying a Cluster on Google Cloud Platform
+:description: Deploy Hazelcast clusters on Google Cloud Platform and allow them to discover each other automatically.
+
+{description}
+
+== Prerequisites
+
+Before deploying Hazelcast on GCP, your GCP instances must have access to the Cloud API (at minimum read-only access scope to the Compute Engine API).
+
+== Discovering Members Automatically
+
+To make it easier to set up clusters on GCP, Hazelcast allows members to discover each other automatically, using discovery strategies.
+
+When a member starts on GCP, members start by fetching a list of all instances filtered by projects, zones, and label. Then, each instance is checked one-by-one with its IP and each of the ports defined in the `hz-port` property. When a member is discovered under IP:PORT, then it joins the cluster.
+
+If you want to create multiple Hazelcast clusters in one project/zone, then you need to manually label the instances.
+
+=== Member Discovery SPI
+
+You can configure Hazelcast in one of the following manners.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+```xml
+<hazelcast>
+  <network>
+    <join>
+      <multicast enabled="false"/>
+      <gcp enabled="true">
+        <label>application=hazelcast</label>
+        <hz-port>5701-5708</hz-port>
+      </gcp>
+    </join>
+  </network>
+</hazelcast>
+```
+--
+YAML:: 
++ 
+-- 
+```yml
+hazelcast:
+  network:
+    join:
+      multicast:
+        enabled: false
+      gcp:
+        enabled: true
+        label: application=hazelcast
+        hz-port: 5701-5708
+```
+--
+Java:: 
++ 
+-- 
+```java
+config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false);
+config.getNetworkConfig().getJoin().getGcpConfig().setEnabled(true)
+  .setProperty("label", "application=hazelcast")
+  .setProperty("hz-port", "5701-5708");
+```
+--
+====
+
+The following properties can be configured:
+
+* `private-key-path`: a filesystem path to the private key for GCP service account in the JSON format; if not set, the access token is fetched from the GCP VM instance
+* `projects`: a list of projects where the plugin looks for instances; if not set, the current project is used
+- `region`: a region where the plugin looks for instances; if not set, the `zones` property is used; if it and `zones` property not set, all zones of the current region are used 
+* `zones`: a list of zones where the plugin looks for instances; if not set, all zones of the current region are used
+* `label`: a filter to look only for instances labeled as specified; property format: `key=value`
+* `hz-port`: a range of ports where the plugin looks for Hazelcast members; if not set, the default value `5701-5708` is used
+
+Note that:
+
+* Your GCP Service Account must have permissions to query for all the projects/zones specified in the configuration
+* If you don't specify any of the properties, then the plugin forms a cluster from all Hazelcast members running in the current project, in the current region
+* If you use the plugin in the Hazelcast Client running outside of the GCP network, then the following parameters are mandatory: `private-key-path`, `projects`, and `zones` or `region`
+
+== Preventing Data Loss
+
+By default, Hazelcast distributes partition replicas (backups) randomly and equally among cluster members. However, this is not safe in terms of high availability when a partition and its replicas are stored on the same rack, using the same network, or power source. To deal with that, Hazelcast offers logical partition grouping, so that a partition
+itself and its backups would not be stored within the same group. This way Hazelcast guarantees that a possible failure
+affecting more than one member at a time will not cause data loss. For more details about partition groups, see xref:clusters:partition-group-configuration.adoc[Partition Group Configuration].
+
+=== Zone Aware
+
+When using `ZONE_AWARE` configuration, backups are created in the other availability zone.
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+```xml
+<partition-group enabled="true" group-type="ZONE_AWARE" />
+```
+--
+YAML:: 
++ 
+--
+```yml
+hazelcast:
+  partition-group:
+    enabled: true
+    group-type: ZONE-AWARE
+```
+--
+Java:: 
++ 
+--
+```java
+config.getPartitionGroupConfig()
+    .setEnabled(true)
+    .setGroupType(MemberGroupType.ZONE_AWARE);
+```
+--
+====
+
+NOTE: When using the `ZONE_AWARE` partition grouping, a cluster spanning multiple availability zones should have an equal number of members in each AZ. Otherwise, it will result in uneven partition distribution among the members.
+
+== Discovering Members from Hazelcast Clients
+
+If you run Hazelcast clients inside GCP, then the configuration is exactly the same as for the members.
+
+If you run Hazelcast clients outside GCP, then you always need to specify the following parameters in your client configuration:
+
+- `private-key-path` - path to the private key for GCP service account
+- `projects` - a list of projects where the plugin looks for instances
+- `region`: a region where the plugin looks for instances; if not set, the `zones` property is used; if it and `zones` property not set, all zones of the current region are used 
+- `zones`: a list of zones where the plugin looks for instances; if not set, all zones of the current region are used
+- `use-public-ip` - must be set to `true`
+
+The following snippets are example declarative and programmatic configurations.
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+```xml
+<hazelcast-client>
+  <network>
+    <gcp enabled="true">
+      <private-key-path>/home/name/service/account/key.json</private-key-path>
+      <projects>project-1,project-2</projects>
+      <region>us-east1</region>
+      <label>application=hazelcast</label>
+      <hz-port>5701-5708</hz-port>
+      <use-public-ip>true</use-public-ip>
+    </gcp>
+  </network>
+</hazelcast-client>
+```
+--
+YAML:: 
++ 
+--
+```yml
+hazelcast-client:
+  network:
+    gcp:
+      enabled: true
+      private-key-path: /home/name/service/account/key.json
+      projects: project-1,project-2
+      region: us-east1
+      label: application=hazelcast
+      hz-port: 5701-5708
+      use-public-ip: true
+```
+--
+Java:: 
++ 
+--
+```java
+clientConfig.getGcpConfig().setEnabled(true)
+      .setProperty("private-key-path", "/home/name/service/account/key.json")
+      .setProperty("projects", "project-1,project-2")
+      .setProperty("region", "us-east1")
+      .setProperty("label", "application=hazelcast")
+      .setProperty("hz-port", "5701-5708")
+      .setProperty("use-public-ip", "true");
+```
+--
+====

@@ -1,24 +1,37 @@
-= Kubernetes/OpenShift Deployment
+= Kubernetes Deployment Overview
+:description: Discover ways to deploy Hazelcast clusters in Kubernetes environments.
+
 [[deploying-in-kubernetes]]
 
-Hazelcast provides a few methods to simplify deploying Hazelcast cluster into Kubernetes-based environments. For production-grade Kubernetes deployment, use Helm chart or Kubernetes/OpenShift Operator.
+{description}
 
-== Quick Start
+== Prerequisites
 
-If you just want to play with Hazelcast on Kubernetes, execute the following commands to create Hazelcast cluster
-with 3 members into `default` namespace using the `default` Service Account.
+Before deploying Hazelcast on Kubernetes, consider the following:
+
+* Your Java Runtime Environment (JRE) must support TLS 1.2, which is the case for most modern JREs.
+* We recommend using Kubernetes link:https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/[StatefulSet^] for managing Hazelcast Pods. If you use Deployment (or ReplicationController), your Hazelcast cluster may start with a split brain, but will eventually recover to form one consistent cluster within a few minutes.
+
+== Limitations
+
+Hazelcast CP Subsystem can be used safely in Kubernetes only if xref:cp-subsystem:configuration.adoc#cp-subsystem-configuration[CP Subsystem Persistence] is enabled (Enterprise Feature). Otherwise, a CP Subsystem Group may not recover after scaling the cluster or performing the rolling upgrade operation.
+
+== Quickstart
+
+If you just want to play with Hazelcast on Kubernetes, execute the following commands to create a Hazelcast cluster
+with 3 members in the `default` namespace using the `default` Service Account.
 
 [source,shell]
 ----
-kubectl apply -f https://raw.githubusercontent.com/hazelcast/hazelcast-kubernetes/master/rbac.yaml
+kubectl apply -f https://raw.githubusercontent.com/hazelcast/hazelcast/master/kubernetes-rbac.yaml
 kubectl run hazelcast-1 --image=hazelcast/hazelcast:$HAZELCAST_VERSION
 kubectl run hazelcast-2 --image=hazelcast/hazelcast:$HAZELCAST_VERSION
 kubectl run hazelcast-3 --image=hazelcast/hazelcast:$HAZELCAST_VERSION
 ----
 
-Hazelcast members automatically discovers themselves using the
-https://github.com/hazelcast/hazelcast-kubernetes[Hazelcast Kubernetes Discovery plugin^]
-and therefore form one Hazelcast cluster.
+Hazelcast members <<discovering-members-in-kubernetes-automatically, automatically discover themselves>> and form one Hazelcast cluster.
+
+NOTE: For production-grade Kubernetes deployment, use Helm chart or Kubernetes/OpenShift Operator.
 
 == Helm Chart
 
@@ -49,4 +62,47 @@ Since all the Operators mentioned above are generated from Helm Charts, their fu
 
 == Enterprise Operator (Preview)
 
-Hazelcast Enterprise Operator is currently in the early alpha preview stage, but it will soon become the preferred way of installing Hazelcast in Kubernetes/OpenShift environments. For details, please check xref:deploy:deploying-with-operator.adoc[].
+Hazelcast Enterprise Operator is currently in the early alpha preview stage, but it will soon become the preferred way of installing Hazelcast in Kubernetes/OpenShift environments. For a tutorial, see xref:deploy:deploying-with-operator.adoc[].
+
+== Example Deployment Environments
+
+Explore some example deployment environments and choose one to suit your use case.
+
+=== Embedded Mode
+
+link:https://guides.hazelcast.org/kubernetes-embedded/[Hazelcast Guides: Embedded Hazelcast on Kubernetes].
+
+=== Docker Images
+
+Use the official Hazelcast Docker images:
+
+ * link:https://hub.docker.com/r/hazelcast/hazelcast/[hazelcast/hazelcast]
+ * link:https://hub.docker.com/r/hazelcast/hazelcast-enterprise[hazelcast/hazelcast-enterprise]
+ 
+Please check link:https://github.com/hazelcast/hazelcast-code-samples/tree/master/hazelcast-integration/kubernetes[Hazelcast Kubernetes Code Samples] for the their usage.
+
+=== Helm Chart
+
+Hazelcast is available in the form of Helm Chart in a few versions:
+
+ * link:https://github.com/helm/charts/tree/master/stable/hazelcast[stable/hazelcast] - Hazelcast IMDG in the official Helm Chart repository
+ * link:https://github.com/hazelcast/charts/tree/master/stable/hazelcast[hazelcast/hazelcast] - Hazelcast IMDG with Management Center
+ * link:https://github.com/hazelcast/charts/tree/master/stable/hazelcast-enterprise[hazelcast/hazelcast-enterprise] - Hazelcast Enterprise with Management Center
+ * link:https://github.com/IBM/charts/tree/master/community/hazelcast-enterprise[IBM/hazelcast-enterprise] - Hazelcast Enterprise (with Management Center) dedicated for IBM ICP and IKS environments
+
+You can also check link:https://hub.helm.sh/charts?q=hazelcast[Hazelcast Helm Charts at Helm Hub].
+
+=== Kubernetes/OpenShift Operator
+
+Hazelcast is available as Kubernetes/OpenShift Operator:
+
+ * link:https://github.com/hazelcast/hazelcast-operator[hazelcast/hazelcast-operator] - official Hazelcast Operator repository
+ * link:https://operatorhub.io/operator/hazelcast-operator[Operator Hub] - official Hazelcast Operator published at Operator Hub
+
+=== Red Hat OpenShift
+
+See link:https://github.com/hazelcast/hazelcast-code-samples/tree/master/hazelcast-integration/openshift[Hazelcast OpenShift Code Samples].
+
+=== Istio
+
+Hazelcast works correctly with Istio >= 1.1.0 without any need of additional configuration. You can use it in both client-server and embedded modes. Also, the Hazelcast cluster can be either outside or inside the Istio mesh. See link:https://guides.hazelcast.org/istio[Hazelcast Guides: Hazelcast with Istio Service Mesh] for the details.

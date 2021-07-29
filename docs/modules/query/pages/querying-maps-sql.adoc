@@ -1,50 +1,24 @@
 = Querying Maps with SQL
-:description: With SQL you can query the keys and values of maps in your local cluster.
+:description: Use SQL to run optimized distributed queries on the keys and values of maps in a local cluster.
 
 {description}
 
-== Querying Maps by Name
+== Connecting to Maps
 
-The SQL service exposes map objects as tables in the predefined `partitioned`
-schema using exact names. This schema is in the SQL service search path so that
-you can access the map objects with or without the schema name.
+Depending on the state of existing maps in a local cluster, you may need to configure the xref:integrate:map-connector.adoc[map connector] before being able to query them in SQL.
 
-Schema names, table names, and field names are case-sensitive.
+You can query existing maps in a local Hazelcast cluster without creating a mapping only if they fulfil the following conditions:
 
-For example, you can access the `employee` map
-as `employee` or `partitioned.employee`, but not as `Employee`:
+- Maps contain at least one entry on each member.
++
+To resolve the values in an existing map, Hazelcast reads a random entry from one local member. If an entry isn't found, the query fails.
++
+WARNING: Because Hazelcast looks for one random entry in a map, you should make sure that object entries contain the same fields.
+- Entries do not include JSON fields.
 
-[source,sql]
-----
-SELECT * FROM employee
-SELECT * FROM partitioned.employee
-----
+If your map does not fulfil these conditions or if you want to create a new map, you must use the map connector to create a mapping to it before you can query it.
 
-== Querying Map Entries by Field
-
-The SQL service resolves fields in map entries automatically by reading the first local entry in the map. If the map does not have local entries on the member where
-the query is started, then the list of fields cannot be resolved, and an
-exception is thrown.
-
-Because Hazelcast looks for one random entry in a map, you should make sure that all entries contain the same fields.
-
-For example, in this JSON-valued map, Hazelcast may take the first entry at random and resolve the fields `name` and `age` :
-
-[cols="m,m"]
-|===
-|key|value
-
-|1
-|{"name":"Alice","age":42}
-
-|2
-|{"name":"Bob","age":43,"petName":"Zaz"}
-|===
-
-If you try to query the `petName` field, it will have the value `null` for the
-entry with `key=1`. However, in future optimizations we may throw an error instead of returning `null`. Therefore, it's best to make sure that all entries contain the same fields.
-
-=== Querying Primitive Entries
+== Querying Primitive Entries
 
 A map entry consists of a key and a value. You can query the key through the `__key` alias and the value through the `this` alias.
 
@@ -63,7 +37,7 @@ SELECT * FROM capital_cities;
 +--------------------+------------+
 ```
 
-The `this` alias is returned by a query only if the value does not contain an object. For example, if the `capital_cities` value was an object that had a `name` and a `country` field, the query result would include those fields as columns and exclude the `this` column.
+The `this` alias is returned by a query only if the value does not contain an object. For example, if the `capital_cities` value was a serialized object that had a `name` and a `country` field, the query result would include those fields as columns and exclude the `this` column.
 
 ```
 +--------------------+------------+--------------+
@@ -73,18 +47,24 @@ The `this` alias is returned by a query only if the value does not contain an ob
 +--------------------+------------+--------------+
 ```
 
-=== Querying Object Fields
+== Querying Objects in Map Entries
 
-If you store objects in a map, you can query its fields only if the object is serialized using one of the following options:
+If you store objects in a map, you can query the objects' fields only if they are serialized using one of the following options:
 
-- For Java objects (xref:serialization:implementing-java-serializable.adoc[`Serializable`], xref:serialization:implementing-dataserializable.adoc[`DataSerializable`], xref:serialization:implementing-dataserializable.adoc#identifieddataserializable[`IdentifiedDataSerializable`]), only public fields and getters are available. A public field is available with its exact name. A getter is available with the JavaBean naming conventions.
-- For xref:serialization:implementing-portable-serialization.adoc[`Portable`] objects, the fields that are written in the `Portable.writePortable()` method are exposed using their exact names.
-- `HazelcastJsonValue`
+- For Java objects that are serialized in the xref:serialization:implementing-java-serializable.adoc[`Serializable`], xref:serialization:implementing-dataserializable.adoc[`DataSerializable`], and xref:serialization:implementing-dataserializable.adoc#identifieddataserializable[`IdentifiedDataSerializable`] formats, only their public fields and getters are available. A public field is available with its exact name. A getter is available with the JavaBean naming conventions.
+- For xref:serialization:implementing-portable-serialization.adoc[`Portable`] objects, the fields that are written in the `Portable.writePortable()` method are available using their exact names.
+- All `HazelcastJsonValue` objects are available only if you create mapping with the xref:integrate:map-connector.adoc[map connector].
 
 NOTE: You cannot query nested object fields using SQL.
 
-Consider an `Employee` class where the SQL service can access
-the following fields:
+Consider a map that stores `Employee` objects as values with `name` and `age` fields:
+
+```java
+IMap<Long, Employee>
+```
+
+The SQL service has access to
+the `Employee` object's fields.
 
 [cols="1,1"]
 |===
@@ -98,8 +78,7 @@ the following fields:
 |`integer`
 |===
 
-Together with the key and value objects, you may query the following fields from
-`IMap<Long, Employee>`:
+Together with the key, you may query those fields.
 
 [source,sql]
 ----
@@ -108,7 +87,13 @@ SELECT __key, this, name, age FROM employee
 
 If both the key and value have fields with the same name, you may only query the key's field and not the value's field.
 
-== Next Steps
+== Running Streaming Queries on Maps
+
+At the moment, you cannot run streaming queries on maps with SQL.
+
+Until this feature is available, use the Jet API to run streaming queries on maps. For a tutorial, see xref:pipelines:stream-imap.adoc[].
+
+== Learn More
 
 Learn the details of all the available xref:sql:sql-statements.adoc[SQL statements].
 

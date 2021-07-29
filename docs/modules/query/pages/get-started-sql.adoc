@@ -1,5 +1,5 @@
 = Get Started with SQL Queries
-:description: In this tutorial, you learn the basics of querying in SQL by using the interactive SQL shell on your Hazelcast member to query a CSV file.
+:description: In this tutorial, you learn the basics of querying in SQL by using the interactive SQL shell on your Hazelcast member to run ad-hoc, batch, federated, and streaming queries.
 
 {description}
 
@@ -11,18 +11,21 @@ To complete this tutorial, you need the following:
 |===
 |Prerequisites|Useful resources
 
-|A Hazelcast cluster and an instance of Management Center running on your local network 
-|xref:getting-started:get-started-binary.adoc[Start a Local Cluster]
+|A Hazelcast cluster in client/server mode and an instance of Management Center running on your local network.
+|xref:getting-started:get-started-binary.adoc[Start a Local Cluster].
+
+|Enable the Jet engine.
+|The Jet engine is needed to run SQL queries. For information on how to enable the Jet engine, see xref:pipelines:job-security.adoc[].
 |===
 
 [.interactive-button]
 xref:interactive-sql.adoc[Try the interactive example,window=_blank]
 
-== Query Static Data
+== Step 1. Create a Data Source to Query
 
-Using SQL, you can load static data from sources such as files and maps so you can tranform and analyze it.
+SQL can query data in maps, Kafka topics and the local cluster's file system.
 
-In this step, you create a static file, load that data into Hazelcast, and query it from an SQL shell.
+In this step, you create a `.csv` file that you can use to query.
 
 . Create a file named `likes.csv`.
 
@@ -39,8 +42,10 @@ id,name,likes
 +
 This example file contains a record of the number of likes each person has.
 
-. Connect to the SQL shell on your cluster member.
-+
+== Step 2. Connect to the SQL Shell on your Cluster Member
+
+The easiest way to run SQL queries on a cluster is to connect to the SQL shell.
+
 [tabs]
 ====
 Binary::
@@ -65,7 +70,7 @@ Replace the `$LOCAL_IP` placeholder with your member's local IP address.
 
 [source,shell,subs="attributes+"]
 ----
-docker run --network hazelcast-network -it --rm hazelcast/hazelcast:{page-component-version} hazelcast --targets hello-world@$LOCAL_IP sql
+docker run --network hazelcast-network -it --rm hazelcast/hazelcast:{page-component-version} hz-cli --targets hello-world@$LOCAL_IP sql
 ----
 
 The `--targets` parameter tells the SQL shell to connect to the member at the given IP address in a cluster called `hello-world`.
@@ -74,8 +79,12 @@ TIP: Make sure you mount the `likes.csv` file on the container that's running yo
 --
 ====
 
-. Use a xref:sql:create-mapping.adoc[`CREATE MAPPING` statement] to give Hazelcast access to the data in the `likes.csv` file.
-+
+== Step 3. Configure the File Connector
+
+To allow Hazelcast to find and recognize the data in your `.csv` file, you need to configure the xref:integrate:file-connector.adoc[file connector].
+
+Use the xref:sql:create-mapping.adoc[`CREATE MAPPING` statement] to configure the file connector and give Hazelcast access to the data in the `likes.csv` file.
+
 [source,sql]
 ----
 CREATE MAPPING csv_likes (id INT, name VARCHAR, likes INT)
@@ -83,10 +92,14 @@ TYPE File
 OPTIONS ('format'='csv',
     'path'='/absolute/path/to/current/folder', 'glob'='likes.csv');
 ----
-+
+
 TIP: Make sure you replace the `path` option with the absolute path to your `.csv` file.
-+
-NOTE: The SQL service does not have a native storage system. Instead it uses external mappings to access various resources as if they were tables.
+
+== Step 4. Run Ad-Hoc Queries
+
+Ad-hoc queries allow you to retrieve a small subset of data. Usually these queries are simple and you can have many of them running concurrently in a Hazelcast cluster.
+
+A common use case for ad-hoc queries is individual business transactions where you need to get or update data.
 
 . Use a xref:sql:select.adoc[`SELECT` statement] to query all the data in the `likes.csv` file.
 +
@@ -109,6 +122,85 @@ You should see the following:
 +------------+--------------------+------------+
 ----
 
+. Query only the `name` and `likes` columns, by adding them as a comma-separated list after the `SELECT` statement.
++
+[source,sql]
+----
+SELECT name, likes FROM csv_likes;
+----
++
+```
++--------------------+------------+
+|name                |       likes|
++--------------------+------------+
+|Jerry               |          13|
+|Greg                |         108|
+|Mary                |          73|
+|Jerry               |          88|
++--------------------+------------+
+```
+
+. Use a filter to display only the names of people with more than 20 likes.
++
+[source,sql]
+----
+SELECT name FROM csv_likes WHERE likes > 20;
+----
++
+```
++--------------------+
+|name                |
++--------------------+
+|Greg                |
+|Mary                |
+|Jerry               |
++--------------------+
+```
+
+. Give the `name` column an alias for the query results.
++
+NOTE: This clause does not rename the column in the table.
++
+[source,sql]
+----
+SELECT name AS popular_users, likes
+FROM csv_likes
+WHERE likes > 20;
+----
++
+```
++--------------------+------------+
+|popular_users       |       likes|
++--------------------+------------+
+|Greg                |         108|
+|Mary                |          73|
+|Jerry               |          88|
++--------------------+------------+
+```
+
+. To filter rows on more than one condition, you can join conditions with the `AND`, `OR`, and `NOT` operators.
++
+[source,sql]
+----
+SELECT *
+FROM csv_likes
+WHERE likes > 20 AND name = 'Mary';
+----
++
+```
++------------+--------------------+------------+
+|          id|name                |       likes|
++------------+--------------------+------------+
+|           3|Mary                |          73|
++------------+--------------------+------------+
+```
+
+== Step 5. Run Batch Queries
+
+Batch queries allow you to query large datasets either in one or multiple systems and/or run aggregations on them to get deeper insights. Usually these queries are complex and you can run a small number of them concurrently in a Hazelcast cluster.
+
+Common uses of OLAP include business reporting functions such as financial analysis, budgeting, and forecast planning.
+
 . Use the `SUM()` function to aggregate the total number of likes for each person and group the results by name.
 +
 [source,sql]
@@ -128,9 +220,37 @@ You should see the following:
 +--------------------+--------------------+
 ```
 +
-The results do not include a rows for each Jerry because the `GROUP BY` statement groups the results by name.
+The results do not include a row for each Jerry because the `GROUP BY` statement groups the results by name.
 
-. Create a mapping to a new table called `dislikes`.
+. Filter for the names that have more than 100 likes combined, using the `HAVING` clause. This clause is equivalent to the `WHERE` clause but for aggregate groups.
++
+[source,sql]
+----
+SELECT name AS most_liked
+FROM csv_likes
+GROUP BY name HAVING SUM(likes) > 100;
+----
++
+```
++--------------------+
+|most_liked          |
++--------------------+
+|Jerry               |
+|Greg                |
++--------------------+
+```
+
+For a list of available aggregations, see xref:sql:expressions.adoc[].
+
+If you need more control over how your data is being transformed and aggregated, you may want to xref:pipelines:overview.adoc[build a pipeline with the Jet API].
+
+== Step 6. Run Federated Queries
+
+Federated queries are those that join tables from different datasets.
+
+Normally, querying in SQL is database or dataset-specific. However, with xref:pipelines:sources-sinks[connectors], you can pull information from different sources and present a more complete picture of the data.
+
+. Configure the map connector to create a new table called `dislikes`.
 +
 [source,sql]
 ----
@@ -142,7 +262,7 @@ dislikes INT
 +
 This table is mapped to a distributed map in Hazelcast where the key is an integer and the value is an object that's serialized to JSON.
 
-. Use `SINK INTO` statements to add some data to the map.
+. Use `SINK INTO` statements to add some entries to the map.
 +
 [source,sql]
 ----
@@ -153,6 +273,8 @@ SINK INTO dislikes VALUES(4, 'Jerry', 0);
 ----
 
 . Use the xref:sql:select.adoc#join-tables[`JOIN` clause] to merge results from the `likes` and `dislikes` tables so you can see who has the most likes and dislikes.
++
+NOTE: The data source on the right of the join must always be a map.
 +
 [source,sql]
 ---- 
@@ -185,8 +307,27 @@ ORDER BY csv_likes.name
 LIMIT 2;
 ----
 
+== Step 7. Run Streaming Queries
+
+Streaming queries are those that continuously produce results. These queries get data from streaming sources. At the moment, the only supported streaming source for SQL are the xref:integrate:kafka-connector.adoc[Kafka connector] or the xref:sql:expressions.adoc#table-valued-functions[`TABLE(generate_stream())` table-valued function].
+
+To run a streaming query on Kafka, you need to configure the connector with the `CREATE MAPPING` statement.
+
+But for simplicity, se the `TABLE(generate_stream())` function to test what happens when you run a streaming query.
+
+[source,sql]
+----
+SELECT * FROM TABLE(generate_stream(100)) WHERE v / 10 * 10 = v;
+----
+
+This query generates an infinite stream of numbers and filters the results so that only multiples of 100 are returned.
+
+In SQL, a stream is like a table with infinite rows that you can only access sequentially and thus never reach the end. As a result, you will get an error if you try to aggregate the stream without using a window function. SQL does not yet support window functions. To aggregate results of streaming queries, use the Jet API.
+
+TIP: This example relies on the client being connected to the cluster to receive the results of the query. To run this query in the background and send the results to a sink, see the tutorial on building a data pipeline with a streaming query, see xref:pipelines:learn-sql.adoc[].
+
 == Next Steps
 
 Learn how to xref:querying-maps-sql.adoc[query maps with SQL].
 
-See more examples of the xref:sql:select.adoc[`SELECT` statement].
+Explore xref:sql:sql-statements.adoc[all available SQL statements].

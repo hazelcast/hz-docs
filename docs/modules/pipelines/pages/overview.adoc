@@ -9,7 +9,7 @@
 
 A data pipeline (also called a pipeline) is a series of steps for processing data, consisting of three elements:
 
-- One or more xref:sources-sinks.adoc[sources]: Where you take your data from.
+- One or more xref:sources-sinks.adoc[sources]: Where you take your data comes from.
 - Processing stages: What you do to your data.
 - At least one xref:sources-sinks.adoc[sink]: Where you send the results of the last processing stage.
 
@@ -26,12 +26,14 @@ Depending on the data source, pipelines can be used for the following use cases:
 
 The Jet engine is a batch and stream processing system that allows Hazelcast members to do both stateless and stateful computations over large amounts of data with consistent low latency.
 
+Some features of the Jet engine include:
 
-Further from that, you can build a multistage cascade of groupBy operations, you can process infinite out-of-order data streams using event time-based windows, you can have forks in your data stream to reuse the same intermediate result in more than one way, you can build a pipeline where an I/O task distributes the processing of the data it reads across all CPU cores, etc. in short, all the advantages that a full-blown DAG computation engine offers.
+- Build a multistage cascade of groupBy operations.
+- Process infinite out-of-order data streams using event time-based windows,.
+- Fork data stream to reuse the same intermediate result in more than one way.
+- Distribute the processing across all available CPU cores.
 
 == Pipeline Workflow
-
-A pipeline is a reusable object that can be passed around and submitted to the cluster several times.
 
 The general workflow of a data pipeline includes the following steps:
 
@@ -43,47 +45,25 @@ A pipeline without any sinks is not valid.
 
 To process or enrich data in between reading it from a source and sending it to a sink, you can use transforms.
 
-TIP: For getting started tutorials, see xref:stream-processing-embedded.adoc[], xref:stream-processing-client.adoc[], or xref:learn-sql.adoc[].
+In Hazelcast, pipelines can be defined using either xref:learn-sql.adoc[SQL] or the link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/jet/pipeline/Pipeline.html[Jet API].
 
 == Extracting and Ingesting Data
 
-Hazelcast provides a variety of connectors for streaming data into pipelines and storing the results in sinks such as Hazelcast data structures, Java Messaging Service (JMS), JDBC systems, Apache Kafka, Hadoop Distributed File System, and TCP Sockets.
+Hazelcast provides a variety of connectors for working with data in a variety of formats and systems, including Hazelcast data structures, Java Messaging Service (JMS), JDBC systems, Apache Kafka, Hadoop Distributed File System, and TCP Sockets.
 
 If a connector doesn't already exist for a source or sink, Hazelcast provides a convenience API so you can easily build a custom one.
 
 For details, see xref:sources-sinks.adoc[].
 
-== Running Data Pipelines in Hazelcast
+== Jobs
 
-Hazelcast members comes with a high-performance execution engine called the Jet engine. Using this engine, pipelines can process hundreds of thousands of records per second with millisecond latencies using a single member.
+Using the high-performance Jet engine, pipelines can process hundreds of thousands of records per second with millisecond latencies using a single member.
 
 To have the Jet engine run a pipeline, it must be submitted to a member. At that point, the pipeline becomes a _job_.
 
-When a member receives a job, it creates a computational model in the form of a Directed Acyclic Graph (DAG). Using this model, the computation is split into tasks that are distributed among all members in the cluster, making use of all available CPU cores.
+When a member receives a job, it creates a computational model in the form of a Directed Acyclic Graph (DAG). Using this model, the computation is split into tasks that are distributed among all members in the cluster, making use of all available CPU cores. This model allows Hazelcast to process data faster because the tasks can be replicated and executed in parallel across the cluster.
 
-This model allows Hazelcast to process data faster because the tasks can be replicated and executed in parallel across the cluster.
-
-In Hazelcast, pipelines can be defined using either xref:learn-sql.adoc[SQL] or the xref:stream-processing-embedded.adoc[Jet API].
-
-[NOTE]
-====
-SQL has the following limitations:
-
-- No window functions.
-+
-You cannot group or aggregate results in streaming queries.
-- Fewer sources and sinks.
-+
-You can use only a subset of the available sources and sinks in the Jet API.
-+
-See xref:sql:connectors.adoc[]
-- Limited support for joins.
-+
-If you want to use joins, the data source on the right of the join must be a map.
-+
-See xref:sql:select.adoc#join-tables[Join Tables]
-
-====
+See xref:submitting-jobs.adoc[].
 
 == Fault-Tolerance and Scalability
 

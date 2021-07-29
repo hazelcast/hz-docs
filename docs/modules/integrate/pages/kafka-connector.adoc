@@ -1,0 +1,312 @@
+= Apache Kafka Connector
+:description: The Kafka connector allows you to stream, filter, and transform events between Hazelcast clusters and Kafka.
+:page-aliases: sql:kafka-connector.adoc
+
+{description}
+
+Apache Kafka is a popular distributed, persistent log store which is a
+great fit for stream processing systems. Data in Kafka is structured
+as _topics_ and each topic consists of one or more partitions, stored in
+the Kafka cluster.
+
+NOTE: This connector is not supported on Solaris operating systems.
+
+== Installing the Connector
+
+This connector is included in the full distribution of Hazelcast.
+
+If you're using the slim distribution, you must add the link:https://mvnrepository.com/artifact/com.hazelcast.jet/hazelcast-jet-kafka/{page-component-version}[`hazelcast-jet-kafka` module] to your member's classpath.
+
+== Permissions
+
+If you use Hazelcast Enterprise, your clients may need permissions to use this connector. For details, see xref:pipelines:job-security.adoc[].
+
+== Configuration Options
+
+Use these options to configure the Kafka connector.
+
+=== SQL Configuration Options
+
+To create a mapping, you must tell Hazelcast how to serialize and deserialize the topic keys and topic messages.
+
+Although Apache Kafka is schema-less, SQL assumes a schema in which all
+messages in a topic are of the same type (with some exceptions).
+
+As well as <<primitives, primitives>>, Hazelcast supports the following formats:
+
+* <<avro, Avro>>
+* JSON
+* Java
+
+Topic keys and values can be in different formats. Any options not recognized by
+Hazelcast are passed directly to the Kafka producer or consumer.
+
+==== Primitives
+
+If you want to use one of the xref:sql:data-types.adoc[primitive types] (any supported SQL data
+type except `OBJECT`), you don't need to tell Hazelcast how to serialize or deserialize the data. Instead, Hazelcast will use the Java class
+representing the primitive type.
+
+For example, if the topic key is an `Integer` and the topic message is a
+`String`, use:
+
+```sql
+CREATE MAPPING my_topic
+TYPE Kafka
+OPTIONS (
+    'keyFormat'='int',
+    'valueFormat'='varchar',
+    'bootstrap.servers' = '127.0.0.1:9092'
+)
+```
+
+In this case, the following options will be automatically used:
+
+```sql
+'key.serializer' = 'org.apache.kafka.common.serialization.IntegerSerializer',
+'key.deserializer' = 'org.apache.kafka.common.serialization.IntegerDeserializer',
+'value.serializer' = 'org.apache.kafka.common.serialization.StringSerializer',
+'value.deserializer' = 'org.apache.kafka.common.serialization.StringDeserializer'
+```
+
+==== Avro
+
+When using Avro, Hazelcast reads fields from the `GenericRecord` returned
+by the `KafkaAvroDeserializer`. When inserting to a topic, Hazelcast creates an
+ad-hoc Avro schema named `jet.sql` from the mapping columns. As a result, you must provide a column list to the mapping.
+
+Hazelcast currently can't use custom
+Avro schemas to create objects, but it can use these schemas to read objects written
+through our ad-hoc schema, as long as the field names and types match.
+
+[cols="m,m"]
+|===
+| SQL Type | Avro Type
+
+a|`TINYINT`, `SMALLINT`, `INT`
+|INT
+
+|BIGINT
+|LONG
+
+|REAL
+|FLOAT
+
+|DOUBLE
+|DOUBLE
+
+|BOOLEAN
+|BOOLEAN
+
+a|`VARCHAR` and all other types
+|STRING
+
+|===
+
+All Avro types are a union of the `NULL` type and the actual type.
+
+```sql
+CREATE MAPPING my_topic (
+    __key VARCHAR,
+    ticker VARCHAR,
+    amount BIGINT,
+    price DECIMAL
+)
+TYPE Kafka
+OPTIONS (
+    'keyFormat' = 'varchar',
+    'valueFormat' = 'avro',
+    'bootstrap.servers' = '127.0.0.1:9092',
+    'schema.registry.url' = 'http://127.0.0.1:8081/'
+    /* more Kafka options ... */
+)
+```
+
+In this example, the key is a plain `Long` number, the value is
+avro-serialized. `keyFormat` and `valueFormat` options are handled by
+Hazelcast, the rest is passed directly to Kafka producer or consumer.
+
+In this case
+`io.confluent.kafka.serializers.KafkaAvroSerializer` and
+`io.confluent.kafka.serializers.KafkaAvroDeserializer` are automatically
+added to allow Hazelcast to serialize and deserialze the Avro data.
+
+==== JSON
+
+The value will be stored as a JSON object. Hazelcast can't automatically
+determine the column list for this format, you must explicitly specify
+it:
+
+```sql
+CREATE MAPPING my_topic(
+    __key BIGINT,
+    ticker VARCHAR,
+    amount INT)
+TYPE Kafka
+OPTIONS (
+    'keyFormat' = 'bigint',
+    'valueFormat' = 'json',
+    'bootstrap.servers' = '127.0.0.1:9092')
+```
+
+There are no additional options for this format.
+
+JSON's type system doesn't match SQL's exactly. For example, JSON
+numbers have unlimited precision, but such numbers are typically not
+portable. We convert SQL integer and floating-point types into JSON
+numbers. We convert the `DECIMAL` type, as well as all temporal types,
+to JSON strings.
+
+We don't support the `JSON` type from the SQL standard yet. That means
+you can't use functions like `JSON_VALUE` or `JSON_QUERY`. If your JSON
+documents don't all have the same fields or if they contain nested
+objects, the usability is limited.
+
+==== Java
+
+Java serialization uses the
+Java objects exactly as `KafkaConsumer.poll()` returns them. You can use
+this option for objects serialized using Java serialization or any other
+serialization method.
+
+For this format you must specify the class name using `keyJavaClass` and
+`valueJavaClass` options, for example:
+
+```sql
+CREATE MAPPING my_topic
+TYPE Kafka
+OPTIONS (
+    'keyFormat' = 'java',
+    'keyJavaClass' = 'java.lang.Long',
+    'valueFormat' = 'java',
+    'valueJavaClass' = 'com.example.Person',
+    'value.serializer' = 'com.example.serialization.PersonSerializer',
+    'value.deserializer' = 'com.example.serialization.PersonDeserializer',
+    'bootstrap.servers' = '127.0.0.1:9092')
+```
+
+If the Java class corresponds to one of the basic data types (numbers,
+dates, strings), that type will directly be used for the key or value
+and mapped as a column named `__key` for keys and `this` for values. In
+the example above, the key will be mapped with the `BIGINT` type. In
+fact, the above `keyFormat` & `keyJavaClass` duo is equivalent to
+`'keyFormat'='bigint'`.
+
+If the Java class is not one of the basic types, Hazelcast will analyze
+the class using reflection and use its properties as column names. It
+recognizes public fields and JavaBean-style getters. If some property
+has a non-primitive type, it will be mapped under the `OBJECT` type.
+
+==== External Column Name
+
+You rarely need to specify the columns in DDL. If you do, you might need
+to specify the external name for the column.
+
+The entries in a map naturally have _key_ and _value_ elements. Because
+of this, the format of the external name must be either `__key.<name>`
+for a field in the key or `this.<name>` for a field in the value.
+
+The external name defaults to `this.<columnName>`, so normally you only
+need to specify it for key fields. There are also columns that represent
+the entire key and value objects, called `__key` and `this`.
+
+=== Jet Configuration Options
+
+To read from Kafka as a source, the only requirements are to provide deserializers
+and a topic name:
+
+```java
+Properties props = new Properties();
+props.setProperty("bootstrap.servers", "localhost:9092");
+props.setProperty("key.deserializer", StringDeserializer.class.getCanonicalName());
+props.setProperty("value.deserializer", StringDeserializer.class.getCanonicalName());
+props.setProperty("auto.offset.reset", "earliest");
+
+Pipeline p = Pipeline.create();
+p.readFrom(KafkaSources.kafka(props, "topic"))
+ .withNativeTimestamps(0)
+ .writeTo(Sinks.logger());
+```
+
+The topics and partitions are distributed across the Hazelcast cluster, so
+that each member is responsible for reading a subset of the data.
+
+When used as a sink, then the only requirements are the serializers:
+
+```java
+Properties props = new Properties();
+props.setProperty("bootstrap.servers", "localhost:9092");
+props.setProperty("key.serializer", StringSerializer.class.getCanonicalName());
+props.setProperty("value.serializer", StringSerializer.class.getCanonicalName());
+
+Pipeline p = Pipeline.create();
+p.readFrom(Sources.files("home/logs"))
+ .map(line -> LogParser.parse(line))
+ .map(log -> entry(log.service(), log.message()))
+ .writeTo(KafkaSinks.kafka(props, "topic"));
+```
+
+== Fault Tolerance
+
+One of the most important features of using Kafka as a source is that
+it's possible to replay data, which enables fault-tolerance. If the job
+has a processing guarantee configured, Hazelcast will periodically save
+the current offsets internally and then replay from the saved offset
+when the job is restarted. In this mode, Hazelcast will manually track and
+commit offsets, without interacting with the consumer groups feature of
+Kafka.
+
+If the processing guarantees are disabled, the source will start reading from
+default offsets that are set in the `auto.offset.reset` property. You can
+enable offset committing by assigning a `group.id`, enabling auto offset
+committing using `enable.auto.commit` and configuring
+`auto.commit.interval.ms` in the given properties. Refer to
+link:https://kafka.apache.org/22/documentation.html[Kafka documentation]
+for the descriptions of these properties.
+
+== Transactional Guarantees
+
+As a sink, the Kafka connector provides exactly-once guarantees at the cost of using
+Kafka transactions. Hazelcast commits the produced records after each snapshot
+is completed. This greatly increases the latency because consumers see
+the records only after they are committed.
+
+If you use at-least-once guarantee, records are visible immediately, but
+in the case of a failure some records could be duplicated. You
+can also configure jobs in exactly-once mode and decrease the guarantee
+just for a particular Kafka sink.
+
+== Schema Registry
+
+Kafka is often used together with link:https://docs.confluent.io/current/schema-registry/index.html[Confluent Schema Registry]
+as a repository of types. The use of the schema registry is done through
+adding it to the `Properties` object and using the `KafkaAvroSerializer/Deserializer`
+if Avro is being used:
+
+```java
+properties.put("value.deserializer", KafkaAvroDeserializer.class);
+properties.put("specific.avro.reader", true);
+properties.put("schema.registry.url", schemaRegistryUrl);
+```
+
+Keep in mind that once the record deserialized, Jet still needs to know
+how to serialize/deserialize the record internally.
+
+== Version Compatibility
+
+The Kafka sink and source are based on version 2.2.0, this means Kafka
+connector will work with any client and broker having version equal to
+or greater than 1.0.0.
+
+== Heterogeneous Messages
+
+This connector supports heterogeneous messages. For example, say you have these messages in your topic:
+
+```json
+{"name":"Alice","age":42}
+{"name":"Bob","age":43,"petName":"Zaz"}
+```
+
+If you map the column `petName`, it will have the value `null` for the
+entry with `key=1`. This scenario is supported. Similar behavior works
+with Avro format.

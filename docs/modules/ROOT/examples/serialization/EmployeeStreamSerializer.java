@@ -16,13 +16,13 @@ public class EmployeeStreamSerializer
     @Override
     public void write( ObjectDataOutput out, EmployeeSS employee )
             throws IOException {
-        out.writeUTF(employee.getSurname());
+        out.writeString(employee.getSurname());
     }
 
     @Override
     public EmployeeSS read( ObjectDataInput in )
             throws IOException {
-        String surname = in.readUTF();
+        String surname = in.readString();
         return new EmployeeSS(surname);
     }
 

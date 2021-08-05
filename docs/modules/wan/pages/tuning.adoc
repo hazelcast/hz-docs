@@ -528,18 +528,18 @@ the batch size and benchmarking at high load.
 
 There are a couple of other configuration values that you might try changing but it depends on your use case.
 The first one is adding a separate configuration for a WAN replication executor.
-Collecting of WAN event batches and processing the responses from the target endpoints are done on a shared executor.
-This executor is shared between the other parts of the Hazelcast system and all the WAN replication publishers will use
-the same executor. In some cases, you might want to create a dedicated executor for all WAN replication publishers.
-The name of this executor is `hz:wan`. Below is an example of a concrete, dedicated executor for WAN replication.
-See the xref:computing:executor-service.adoc#configuring-executor-service[Configuring Executor Service section] for more information on
-the configuration options of the executor.
+Collecting of WAN event batches and processing the responses from the target endpoints are done in a thread pool shared
+between the other parts of the Hazelcast system and all WAN replication schemes. In some cases, you might want to define
+how many threads WAN replication can use by setting the thread pool size of WAN's dedicated executor. The name of this
+executor is `hz:wan`. Below is an example of a concrete, dedicated executor for WAN replication.
+See the xref:computing:executor-service.adoc#configuring-executor-service[Configuring Executor Service section]
+for more information on the configuration options of the executor.
 
-[tabs] 
-==== 
-XML:: 
-+ 
--- 
+[tabs]
+====
+XML::
++
+--
 [source,xml]
 ----
 <hazelcast>
@@ -562,6 +562,12 @@ hazelcast:
       pool-size: 16
 ----
 ====
+
+In this case, WAN replication is limited to use 16 threads at most, which is the default. Note that every configured WAN
+batch publisher occupies one thread from the executor's pool, therefore, the pool should have more threads than the number
+of the configured WAN batch publishers to leave threads available for processing other WAN related tasks such as asynchronously processing the
+responses of the WAN target clusters. Since the threads WAN executor uses are borrowed from a global thread pool to
+reduce the number of threads in use, the threads running WAN tasks do not have any specific name.
 
 The last two elements that you might want to change are `acknowledge-type` and `max-concurrent-invocations`.
 Changing these elements allow you to get a greater throughput at the expense of event ordering.

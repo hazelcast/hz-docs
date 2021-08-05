@@ -1,0 +1,278 @@
+= Encrypting Persisted Data at Rest
+:description: Data on disk may contain sensitive information such as in the keys or values of maps. To protect your data, you can configure Persistence to use encryption at rest, which encrypts all files in your persistence store.
+
+{description}
+
+== How Encryption at Rest Works
+
+Data persisted in the persistence store is encrypted using symmetric encryption. The
+implementation is based on
+https://docs.oracle.com/javase/8/docs/technotes/guides/security/crypto/CryptoSpec.html[Java Cryptography Architecture^] (JCA).
+The encryption scheme uses two levels of encryption keys: auto-generated persistence
+store encryption keys (one for each configured parallelism) that are used to encrypt
+the chunk files and a master encryption key that is used to encrypt the store-specific
+encryption keys. The master encryption key is sourced from an external system called the _secure
+store_ and, in contrast to the persistence-store encryption keys, it is not persisted
+anywhere within the persistence store.
+
+When encryption at rest is first enabled on a member, the member contacts
+the secure store during startup and retrieves the master encryption key. Then, the member generates
+the persistence-store encryption keys, encrypts them with the master key, and stores them in the persistence store's folder. The subsequent writes to any chunk files will be encrypted using this persistence-store encryption key. During Persistence,
+the member gets the master encryption key from the secure store, decrypts the persistence-store
+encryption keys and uses those to decrypt the chunk files.
+
+== Rotating the Master Key
+
+If you update the master encryption key in the secure store,
+the Persistence subsystem will detect it and retrieve the new master encryption key. During
+this process, it will also re-encrypt the persistence store encryption keys using the new master encryption key.
+
+== Configuring Encryption at Rest
+
+Encryption at Rest can be enabled and configured programmatically or declaratively using the
+`encryption-at-rest` sub-element of `persistence`. The `encryption-at-rest`
+element has the following attributes and sub-elements:
+
+=== `persistence.enabled`
+
+Whether encryption is enabled
+
+Default: `false`
+
+=== `persistence.encryption-at-rest.algorithm`
+
+The symmetric cipher to use (such as `AES/CBC/PKCS5Padding`).
+
+=== `persistence.encryption-at-rest.salt`
+
+The encryption salt.
+
+=== `persistence.encryption-at-rest.key-size`
+
+The size of the auto-generated persistence store encryption key.
+
+=== `persistence.encryption-at-rest.secure-store`
+
+The secure store to use for the retrieval of master
+encryption keys. See <<configuring-secure-store, Configuring a Secure Store>> for more details.
+
+=== Configuration Examples
+
+The following are the example configuration settings for encryption at rest.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <persistence enabled="true">
+        ...
+        <encryption-at-rest enabled="true">
+            <algorithm>AEC/CBC/PKCS5Padding</algorithm>
+            <salt>thesalt</salt>
+            <key-size>128</key-size>
+            <secure-store>...</secure-store>
+        </encryption-at-rest>
+        ...
+    </persistence>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  persistence:
+    enabled: true
+    encryption-at-rest:
+      enabled: true
+      algorithm: AES/CBC/PKCS5Padding
+      salt: thesalt
+      key-size: 128
+      secure-store:
+         ...
+----
+--
+Java::
++
+--
+[source,java]
+----
+include::ROOT:example$/storage/SampleEncryptionAtRestConfiguration.java[tag=encryptionatrest]
+----
+--
+====
+
+[[configuring-secure-store]]
+== Configuring a Secure Store
+
+A secure store represents a secure source of master encryption keys and
+is required for using encryption at rest.
+
+Hazelcast Enterprise provides secure store implementations for the
+https://docs.oracle.com/javase/8/docs/api/java/security/KeyStore.html[Java KeyStore^]
+and for https://www.vaultproject.io/[HashiCorp Vault^].
+
+=== Java KeyStore Secure Store
+
+The Java KeyStore secure store provides integration with the https://docs.oracle.com/javase/8/docs/api/java/security/KeyStore.html[Java KeyStore^].
+It can be configured programmatically or declaratively using the
+`keystore` sub-element of `secure-store`. The `keystore` element has the following sub-elements:
+
+* `path`: The path to the KeyStore file.
+* `type`: The type of the KeyStore (`PKCS12`, `JCEKS`, etc.).
+* `password`: The KeyStore password.
+* `current-key-alias`: The alias for the current encryption key entry (optional).
+* `polling-interval`: The polling interval (in seconds) for checking for changes in the KeyStore.
+Disabled by default.
+
+NOTE: Sensitive configuration properties such as `password` should be protected using
+xref:configuration:variable-replacers.adoc[encryption replacers].
+
+The Java KeyStore Secure treats all `KeyStore.SecretKeyEntry` entries stored in the KeyStore as
+encryption keys. It expects that these entries use the same protection password as the KeyStore
+itself. Entries of other types (private key entries, certificate entries) are ignored. If
+`current-key-alias` is set, the corresponding entry will be treated as the current encryption key;
+otherwise, the highest entry in the alphabetical order will be used. The remaining entries will
+represent historical versions of the encryption key.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<secure-store>
+    <keystore>
+        <path>/path/to/keystore.file</path>
+        <type>PKCS12</type>
+        <password>password</password>
+        <current-key-alias>current</current-key-alias>
+        <polling-interval>60</polling-interval>
+    </keystore>
+</secure-store>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+      secure-store:
+        keystore:
+          path: /path/to/keystore.file
+          type: PKCS12
+          password: password
+          current-key-alias: current
+          polling-interval: 60
+----
+--
+Java::
++
+--
+[source,java]
+----
+include::ROOT:example$/storage/SampleEncryptionAtRestConfiguration.java[tag=keystore]
+----
+--
+====
+
+=== HashiCorp Vault Secure Store
+
+The HashiCorp Vault secure store provides integration with https://www.vaultproject.io/[HashiCorp Vault^].
+It can be configured programmatically or declaratively using the
+`vault` sub-element of `secure-store`. The `vault` element has the following sub-elements:
+
+* `address`: The address of the Vault server.
+* `secret-path`: The secret path under which the encryption keys are stored.
+* `token`: The Vault authentication token.
+* `polling-interval`: The polling interval (in seconds) for checking for changes in Vault. Disabled
+by default.
+* `ssl`: The TLS/SSL configuration for HTTPS support. See the xref:security:tls-ssl.adoc[TLS/SSL section] for more
+information about how to use the `ssl` element.
+
+NOTE: Sensitive configuration properties such as `token` should be protected using
+xref:configuration:variable-replacers.adoc[encryption replacers].
+
+The HashiCorp Vault secure store implementation uses the official REST API to integrate with
+HashiCorp Vault. Only for the https://www.vaultproject.io/docs/secrets/kv/index.html[KV secrets engine^],
+both KV V1 and KV V2 can be used, but since only V2 provides secrets versioning, this is
+the recommended option. With KV V1 (no versioning support), only one version of the encryption
+key can be kept, whereas with KV V2, the HashiCorp Vault secure store is able to retrieve
+also the historical encryption keys. (Note that the size of the version history is configurable
+on the Vault side.) Having access to the previous encryption keys may be critical to avoid
+scenarios where the data becomes undecryptable because the master encryption key
+is no longer usable (for instance, when the original master encryption key got rotated out
+in the secure store while the cluster was down).
+
+The encryption key is expected to be stored at the specified secret path and represented as a
+single key/value pair in the following format:
+
+```
+name=Base64-encoded-data
+```
+
+where name can be an arbitrary string. Multiple key/value pairs under the same secret path are not
+supported. Here is an example of how such a key/value pair can be stored using the HashiCorp
+Vault command-line client (under the secret path `hz/cluster`):
+
+```
+vault kv put hz/cluster value=HEzO124Vz...
+```
+
+With KV V2, a second `put` to the same secret path creates a new version of the encryption key.
+With KV V1, it simply overwrites the current encryption key, discarding the old value.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<secure-store>
+    <vault>
+        <address>http://localhost:1234</address>
+        <secret-path>secret/path</secret-path>
+        <token>token</token>
+        <polling-interval>60</polling-interval>
+        <ssl>...</ssl>
+    </vault>
+</secure-store>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+      secure-store:
+        vault:
+          address: http://localhost:1234
+          secret-path: secret/path
+          token: token
+          polling-interval: 60
+          ssl:
+            ...
+----
+--
+Java::
++
+--
+[source,java]
+----
+include::ROOT:example$/storage/SampleEncryptionAtRestConfiguration.java[tag=vault]
+----
+--
+====

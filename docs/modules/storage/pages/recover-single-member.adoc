@@ -1,0 +1,156 @@
+= Recovering Persisted Data after Single Member Failures
+:description: The way in which a cluster handles a single member failure, depends on whether you've set a rebalance delay and whether the cluster can validate its partition table.
+
+{description}
+
+By default, if a cluster detects that a member is restarting and attempting to rejoin, the cluster’s master member will ask the member to send its partition table for validation.
+
+If the master member validates that the partition table was correct at the time the member left the cluster, the member loads its persisted data from disk.
+
+If the cluster cannot validate the member's partition table for whatever reason, the member stops trying to join the cluster and shuts down. The cluster will not allow the member to rejoin until it has deleted its persistence store. The cluster then recovers the missing member's data from backups and
+redistributes it among the remaining cluster members.
+
+To handle invalid partitions, you can:
+
+- Set the xref:configuring-persistence.adoc#`persistence.auto-remove-stale-data`[`auto-remove-stale-data` configuration option] to true
+- <<force-start, Use Force Start>> to delete the data and start the member.
+- <<partial-start, Use Partial Start>> to configure a strategy for this scenario.
+
+If you have lots of persisted data and you are concerned about how long it may take for your cluster to migrate data after a member fails to rejoin, you can configure the following options:
+
+- <<delaying-migrations, Stop the rest of the cluster from migrating data>> until a certain amount of time has passed.
++
+WARNING: Do not use this option if your cluster also stores in-memory data. This option stops the cluster from migrating in-memory data. As a result any data that is not persisted will be lost if the member restarts, including backups.
+
+- <<synchronzing-persisted-data-faster, Enable the member to synchronize its persisted map and JCache data faster>> while also allowing the cluster to continue migrations as usual.
+
+== Delaying Migrations
+
+Delaying migrations stops your cluster from migrating a failed member's data too soon. This option is useful if you have lots of persisted data and it would take too long to migrate, and you want to give members more time to restart.
+
+To delay migrations during a single member failure, configure a rebalance delay, using the xref:ROOT:system-properties.adoc#rebalance-delay[`hazelcast.partition.rebalance.after.member.left.delay.seconds` property].
+
+WARNING: Do not use this option if your cluster also stores in-memory data. This option stops the cluster from migrating in-memory data. As a result any data that is not persisted will be lost if the member restarts, including backups. 
+
+Assume the following:
+
+* A cluster consists of members A, B, and C with Persistence enabled.
+* Member B is killed.
+* Member B restarts.
+
+If member B restarts within the rebalance delay, all its persisted data will be restored from disk and no migrations will take place.
+
+While the member is down, operations on data owned by that member will be retried until they either time out or the member restarts and executes the requested operation. As a result, this option is best when you prefer a latency spike rather than migrating data over the network.
+
+If member B does not restart within the rebalance delay, the cluster recovers member B's data from backups and
+redistributes the data among the remaining members (members A and C
+in this case). If member B is later restarted, it recovers its persisted data from disk and brings it up-to-date with data from members A and C. If Merkle trees are enabled on any maps, migrations use those to request only missing persisted data. For details about how members use Merkle trees, see <<synchronizing-persisted-data-faster, Synchronizing Persisted Data Faster>>.
+
+== Synchronizing Persisted Data Faster
+
+When a failed member rejoins the cluster, it will populate its in-memory stores with data from disk that may be stale.
+
+If you have lots of persisted data as well as in-memory data that you don't want to lose, you can configure your data structures to generate a Merkle tree.
+
+The Merkle tree stores the state of persisted data in a way that other cluster members can quickly read and check the delta for what is missing. This way, after a restart, the member can send its Merkle tree to the cluster and request only the missing data, reducing the amount of data sent over the network.
+
+=== Configuring Merkle Trees
+
+On the map and JCache data structures, you can configure the following options to enable the Merkle tree.
+
+==== `merkle-tree.enabled`
+
+Whether a Merkle tree is generated for the data structure.
+
+Default: disabled
+
+==== `merkle-tree.depth`
+
+The depth of the Merkle tree.
+
+Default: 10
+
+The deeper the tree, the more accurate the difference detection and the more space is needed to store the Merkle tree in memory.
+
+== Force Start
+
+A member can crash permanently and then be unable to recover from the failure.
+In this case, you can force the cluster
+to clean its persisted data and make a fresh start in a process called _force start_.
+
+WARNING: Force start is a destructive process, which results
+in the deletion of persisted data.
+
+Assume the following which is a valid scenario to use force start:
+
+* You have a cluster consisting of members A and B which is initially stable.
+* Cluster transitions into `FROZEN` or `PASSIVE` state.
+* Cluster gracefully shuts down.
+* Member A restarts, but member B does not.
+* Member A waits for member B to join, which never happens.
+* Now you have the choice to Force Start the cluster without member B.
+* Cluster discards all data and starts empty.
+
+You can trigger the force start process using the xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#hot-restart[Management Center],
+REST API, or cluster management scripts.
+
+== Partial Start
+
+When one or more members fail to start, have incorrect
+data in the persistence store (stale or corrupted data), or fail to load their data,
+the cluster becomes incomplete and the restart mechanism cannot proceed.
+One solution is to use <<force-start, Force Start>> and make a fresh
+start with existing members. Another solution is to do a partial start.
+
+Partial start means that the cluster starts with an incomplete member set.
+Data belonging to those missing members is assumed lost and Hazelcast tries
+to recover missing data using the restored backups. For example, if you have
+minimum two backups configured for all maps and caches, then a partial start
+up to two missing members will be safe against data loss. If there are more
+than two missing members or there are maps/caches with less than two backups,
+then data loss is expected.
+
+Partial start is controlled by xref:configuring-persistence.adoc#'persistence.cluster-data-recovery-policy`[`cluster-data-recovery-policy` configuration
+option] and is not allowed by default. To enable partial start, one of the
+configuration values xref:configuring-persistence.adoc#'persistence.cluster-data-recovery-policy`[`PARTIAL_RECOVERY_MOST_RECENT` or `PARTIAL_RECOVERY_MOST_COMPLETE`
+should be set].
+
+When partial start is enabled, Hazelcast can perform a partial start
+automatically or manually, in cases where some members are unable to restart
+successfully. Partial start proceeds automatically when some members fail to
+start and join to the cluster in `validation-timeout-seconds`. After the
+`validation-timeout-seconds` duration is passed, Persistence chooses to perform
+partial start with the members present in the cluster. Moreover, partial start can
+be requested manually using the
+xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#hot-restart[Management Center],
+xref:management:cluster-utilities.adoc#using-rest-api-for-cluster-management[REST API] and xref:management:cluster-utilities.adoc#example-usages-for-cluster-sh[cluster management scripts]
+before the `validation-timeout-seconds` duration passes.
+
+The other situation to decide to perform a partial start is failures during
+the data load phase. When Hazelcast learns data load result of all members which
+have passed the validation step, it automatically performs a partial start with
+the ones which have successfully restored their data. Please note that
+partial start does not expect every member to succeed in the data load step.
+It completes the process when it learns data load result for every member and
+there is at least one member which has successfully restored its data.
+Relatedly, if it cannot learn data load result of all members before `data-load-timeout-seconds`
+duration, it proceeds with the ones which have already completed the data load process.
+
+Selection of members to perform partial start among live members is done
+according to the `cluster-data-recovery-policy` configuration.
+Set of members which are not selected by the `cluster-data-recovery-policy`
+are called `Excluded members` and they are instructed to perform <<force-start, force start>>.
+Excluded members are allowed to join cluster only when they clean their
+data and make a fresh-new start. This is a completely automatic
+process. For instance, if you start the missing members after partial start
+is completed, they clean their data and join the cluster.
+
+Please note that partial start is a destructive process. Once it is completed,
+it cannot be repeated with a new configuration. For this reason, one may need
+to perform the partial start process manually. Automatic behavior of partial start
+relies on `validation-timeout-seconds` and `data-load-timeout-seconds` configuration
+values. If you need to control the process manually, `validation-timeout-seconds` and
+`data-load-timeout-seconds` properties can be set to very big values so that
+Hazelcast cannot make progress on timeouts automatically. Then, the overall
+process can be managed manually via aforementioned methods, i.e.,
+Management Center, REST API and cluster management scripts.

@@ -1,0 +1,242 @@
+= Persistence Configuration Options
+:description: To use Persistence, you must first enable and configure it using the global options, then you can choose to configure persistence for maps, JCache data structures, or jobs.
+
+To use Persistence, you must first enable and configure it using the <<global-persistence-configuration, global options>>, then you can choose to configure persistence for <<data-structure-persistence-configuration,specific map or JCache data structures>> or <<job-snapshot-configuration,jobs>>.
+
+== Global Persistence Configuration
+
+Use the following options to configure Persistence on your members.
+
+=== `persistence.enabled`
+
+Whether Persistence is enabled on your cluster.
+
+Default: `false`
+
+Set this attribute to `true` if you want any of your
+data structures or job snapshots to use the Persistence feature.
+
+=== `persistence.base-dir`
+
+The parent folder where persisted data
+is stored.
+
+Default: `persistence`
+
+This folder is created automatically if it does not exist.
+
+If more than one member shares this parent folder, each member stores a unique folder inside it in which to store its data. This is especially useful for cloud
+environments where the members generally use a shared filesystem.
+
+When a member starts, it tries to acquire ownership of the
+first available folder inside the parent folder. If the parent folder
+is empty or if all folders are already acquired by other members, then it creates its own new folder.
+
+=== `persistence.backup-dir`
+
+The folder in which backup snapshots of data
+(hot backups) are stored. See xref:backing-up-persistence.adoc[].
+
+Default: ''
+
+If this element is not defined,
+hot backup is disabled. If a folder is defined which does not exist, it is created on
+the first backup. To avoid clashing data on multiple backups, each backup has a unique
+sequence ID which determines the name of the folder which contains all data for that backup.
+This unique folder is created as a subfolder of the configured `backup-dir`.
+
+=== `persistence.parallelism`
+
+Number of I/O threads that are started concurrently for reading from and writing to Persistence files.
+
+Default: `1`
+
+This is a good default in most but not
+all cases. You should measure the raw I/O throughput of your infrastructure and
+test with different values of parallelism. In some cases such as dedicated
+hardware, higher parallelism can yield more throughput. In other
+cases, such as running on EC2, a higher parallelism can yield diminishing returns with more thread
+scheduling, more contention on I/O, and less efficient garbage collection.
+
+=== `persistence.validation-timeout-seconds`
+
+Validation timeout for the Persistence process
+when validating the cluster members expected to join and the partition table on the whole cluster.
+
+=== `persistence.data-load-timeout-seconds`
+
+Data load timeout for the Persistence process.
+All members in the cluster should finish restoring their local data before this timeout.
+
+=== `persistence.cluster-data-recovery-policy`
+
+Specifies the data recovery policy that is
+respected during the Persistence cluster start.
+
+Default: `FULL_RECOVERY_ONLY`
+
+Valid values are:
+
+* `FULL_RECOVERY_ONLY`: Starts the cluster only when all expected members
+are present and correct. Otherwise, it fails.
+* `PARTIAL_RECOVERY_MOST_RECENT`: Starts the cluster with the members which have most up-to-date partition table and successfully restored their data. All other members leave the cluster and force start themselves. If no member restores its data successfully, cluster start fails.
+* `PARTIAL_RECOVERY_MOST_COMPLETE`: Starts the cluster with the largest group of members which have the same partition table version and successfully restored their data. All other members leave the cluster and force start themselves. If no member restores its data successfully, cluster start fails.
+
+=== `persistence.auto-remove-stale-data`
+
+Enables automatic removal of stale persistence stores.
+When a member terminates or crashes and the cluster state is `ACTIVE`, the remaining
+members redistribute the data among themselves and the data persisted on terminated
+member's storage becomes stale. That terminated member cannot rejoin the cluster
+without removing its persistence store. When auto-removal of stale data is enabled,
+while restarting that member, the persistence store is automatically removed and it joins
+the cluster as a completely new member. Otherwise, the persistence store should be removed manually.
+
+=== `persistence.encryption-at-rest`
+
+Configures encryption of data in the persistence store.
+See xref:encryption-at-rest.adoc[] for more information.
+
+Default: disabled
+
+== Data Structure Persistence Configuration
+
+Use the following options to configure Persistence for map and JCache data structures.
+
+=== `persistence.enabled`
+
+Whether the
+Persistence feature is enabled for the related data structure.
+
+Default: `false`
+
+=== `persistence.fsync`
+
+Turning on `fsync` guarantees that data is persisted to the disk
+device when a write operation returns successful response to the caller.
+
+Default: `false`
+
+By default, data is persisted to the disk device
+eventually, instead of on every disk write. This generally provides a better performance.
+
+=== `merkle-tree`
+
+Configures the Merkle tree for faster synchronization of data in the persistence store with the rest of the cluster.
+
+See xref:recover-single-member.adoc#synchronizing-data-faster[Synchronizing Data Faster] for more information.
+
+Default: disabled
+
+== Job Snapshot Configuration
+
+Use the following options to configure Persistence for jobs.
+
+=== `jet.instance.lossless-cluster-restart`
+
+Whether to save the in-memory snapshot data of jobs to disk.
+
+Default: `false`
+
+For lossless restart to work the cluster must be xref:maintain-cluster:shutdown.adoc#graceful-shutdown[shut down gracefully].
+When members are shutdown one by one in a rapid succession, Hazelcast triggers
+an automatic rebalancing process where backup partitions are promoted
+and new backups are created for each member. This may result in
+out-of-memory errors or data loss.
+
+Because data is saved locally on each member, all
+members must be present after a restart for Hazelcast to be able to reload
+the data.
+
+=== Persistence Configuration Examples
+
+The following are example configuration settings for a map instance, a JCache instance, and the Jet engine.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <persistence enabled="true">
+      <base-dir>/mnt/persistence</base-dir>
+      <backup-dir>/mnt/hot-backup</backup-dir>
+      <validation-timeout-seconds>120</validation-timeout-seconds>
+      <data-load-timeout-seconds>900</data-load-timeout-seconds>
+      <cluster-data-recovery-policy>FULL_RECOVERY_ONLY</cluster-data-recovery-policy>
+    </persistence>
+    ...
+    <map name="test-map">
+      <merkle-tree enabled="true" >
+        <depth>12</depth>
+      </merkle-tree>
+      <persistence enabled="true">
+        <fsync>false</fsync>
+      </persistence>
+    </map>
+    ...
+    <cache name="test-cache">
+      <merkle-tree enabled="true" >
+        <depth>12</depth>
+      </merkle-tree>
+      <persistence enabled="true">
+          <fsync>false</fsync>
+      </persistence>
+    </cache>
+    ...
+    <jet>
+      <instance>
+        <lossless-restart-enabled>true</lossless-restart-enabled>
+      </instance>
+    </jet>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  persistence:
+    enabled: true
+    base-dir: /mnt/persistence
+    backup-dir: /mnt/hot-backup
+    validation-timeout-seconds: 120
+    data-load-timeout-seconds: 900
+    cluster-data-recovery-policy: FULL_RECOVERY_ONLY
+  map:
+    test-map:
+      merkle-tree:
+        enabled: true
+        depth: 12
+      persistence:
+        enabled: true
+        fsync: false
+  cache:
+    test-cache:
+      merkle-tree:
+        enabled: true
+        depth: 12
+      persistence:
+        enabled: true
+        fsync: false
+  jet:
+    instance:
+      lossless-restart-enabled: true
+----
+--
+Java::
++
+--
+[source,java]
+----
+include::ROOT:example$/storage/SampleHotRestartConfiguration.java[tag=hrconf]
+----
+--
+====

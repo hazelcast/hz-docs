@@ -16,17 +16,17 @@ public class Address implements DataSerializable {
     //getters setters..
 
     public void writeData( ObjectDataOutput out ) throws IOException {
-        out.writeUTF(street);
+        out.writeString(street);
         out.writeInt(zipCode);
-        out.writeUTF(city);
-        out.writeUTF(state);
+        out.writeString(city);
+        out.writeString(state);
     }
 
     public void readData( ObjectDataInput in ) throws IOException {
-        street = in.readUTF();
+        street = in.readString();
         zipCode = in.readInt();
-        city = in.readUTF();
-        state = in.readUTF();
+        city = in.readString();
+        state = in.readString();
     }
 }
 //end::address[]

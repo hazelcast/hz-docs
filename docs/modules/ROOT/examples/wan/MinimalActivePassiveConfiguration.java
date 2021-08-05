@@ -9,6 +9,7 @@ public class MinimalActivePassiveConfiguration {
 //tag::wrc[]
         Config config = new Config();
         WanBatchPublisherConfig batchPublisherConfig = new WanBatchPublisherConfig()
+                .setPublisherId("londonPublisherId")
                 .setClusterName("london")
                 .setTargetEndpoints("10.3.5.1:5701");
 

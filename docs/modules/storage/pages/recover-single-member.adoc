@@ -1,5 +1,5 @@
 = Recovering Persisted Data after Single Member Failures
-:description: The way in which a cluster handles a single member failure, depends on whether you've set a rebalance delay and whether the cluster can validate its partition table.
+:description: The way in which a cluster handles a single member failure depends on whether you've set a rebalance delay and whether the cluster can validate its partition table.
 
 {description}
 
@@ -26,7 +26,7 @@ WARNING: Do not use this option if your cluster also stores in-memory data. This
 
 == Delaying Migrations
 
-Delaying migrations stops your cluster from migrating a failed member's data too soon. This option is useful if you have lots of persisted data and it would take too long to migrate, and you want to give members more time to restart.
+Delaying migrations stops your cluster from migrating a failed member's data too soon. This option is useful if you have lots of persisted data that would take too long to migrate, and you want to give members more time to restart.
 
 To delay migrations during a single member failure, configure a rebalance delay, using the xref:ROOT:system-properties.adoc#rebalance-delay[`hazelcast.partition.rebalance.after.member.left.delay.seconds` property].
 
@@ -44,7 +44,7 @@ While the member is down, operations on data owned by that member will be retrie
 
 If member B does not restart within the rebalance delay, the cluster recovers member B's data from backups and
 redistributes the data among the remaining members (members A and C
-in this case). If member B is later restarted, it recovers its persisted data from disk and brings it up-to-date with data from members A and C. If Merkle trees are enabled on any maps, migrations use those to request only missing persisted data. For details about how members use Merkle trees, see <<synchronizing-persisted-data-faster, Synchronizing Persisted Data Faster>>.
+in this case). If member B is later restarted, it recovers its persisted data from disk and brings it up-to-date with data from members A and C. If Merkle trees are enabled on available data structures, migrations use those to request only missing persisted data. For details about how members use Merkle trees, see <<synchronizing-persisted-data-faster, Synchronizing Persisted Data Faster>>.
 
 == Synchronizing Persisted Data Faster
 
@@ -52,11 +52,11 @@ When a failed member rejoins the cluster, it will populate its in-memory stores 
 
 If you have lots of persisted data as well as in-memory data that you don't want to lose, you can configure your data structures to generate a Merkle tree.
 
-The Merkle tree stores the state of persisted data in a way that other cluster members can quickly read and check the delta for what is missing. This way, after a restart, the member can send its Merkle tree to the cluster and request only the missing data, reducing the amount of data sent over the network.
+The Merkle tree stores the state of persisted data in a way that other cluster members can quickly read, compare with their own, and check the delta for what is missing. This way, after a restart, the member can send its Merkle tree to the cluster and request only the missing data, reducing the amount of data sent over the network.
 
 === Configuring Merkle Trees
 
-On the map and JCache data structures, you can configure the following options to enable the Merkle tree.
+On map and JCache data structures, you can configure the following options to enable the Merkle tree.
 
 ==== `merkle-tree.enabled`
 
@@ -96,21 +96,15 @@ REST API, or cluster management scripts.
 
 == Partial Start
 
-When one or more members fail to start, have incorrect
-data in the persistence store (stale or corrupted data), or fail to load their data,
-the cluster becomes incomplete and the restart mechanism cannot proceed.
-One solution is to use <<force-start, Force Start>> and make a fresh
-start with existing members. Another solution is to do a partial start.
-
-Partial start means that the cluster starts with an incomplete member set.
+Partial start allows a cluster to start with an incomplete member set.
 Data belonging to those missing members is assumed lost and Hazelcast tries
-to recover missing data using the restored backups. For example, if you have
-minimum two backups configured for all maps and caches, then a partial start
+to recover missing data using the restored backups. For example, if you have a
+minimum of two backups configured for all maps and caches, then a partial start
 up to two missing members will be safe against data loss. If there are more
 than two missing members or there are maps/caches with less than two backups,
 then data loss is expected.
 
-Partial start is controlled by xref:configuring-persistence.adoc#'persistence.cluster-data-recovery-policy`[`cluster-data-recovery-policy` configuration
+Partial start is controlled by the xref:configuring-persistence.adoc#'persistence.cluster-data-recovery-policy`[`cluster-data-recovery-policy` configuration
 option] and is not allowed by default. To enable partial start, one of the
 configuration values xref:configuring-persistence.adoc#'persistence.cluster-data-recovery-policy`[`PARTIAL_RECOVERY_MOST_RECENT` or `PARTIAL_RECOVERY_MOST_COMPLETE`
 should be set].

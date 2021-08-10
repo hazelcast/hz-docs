@@ -30,12 +30,12 @@ public class Foo implements Portable {
 
     @Override
     public void writePortable( PortableWriter writer ) throws IOException {
-        writer.writeUTF( "foo", foo );
+        writer.writeString( "foo", foo );
     }
 
     @Override
     public void readPortable( PortableReader reader ) throws IOException {
-        foo = reader.readUTF( "foo" );
+        foo = reader.readString( "foo" );
     }
 }
 //end::fooportable[]

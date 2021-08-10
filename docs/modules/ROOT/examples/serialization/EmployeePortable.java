@@ -27,12 +27,12 @@ class EmployeePortable implements Portable {
     }
 
     public void writePortable(PortableWriter writer) throws IOException {
-        writer.writeUTF("n", name);
+        writer.writeString("n", name);
         writer.writeInt("a", age);
     }
 
     public void readPortable(PortableReader reader) throws IOException {
-        name = reader.readUTF("n");
+        name = reader.readString("n");
         age = reader.readInt("a");
     }
 

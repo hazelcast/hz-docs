@@ -21,11 +21,11 @@ public class IdentifiedEntryProcessor implements EntryProcessor<String, String, 
     }
     @Override
     public void writeData(ObjectDataOutput out) throws IOException {
-        out.writeUTF(value);
+        out.writeString(value);
     }
     @Override
     public void readData(ObjectDataInput in) throws IOException {
-        value = in.readUTF();
+        value = in.readString();
     }
     @Override
     public String process(Map.Entry<String, String> entry) {

@@ -62,7 +62,7 @@ extraction fails, Hazelcast throws an exception as before.
 Currently, Hazelcast supports extracting schemas out of the classes that have the following
 field types.
 
-* Primitive types: boolean`, `byte`, `short`, `char`, `integer`, `long`, `float`, and `double`.
+* Primitive types: `boolean`, `byte`, `short`, `char`, `integer`, `long`, `float`, and `double`.
 * `String`
 * `java.time.LocalDate`, `java.time.LocalTime`, `java.time.LocalDateTime`, and `java.time.OffsetDateTime`
 * `java.math.BigDecimal`
@@ -150,7 +150,9 @@ class EmployeeSerializer implements CompactSerializer<Employee> {
 ----
 
 The last step is to register the serializer to the `CompactSerializationConfig`.
-Below is the programmatic configuration for this step.
+Below is the programmatic and declarative configurations for this step.
+
+**Programmatic Configuration:**
 
 [source,java]
 ----
@@ -160,6 +162,46 @@ serializationConfig.
         .setEnabled(true) // Required during BETA
         .register(Employee.class, "employee", new EmployeeSerializer());
 ----
+
+**Declarative Configuration:**
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+    ...
+    <serialization>
+        <compact-serialization enabled="true">
+            <registered-classes>
+                <class type-name="employee" serializer="com.example.EmployeeSerializer">
+                    com.example.Employee
+                </class>
+            </registered-classes>
+        </compact-serialization>
+    </serialization>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  serialization:
+    compact-serialization:
+      enabled: true
+      registered-classes:
+        - class: com.example.Employee
+          type-name: employee
+          serializer: com.example.EmployeeSerializer
+----
+====
 
 A schema will be created from the serializer, and a unique schema identifier will be
 assigned to it automatically.
@@ -240,10 +282,14 @@ written by a new writer, they will be able to read all fields.
 
 == CompactSerializationConfig
 
-NOTE: Currently, `CompactSerializationConfig` only supports programmatic configuration. The support
-for the declarative configuration will be added shortly.
+NOTE: Since the Compact serialization is in BETA, and the configuration API might change
+in the future, we didn't define it in our XSDs. If you want to configure Compact
+serialization with XML or YAML configurations, you have to disable schema validation, by
+setting the `hazelcast.config.schema.validation.enabled` system property to `false`.
 
 During the BETA period, Compact serialization has to be enabled explicitly as shown below.
+
+**Programmatic Configuration:**
 
 [source,java]
 ----
@@ -252,20 +298,53 @@ serializationConfig.
         getCompactSerializationConfig()
         .setEnabled(true);
 ----
+
+**Declarative Configuration:**
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+    ...
+    <serialization>
+        <compact-serialization enabled="true" />
+    </serialization>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  serialization:
+    compact-serialization:
+      enabled: true
+----
+====
+
 Apart from that, the configuration can be used to register either
 
 - an explicit `CompactSerializer`
 - a reflective serializer for a class.
 
-In both of these cases, you can either
-
-- supply a type name for the class
-- or let Hazelcast choose the fully qualified class name for you.
+In case of an explicit serializer, you have to supply a type name for the class.
 
 Choosing a type name will associate that name with the schema and will make the polyglot
 use cases where there are multiple clients from different languages easier.
 
+When a class is serialized using the reflective serializer, Hazelcast will choose the
+fully qualified class name as the type name automatically.
+
 Below is the way to register an explicit serializer for a certain class.
+
+**Programmatic Configuration:**
 
 [source,java]
 ----
@@ -276,8 +355,50 @@ serializationConfig.
         .register(Foo.class, "foo", new FooSerializer()); // Use the "foo" as the type name
 ----
 
+**Declarative Configuration:**
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+    ...
+    <serialization>
+        <compact-serialization enabled="true">
+            <registered-classes>
+                <class type-name="foo" serializer="com.example.FooSerializer">
+                    com.example.Foo
+                </class>
+            </registered-classes>
+        </compact-serialization>
+    </serialization>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  serialization:
+    compact-serialization:
+      enabled: true
+      registered-classes:
+        - class: com.example.Foo
+          type-name: foo
+          serializer: com.example.FooSerializer
+----
+====
+
 Lastly, the following is a sample configuration that registers reflective
 serializer for a certain class, without implementing an explicit serializer.
+
+**Programmatic Configuration:**
 
 [source,java]
 ----
@@ -285,14 +406,50 @@ SerializationConfig serializationConfig = new SerializationConfig();
 serializationConfig.
         getCompactSerializationConfig()
         .setEnabled(true)
-        .register(Bar.class); // Use the fully qualified class name as the type name
+        .register(Bar.class); // Uses the fully qualified class name as the type name
 ----
+
+**Declarative Configuration:**
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+    ...
+    <serialization>
+        <compact-serialization enabled="true">
+            <registered-classes>
+                <class>com.example.Bar</class>
+            </registered-classes>
+        </compact-serialization>
+    </serialization>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  serialization:
+    compact-serialization:
+      enabled: true
+      registered-classes:
+        - class: com.example.Bar
+----
+====
 
 You may need to register a class for reflective serializer if 
 
-* the class implements one of the existing serialization methods such as Serializable,
-Externalizable, Portable, IdentifiedDataSerializable or DataSerializable
-* the class is registered to be used by a custom serializer
+* the class implements one of the existing serialization methods such as `Serializable`,
+`Externalizable`, `Portable`, `IdentifiedDataSerializable` or `DataSerializable`.
+* the class is registered to be used by a custom serializer.
 * there is a global serializer registered to serialize every class. 
 
 == GenericRecord Representation

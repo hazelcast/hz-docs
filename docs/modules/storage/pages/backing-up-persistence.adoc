@@ -1,11 +1,12 @@
 = Backing Up Persisted Data
 :description: You can take snapshots of your persistence store (persisted files) to be able to copy the data onto other clusters without having to shut down your cluster. This process is called a hot backup.
+:page-enterprise: true
 
 {description}
 
 == Prerequisites
 
-To back up persisted data, you must have Persistence enabled. See xref:configuring-persistence.adoc[].
+To back up persisted data, you must have persistence enabled. See xref:configuring-persistence.adoc[].
 
 == How Members Create Hot Backups
 
@@ -87,7 +88,7 @@ To trigger a new backup, you can use one of the following options:
 in a `PASSIVE` state].
 +
 Backups may be
-initiated during membership changes, partition table changes, or during normal data updates. As a result, some members may have outdated versions of data before they start the backup process and copy the stale persisted data. By putting your cluster in a `PASSIVE` state, you can make data more consistent on all members.
+initiated during membership changes, partition table changes, or during normal data updates. As a result, some members can have outdated versions of data before they start the backup process and copy the stale persisted data. By putting your cluster in a `PASSIVE` state, you can make data more consistent on all members.
 
 . Trigger a backup.
 +
@@ -108,7 +109,7 @@ service.backup(backupSeq);
 ----
 +
 NOTE: Backups fail if any member contains a sequenced backup subfolder
-with the name.
+with the same name.
 
 . xref:management:cluster-utilities.adoc#cluster-member-states[Put your cluster back in an `ACTIVE` state].
 +
@@ -122,10 +123,12 @@ After that, the backup process continues asynchronously and you can return the c
 Only cluster and distributed object metadata is copied synchronously
 during the invocation of the backup method. The rest of the
 persistence store is copied asynchronously
-after the method call has ended. You can track the progress by API or
-view it from the xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#status-information[Management Center].
+after the method call has ended. You can track the progress of the backup process, using one of the following options:
 
-An example of how to track the progress via API is shown below:
+- Java API
+- xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#status-information[Management Center].
+
+An example of how to track the progress via the Java API is shown below:
 
 [source,java]
 ----
@@ -136,9 +139,9 @@ BackupTaskStatus status = service.getBackupTaskStatus();
 
 The returned object contains the local member's backup status:
 
-* the backup state (NOT_STARTED, IN_PROGRESS, FAILURE, SUCCESS)
-* the completed count
-* the total count
+* The backup state (NOT_STARTED, IN_PROGRESS, FAILURE, SUCCESS)
+* The completed count
+* The total count
 
 The completed and total count can provide you a way to track the
 percentage of the copied data. Currently the count defines the
@@ -200,12 +203,12 @@ named `backup-<backupSeq>` in the configured <<configuring-hot-backup, hot backu
 (`backup-dir`). To start a cluster with data from a specific backup, you need to set
 the <<global-persistence-configuration, base folder>> (`base-dir`) to the desired backup subfolder.
 
-For example, if you configure your cluster members with the following, you would copy each existing member’s backup subfolder to the respective new member’s base-dir.: 
+For example, if you configure your cluster members with the following, you would copy each existing member’s backup subfolder to the folder that's configured in the new member’s `base-dir` option: 
 
 ```
 base-dir=/opt/hz/data/
 backup-dir=/opt/hz/backups
 ```
 
-So, assuming the new members also had the same configuration `base-dir` and `backup-dir`, you would copy `/opt/hz/backups/backup-<backupSeq>/*` from the existing member to `/opt/hz/data` on the new member.
+So, assuming the new members also had the same configured `base-dir` and `backup-dir`, you would copy `/opt/hz/backups/backup-<backupSeq>/*` from the existing member to `/opt/hz/data` on the new member.
 

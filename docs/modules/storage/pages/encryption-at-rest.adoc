@@ -1,23 +1,20 @@
 = Encrypting Persisted Data at Rest
-:description: Data on disk may contain sensitive information such as in the keys or values of maps. To protect your data, you can encrypt all files in your persistence store.
+:description: Persisted data on disk such as map entries may contain sensitive information. To protect your data, you can configure members to encrypt all persisted files in your persistence store.
 
 {description}
 
 == Prerequisites
 
-To encrypt persisted data, you must have Persistence enabled. See xref:configuring-persistence.adoc[].
+To encrypt persisted data, you must have persistence enabled. See xref:configuring-persistence.adoc[].
 
 == How Encryption at Rest Works
 
-Data in the persistence store is encrypted using symmetric encryption. The
-implementation is based on
-https://docs.oracle.com/javase/8/docs/technotes/guides/security/crypto/CryptoSpec.html[Java Cryptography Architecture^] (JCA).
+Data in the persistence store is encrypted using symmetric encryption.
 The encryption scheme uses two levels of encryption keys: auto-generated persistence
 store encryption keys (one for each configured parallelism) that are used to encrypt
 the chunk files and a master encryption key that is used to encrypt the store-specific
 encryption keys. The master encryption key is sourced from an external system called the _secure
-store_ and, in contrast to the persistence-store encryption keys, it is not persisted
-anywhere within the persistence store.
+store_ and, in contrast to the persistence-store encryption keys, it is not persistedanywhere within the persistence store.
 
 When encryption at rest is first enabled on a member, the member contacts
 the secure store during startup and retrieves the master encryption key. Then, the member generates
@@ -25,36 +22,12 @@ the persistence-store encryption keys, encrypts them with the master key, and st
 the member gets the master encryption key from the secure store, decrypts the persistence-store
 encryption keys and uses those to decrypt the chunk files.
 
-== Configuring Encryption at Rest
+== Enabling Encryption at Rest
 
-Encryption at Rest can be enabled and configured programmatically or declaratively, using the following options.
+To encrypt persisted data, you must enable it and configure at least the following required options:
 
-=== `persistence.encryption-at-rest`
-
-Whether encryption is enabled
-
-Default: `false`
-
-=== `persistence.encryption-at-rest.algorithm`
-
-The symmetric cipher to use (such as `AES/CBC/PKCS5Padding`).
-
-=== `persistence.encryption-at-rest.salt`
-
-The encryption salt.
-
-=== `persistence.encryption-at-rest.key-size`
-
-The size of the auto-generated persistence store encryption key.
-
-=== `persistence.encryption-at-rest.secure-store`
-
-The secure store to use for the retrieval of master
-encryption keys. See <<configuring-secure-store, Configuring a Secure Store>> for more details.
-
-=== Configuration Examples
-
-The following are example configuration settings for encryption at rest.
+- xref:configuring-persistence.adoc#persistence.enryption-at-rest.algorithm[`algorithm`]
+- <<configuring-a-secure-store, `secure-store`>>
 
 [tabs] 
 ==== 
@@ -68,10 +41,12 @@ XML::
     <persistence enabled="true">
         ...
         <encryption-at-rest enabled="true">
-            <algorithm>AEC/CBC/PKCS5Padding</algorithm>
-            <salt>thesalt</salt>
-            <key-size>128</key-size>
-            <secure-store>...</secure-store>
+          <algorithm>
+            AES/CBC/PKCS5Padding
+          </algorithm>
+          <secure-store>
+            <!-- configure a secure store here -->
+          </secure-store>
         </encryption-at-rest>
         ...
     </persistence>
@@ -91,10 +66,8 @@ hazelcast:
     encryption-at-rest:
       enabled: true
       algorithm: AES/CBC/PKCS5Padding
-      salt: thesalt
-      key-size: 128
       secure-store:
-         ...
+        # configure a secure store here
 ----
 --
 Java::
@@ -110,34 +83,31 @@ include::ROOT:example$/storage/SampleEncryptionAtRestConfiguration.java[tag=encr
 [[configuring-secure-store]]
 == Configuring a Secure Store
 
-A secure store represents a secure source of master encryption keys and
-is required for using encryption at rest.
+A secure store represents a secure place outside of the persistence store in which Hazelcast can keep its master encryption keys.
 
-Hazelcast Enterprise provides secure store implementations for the
-https://docs.oracle.com/javase/8/docs/api/java/security/KeyStore.html[Java KeyStore^]
-and for https://www.vaultproject.io/[HashiCorp Vault^].
+Hazelcast provides secure store implementations for the storing master encryption keys in the following places:
+
+- https://docs.oracle.com/javase/8/docs/api/java/security/KeyStore.html[Java KeyStore^]: A Java class for storing cryptographic keys and certificates.
+
+- https://www.vaultproject.io/[HashiCorp Vault^]: A tool for securely accessing secrets.
 
 === Java KeyStore Secure Store
 
-The Java KeyStore secure store provides integration with the https://docs.oracle.com/javase/8/docs/api/java/security/KeyStore.html[Java KeyStore^].
-It can be configured programmatically or declaratively using the
-`keystore` sub-element of `secure-store`. The `keystore` element has the following sub-elements:
+You can configure members to store your master encryption keys in a Java KeyStore by specifying the following options:
 
 * `path`: The path to the KeyStore file.
-* `type`: The type of the KeyStore (`PKCS12`, `JCEKS`, etc.).
+* `type`: The type of KeyStore (`PKCS12`, `JCEKS`, etc.).
 * `password`: The KeyStore password.
 * `current-key-alias`: The alias for the current encryption key entry (optional).
 * `polling-interval`: The polling interval (in seconds) for checking for changes in the KeyStore.
 Disabled by default.
 
-NOTE: Sensitive configuration properties such as `password` should be protected using
-xref:configuration:variable-replacers.adoc[encryption replacers].
+NOTE: Sensitive configuration values such as passwords should be protected using xref:configuration:variable-replacers.adoc[variable replacers].
 
-The Java KeyStore Secure treats all `KeyStore.SecretKeyEntry` entries stored in the KeyStore as
-encryption keys. It expects that these entries use the same protection password as the KeyStore
-itself. Entries of other types (private key entries, certificate entries) are ignored. If
-`current-key-alias` is set, the corresponding entry will be treated as the current encryption key;
-otherwise, the highest entry in the alphabetical order will be used. The remaining entries will
+The Java KeyStore treats all `KeyStore.SecretKeyEntry` entries stored in the KeyStore as
+encryption keys. It expects that these entries use the same protection password as the KeyStore. Entries of other types (private key entries, certificate entries) are ignored. If the
+`current-key-alias` option is configured, the corresponding entry will be treated as the current encryption key,
+otherwise the highest entry in the alphabetical order will be used. The remaining entries will
 represent historical versions of the encryption key.
 
 [tabs] 
@@ -185,9 +155,7 @@ include::ROOT:example$/storage/SampleEncryptionAtRestConfiguration.java[tag=keys
 
 === HashiCorp Vault Secure Store
 
-The HashiCorp Vault secure store provides integration with https://www.vaultproject.io/[HashiCorp Vault^].
-It can be configured programmatically or declaratively using the
-`vault` sub-element of `secure-store`. The `vault` element has the following sub-elements:
+You can configure members to store your master encryption key in a Hashicorp Vault store by specifying the following options:
 
 * `address`: The address of the Vault server.
 * `secret-path`: The secret path under which the encryption keys are stored.
@@ -197,8 +165,7 @@ by default.
 * `ssl`: The TLS/SSL configuration for HTTPS support. See the xref:security:tls-ssl.adoc[TLS/SSL section] for more
 information about how to use the `ssl` element.
 
-NOTE: Sensitive configuration properties such as `token` should be protected using
-xref:configuration:variable-replacers.adoc[encryption replacers].
+NOTE: Sensitive configuration properties such as `token` should be protected using xref:configuration:variable-replacers.adoc[variable replacers].
 
 The HashiCorp Vault secure store implementation uses the official REST API to integrate with
 HashiCorp Vault. Only for the https://www.vaultproject.io/docs/secrets/kv/index.html[KV secrets engine^],

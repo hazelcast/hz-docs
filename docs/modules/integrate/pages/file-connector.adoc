@@ -1,6 +1,5 @@
 = Unified File Connector
-:description: The unified file connector provides a simple way to read files across different sources. Using this connector, you can read files from the local filesystem, HDFS and cloud storage systems such as Amazon S3, Google Cloud Storage or Azure Blob Storage. At the same time, this connector supports various data formats, including text files, CSV, JSON, and Avro.
-:page-aliases: sql:file-connector.adoc
+:description: The unified file connector provides a simple way to read files across different sources. Using this connector, you can read files from the local filesystem, HDFS and cloud storage systems such as Amazon S3, Google Cloud Storage or Azure Blob Storage. This connector supports various data formats, including text files, CSV, JSON, and Avro.
 
 {description}
 
@@ -11,7 +10,7 @@ NOTE: This connector can be used only as a source. To use files as a sink, you c
 To read from a local or shared filesystem, you do not need to install any additional modules as these are included in the full and slim
 distributions of Hazelcast.
 
-To access Hadoop or any of the cloud-based file systems, add one of the downloadable modules listed in
+To access Hadoop or any of the cloud-based file systems, you may need to add one of the downloadable modules listed in
 <<supported-storage-systems, Supported Storage Systems>> to your members' classpaths.
 
 Depending on the <<supported-file-formats, format of your files>>, you may also need to add other modules to the classpath.
@@ -32,11 +31,11 @@ If you use the slim distribution of Hazelcast, be sure to add the respective mod
 
 |Member Filesystems (both shared and local)
 |Included in both full and slim distributions of Hazelcast.
-|path/to/a/folder
+|path/to/a/directory
 
 |Hadoop Distributed File System (HDFS)
 |link:https://mvnrepository.com/artifact/com.hazelcast.jet/hazelcast-jet-hadoop-all/{page-component-version}[hazelcast-jet-hadoop-all]
-|hdfs://path/to/a/folder
+|hdfs://path/to/a/directory
 
 |Amazon S3
 |link:https://mvnrepository.com/artifact/com.hazelcast.jet/hazelcast-jet-files-s3/{page-component-version}[hazelcast-jet-files-s3]
@@ -68,9 +67,9 @@ Use these options to configure the file connector.
 
 === `path`
 
-The absolute path to a single folder.
+The absolute path to a single directory.
 
-This parameter must not contain any wildcard characters. The given folder is not read recursively.
+This parameter must not contain any wildcard characters. The given directory is not read recursively.
 
 Hazelcast supports the following path schemes:
 
@@ -82,7 +81,7 @@ Hazelcast supports the following path schemes:
 * `gs`: Google Cloud Storage
 
 For example, a path to a file in a Hadoop cluster would start
-with `hdfs://path/to/folder/`.
+with `hdfs://path/to/directory/`.
 
 NOTE: Any path that does not start with a schema is considered local (files on Hazelcast members).
 
@@ -99,7 +98,7 @@ takes a `path` as a `String` parameter and returns a `FileSourceBuilder` object.
 If you don't specify a <<format, format>>, this API tries to read a `.txt` file line by line.
 
 ```java
-BatchSource<String> source = FileSources.files("/path/to/my/folder")
+BatchSource<String> source = FileSources.files("/path/to/my/directory")
   .build();
 ```
 --
@@ -107,7 +106,7 @@ SQL::
 + 
 --
 
-Create a mapping to a folder, using the `path` option.
+Create a mapping to a directory, using the `path` option.
 
 You must also specify a <<format, format>>.
 
@@ -115,17 +114,17 @@ You must also specify a <<format, format>>.
 CREATE MAPPING my_files
 TYPE File
 OPTIONS (
-    'path' = '/path/to/folder',
+    'path' = '/path/to/directory',
     'format' = 'json'
 )
 ```
 --
 If you omit a column list from the `CREATE MAPPING` command:
 
-- Hazelcast will read a sample file from the folder and try to determine column names and types from it.
-- The `path` folder must be
+- Hazelcast will read a sample file from the directory and try to determine column names and types from it.
+- The `path` directory must be
 available at the time you execute the `CREATE MAPPING` statement and it must not be empty.
-- Every cluster member must have at least one file in the `path` folder. 
+- Every cluster member must have at least one file in the `path` directory. 
 
 If you name the columns
 explicitly, you can change the default type according to the xref:data-types.adoc[conversion rules]. For example, the CSV format uses the `VARCHAR` type for all fields in the file. If you specify `INT` manually, the behavior would be as if `CAST(column
@@ -138,7 +137,7 @@ CREATE MAPPING my_files (
 )
 TYPE File
 OPTIONS (
-    'path' = '/path/to/folder',
+    'path' = '/path/to/directory',
     'format' = 'csv'
 )
 ```
@@ -177,11 +176,11 @@ SQL file formats must be structured. As a result, SQL supports only the followin
 === `glob`
 
 A filename pattern that uses wildcard characters such as `*` or
-`?` to filter the files in the `path` folder.
+`?` to filter the files in the `path` directory.
 
 Default: `*` (match all files)
 
-For example, if a folder contains JSON files named using the
+For example, if a directory contains JSON files named using the
 `YYYY-MM-DD.log` pattern, you can read all the files from January 2020 with the following `glob` argument:
 
 [tabs] 
@@ -212,7 +211,7 @@ OPTIONS (
 
 === `ignoreFileNotFound`
 
-Return zero results instead of throwing an error when files in the `path` folder are not found.
+Return zero results instead of throwing an error when files in the `path` directory are not found.
 
 Default: `false`
 
@@ -288,7 +287,7 @@ Read shared files only once instead of reading each copy on every member.
 
 Default: `false`
 
-If the `path` folder is shared among cluster
+If the `path` directory is shared among cluster
 members such as on a network mounted filesystem, set the
 `sharedFileSystem` option to `true`. The files will be assigned among
 the members and reading the files multiple times (once on each member)
@@ -318,7 +317,7 @@ BatchSource<String> source = FileSources.files("/data")
   .build();
 ```
 
-You can provide additional <<option, options>> to Hadoop. For example, to read all files in a folder recursively:
+You can provide additional <<option, options>> to Hadoop. For example, to read all files in a directory recursively:
 
 ```java
 BatchSource<String> source = FileSources.files("/data")
@@ -453,7 +452,7 @@ names from the file header. All columns have the `VARCHAR` type.
 CREATE MAPPING my_files
 TYPE File
 OPTIONS (
-    'path' = '/path/to/folder',
+    'path' = '/path/to/directory',
     'format' = 'csv'
 )
 ```
@@ -493,7 +492,7 @@ declaration, Hazelcast infers names and types based on a sample.
 CREATE MAPPING my_files
 TYPE File
 OPTIONS (
-    'path' = '/path/to/folder',
+    'path' = '/path/to/directory',
     'format' = 'json'
 )
 ```
@@ -600,7 +599,7 @@ SQL::
 CREATE MAPPING my_files
 TYPE File
 OPTIONS (
-    'path' = 'hdfs://path/to/folder',
+    'path' = 'hdfs://path/to/directory',
     'format' = 'parquet'
     /* more Hadoop options ... */
 )

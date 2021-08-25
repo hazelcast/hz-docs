@@ -1,0 +1,118 @@
+= SQL Overview
+:description: You can use SQL to query data in maps, Kafka topics, or a variety of file systems. Results can be sent directly to the client or inserted into maps or Kafka topics. For streaming queries, you can submit them to a cluster as jobs to run in the background.
+:page-aliases: query:sql-overview.adoc
+
+{description}
+
+== Supported Queries
+
+You can run the following queries with SQL.
+
+TIP: For a hands-on introduction to SQL, see xref:get-started-sql.adoc[].
+
+[cols="a,a,a"]
+|===
+
+|Query|Description|Tutorial
+
+|Ad-hoc queries, also known as point queries or online transactional processing (OLTP) queries.
+|Retrieve a small subset of data quickly.
+|xref:get-started-sql.adoc[]
+
+|Batch queries, also known as online analytical processing (OLAP) queries.
+|Query large datasets either in one or multiple systems and/or run aggregations on them to get deeper insights.
+|xref:get-started-sql.adoc[]
+
+|Streaming queries, also known as continuous queries.
+|Keep an open connection to a streaming data source and run a continuous query to get near real-time updates.
+|xref:learn-sql.adoc[]
+
+|Federated queries 
+|Join tables from different datasets. Normally, querying in SQL is database or dataset-specific. However, with <<mappings, mappings>>, you can pull information from different sources and present a more complete picture of the data.
+|xref:get-started-sql-files.adoc[]
+
+|===
+
+== Mappings
+
+To connect to data sources and query them as if they were tables, the SQL service uses a concept called _mappings_.
+
+Mappings use Hazelcast xref:integrate:connectors.adoc[connectors] to give the SQL service essential information about the source's data model, data access patterns, and serialization formats.
+
+You can create mappings to the following data sources:
+
+- xref:mapping-to-a-file-system.adoc[Distributed maps]
+- xref:mapping-to-kafka.adoc[Kafka topics]
+- xref:mapping-to-maps.adoc[File systems]
+
+== Schemas
+
+The SQL service exposes objects as tables in the following schemas:
+
+- `partitioned`: Existing maps in a local cluster that do not contain JSON values.
+
+- `public`: Any tables that have been filled with data, using mappings.
+
+- `information_schema`: Details about any mappings.
+
+If you don't name a schema in your query, Hazelcast first looks in the `public` schema and then in the `partitioned` schema.
+
+== Case Sensitivity
+
+Schema names, table names, and field names are case-sensitive.
+
+For example, you can access an exisiting `employee` map
+as `employee` or `partitioned.employee`, but not as `Employee`:
+
+[source,sql]
+----
+SELECT * FROM employee
+SELECT * FROM partitioned.employee
+----
+
+== Limitations
+
+SQL has the following limitations:
+
+- To use SQL, the Jet engine must be enabled.
++
+For details about enabling/disabling the Jet engine, see xref:pipelines:job-security.adoc[].
+
+- No support for window functions.
++
+You cannot group or aggregate results in streaming queries.
+- Fewer connectors.
++
+You can use only a subset of the available connectors in the Jet API.
++
+See xref:pipelines:sources-sinks.adoc[].
+- Limited support for joins.
++
+If you want to use joins, the data source on the right of the join must be a map.
++
+See xref:sql:select.adoc#join-tables[Join Tables].
+
+== Supported Statements
+
+Hazelcast supports a subset of standard ANSI SQL statements as well as some custom ones for creating jobs, mappings, and streaming queries.
+
+For a list of supported statements, see xref:sql:sql-statements.adoc[].
+
+== How Hazelcast Executes SQL Statements
+
+When an SQL statement is submitted for execution, the SQL service parses and
+optimizes it using link:https://calcite.apache.org/[Apache Calcite]. The result is an executable plan that
+is cached and reused by subsequent executions of the same statement.
+
+The plan contains a tree of query fragments. A query fragment is a tree of
+operators that could be executed on a single member independently. Child
+fragments supply data to parent fragments, possibly over a network, until
+the root fragment is reached. The root fragment returns the query results.
+
+== Next Steps
+
+- xref:get-started-sql.adoc[].
+- xref:learn-sql.adoc[].
+- xref:get-started-sql-files.adoc[].
+
+Explore the xref:sql:select.adoc[SQL reference docs].

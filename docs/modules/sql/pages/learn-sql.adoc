@@ -1,5 +1,6 @@
-= Get Started with Pipelines in SQL
+= Get Started with SQL Over Kafka
 :description: Use an interactive SQL shell on your Hazelcast member to query real-time streaming data as it is being generated and ingest the results into a map.
+:page-aliases: pipelines:learn-sql.adoc
 
 {description}
 
@@ -17,6 +18,9 @@ To complete this tutorial, you need the following:
 |Enable the Jet engine.
 |The Jet engine is needed to run SQL queries. For information on how to enable the Jet engine, see xref:pipelines:job-security.adoc[].
 |===
+
+[.interactive-button]
+xref:interactive-sql-kafka.adoc[Try the interactive example,window=_blank]
 
 == Step 1. Query Streaming Data from Apache Kafka
 
@@ -188,75 +192,44 @@ You should see that Hazelcast has executed the query and filtered the results:
 |EFGH             |                  1400|                 20|
 ```
 
-== Step 2. Store Pipeline Results in Hazelcast
+== Step 2. Ingest Query Results into a Hazelcast Map
 
-As well as querying and transforming data, you can store your query results in one or more systems. This feature is useful for sending results to other systems or caching results in Hazelcast to avoid running redundant queries.
+As well as querying and transforming data, you can ingest results into other systems, including Hazelcast maps to avoid running redundant queries.
 
-In this step, you create a mapping to a map named `tradeMap` and store some trade data in it as JSON.
+However, because Kafka is a streaming source, your query continues to run until it is canceled and results are returned to the SQL shell as soon as they are ready.
 
-. Use the xref:sql:create-mapping.adoc[`CREATE MAPPING` statement] to create a map.
+To be able to ingest data, you need to set up a _job_ to allow the streaming query to run in the background and send the results elsewhere.
+
+. Create a mapping to a new map in which to store your streaming query results.
 +
-[source,sql]
-----
+```sql
 CREATE MAPPING tradeMap (
-    __key BIGINT,
-    ticker VARCHAR,
-    price DECIMAL,
-    amount BIGINT)
+__key BIGINT,
+ticker VARCHAR,
+price DECIMAL,
+amount BIGINT)
 TYPE IMap
 OPTIONS (
-    'keyFormat'='bigint',
-    'valueFormat'='json');
-----
-
-. Use the xref:sql:sink-into.adoc[`SINK INTO` statement] to store the results of a query in the map.
-+
-[source,sql]
-----
-SINK INTO tradeMap VALUES (1, 'hazl', 10, 1);
-----
-
-. Query the map to make sure that the data is there.
-+
-[source,sql]
-----
-SELECT * FROM tradeMap;
-----
-
-You should see the following:
-
-```
-+-----+----------+--------+--------+
-|__key|ticker    |   price|  amount|
-+-----+----------+--------+--------+
-|    1|hazl      |10.0000…|       1|
-+-----+----------+--------+--------+
+'keyFormat'='bigint',
+'valueFormat'='json');
 ```
 
-== Step 3. Create a Standalone Streaming Query
-
-In step 1 and 2, you manually took trades from the Kafka topic and added them to a map.
-
-In this step, you create a job that will stream data from a Kafka topic and store the results in a map automatically.
-
-. Use the xref:sql:create-job.adoc[`CREATE JOB` statement] to submit a streaming job to your cluster that will monitor you Kafka topic for changes and store them in a map.
+. Submit a streaming job to your cluster that will monitor your Kafka topic (`SELECT id, ticker, price, amount FROM trades`) for changes and store them in a map (`SINK INTO tradeMap`).
 +
-[source,sql]
-----
+```sql
 CREATE JOB ingest_trades AS
-  SINK INTO tradeMap
-  SELECT id, ticker, price, amount
-  FROM trades;
-----
+SINK INTO tradeMap
+SELECT id, ticker, price, amount
+FROM trades;
+```
 +
-NOTE: A streaming job will run indefinitely until it is explicitly canceled or the cluster is shut down. Even if you kill the shell connection, the job will continue running on the cluster. To learn more about jobs, see xref:pipelines:overview.adoc[].
+**Note:** A streaming job will run indefinitely until it is explicitly canceled or the cluster is shut down. Even if you kill the shell connection, the job will continue running on the cluster.
 
-. Use the xref:sql:show-jobs.adoc[`SHOW JOBS` statement] to make sure that your job was successfully submitted.
+. List your job to make sure that it was successfully submitted.
 +
-[source,sql]
-----
+```sql
 SHOW JOBS;
-----
+```
 +
 You should see a job called `ingest_trades`.
 +
@@ -270,50 +243,45 @@ You should see a job called `ingest_trades`.
 
 . Publish some events to the Kafka topic.
 +
-[source,sql]
-----
+```sql
 INSERT INTO trades VALUES
-  (1, 'ABCD', 5.5, 10),
-  (2, 'EFGH', 14, 20);
-----
+(1, 'ABCD', 5.5, 10),
+(2, 'EFGH', 14, 20);
+```
 
 . Query your `tradeMap` map to see that the Kafka data has been added to it.
 +
-[source,sql]
-----
+```sql
 SELECT * FROM tradeMap;
-----
+```
 +
 You should see that the data coming from Kafka is being stored in your map.
 +
 ```
-+---------------+--------------------+----------+--------------------+
-|             id|ticker              |     price|              amount|
-+---------------+--------------------+----------+--------------------+
-|              2|EFGH                |14.000000…|                  20|
-|              1|ABCD                |5.5000000…|                  10|
-+---------------+--------------------+----------+--------------------+
++---------+---------+----------+------------+
+|       id|ticker   |     price|      amount|
++---------+---------+----------+------------+
+|        2|EFGH     |14.000000…|          20|
+|        1|ABCD     |5.5000000…|          10|
++---------+---------+----------+------------+
 ```
 
 . To stop your streaming job, use the `DROP` statement to cancel it.
 +
-[source,sql]
-----
+```sql
 DROP JOB ingest_trades;
-----
-+
-In the console of the Hazelcast member, you should see that the job is canceled as well as the time it was started and how long it ran for.
-+
+```
+
+In the terminal where you started the Hazelcast member, you should see that the job is canceled as well as the time it was started and how long it ran for.
+
 ```
 Execution of job '062d-d578-9240-0001', execution 062d-d578-df80-0001 got terminated, reason=java.util.concurrent.CancellationException
-	Start time: 2021-05-13T16:31:14.410
-	Duration: 00:02:48.318
+    Start time: 2021-05-13T16:31:14.410
+    Duration: 00:02:48.318
 ```
 
 == Next Steps
 
-See a complete list of xref:sql:sql-statements.adoc[supported SQL statements].
-
-For more details about integrating Hazelcast with files, see xref:integrate:file-connector.adoc[File Connector].
-
-For more details about integrating Hazelcast with Kafka, see xref:integrate:kafka-connector.adoc[Kafka Connector].
+- xref:pipelines:configuring-jobs.adoc[]
+- xref:pipelines:job-management.adoc[]
+- xref:sql-statements.adoc#job-management[SQL statements for job management]

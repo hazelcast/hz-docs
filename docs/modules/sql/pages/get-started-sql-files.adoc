@@ -1,5 +1,5 @@
-= Get Started with SQL Queries
-:description: In this tutorial, you learn the basics of querying in SQL by using the interactive SQL shell on your Hazelcast member to run ad-hoc, batch, federated, and streaming queries.
+= Get Started with SQL Over Files
+:description: In this tutorial, you learn the basics of querying files in SQL by creating and querying a CSV file.
 
 {description}
 
@@ -19,7 +19,7 @@ To complete this tutorial, you need the following:
 |===
 
 [.interactive-button]
-xref:interactive-sql.adoc[Try the interactive example,window=_blank]
+xref:interactive-sql-files.adoc[Try the interactive example,window=_blank]
 
 == Step 1. Create a Data Source to Query
 
@@ -98,8 +98,6 @@ TIP: Make sure you replace the `path` option with the absolute path to your `.cs
 == Step 4. Run Ad-Hoc Queries
 
 Ad-hoc queries allow you to retrieve a small subset of data. Usually these queries are simple and you can have many of them running concurrently in a Hazelcast cluster.
-
-A common use case for ad-hoc queries is individual business transactions where you need to get or update data.
 
 . Use a xref:sql:select.adoc[`SELECT` statement] to query all the data in the `likes.csv` file.
 +
@@ -199,8 +197,6 @@ WHERE likes > 20 AND name = 'Mary';
 
 Batch queries allow you to query large datasets either in one or multiple systems and/or run aggregations on them to get deeper insights. Usually these queries are complex and you can run a small number of them concurrently in a Hazelcast cluster.
 
-Common uses of OLAP include business reporting functions such as financial analysis, budgeting, and forecast planning.
-
 . Use the `SUM()` function to aggregate the total number of likes for each person and group the results by name.
 +
 [source,sql]
@@ -248,7 +244,7 @@ If you need more control over how your data is being transformed and aggregated,
 
 Federated queries are those that join tables from different datasets.
 
-Normally, querying in SQL is database or dataset-specific. However, with xref:pipelines:sources-sinks[connectors], you can pull information from different sources and present a more complete picture of the data.
+Normally, querying in SQL is database or dataset-specific. However, Hazelcast, you can pull information from different sources and present a more complete picture of the data.
 
 . Configure the map connector to create a new table called `dislikes`.
 +
@@ -266,10 +262,11 @@ This table is mapped to a distributed map in Hazelcast where the key is an integ
 +
 [source,sql]
 ----
-SINK INTO dislikes VALUES(1, 'Greg', 1);
-SINK INTO dislikes VALUES(2, 'Jerry', 0);
-SINK INTO dislikes VALUES(3, 'Mary', 5);
-SINK INTO dislikes VALUES(4, 'Jerry', 0);
+SINK INTO dislikes VALUES
+(1, 'Greg', 1),
+(2, 'Jerry', 0),
+(3, 'Mary', 5),
+(4, 'Jerry', 0);
 ----
 
 . Use the xref:sql:select.adoc#join-tables[`JOIN` clause] to merge results from the `likes` and `dislikes` tables so you can see who has the most likes and dislikes.
@@ -306,25 +303,6 @@ ON csv_likes.id = dislikes.__key
 ORDER BY csv_likes.name
 LIMIT 2;
 ----
-
-== Step 7. Run Streaming Queries
-
-Streaming queries are those that continuously produce results. These queries get data from streaming sources. At the moment, the only supported streaming source for SQL are the xref:integrate:kafka-connector.adoc[Kafka connector] or the xref:sql:expressions.adoc#table-valued-functions[`TABLE(generate_stream())` table-valued function].
-
-To run a streaming query on Kafka, you need to configure the connector with the `CREATE MAPPING` statement.
-
-But for simplicity, se the `TABLE(generate_stream())` function to test what happens when you run a streaming query.
-
-[source,sql]
-----
-SELECT * FROM TABLE(generate_stream(100)) WHERE v / 10 * 10 = v;
-----
-
-This query generates an infinite stream of numbers and filters the results so that only multiples of 100 are returned.
-
-In SQL, a stream is like a table with infinite rows that you can only access sequentially and thus never reach the end. As a result, you will get an error if you try to aggregate the stream without using a window function. SQL does not yet support window functions. To aggregate results of streaming queries, use the Jet API.
-
-TIP: This example relies on the client being connected to the cluster to receive the results of the query. To run this query in the background and send the results to a sink, see the tutorial on building a data pipeline with a streaming query, see xref:pipelines:learn-sql.adoc[].
 
 == Next Steps
 

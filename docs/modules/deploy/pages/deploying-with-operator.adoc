@@ -95,6 +95,43 @@ Members {size:3, ver:3} [
 ...
 ----
 
+== Connect to Hazelcast from Outside Kubernetes
+
+If you want to access Hazelcast cluster from outside Kubernetes, you need to use the `expose-externally` feature. Here is a sample Custom Resource definition.
+
+
+[source,yaml]
+----
+include::ROOT:example$/operator/hazelcast_expose_externally.yaml[]
+----
+
+After applying it into Kubernetes, you can verify that each Hazelcast member is exposed with a separate service.
+
+[source,shell]
+----
+kubectl get service
+NAME                 TYPE           CLUSTER-IP       EXTERNAL-IP     PORT(S)          AGE
+hazelcast-sample     LoadBalancer   10.219.246.19    35.230.92.217   5701:30560/TCP   2m11s
+hazelcast-sample-0   NodePort       10.219.254.192   <none>          5701:31890/TCP   2m11s
+hazelcast-sample-1   NodePort       10.219.247.43    <none>          5701:32310/TCP   2m11s
+hazelcast-sample-2   NodePort       10.219.243.16    <none>          5701:32585/TCP   2m11s
+----
+
+Then, you use the LoadBalancer External IP of the LoadBalancer service in your Hazelcast client configuration.
+
+Note that you can configure the `expose-externally` feature with the following parameters:
+
+* `type`: the way Hazelcast members are exposed, which implies Hazelcast client type (Unisocket or Smart)
+** `Unisocket`: all members are exposed via one Kubernetes service
+** `Smart`: each Hazelcast member is exposed with a separate Kubernetes service
+* `discoveryServiceType`: Type of Kubernetes service used for discovering Hazelcast cluster
+** `LoadBalancer` (default): Hazelcast client configuration `<load-balancer-external-ip>:5701`
+** `NodePort`: Hazelcast client configuration `<node-address>:<node-port>`
+* `memberAccess`: the way how each Hazelcast member is accessed
+** `NodePortExternalIP` (default): Hazelcast client is outside the Kubernetes network, so members need to be accessed via the public IP assigned to each Kubernetes Node
+** `NodePortNodeName`: Hazelcast client is inside the same network as the Kubernetes nodes, so members can access Kubernetes nodes by their hostnames
+** `LoadBalancer`: Hazelcast client is outside the Kubernetes network and members are accessed via the the external IP assigned to the LoadBalancer service
+
 == Clean up
 
 Run the following commands to remove Hazelcast cluster, Hazelcast License Key Secret, and Hazelcast Enterprise Operator.

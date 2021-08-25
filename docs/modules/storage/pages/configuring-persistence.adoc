@@ -1,6 +1,5 @@
 = Persistence Configuration Options
 :description: Explore the options for configuring peristence on your members.
-:page-toclevels: 3
 
 {description}
 
@@ -50,11 +49,19 @@ config.setPersistenceConfig(PersistenceConfig);
 --
 ====
 
-=== `persistence.base-dir`
+[cols="1a,1a,1m,2a",options="header"]
+|===
+|Option|Description|Default|Example
 
-The parent folder in which to store persisted data.
 
-Default: `persistence`
+[[persistence-base-dir]]
+|`persistence.base-dir`
+|The parent folder in which to store persisted data.
+
+This folder is created automatically if it does not exist.
+
+|persistence
+|
 
 [tabs] 
 ==== 
@@ -66,7 +73,7 @@ XML::
 <hazelcast>
   <persistence enabled="true">
     <base-dir>
-      persistence
+      /path/to/persistence
     </base-dir>
   </persistence>
 </hazelcast>
@@ -80,7 +87,7 @@ YAML::
 hazelcast:
   persistence:
     enabled: true
-    base-dir: persistence
+    base-dir: /path/to/persistence
 ----
 --
 Java:: 
@@ -92,84 +99,37 @@ Config config = new Config();
 
 PersistenceConfig PersistenceConfig = new PersistenceConfig()
 .setEnabled(true)
-.setBaseDir(new File("persistence"));
+.setBaseDir(new File("/path/to/persistence"));
 
 config.setPersistenceConfig(PersistenceConfig);
 ----
 --
 ====
 
-This folder is created automatically if it does not exist.
+[[persistence-backup-dir]]
+|`persistence.backup-dir`
+|The folder in which to store backup snapshots
+(hot backups).
 
-If more than one member shares this parent folder, each member stores its own unique folder inside it.
+a|'' (empty)
 
-When a member starts, it tries to acquire ownership of the
-first available folder inside the parent folder. If the parent folder
-is empty or if all folders are already acquired by other members, then the member creates its own new folder.
+|
+See xref:backing-up-persistence.adoc[].
 
-=== `persistence.backup-dir`
+[[persistence-parallelism]]
+|`persistence.parallelism`
+|Number of I/O threads that are started concurrently for reading from and writing to files in the persistence store.
 
-The folder in which to store backup snapshots
-(hot backups). See xref:backing-up-persistence.adoc[].
 
-Default: ''
+Before changing the default, you should measure the raw I/O throughput of your infrastructure and
+test with different values of parallelism. In some cases, such as dedicated
+hardware, higher parallelism can yield more throughput. In other
+cases, such as running on EC2, a higher parallelism can yield diminishing returns with more thread
+scheduling, more contention on I/O, and less efficient garbage collection.
+|`1`
 
-[tabs] 
-==== 
-XML:: 
-+ 
---
-[source,xml]
-----
-<hazelcast>
-  <persistence enabled="true">
-    <backup-dir>
-      backups
-    </backup-dir>
-  </persistence>
-</hazelcast>
-----
---
-YAML:: 
-+ 
---
-[source,yaml]
-----
-hazelcast:
-  persistence:
-    enabled: true
-    backup-dir: backups
-----
---
-Java:: 
-+ 
---
-[source,java]
-----
-Config config = new Config();
-
-PersistenceConfig PersistenceConfig = new PersistenceConfig()
-.setEnabled(true)
-.setBackupDir(new File("backups"));
-
-config.setPersistenceConfig(PersistenceConfig);
-----
---
-====
-
-If this option is null,
-hot backup is disabled. If the given folder does not exist, it is created during
-the first backup. To avoid clashing data on multiple backups, each backup has a unique
-sequence ID which determines the name of the folder which contains all data for that backup.
-This unique folder is created as a subfolder of the configured `backup-dir` folder.
-
-=== `persistence.parallelism`
-
-Number of I/O threads that are started concurrently for reading from and writing to files in the persistence store.
-
-Default: `1`
-
-[tabs] 
+|
+[tabs]
 ==== 
 XML:: 
 + 
@@ -212,19 +172,12 @@ config.setPersistenceConfig(PersistenceConfig);
 --
 ====
 
-A value of 1 is good for most but not
-all cases. You should measure the raw I/O throughput of your infrastructure and
-test with different values of parallelism. In some cases, such as dedicated
-hardware, higher parallelism can yield more throughput. In other
-cases, such as running on EC2, a higher parallelism can yield diminishing returns with more thread
-scheduling, more contention on I/O, and less efficient garbage collection.
+[[persistence-validation-timeout-seconds]]
+|`persistence.validation-timeout-seconds`
+|Amount of time that the cluster waits before starting the <<partitioned.cluster-data-recovery-policy, data recovery process>>.
+|120
 
-=== `persistence.validation-timeout-seconds`
-
-Amount of time that the cluster waits before starting the <<partitioned.cluster-data-recovery-policy, data recovery process>>.
-
-Default: `120`
-
+|
 [tabs] 
 ==== 
 XML:: 
@@ -268,12 +221,12 @@ config.setPersistenceConfig(PersistenceConfig);
 --
 ====
 
-=== `persistence.data-load-timeout-seconds`
+[[persistence-data-load-timeout-seconds]]
+|`persistence.data-load-timeout-seconds`
+|Amount of time in seconds that the cluster allows for members to finish restoring their local data.
+|900
 
-Amount of time that the cluster allows for members to finish restoring their local data.
-
-Default: `900`
-
+|
 [tabs] 
 ==== 
 XML:: 
@@ -317,12 +270,10 @@ config.setPersistenceConfig(PersistenceConfig);
 --
 ====
 
-=== `persistence.cluster-data-recovery-policy`
-
-The data recovery policy that is
+[[persistence-cluster-data-recovery-policy]]
+|`persistence.cluster-data-recovery-policy`
+|The data recovery policy that is
 respected when the cluster restarts.
-
-Default: `FULL_RECOVERY_ONLY`
 
 Valid values are:
 
@@ -330,7 +281,9 @@ Valid values are:
 are present and correct.
 * `PARTIAL_RECOVERY_MOST_RECENT`: Starts the cluster with the members that have most up-to-date partition table and successfully restored their data. All other members leave the cluster and force start themselves. If no members restore their data successfully, the cluster start fails.
 * `PARTIAL_RECOVERY_MOST_COMPLETE`: Starts the cluster with the largest group of members that have the same partition table version and successfully restored their data. All other members leave the cluster and force start themselves. If no members restore their data successfully, the cluster start fails.
+|FULL_RECOVERY_ONLY
 
+|
 [tabs] 
 ==== 
 XML:: 
@@ -374,14 +327,12 @@ config.setPersistenceConfig(PersistenceConfig);
 --
 ====
 
-=== `persistence.auto-remove-stale-data`
+[[persistence-auto-remove-stale-data]]
+|`persistence.auto-remove-stale-data`
+|Enables a joining member to automatically remove its persistence store if the cluster's master member considers the peristed data to be stale. See xref:recover-single-member.adoc[].
+|true
 
-Enables a joining member to automatically remove its persistence store if the cluster's master member considers the peristed data to be stale. See xref:recover-single-member.adoc[].
-
-Default: `true`
-
-NOTE: A joining member that crashes while in an `ACTIVE` state will generally not consider its data stale. Instead, the member will reload its data from disk and then synchronize it with other cluster members as needed. Only in some exceptional circumstances will the master member consider the joining member's data stale.
-
+|
 [tabs] 
 ==== 
 XML:: 
@@ -425,246 +376,17 @@ config.setPersistenceConfig(PersistenceConfig);
 --
 ====
 
-=== `persistence.encryption-at-rest`
+[[persistence-encryption-at-rest]]
+|`persistence.encryption-at-rest`
+|Enables encryption of data in the persistence store.
+|disabled
+|See xref:encryption-at-rest.adoc[].
 
-Enables encryption of data in the persistence store.
-See xref:encryption-at-rest.adoc[] for more information.
-
-Default: disabled
-
-[tabs] 
-==== 
-XML:: 
-+ 
---
-[source,xml]
-----
-<hazelcast>
-  <persistence enabled="true">
-    <encryption-at-rest>
-      <!-- insert configuration options here -->
-    </encryption-at-rest>
-  </persistence>
-</hazelcast>
-----
---
-YAML:: 
-+ 
---
-[source,yaml]
-----
-hazelcast:
-  persistence:
-    enabled: true
-      encryption-at-rest:
-        enabled: true
-        # insert configuration options here
-----
---
-Java:: 
-+ 
---
-Add configuration options to the link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/config/EncryptionAtRestConfig.html[`EncryptionAtRestConfig` object].
-
-[source,java]
-----
-Config config = new Config();
-
-PersistenceConfig PersistenceConfig = new PersistenceConfig()
-.setEnabled(true);
-EncryptionAtRestConfig encryptionAtRestConfig = PersistenceConfig.getEncryptionAtRestConfig();
-encryptionAtRestConfig.setEnabled(true);
-
-config.setPersistenceConfig(PersistenceConfig);
-----
---
-====
-
-=== `persistence.encryption-at-rest.algorithm`
-
-The symmetric cipher to use for encrypting persisted data.
-
-Default: `AES/CBC/PKCS5Padding`
-
-Valid values are:
-
-- `AES/CBC/PKCS5Padding`
-- `DES/ECB/PKCS5Padding`
-- `Blowfish`
-- `DESede`
-
-[tabs] 
-==== 
-XML:: 
-+ 
---
-[source,xml]
-----
-<hazelcast>
-  <persistence enabled="true">
-    <encryption-at-rest enabled="true">
-      <algorithm>
-        AES/CBC/PKCS5Padding
-      </algorithm>
-    </encryption-at-rest>
-  </persistence>
-</hazelcast>
-----
---
-YAML:: 
-+ 
---
-[source,yaml]
-----
-hazelcast:
-  persistence:
-    enabled: true
-      encryption-at-rest:
-        enabled: true
-        algorithm: AES/CBC/PKCS5Padding
-----
---
-Java:: 
-+ 
---
-[source,java]
-----
-Config config = new Config();
-
-PersistenceConfig PersistenceConfig = new PersistenceConfig()
-.setEnabled(true)
-.setAutoRemoveStaleData(true)
-.setAlgorithm("AES/CBC/PKCS5Padding");
-
-config.setPersistenceConfig(PersistenceConfig);
-----
---
-====
-
-=== `persistence.encryption-at-rest.salt`
-
-The encryption salt.
-
-Default: `thesalt`
-
-[tabs] 
-==== 
-XML:: 
-+ 
---
-[source,xml]
-----
-<hazelcast>
-  <persistence enabled="true">
-    <encryption-at-rest enabled="true">
-      <salt>
-        thesalt
-      </salt>
-    </encryption-at-rest>
-  </persistence>
-</hazelcast>
-----
---
-YAML:: 
-+ 
---
-[source,yaml]
-----
-hazelcast:
-  persistence:
-    enabled: true
-      encryption-at-rest:
-        enabled: true
-        salt: thesalt
-----
---
-Java:: 
-+ 
---
-[source,java]
-----
-Config config = new Config();
-
-PersistenceConfig PersistenceConfig = new PersistenceConfig()
-.setEnabled(true)
-.setAutoRemoveStaleData(true)
-.setSalt("thesalt");
-
-config.setPersistenceConfig(PersistenceConfig);
-----
---
-====
-
-=== `persistence.encryption-at-rest.key-size`
-
-The size (in bits) of the auto-generated persistence store encryption key.
-
-Default: `0`
-
-A value of 0 means that the key size is determined by the <<persistence.encryption-at-rest.algorithm, encryption algorithm>>.
-
-[tabs] 
-==== 
-XML:: 
-+ 
---
-[source,xml]
-----
-<hazelcast>
-  <persistence enabled="true">
-    <encryption-at-rest enabled="true">
-      <key-size>
-        0
-      </key-size>
-    </encryption-at-rest>
-  </persistence>
-</hazelcast>
-----
---
-YAML:: 
-+ 
---
-[source,yaml]
-----
-hazelcast:
-  persistence:
-    enabled: true
-      encryption-at-rest:
-        enabled: true
-        key-size: 0
-----
---
-Java:: 
-+ 
---
-[source,java]
-----
-Config config = new Config();
-
-PersistenceConfig PersistenceConfig = new PersistenceConfig()
-.setEnabled(true)
-.setAutoRemoveStaleData(true)
-.setKeySize(0);
-
-config.setPersistenceConfig(PersistenceConfig);
-----
---
-====
-
-=== `persistence.encryption-at-rest.secure-store`
-
-The secure store to use for the storing master
-encryption keys. See xref:encryption-at-rest.adoc[] for more information.
+|===
 
 == Data Structure Persistence Configuration
 
 Use the following options to configure persistence for xref:data-structures:map.adoc[map] and xref:jcache:overview.adoc[JCache] data structures.
-
-=== `persistence.enabled`
-
-Enables persistence for the related data structure.
-
-Default: `false`
 
 [tabs] 
 ==== 
@@ -712,14 +434,18 @@ config.addMapConfig(mapConfig);
 --
 ====
 
-=== `persistence.fsync`
+[cols="1a,1a,1m,2a",options="header"]
+|===
+|Option|Description|Default|Example
 
-Guarantees that data is persisted to disk when a write operation returns a successful response to the caller.
-
-Default: `false`
+[[persistence-fsync]]
+|`persistence.fsync`
+|Guarantees that data is persisted to disk when a write operation returns a successful response to the caller.
 
 By default, data is eventually persisted to disk instead of on every disk write. This generally provides a better performance.
+|false
 
+|
 [tabs] 
 ==== 
 XML:: 
@@ -767,25 +493,18 @@ config.addMapConfig(mapConfig);
 --
 ====
 
-=== `merkle-tree`
-
-Allows restarting members to synchronize their persisted map or JCache data faster with the rest of the cluster.
-
-Default: disabled
+|`merkle-tree`
+|Allows restarting members to synchronize their persisted map or JCache data faster with the rest of the cluster.
 
 Although this option is not unique to persistence (map Merkle trees are also used for xref:wan:advanced-features.adoc[WAN delta synchronization]), we strongly recommended enabling it for each map or JCache data structure that you want to persist on disk.
+|disabled
 
-See xref:recover-single-member.adoc#synchronizing-data-faster[Synchronizing Data Faster] for more information.
+|See xref:recover-single-member.adoc#synchronizing-data-faster[Synchronizing Data Faster] for more information.
+|===
 
 == Job Snapshot Configuration
 
-Use the following option to configure persistence for pipeline xref:pipelines:overview.adoc[jobs].
-
-=== `jet.instance.lossless-cluster-restart`
-
-Whether to save job snapshot data to disk.
-
-Default: `false`
+Use the following option to configure persistence for xref:pipelines:overview.adoc[job snapshots].
 
 [tabs] 
 ==== 

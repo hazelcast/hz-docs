@@ -10,14 +10,16 @@ By default, if a cluster detects that a member is restarting and attempting to r
 
 If the master member validates that the partition table was correct at the time the member left the cluster, the member loads its persisted data from disk.
 
-If the cluster cannot validate the member's partition table for whatever reason, the member stops trying to join the cluster and shuts down. The cluster will not allow the member to rejoin until it has deleted its persistence store. The cluster then recovers the missing member's data from backups and
+If the cluster <<handling-invalid-partitions, cannot validate the member's partition table>> for whatever reason, the member stops trying to join the cluster and shuts down. The cluster will not allow the member to rejoin until it has deleted its persistence store. The cluster then recovers the missing member's data from backups and
 redistributes it among the remaining cluster members.
 
 == Handling Invalid Partitions
 
 To handle cases where the master member rejects a rejoining member because of invalid partitions, you can do one of the following:
 
-- Set the xref:configuring-persistence.adoc#`persistence.auto-remove-stale-data`[`auto-remove-stale-data` configuration option] to true.
+- Set the xref:configuring-persistence.adoc#persistence.auto-remove-stale-data[`auto-remove-stale-data` configuration option] to true.
++
+NOTE: A joining member that crashes while in an `ACTIVE` state will generally not consider its data stale. Instead, the member will reload its data from disk and then synchronize it with other cluster members as needed. Only in some exceptional circumstances will the master member consider the joining member's data stale.
 - <<force-start, Use Force Start>> to delete the data and restart the member.
 - <<partial-start, Use Partial Start>> to configure a strategy for this scenario.
 
@@ -44,7 +46,7 @@ To trigger a force start use one of the following options:
 
 - xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#hot-restart[Management Center]
 
-- xref:management:cluster-utilities.adoc#using-rest-api-for-cluster-management[REST API]
+- xref:management:cluster-utilities.adoc#partial-start-force-start[REST API]
 
 - xref:management:cluster-utilities.adoc#example-usages-for-cluster-sh[Cluster management scripts]
 
@@ -76,7 +78,7 @@ To trigger a manual partial start, use one of the following options before the `
 
 - xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#hot-restart[Management Center]
 
-- xref:management:cluster-utilities.adoc#using-rest-api-for-cluster-management[REST API]
+- xref:management:cluster-utilities.adoc#partial-start-force-start[REST API]
 
 - xref:management:cluster-utilities.adoc#example-usages-for-cluster-sh[Cluster management scripts]
 
@@ -158,16 +160,116 @@ The Merkle tree stores the state of persisted data in a way that other cluster m
 
 On map and JCache data structures, you can configure the following options to enable the Merkle tree.
 
-==== `merkle-tree.enabled`
+[cols="1a,1a,1m,2a",options="header"]
+|===
+|Option|Description|Default|Example
 
-Whether a Merkle tree is generated for the data structure.
+|`merkle-tree.enabled`
+|Whether a Merkle tree is generated for the data structure.
+|disabled
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="test-map">
+    <persistence enabled="true">
+    </persistence>
+    <merkle-tree enabled="true">
+    </merkle-tree>
+  </map>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+  test-map:
+    persistence:
+      enabled: true
+    merkle-tree:
+      enabled: true
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
 
-Default: disabled
+MapConfig mapConfig = config.getMapConfig("test-map");
+mapConfig.getDataPersistenceConfig().setEnabled(true)
+mapConfig.getMerkleTreeConfig().setEnabled(true);
 
-==== `merkle-tree.depth`
+config.addMapConfig(mapConfig);
+----
+--
+====
 
-The depth of the Merkle tree.
-
-Default: 10
+|`merkle-tree.depth`
+|The depth of the Merkle tree.
 
 The deeper the tree, the more accurate the difference detection and the more space is needed to store the Merkle tree in memory.
+|10
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="test-map">
+    <persistence enabled="true">
+    </persistence>
+    <merkle-tree enabled="true">
+      <depth>
+        12
+      </depth>
+    </merkle-tree>
+  </map>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+  test-map:
+    persistence:
+      enabled: true
+    merkle-tree:
+      enabled: true
+      depth: 12
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+MapConfig mapConfig = config.getMapConfig("test-map");
+mapConfig.getDataPersistenceConfig().setEnabled(true)
+mapConfig.getMerkleTreeConfig().setEnabled(true);
+mapConfig.getMerkleTreeConfig().setDepth(12);
+
+config.addMapConfig(mapConfig);
+----
+--
+====
+|===

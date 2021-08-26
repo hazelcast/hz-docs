@@ -12,6 +12,7 @@ https://jet-start.sh/blog/[Jet release notes].
 
 == New Features
 
+* **Jet Streaming Engine**: Hazelcast now incorporates the streaming engine, which was formerly and separately known as Hazelcast Jet.
 * **SQL Engine:** We have added the support of following operators to our SQL engine:
 ** INSERT
 ** UPDATE
@@ -59,6 +60,10 @@ against malicious uses of the Jet API. See the xref:pipelines:job-security.adoc[
 
 === BETA API Changes
 
+* After the unification of cloud discovery plugins (see <<cloud-discovery-plugins, here>>,
+the exception class for the failure in generating `SSLSocketFactory` is changed from
+`KubernetesClientException` to `RestClientException` for the Kubernetes plugin.
+https://github.com/hazelcast/hazelcast/pull/19132[#19132]
 * Changed the type of `YEAR` field in the SQL client protocol from `short` to `int`.
 https://github.com/hazelcast/hazelcast/pull/18984[#18984]
 * Since the `HOST` and `RACK` metadata were deprecated in the previous Hazelcast
@@ -105,9 +110,27 @@ https://github.com/hazelcast/hazelcast-code-samples/pull/475[#475]
 
 === The Jet and SQL Engine 
 
+* Added support of reading data from High-Density Memory Store backed maps via the SQL engine.
+https://github.com/hazelcast/hazelcast/pull/19328[#19328]
+* Added support of regular and index (migration tolerant) scan of High-Density Memory Store via SQL.
+https://github.com/hazelcast/hazelcast/pull/19227[#19227]
+* Tables were called `mapping` in `information_schema.mappings` and `table` in `information_schema.columns`.
+This inconsistency has been fixed by renaming `mapping` as `table`.
+https://github.com/hazelcast/hazelcast/issues/19210[#19210]
+* Added support of the `CONCAT_WS` function, which takes variable sized
+`VARCHAR` (minimum 3) and returns a `VARCHAR` that consists of the
+concatenation of the arguments except the first one using the first argument as a separator.
+https://github.com/hazelcast/hazelcast/pull/19094[#19094]
+* The 'SELECT' statement now also supports queries without the `FROM` clause
+so that you can submit queries like `SELECT rand()` without this clause.
+https://github.com/hazelcast/hazelcast/pull/19030[#19030]
 * The Jet engine jobs submitted in a Hazelcast cluster are now cancelled
 when you upgrade your Hazelcast version since the Jet engine doesn't provide backwards compatibility.
 https://github.com/hazelcast/hazelcast/pull/19012[#19012]
+* Implemented the partition-tolerant index scan processor for Hazelcast maps:
+during a partition migration, this processor searches all the migrated partitions on all
+available cluster members.
+https://github.com/hazelcast/hazelcast/pull/18968[#18968]
 * Added support of the `putIfAbsentAsync()` method for maps on the member side;
 which is required for the usage of `INSERT INTO` statements in SQL queries.
 https://github.com/hazelcast/hazelcast/pull/18946[#18946]
@@ -185,6 +208,34 @@ https://github.com/hazelcast/hazelcast/pull/18483[#18483],
 https://github.com/hazelcast/hazelcast/pull/18422[#18422],
 https://github.com/hazelcast/hazelcast/pull/18067[#18067]
 
+=== Data Structures
+
+* The previous Replicated Map implementation was iterating all the values
+while calculating the size of map; this was causing latencies and performance issues
+as the entries in a Replicated Map grows. The related `size()` method
+has been refactored to eliminate the aforementioned situation.
+https://github.com/hazelcast/hazelcast/pull/19005[#19005]
+
+=== Cloud Discovery Plugins
+
+* In Kubernetes, Hazelcast resolves its public addresses by finding an individual service
+that points to the given Hazelcast pod. If there are multiple services pointing to one pod,
+then the discovery could not work or might have chosen the wrong service. The following changes
+have been made to address this:
+** Added label-based filtering for the Kubernetes Service per pod.
+** Added matching service and pod by name (if there are multiple services per pod is configured,
+the priority takes a service with the same name as the pod, before it was a random service.
+** Added resolving load balancer service if "hostname" is defined.
++
+https://github.com/hazelcast/hazelcast/pull/19168[#19168]
+* The code of the AWS, Azure, Kubernetes and GCP discovery
+plugins' in their own Github repos have been moved into the `hazelcast/hazelcast`
+repo. Their documentation also has been merged and unified into Hazelcast xref:deploy:deploying-in-cloud.adoc[documentation].
+https://github.com/hazelcast/hazelcast/pull/19132[#19132]
+* Added Kubernetes plugin's configuration file for role based access control
+into the `hazelcast/hazelcast` Github repository as `kubernetes-rbac.yaml`.
+https://github.com/hazelcast/hazelcast/pull/19093[#19093]
+
 === Serialization
 
 * Added support of default serializers for the following classes
@@ -198,6 +249,10 @@ https://github.com/hazelcast/hazelcast/pull/18983[#18983]
 
 === Security
 
+* Added an example Hazelcast configuration file (`hazelcast-security-hardened.yaml`) focused
+on hardened security to the distribution packages; it lists configuration options with their
+descriptions which may help securing your Hazelcast deployment.
+https://github.com/hazelcast/hazelcast/pull/18843[#18843]
 * Introduced the simple authentication configuration; it allows to have users and
 their assigned roles stored together with other Hazelcast configurations. See the example:
 +
@@ -226,6 +281,10 @@ https://github.com/hazelcast/hazelcast/pull/18948[#18948]
 
 === Configuration
 
+* The properties provided in former `JetProperties` are now merged into `ClusterProperty`.
+Also added the `hazelcast` prefix to the former Jet property names, e.g., `jet.job.scan.period` has become
+`hazelcast.jet.job.scan.period` and the former one is deprecated.
+https://github.com/hazelcast/hazelcast/pull/19146[#19146]
 * Added a configuration option to enable/disable resource uploading for
 Jet engine jobs. See xref:configuration:jet-configuration.adoc#enabling-resource-uploading[here] for details.
 * Even when the factory configuration is missing on the member but
@@ -248,6 +307,13 @@ https://github.com/hazelcast/hazelcast/pull/18425[#18425]
 
 === Other Enhancements
 
+
+* The README of `hazelcast/hazelcast` GitHub repository has been completely
+rewritten to reflect the unification of former Hazelcast IMDG and Jet products.
+https://github.com/hazelcast/hazelcast/pull/19061[#19061]
+* The `hazelcast-sql` module is now covered by the Hazelcast Community License; before,
+it was Apache License, Version 2.
+https://github.com/hazelcast/hazelcast/pull/18957[#18957]
 * Added the client console entry point to the Hazelcast command line
 interface; you can now use the `hazelcast console` command to start
 the client console application.
@@ -280,6 +346,20 @@ https://github.com/hazelcast/hazelcast/pull/17428[#17428]
 
 == Fixes
 
+* If two clusters with different cluster names run locally and both of them has enabled security,
+then a Hazelcast client was ignoring the configured cluster names and connecting to any of them;
+a check has been put to eliminate this issue.
+https://github.com/hazelcast/hazelcast/pull/19344[#19344]
+* Fixed an issue where a high amount of garbage collection pressure was occurring
+during repartitioning especially when having a high partition count.
+https://github.com/hazelcast/hazelcast/pull/19312[#19312]
+* Fixed an issue where the `hz-cli submit` script was not working properly with
+relative path: if the script is called from a different directory (like `./bin/hz-cli`), the `bin` directory was
+taken as root for the relative path instead of the directory from where the script is called.
+https://github.com/hazelcast/hazelcast/pull/19204[#19204]
+* Fixed an issue where `ElasticSearch` did not have a client method that allows
+HTTPS connections; added a new client with HTTP and HTTPS schemes.
+https://github.com/hazelcast/hazelcast/pull/19139[#19139]
 * SQL expressions now does not fail when used with trailing semicolons.
 https://github.com/hazelcast/hazelcast/pull/18976[18976]
 * Fixed an issue where the health monitor was incorrectly showing the value for
@@ -321,6 +401,10 @@ https://github.com/hazelcast/hazelcast/issues/18625[#18625]
 * Replicated Map does not fail to publish events anymore, from an entry listener with a predicate
 which has an attribute path.
 https://github.com/hazelcast/hazelcast/pull/18623[#18623]
+* Using hostnames for members (not IP addresses) in the cluster membership and WAN replication configurations for
+some deployments was causing connectivity issues; for instance, when using the load balancer in WAN replication
+configuration in OpenShift, or when using hostnames in AWS. This issue has been fixed.
+https://github.com/hazelcast/hazelcast/pull/18591[#18591]
 * Fixed a possible performance regression by not starting the cooperative threads
 until a job is submitted; otherwise the Jet engine was consuming system resources.
 https://github.com/hazelcast/hazelcast/pull/18574[#18574]
@@ -328,6 +412,10 @@ https://github.com/hazelcast/hazelcast/pull/18574[#18574]
 (from an unexpected mapping) when there are different user-provided schemas for
 data structures and mappings.
 https://github.com/hazelcast/hazelcast/issues/18428[#18428]
+* Fixed an issue where the client state listener was not properly working
+with failover clients (in blue-green deployments); it was failing with
+invalid configuration exception.
+https://github.com/hazelcast/hazelcast/issues/18351[#18351]
 * Fixed an issue where there might be continuous reconnection attempts by the
 cluster members to a failed member, even its connection is explicitly closed
 and when Hazelcast is placed behind a proxy.
@@ -337,6 +425,11 @@ https://github.com/hazelcast/hazelcast/issues/17834[#17834]
 
 == Removed/Deprecated Features
 
+* The following properties have been deprecated:
+** `hazelcast.client.statistics.enabled`
+** `hazelcast.client.statistics.period.seconds`
++
+https://github.com/hazelcast/hazelcast/pull/19219[#19219]
 * Former `Jet`, `JetInstance` and `JetCacheManager` classes have been deprecated.
 See xref:migrate:upgrade.adoc#depreciation-of-the-jet-and-jetinstance-classes[here]
 for details. Accordingly `JetInstance` has been removed from Hazelcast's command line

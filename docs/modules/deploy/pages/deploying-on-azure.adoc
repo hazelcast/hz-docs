@@ -1,0 +1,310 @@
+= Deploying a Cluster on Microsoft Azure
+:description: Deploy Hazelcast clusters on Azure and allow them to discover each other automatically.
+
+{description}
+
+== Prerequisites
+
+Hazelcast uses link:https://docs.microsoft.com/en-us/azure/virtual-machines/windows/instance-metadata-service[Azure Instance Metadata Service] to get an access token as well as other environment details. To use this service, Hazelcast requires link:https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview[Azure managed identities] with the correct `READ` roles.
+
+== Discovering Members Automatically
+
+To make it easier to set up clusters on Microsoft Azure, Hazelcast allows members to discover each other automatically, using discovery strategies.
+
+Enable the Hazelcast Azure discovery service:  
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+```xml
+<hazelcast>
+  <network>
+    <join>
+      <multicast enabled="false"/>
+      <azure enabled="true">
+        <tag>TAG-NAME=HZLCAST001</tag>
+        <hz-port>5701-5703</hz-port>
+      </azure>  
+    </join>
+  </network>
+</hazelcast>
+```
+--
+YAML:: 
++ 
+--
+```yaml
+hazelcast:
+  network:
+    join:
+      multicast:
+        enabled: false
+      azure:
+        enabled: true
+        tag: TAG-NAME=HZLCAST001
+        hz-port: 5701-5703
+```
+--
+Java:: 
++ 
+-- 
+```java
+config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false);
+config.getNetworkConfig().getJoin().getAzureConfig().setEnabled(true);
+  .setProperty("tag", "TAG-NAME=HZLCAST001")
+  .setProperty("hz-port", "5701-5703");
+```
+--
+====
+
+The following properties are optional:
+
+- `tag` - The key-value pair of the tag on the Azure network interfaces (NIC). The format should be as `key=value`. If this setting is configured, Hazelcast will search for instances over only the resources that have this tag entry in their network interfaces. If not configured, Hazelcast will search for instances over all available resources.
+- `hz-port` - The port range where Hazelcast is expected to be running. The format should be as `5701` or `5701-5703`. The default value is `5701-5703`.
+
+The other necessary information such as subscription ID and and resource group name will be retrieved from the  Azure Instance Metadata Service. This allows Hazelcast to run without keeping any secret or password in the code or configuration.
+
+If you don't setup the correct access roles on Azure environment, then you will see an exception similar below:
+
+```
+WARNING: Cannot discover nodes, returning empty list
+com.hazelcast.azure.RestClientException: Failure in executing REST call
+        at com.hazelcast.azure.RestClient.call(RestClient.java:106)
+        at com.hazelcast.azure.RestClient.get(RestClient.java:69)
+        at com.hazelcast.azure.AzureMetadataApi.callGet(AzureMetadataApi.java:107)
+        at com.hazelcast.azure.AzureMetadataApi.accessToken(AzureMetadataApi.java:96)
+        at com.hazelcast.azure.AzureClient.fetchAccessToken(AzureClient.java:131)
+        at com.hazelcast.azure.AzureClient.getAddresses(AzureClient.java:118)
+        at com.hazelcast.azure.AzureDiscoveryStrategy.discoverNodes(AzureDiscoveryStrategy.java:136)
+        at com.hazelcast.spi.discovery.impl.DefaultDiscoveryService.discoverNodes(DefaultDiscoveryService.java:71)
+        at com.hazelcast.internal.cluster.impl.DiscoveryJoiner.getPossibleAddresses(DiscoveryJoiner.java:69)
+        at com.hazelcast.internal.cluster.impl.DiscoveryJoiner.getPossibleAddressesForInitialJoin(DiscoveryJoiner.java:58)
+        at com.hazelcast.internal.cluster.impl.TcpIpJoiner.joinViaPossibleMembers(TcpIpJoiner.java:136)
+        at com.hazelcast.internal.cluster.impl.TcpIpJoiner.doJoin(TcpIpJoiner.java:96)
+        at com.hazelcast.internal.cluster.impl.AbstractJoiner.join(AbstractJoiner.java:137)
+        at com.hazelcast.instance.impl.Node.join(Node.java:796)
+        at com.hazelcast.instance.impl.Node.start(Node.java:451)
+        at com.hazelcast.instance.impl.HazelcastInstanceImpl.<init>(HazelcastInstanceImpl.java:122)
+        at com.hazelcast.instance.impl.HazelcastInstanceFactory.constructHazelcastInstance(HazelcastInstanceFactory.java:241)
+        at com.hazelcast.instance.impl.HazelcastInstanceFactory.newHazelcastInstance(HazelcastInstanceFactory.java:220)
+        at com.hazelcast.instance.impl.HazelcastInstanceFactory.newHazelcastInstance(HazelcastInstanceFactory.java:158)
+        at com.hazelcast.core.Hazelcast.newHazelcastInstance(Hazelcast.java:91)
+        at com.hazelcast.core.server.HazelcastMemberStarter.main(HazelcastMemberStarter.java:46)
+Caused by: com.hazelcast.azure.RestClientException: Failure executing: GET at: http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com. Message: {"error":"invalid_request","error_description":"Identity not found"},
+        at com.hazelcast.azure.RestClient.call(RestClient.java:101)
+        ... 20 more
+```
+
+== Discovering Members from Hazelcast Clients
+ 
+If you have Hazelcast clients running outside of an Azure VM, the Azure Instance Metadata service unavailable. In this case, Hazelcast client instances should be configured with the following properties:
+
+NOTE: You will need to setup link:https://azure.microsoft.com/en-us/documentation/articles/resource-group-create-service-principal-portal/[Azure Active Directory Service Principal credentials] for your Azure Subscription to be able to use these properties.
+
+- `instance-metadata-available` - This property should be configured as `false` in order to be able to use the following properties. It is `true` by default.
+- `client-id` - The Azure Active Directory Service Principal client ID.
+- `client-secret` - The Azure Active Directory Service Principal client secret.
+- `tenant-id` - The Azure Active Directory tenant ID.
+- `subscription-id` - The Azure subscription ID.
+- `resource-group` - The name of Azure link:https://azure.microsoft.com/en-us/documentation/articles/resource-group-portal/[resource group] which the Hazelcast instance is running in.
+- `scale-set` - *(Optional)* The name of Azure link:https://docs.microsoft.com/en-us/azure/virtual-machine-scale-sets/overview[VM scale set]. If this setting is configured, the plugin will search for instances over the resources only within this scale set.
+- `use-public-ip` - Enables the discovery joiner to use public IPs. It should be set to `true` in client instances running outside the Azure environment.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+```xml
+<hazelcast-client>
+  <network>
+      <azure enabled="true">
+        <instance-metadata-available>false</instance-metadata-available>
+        <client-id>CLIENT_ID</client-id>
+        <client-secret>CLIENT_SECRET</client-secret>
+        <tenant-id>TENANT_ID</tenant-id>
+        <subscription-id>SUB_ID</subscription-id>
+        <resource-group>RESOURCE-GROUP-NAME</resource-group>
+        <scale-set>SCALE-SET-NAME</scale-set>
+        <use-public-ip>true</use-public-ip>
+      </azure>
+  </network>
+</hazelcast-client>
+```
+--
+YAML:: 
++ 
+-- 
+```yaml
+hazelcast-client:
+  network:
+      azure:
+        enabled: true
+        instance-metadata-available: false
+        client-id: CLIENT_ID
+        tenant-id: TENANT_ID
+        client-secret: CLIENT_SECRET
+        subscription-id: SUB_ID
+        resource-group: RESOURCE-GROUP-NAME
+        scale-set: SCALE-SET-NAME
+        use-public-ip: true
+```
+--
+Java:: 
++ 
+--
+```java
+clientConfig.getNetworkConfig().getAzureConfig()
+  .setEnabled(true)
+  .setProperty("instance-metadata-available", "false")
+  .setProperty("client-id", "CLIENT_ID")
+  .setProperty("tenant-id", "TENANT_ID")
+  .setProperty("client-secret", "CLIENT_SECRET")
+  .setProperty("subscription-id", "SUB_ID")
+  .setProperty("resource-group", "RESOURCE-GROUP-NAME")
+  .setProperty("scale-set", "SCALE-SET-NAME")
+  .setProperty("use-public-ip", "true");
+```
+--
+====
+
+== Configuration for WAN Replication Target Cluster Discovery
+
+Hazelcast allows you to configure xref:wan:wan.adoc[WAN replication] to work with the clusters in Azure and determine the endpoint IP addresses at runtime. If one Hazelcast cluster is running outside Azure and another is running inside Azure, then you should configure your WAN batch publisher as below:
+
+NOTE: You will need to setup link:https://azure.microsoft.com/en-us/documentation/articles/resource-group-create-service-principal-portal/[Azure Active Directory Service Principal credentials] for your Azure Subscription to be able to use these properties.
+
+- `instance-metadata-available` - This property should be configured as `false` in order to be able to use the following properties. It is `true` by default.
+- `client-id` - The Azure Active Directory Service Principal client ID.
+- `client-secret` - The Azure Active Directory Service Principal client secret.
+- `tenant-id` - The Azure Active Directory tenant ID.
+- `subscription-id` - The Azure subscription ID.
+- `resource-group` - The name of Azure link:https://azure.microsoft.com/en-us/documentation/articles/resource-group-portal/[resource group] which the Hazelcast instance is running in.
+- `scale-set` - *(Optional)* The name of Azure link:https://docs.microsoft.com/en-us/azure/virtual-machine-scale-sets/overview[VM scale set]. If this setting is configured, the plugin will search for instances over the resources only within this scale set.
+- `use-public-ip` - Enables the discovery joiner to use public IPs. It should be set to `true` in client instances running outside the Azure environment.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+```xml
+<hazelcast>
+    <wan-replication name="my-wan-cluster-batch">
+        <batch-publisher>
+          ...
+          <azure enabled="true">
+            <instance-metadata-available>false</instance-metadata-available>
+            <client-id>CLIENT_ID</client-id>
+            <client-secret>CLIENT_SECRET</client-secret>
+            <tenant-id>TENANT_ID</tenant-id>
+            <subscription-id>SUB_ID</subscription-id>
+            <resource-group>RESOURCE-GROUP-NAME</resource-group>
+            <scale-set>SCALE-SET-NAME</scale-set>
+          </azure>
+        </batch-publisher>
+    </wan-replication>
+</hazelcast>
+```
+--
+YAML:: 
++ 
+-- 
+```yaml
+hazelcast:
+  wan-replication:
+    name: my-wan-cluster-batch
+    batch-publisher:
+      ...
+      azure:
+        enabled: true
+        instance-metadata-available: false
+        client-id: CLIENT_ID
+        tenant-id: TENANT_ID
+        client-secret: CLIENT_SECRET
+        subscription-id: SUB_ID
+        resource-group: RESOURCE-GROUP-NAME
+        scale-set: SCALE-SET-NAME
+```
+--
+Java:: 
++ 
+--
+```java
+WanBatchPublisherConfig batchPublisherConfig = new WanBatchPublisherConfig()
+  .getAzureConfig()
+  .setEnabled(true)
+  .setProperty("instance-metadata-available", "false")
+  .setProperty("client-id", "CLIENT_ID")
+  .setProperty("tenant-id", "TENANT_ID")
+  .setProperty("client-secret", "CLIENT_SECRET")
+  .setProperty("subscription-id", "SUB_ID")
+  .setProperty("resource-group", "RESOURCE-GROUP-NAME")
+  .setProperty("scale-set", "SCALE-SET-NAME")
+  .setProperty("use-public-ip", "true");
+```
+--
+====
+
+== Azure App Services Support
+
+link:https://azure.microsoft.com/en-gb/services/app-service/[Azure App Services] is a platform as a service (PaaS) which allows publishing applications running on multiple frameworks and written in different programming languages. If you would like to use Hazelcast in your App Service applications, you can <<discovering-members-from-hazelcast-clients, connect a Hazelcast client>> to a Hazelcast cluster running in Azure environment.
+
+Azure App Services are unaware of the underlying VMs' network interfaces so it is not available to communicate among App Services using TCP/IP. Because of this reason, it is not possible to deploy a Hazelcast cluster on Azure App Services.  
+
+== Preventing Data Loss
+
+By default, Hazelcast distributes partition replicas (backups) randomly and equally among cluster members. However, this is not safe in terms of high availability when a partition and its replicas are stored on the same rack, using the same network, or power source. To deal with that, Hazelcast offers logical partition grouping, so that a partition
+itself and its backups would not be stored within the same group. This way Hazelcast guarantees that a possible failure
+affecting more than one member at a time will not cause data loss. For more details about partition groups, see xref:clusters:partition-group-configuration.adoc[Partition Group Configuration].
+
+In addition to built-in grouping option `ZONE_AWARE`, you can customize the formation of
+these groups based on the network interfaces of members. For more details about custom groups, see
+xref:clusters:partition-group-configuration.adoc[Custom Partition Groups].
+
+=== Multi-Zone Deployments
+
+If `ZONE_AWARE` partition group is enabled, the backups of a partition are always stored in a different availability
+zone. Note that if a cluster is deployed to an Azure region that does not support availability zones, then the fault
+domains of instances are used when forming partition groups. That is, the members on fault domain (FD) 0 form a single
+group, and those on FD 1 form another group, and so on.
+
+NOTE: When using the `ZONE_AWARE` partition grouping, a cluster spanning multiple availability zones (or fault
+domains if the region does not support zones) should have an equal number of members in each zone (or fault domain).
+Otherwise, it will result in uneven partition distribution among the members.*
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+```xml
+<partition-group enabled="true" group-type="ZONE_AWARE" />
+```
+--
+YAML:: 
++ 
+-- 
+```yaml
+hazelcast:
+  partition-group:
+    enabled: true
+    group-type: ZONE_AWARE
+```
+--
+Java:: 
++ 
+-- 
+```java
+config.getPartitionGroupConfig()
+  .setEnabled(true)
+  .setGroupType(MemberGroupType.ZONE_AWARE);
+```
+--
+====
+
+== Automated Deployment
+
+You can also use the https://github.com/Azure/azure-quickstart-templates/tree/master/hazelcast-vm-cluster[Azure Hazelcast Template] to automatically deploy a Hazelcast cluster.

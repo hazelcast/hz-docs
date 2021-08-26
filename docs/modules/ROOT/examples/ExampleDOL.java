@@ -4,11 +4,10 @@ import com.hazelcast.core.*;
 
 import java.util.Collection;
 
-
+//tag::sampledol[]
 public class ExampleDOL implements DistributedObjectListener {
 
     public static void main(String[] args) {
-      //tag::sampledol[]
         ExampleDOL example = new ExampleDOL();
         Config config = new Config();
 
@@ -32,5 +31,5 @@ public class ExampleDOL implements DistributedObjectListener {
         DistributedObject instance = event.getDistributedObject();
         System.out.println("Destroyed " + instance.getName());
     }
-      //end::sampledol[]
 }
+//end::sampledol[]

@@ -10,6 +10,7 @@ public class MinimalActiveActiveConfiguration1 {
         Config config = new Config();
         config.setClusterName("tokyo");
         WanBatchPublisherConfig batchPublisherConfig = new WanBatchPublisherConfig()
+                .setPublisherId("londonPublisherId")
                 .setClusterName("london")
                 .setTargetEndpoints("10.3.5.1:5701");
 

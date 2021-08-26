@@ -517,11 +517,16 @@ Following is an example `log4j2.properties` file:
 
 [source,shell]
 ----
-rootLogger=file
 rootLogger.level=info
-property.filepath=/path/to/log/files
+property.filepath=log
 property.filename=hazelcast
 
+appenders = console, file
+
+appender.console.type = Console
+appender.console.name = STDOUT
+appender.console.layout.type = PatternLayout
+appender.console.layout.pattern = %d{yyyy-MM-dd HH:mm:ss} %-5p %c\{1}:%L - %m%n
 appender.file.type=RollingFile
 appender.file.name=RollingFile
 appender.file.fileName=${filepath}/${filename}.log
@@ -537,11 +542,11 @@ appender.file.policies.size.size=50MB
 appender.file.strategy.type=DefaultRolloverStrategy
 appender.file.strategy.max=100
 
-rootLogger.appenderRefs=file
+rootLogger.appenderRefs= STDOUT
+rootLogger.appenderRef.stdout.ref = STDOUT
 rootLogger.appenderRef.file.ref=RollingFile
 
 #Hazelcast specific logs.
-
 #log4j.logger.com.hazelcast=debug
 
 #log4j.logger.com.hazelcast.cluster=debug
@@ -1142,7 +1147,7 @@ XML::
     ...
     <network>
         <rest-api enabled="true">
-            <endpoint-group name=“HEALTH_CHECK” enabled=“true”/>
+            <endpoint-group name="HEALTH_CHECK" enabled=“true”/>
         </rest-api>
     </network>
     ...
@@ -1223,17 +1228,17 @@ The following is the output with example values:
 ```
 
 `nodeState`: Specifies the state of member on which the health check is launched;
-see xref:management:cluster-utilities.adoc#cluster-member-states[Member States]
+see the xref:management:cluster-utilities.adoc#cluster-member-states[Member States section]
 to learn about the states of cluster members.
 `clusterState`: Specifies the state of cluster which the health checked member belongs to;
-see xref:management:cluster-utilities.adoc#cluster-states[Cluster States]
+see the xref:management:cluster-utilities.adoc#cluster-states[Cluster States section]
 to learn about the states of clusters.
 `clusterSafe`: Specifies whether the cluster is safe, i.e., there are no active partition
 migrations and all backups are in sync for each partition in the cluster;
-see xref:management:cluster-utilities.adoc#safety-checking-cluster-members[Safety Checking]
+see the xref:management:cluster-utilities.adoc#safety-checking-cluster-members[Safety Checking section]
 to learn about the safety of clusters.
 `migrationQueueSize`: Specifies the count of remaining migration tasks while the cluster data
-is being repartitioned. See xref:overview:data-partitioning.adoc[Data Partitioning]
+is being repartitioned. See the xref:overview:data-partitioning.adoc[Data Partitioning section]
 to learn about Hazelcast's partitioning mechanism.
 `clusterSize`: Specifies the cluster member count.
 
@@ -1547,6 +1552,9 @@ You can configure the frequency of dumping information to the log file using the
 * `hazelcast.diagnostics.metrics.period.seconds`: Set a value in seconds.
 Its default value is `60` seconds.
 
+NOTE: See the xref:ROOT:list-of-metrics.adoc[List of Hazelcast Metrics appendix] for the full list
+of metrics with their descriptions.
+
 ==== SlowOperations
 
 It shows the slow operations and invocations, See the xref:performance:slowoperationdetector.adoc[SlowOperationDetector section]
@@ -1567,6 +1575,71 @@ pending invocations and the threshold that makes an invocation to be considered 
 Its default value is `60` seconds.
 * `hazelcast.diagnostics.invocation.slow.threshold.seconds`: Set a value in seconds.
 Its default value is `5` seconds.
+
+==== InvocationProfiler
+
+It shows invocation latencies for each operation. See an example output below:
+
+```
+06-05-2021 17:15:29 1557152129944 Invocations[
+                          Pending[]
+                          History[]
+                          SlowHistory[]
+                          Profiler[
+                                  com.hazelcast.map.impl.query.QueryOperation[
+                                          count=400
+                                          totalTime(us)=56,000
+                                          avg(us)=140
+                                          max(us)=3,000
+                                          latency-distribution[
+                                                  0..99us=346
+                                                  800..1599us=53
+                                                  1600..3199us=1]]
+                                  com.hazelcast.map.impl.operation.GetOperation[
+                                          count=100
+                                          totalTime(us)=19,000
+                                          avg(us)=190
+                                          max(us)=1,000
+                                          latency-distribution[
+                                                  0..99us=81
+                                                  800..1599us=19]]
+```
+
+You can control the frequency of scanning all invocations using the following system property:
+
+* `hazelcast.diagnostics.invocation-profiler.period.seconds`: Set a value in seconds. Its default value is `5` seconds.
+You can set it to `0` to disable the plugin.
+
+You can increase this period if you would like to decrease the logging noise.
+
+==== OperationProfiler
+
+It measures the time an operation runs on an operation thread; if the operation is a blocking
+one or being offloaded, only the time on the operation thread is measured. See an example output below:
+
+```
+06-05-2021 14:53:48 1595332428248 OperationsProfiler[
+                          com.hazelcast.map.impl.operation.GetOperation[
+                                  count=502,501
+                                  totalTime(us)=1,690,645
+                                  avg(us)=3
+                                  max(us)=462
+                                  latency-distribution[
+                                          1..2us=875
+                                          2..4us=359,876
+                                          4..8us=131,775
+                                          8..16us=8,720
+                                          16..32us=887
+                                          32..64us=178
+                                          64..128us=122
+                                          128..256us=62
+                                          256..512us=6]]
+```
+
+You can control the frequency of scanning all operations using the following system property:
+
+* `hazelcast.diagnostics.operation-profiler.period.seconds`: Set a value in seconds. Its default value is `5` seconds.
+You can set it to `0` to disable the plugin.
 
 ==== HazelcastInstance
 
@@ -1949,6 +2022,9 @@ Hazelcast members expose various management beans which include
 statistics about distributed data structures and the states of Hazelcast member internals.
 
 The metrics are local to the members, i.e., they do not reflect cluster wide values.
+
+NOTE: See the xref:ROOT:list-of-metrics.adoc[List of Hazelcast Metrics appendix] for the full list
+of metrics with their descriptions.
 
 You can find the JMX API definition below with descriptions and the API methods in parenthesis.
 

@@ -24,26 +24,26 @@ then use the map `put` method to put an entry into the map.
 ----
 HazelcastInstance hzInstance = Hazelcast.newHazelcastInstance();
 Map<String, String> capitalcities = hzInstance.getMap( "capitals" );
-    capitalcities.put( "1", "Tokyo" );
-    capitalcities.put( "2", "Paris" );
-    capitalcities.put( "3", "Washington" );
-    capitalcities.put( "4", "Ankara" );
-    capitalcities.put( "5", "Brussels" );
-    capitalcities.put( "6", "Amsterdam" );
-    capitalcities.put( "7", "New Delhi" );
-    capitalcities.put( "8", "London" );
-    capitalcities.put( "9", "Berlin" );
-    capitalcities.put( "10", "Oslo" );
-    capitalcities.put( "11", "Moscow" );
-    ...
-    capitalcities.put( "120", "Stockholm" );
+capitalcities.put( "1", "Tokyo" );
+capitalcities.put( "2", "Paris" );
+capitalcities.put( "3", "Washington" );
+capitalcities.put( "4", "Ankara" );
+capitalcities.put( "5", "Brussels" );
+capitalcities.put( "6", "Amsterdam" );
+capitalcities.put( "7", "New Delhi" );
+capitalcities.put( "8", "London" );
+capitalcities.put( "9", "Berlin" );
+capitalcities.put( "10", "Oslo" );
+capitalcities.put( "11", "Moscow" );
+...
+capitalcities.put( "120", "Stockholm" );
 ----
 
 When you run this code, a cluster member is created with a map whose entries are
 distributed across the members' partitions. See the below illustration. For now,
 this is a single member cluster.
 
-image:ROOT:1Node.png[Map Entries in a Single Member]
+image:ROOT:Map1.png[Map Entries in a Single Member]
 
 NOTE: Please note that some of the partitions do not contain any data entries since
 we only have 120 objects and the partition count is 271 by default. This count is
@@ -58,7 +58,7 @@ cluster with two members. This is also where backups of entries are created - re
 the backup partitions mentioned in the xref:overview:hazelcast-overview.adoc[Hazelcast Overview section].
 The following illustration shows two members and how the data and its backup is distributed.
 
-image:ROOT:2Nodes.png[Map Entries with Backups in Two Members]
+image:ROOT:Map2.png[Map Entries with Backups in Two Members]
 
 As you see, when a new member joins the cluster, it takes ownership and loads some of the
 data in the cluster. Eventually, it will carry almost "(1/n `*` total-data) + backups" of the data,
@@ -401,7 +401,7 @@ the entries decreases performance (the number of entries is large).
 *** `USED_HEAP_SIZE`: Maximum used heap size in megabytes per map for each Hazelcast instance.
 Please note that this policy does not work when <<setting-in-memory-format, in-memory format>>
 is set to `OBJECT`, since the memory footprint cannot be determined when data is put as `OBJECT`.
-** `USED_HEAP_PERCENTAGE`: Maximum used heap size percentage per map for each Hazelcast instance.
+*** `USED_HEAP_PERCENTAGE`: Maximum used heap size percentage per map for each Hazelcast instance.
 If, for example, a JVM is configured to have 1000 MB and this value is 10, then the map entries
 will be evicted when used heap size exceeds 100 MB. Please note that this policy does not work
 when <<setting-in-memory-format, in-memory format>> is set to `OBJECT`, since the memory footprint
@@ -856,8 +856,8 @@ In some cases, you may want to load and store distributed map entries
 from/to a persistent data store such as a relational database. For example,
 if you want to back up your map entries or if you want to check your database
 for updated data entries. To do this,
-you can use Hazelcast's link:https://docs.hazelcast.org/docs/{page-component-version}//javadoc/com/hazelcast/map/MapStore.html[`MapStore`] and
-link:https://docs.hazelcast.org/docs/{page-component-version}//javadoc/com/hazelcast/map/MapLoader.html[`MapLoader`] interfaces.
+you can use Hazelcast's link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/map/MapStore.html[`MapStore`] and
+link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/map/MapLoader.html[`MapLoader`] interfaces.
 
 [cols="1m,5a"]
 |===
@@ -1175,9 +1175,9 @@ Here is the `MapLoader` initialization flow:
 . When `getMap()` is first called from any member, initialization starts
 depending on the value of the `initial-mode` property. If it is set to `EAGER`,
 initialization starts on all partitions as soon as the map is created,
-i.e., all partitions are loaded when `getMap` is called.  If it is set to
-`LAZY`, data is loaded partition by partition, i.e., each partition is
-loaded with its first touch.
+i.e., all partitions are loaded when `getMap` is called.  A map is loaded when
+the `IMap#getMap` method is called in the `EAGER` mode; otherwise, it is loaded
+after the first operation, e.g., `IMap#size`, `IMap#get`, etc. of the map in the `LAZY` mode.
 . Hazelcast calls the `MapLoader.loadAllKeys()` to get all your
 keys on one of the members.
 . That member distributes keys to all other members in batches.
@@ -1653,7 +1653,7 @@ HazelcastInstance hc = Hazelcast.newHazelcastInstance();
 
 
 Using the same method, you can also retrieve the statistics on entry level.
-For this, you should set `per-entry-statistics-enabled` under the map configuration as
+For this, you should set `per-entry-stats-enabled` under the map configuration as
 `true` (its default value is `false`):
 
 [tabs] 
@@ -1666,7 +1666,7 @@ XML::
 <hazelcast>
     ...
     <map name="myMap">
-        <per-entry-statistics-enabled>true</per-entry-statistics-enabled>
+        <per-entry-stats-enabled>true</per-entry-stats-enabled>
     </map>
     ...
 </hazelcast>
@@ -1680,7 +1680,7 @@ YAML::
 hazelcast:
   map:
     myMap:
-      per-entry-statistics-enabled: true
+      per-entry-stats-enabled: true
 ----
 ====
 

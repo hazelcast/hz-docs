@@ -272,7 +272,7 @@ the script <<using-the-script-cluster-sh, `cluster.sh`>>, you can also use REST 
 The following are the operations you can perform.
 
 NOTE: Some of the REST calls listed below need their REST endpoint groups to be enabled.
-See the xref:rest-endpoint-groups.adoc[Using the REST Endpoint Groups section] on how to enable them.
+See the xref:clients:rest.adoc#using-the-rest-endpoint-groups[REST Endpoint Groups section] on how to enable them.
 
 Also note that the value of `$\{PASSWORD}` in the following calls is checked only if
 the security is xref:security:enabling-jaas.adoc[enabled] in Hazelcast, i.e., if you have Hazelcast Enterprise Edition.
@@ -300,7 +300,7 @@ To get the state of the cluster, use the following command:
 +
 [source,shell]
 ----
-curl --data "${CLUSTERNAME}&$\{PASSWORD}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/state
+curl --data "${CLUSTERNAME}&${PASSWORD}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/state
 ----
 +
 * _Changing the cluster state:_
@@ -309,7 +309,7 @@ To change the state of the cluster to `frozen`, use the following command:
 +
 [source,shell]
 ----
-curl --data "${CLUSTERNAME}&$\{PASSWORD}&${STATE}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/changeState
+curl --data "${CLUSTERNAME}&${PASSWORD}&${STATE}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/changeState
 ----
 +
 * _Shutting down the cluster:_
@@ -318,7 +318,7 @@ To shutdown the cluster, use the following command:
 +
 [source,shell]
 ----
-curl --data "${CLUSTERNAME}&$\{PASSWORD}"  http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/clusterShutdown
+curl --data "${CLUSTERNAME}&${PASSWORD}"  http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/clusterShutdown
 ----
 +
 * _Querying the current cluster version:_
@@ -338,7 +338,7 @@ To partial start the cluster when Persistence is enabled, use the following comm
 +
 [source,shell]
 ----
-curl --data "${CLUSTERNAME}&$\{PASSWORD}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/partialStart/
+curl --data "${CLUSTERNAME}&${PASSWORD}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/partialStart/
 ----
 +
 * _Force starting the cluster:_
@@ -347,7 +347,7 @@ To force start the cluster when Persistence is enabled, use the following comman
 +
 [source,shell]
 ----
-curl --data "${CLUSTERNAME}&$\{PASSWORD}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/forceStart/
+curl --data "${CLUSTERNAME}&${PASSWORD}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/forceStart/
 ----
 +
 NOTE: You can also perform the above operations (partialStart and forceStart) using
@@ -361,7 +361,7 @@ To initiate the Hot Backup, use the following `curl` command:
 +
 [source,shell]
 ----
-curl --data "${CLUSTERNAME}&$\{PASSWORD}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/hotBackup
+curl --data "${CLUSTERNAME}&${PASSWORD}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/hotBackup
 ----
 +
 * _Changing the cluster version:_
@@ -371,7 +371,7 @@ a new minor version, use the following `curl` command:
 +
 [source,shell]
 ----
-curl --data "${CLUSTERNAME}&$\{PASSWORD}&${CLUSTER_VERSION}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/version
+curl --data "${CLUSTERNAME}&${PASSWORD}&${CLUSTER_VERSION}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/version
 ----
 +
 For example, assuming the default cluster name and password, issue the following command to any member
@@ -700,53 +700,3 @@ hazelcast:
       value: 4
 ----
 ====
-
-== Safety Checking Cluster Members
-
-To prevent data loss when shutting down a cluster member, Hazelcast provides
-a graceful shutdown feature. You perform this shutdown by calling the method `HazelcastInstance.shutdown()`.
-
-The oldest cluster member migrates all the replicas owned by
-the shutdown-requesting member to the other running (not initiated shutdown) cluster members.
-After these migrations are completed, the shutting down member will not be the owner or
-a backup of any partition anymore. It means that you can shutdown any number of Hazelcast members
-in a cluster concurrently with no data loss.
-
-Please note that the process of shutting down members waits for
-a predefined amount of time for the oldest member to migrate their partition replicas.
-You can specify this graceful shutdown timeout duration using the property `hazelcast.graceful.shutdown.max.wait`.
-Its default value is 10 minutes. If migrations are not completed within this duration,
-shutdown may continue non-gracefully and lead to data loss.
-Therefore, you should choose your own timeout duration considering the size of data in your cluster.
-
-=== Ensuring Safe State with PartitionService
-
-With the improvements in graceful shutdown procedure in Hazelcast 3.7,
-the following methods are not needed to perform graceful shutdown.
-Nevertheless, you can use them to check the current safety status of the partitions in your cluster.
-
-[source,java]
-----
-public interface PartitionService {
-   ...
-   ...
-    boolean isClusterSafe();
-    boolean isMemberSafe(Member member);
-    boolean isLocalMemberSafe();
-    boolean forceLocalMemberToBeSafe(long timeout, TimeUnit unit);
-}
-----
-
-The method `isClusterSafe` checks whether the cluster is in a safe state.
-It returns `true` if there are no active partition migrations and all backups are in sync for each partition.
-
-The method `isMemberSafe` checks whether a specific member is in a safe state.
-It checks if all backups of partitions of the given member are in sync with the primary ones.
-Once it returns `true`, the given member is safe and it can be shut down without data loss.
-
-Similarly, the method `isLocalMemberSafe` does the same check for the local member.
-The method `forceLocalMemberToBeSafe` forces the owned and backup partitions to be synchronized,
-making the local member safe.
-
-See https://github.com/hazelcast/hazelcast-code-samples/tree/master/monitoring/cluster-safety[here^]
-for more `PartitionService` code samples.

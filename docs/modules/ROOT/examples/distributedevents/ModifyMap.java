@@ -1,12 +1,13 @@
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.map.IMap;
 
 //tag::modify[]
 public class ModifyMap {
 
     public static void main( String[] args ) {
-        HazelcastInstance hz = Hazelcast.newHazelcastInstance();
+        HazelcastInstance hz = HazelcastClient.newHazelcastClient();
         IMap<String, String> map = hz.getMap( "somemap");
         String key = "" + System.nanoTime();
         String value = "1";

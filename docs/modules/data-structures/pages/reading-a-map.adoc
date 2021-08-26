@@ -1,0 +1,116 @@
+= Reading Data From a Map
+:description: Data in a map is distributed among members in a Hazelcast cluster. To read entries from a map, you can use simple get requests, distributed queries, or use the map as a source in a data pipeline. 
+
+{description}
+
+== Retrieving Entries
+
+You can retrieve map data using the following methods:
+
+* `map.get(K)` - returns the value associated with the specified key
+* `map.values()` - returns a collection of all values in the map
+* `map.keySet()` - returns a set of all keys in the map
+* `map.entrySet()` - returns a set of all key/value pairs in the map
+* `map.containsKey()`  and `map.containsValue()` - checks whether specified key or value is contained in the map and returns a true or false
+
+All of these methods return data to your application without altering the contents of the map itself. 
+
+In the code sample below, we're using the `map.entrySet()` method to retrieve the entire contents of the map, then printing out each entry.
+
+[tabs] 
+==== 
+Java:: 
++ 
+--
+[source,java]
+----
+for (Map.Entry<Integer, String> entry : myMap.entrySet()) {
+    System.out.println(entry.getKey() + " " + entry.getValue())
+    };
+----
+--
+C++:: 
++ 
+-- 
+[source,cpp]
+----
+for (const auto &entry : my_map->entry_set<int, std::string>().get()) {
+    std::cout << entry.first << ' ' << entry.second << std::endl;
+}
+----
+--
+
+C Sharp:: 
++ 
+-- 
+[source,cs]
+----
+foreach (var (key, value) in await map.GetEntriesAsync())
+{
+  Console.WriteLine(key + " " + value);
+}
+
+----
+--
+
+Node.js:: 
++ 
+-- 
+[source,javascript]
+----
+for(const [key, value] of await idPersonMap.entrySet()){
+    console.log('key:', key, 'value:', value);
+}
+
+----
+--
+Python:: 
++ 
+-- 
+[source,python]
+----
+for key, value in my_map.entry_set():
+    print(key, value)
+
+----
+--
+Go:: 
++ 
+-- 
+[source,go]
+----
+// error handling is omitted for brevity
+entries, _ := myMap.GetEntrySet()
+for _, entry := range entries {
+    fmt.Printf("%d %s\n", entry.Key, entry.Value)
+}
+
+----
+--
+====
+
+NOTE: The set returned by this method is not in any particular order. Because the map is distributed across multiple Hazelcast nodes, the set will be assembled in the order in which cluster members respond to the request. 
+
+== Distributed Queries
+
+Distributed queries allow you to request filtered data from members or external data sources without having to receive it all and iterate over it locally.
+
+You can use client APIs or SQL to run distributed queries on maps.
+
+For an overview of the tools, see xref:query:overview.adoc[].
+
+For SQL, see xref:query:sql-overview.adoc[].
+
+For the client API, see xref:query:predicate-overview.adoc[].
+
+== Reading Data into Streaming Pipelines
+
+If you’re building a data processing pipeline, you can use SQL or the Jet API to read data from an in-memory map and process it for use cases such as enrichment or analytics.
+
+See xref:pipelines:overview.adoc[].
+
+== Optimizing Data Retrieval
+
+If you are doing frequent `map.get()` operations from a relatively static map, you can employ the Near Cache feature to improve performance. Near Cache creates a copy of the map data locally on the client, and all `map.get()` operations are executed on the cached data rather than the map in the Hazelcast cluster. The cluster will synchronize the cached data with the cluster data at regular, configured intervals. This solution is most suitable when your maps do not change often and when the map operations are mostly reads.
+
+See xref:performance:near-cache.adoc[].

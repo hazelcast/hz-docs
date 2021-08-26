@@ -1,0 +1,285 @@
+= Locking Maps
+:description: Although maps are thread-safe, you may prefer to have manual control over which members have access to a map entry at a given time. Hazelcast offers two ways of locking map entries: pessimistic locking and optimistic locking.
+
+{description}
+
+Hazelcast uses and manages its own partition threads. Each partition is managed by a single thread, ensuring that write operations to a given partition are handled one at a time in first-in-first-out order. In other words, it is not possible for multiple simultaneous write attempts to occur. In most cases, this operational model is sufficient in preventing race conditions. (For more on threading operations, refer to the xref:performance:threading-model.adoc[Threading Model]. )
+
+However, if your application does encounter race conditions, you can resolve this using manual map locks. Adding a lock ensures that a map entry cannot be overwritten by another operation until the locking operation is complete. 
+
+[[pessimistic-locking]]
+== Pessimistic Locking
+
+Pessimistic locking explicitly locks and unlocks map entries. You'll use the `lock()` and `unlock()` methods to control when the lock is placed and when it is lifted. 
+
+[tabs] 
+==== 
+Java:: 
++ 
+--
+[source,java]
+----
+include::ROOT:example$/dds/map/PessimisticUpdateMember.java[tag=pum]
+----
+--
+C++:: 
++ 
+-- 
+[source,cpp]
+----
+auto hz = hazelcast::new_client().get();
+auto map = hz.get_map( "map" ).get();
+std::string key("1");
+map->put<std::string, int>(key, 5).get();
+std::cout << "Starting\n";
+for (int k = 0;k < 1000; ++k) {
+    map->lock(key).get();
+    try {
+        auto value = map->get<std::string, int>(key).get();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        map->put(key, value).get();
+        map->unlock(key).get();
+    } catch (...) {
+            map->unlock(key).get();
+    }
+}
+std::cout << "Finished! Result = " << map->get<std::string, int>(key).get() << std::endl;
+
+
+
+----
+--
+
+C Sharp:: 
++ 
+-- 
+[source,cs]
+----
+await using var client = await HazelcastClientFactory.StartNewClientAsync();
+await using var map = await client.GetMapAsync<string, int>("map");
+
+const string key = "key1";
+await map.SetAsync(key, 0);
+
+Console.WriteLine("Starting...");
+
+for (var i = 0; i < 1000; i++)
+{
+    await map.LockAsync(key);
+
+    try
+    {
+        var value = await map.GetAsync(key);
+        await map.SetAsync(key, ++value);
+    }
+    finally
+    {
+        await map.UnlockAsync(key);
+    }
+}
+
+Console.WriteLine($"Finished! Result = {await map.GetAsync(key)}");
+
+
+----
+--
+
+Node.js:: 
++ 
+-- 
+[source,javascript]
+----
+class ValueClass {
+    constructor() {
+        this.amount = 0;
+        this.factoryId = 1;
+        this.classId = 1;
+    }
+
+    readPortable(reader) {
+        this.amount = reader.readInt('amount');
+    }
+
+    writePortable(writer) {
+        writer.writeInt('amount', this.amount);
+    }
+}
+
+function portableFactory(classId) {
+    if (classId === 1) {
+        return new ValueClass();
+    }
+    return null;
+}
+
+
+const client = await Client.newHazelcastClient({
+    serialization: {
+        portableFactories: {
+            1: portableFactory
+        }
+    }
+});
+const map = await client.getMap('map');
+const key = '1';
+await map.put(key, new ValueClass());
+console.log('Starting');
+for(let i = 0; i < 1000; i++){
+    await map.lock(key);
+    try {
+        const value = await map.get(key);
+        value.amount++;
+        await map.put(key, value);
+    } catch (error) {
+        await map.unlock(key);
+    }
+}
+console.log('Finished! Result = ', (await map.get(key)).amount);
+
+----
+--
+Python:: 
++ 
+-- 
+[source,python]
+----
+client = hazelcast.HazelcastClient()
+distributed_map = client.get_map("map").blocking()
+
+key = "1"
+distributed_map.put(key, 0)
+
+print("Starting")
+
+for i in range(1000):
+    distributed_map.lock(key)
+    try:
+        value = distributed_map.get(key)
+        value += 1
+        distributed_map.put(key, value)
+    finally:
+        distributed_map.unlock(key)
+
+print("Finished! Result =", distributed_map.get(key))
+
+----
+--
+Go:: 
++ 
+-- 
+[source,go]
+----
+hzClient, _ := hazelcast.StartNewClient()
+ctx := context.TODO()
+myMap, _ := hz.GetMap(ctx, "my-map")
+key := "1"
+myMap.Put(ctx, key, 1)
+fmt.Println("Starting")
+lockCtx := myMap.NewLockContext(ctx)
+for k := 0; k < 1000; k++ {
+	myMap.Lock(lockCtx, key)
+	value, _ := myMap.Get(lockCtx, key)
+	intValue := value.(int64) + 1
+	myMap.Put(lockCtx, key, intValue)
+	myMap.Unlock(lockCtx, key)
+}
+value, _ := myMap.Get(lockCtx, key)
+fmt.Println("Finished! Result =", value)
+----
+--
+====
+
+The lock will automatically be collected by the garbage collector when the lock is released and no other waiting conditions exist on the lock.
+
+The lock is reentrant, but it does not support fairness.
+
+WARNING: In some cases, a client application connected to your cluster may cause the entries in a map to remain locked after the application has been restarted (which were already locked before such a restart). This can be due to the reasons such as incomplete/incorrect client implementations. In these cases, you can unlock the entries, either from the thread which locked them using the `IMap.unlock()` method, or check if the entry is locked using the `IMap.isLock()` method and then call `IMap.forceUnlock()`.
+
+TIP: For the above case, as a workaround, you can also kill all the applications connected to the cluster and use the Management Center's scripting functionality to clear the map and release the locks (instead of using `IMap.forceUnlock()`). Keep in mind that the scripting functionality is limited to working with maps that have primitive key types, e.g., string keys and limited to relaying only a single string of output per member to the result panel in the Management Center.
+
+Another way to solve the race issue is by acquiring a predictable `Lock` object from Hazelcast. This way, every value in the map can be given a lock, or you can create a stripe of locks.
+
+[[optimistic-locking]]
+== Optimistic Locking
+
+In Hazelcast, you can apply the optimistic locking strategy with the `map.replace()` method. This method compares values in object or data forms
+depending on the in-memory format configuration. If the values are equal, it replaces the old value with the new one. If you want to use your defined `equals` method, `in-memory-format` should be `OBJECT`. Otherwise, Hazelcast serializes objects to `BINARY` forms and compares them.
+
+The locking strategy you choose depends on your locking requirements.
+
+Optimistic locking is better for mostly read-only systems. It has a performance boost over pessimistic locking.
+
+Pessimistic locking is good if there are lots of updates on the same key. It is more robust than optimistic locking from the perspective of data consistency.
+
+In Hazelcast, use `IExecutorService` to submit a task to a key owner, or to a member or members. This is the recommended way to perform task executions, rather than using pessimistic or optimistic locking techniques. `IExecutorService` has fewer network hops and less data over wire, and tasks are executed very near to the data. See the xref:performance:data-affinity.adoc[Data Affinity section].
+
+[[solving-the-aba-problem]]
+== Solving the ABA Problem
+
+The ABA problem occurs in environments when a shared resource is open to change by multiple threads. Even if one thread sees the same value
+for a particular key in consecutive reads, it does not mean that nothing has changed between the reads. Another thread may change the value,
+do work and change the value back, while the first thread thinks that nothing has changed.
+
+To prevent these kind of problems, you can assign a version number and check it before any write to be sure that nothing has changed between consecutive reads. Although all the other fields are equal, the version field will prevent objects from being seen as equal. This is the optimistic locking strategy; it is used in environments that do not expect intensive concurrent changes on a specific key.
+
+In Hazelcast, you can apply the <<optimistic-locking, optimistic locking>> strategy with the map `replace` method.
+
+[[lock-split-brain-protection-with-pessimistic-locking]]
+== Lock Split-Brain Protection with Pessimistic Locking
+
+Locks can be configured to check the number of currently present members before applying a locking operation. If the check fails, the lock operation
+fails with a `SplitBrainProtectionException` (see the xref:network-partitioning:split-brain-protection.adoc[Split-Brain Protection section]).
+As pessimistic locking uses lock operations internally, it also uses the configured lock split-brain protection. This means that you can configure a lock split-brain protection with the same name or a pattern that matches the map name. Note that the split-brain protection for locking actions can be different from the split-brain protection for other map actions.
+
+The following actions check for lock split-brain protection before being applied:
+
+* `IMap.lock(K)` and `IMap.lock(K, long, java.util.concurrent.TimeUnit)`
+* `IMap.isLocked()`
+* `IMap.tryLock(K)`, `IMap.tryLock(K, long, java.util.concurrent.TimeUnit)` and
+`IMap.tryLock(K, long, java.util.concurrent.TimeUnit, long, java.util.concurrent.TimeUnit)`
+* `IMap.unlock()`
+* `IMap.forceUnlock()`
+* `MultiMap.lock(K)` and `MultiMap.lock(K, long, java.util.concurrent.TimeUnit)`
+* `MultiMap.isLocked()`
+* `MultiMap.tryLock(K)`, `MultiMap.tryLock(K, long, java.util.concurrent.TimeUnit)`
+and `MultiMap.tryLock(K, long, java.util.concurrent.TimeUnit, long, java.util.concurrent.TimeUnit)`
+* `MultiMap.unlock()`
+* `MultiMap.forceUnlock()`
+
+An example of declarative configuration:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="myMap">
+        <split-brain-protection-ref>map-actions-split-brain-protection</split-brain-protection-ref>
+    </map>
+    <lock name="myMap">
+        <split-brain-protection-ref>map-lock-actions-split-brain-protection</split-brain-protection-ref>
+    </lock>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  map:
+    myMap:
+      split-brain-protection-ref: map-actions-split-brain-protection
+  lock:
+    myMap:
+      split-brain-protection-ref: map-lock-actions-split-brain-protection
+----
+====
+
+Here the configured map uses the `map-lock-actions-split-brain-protection` for map lock actions and the `map-actions-split-brain-protection` for other map actions.

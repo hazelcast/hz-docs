@@ -19,9 +19,17 @@ public class SamplePersistenceConfiguration {
 
         MapConfig mapConfig = config.getMapConfig("test-map");
         mapConfig.getDataPersistenceConfig().setEnabled(true);
+        mapConfig.getMerkleTreeConfig().setEnabled(true);
+        mapConfig.getMerkleTreeConfig().setDepth(12);
+        config.addMapConfig(mapConfig);
 
         CacheSimpleConfig cacheConfig = config.getCacheConfig("test-cache");
         cacheConfig.getDataPersistenceConfig().setEnabled(true);
+        cacheConfig.getMerkleTreeConfig().setEnabled(true);
+        cacheConfig.getMerkleTreeConfig().setDepth(12);
+        config.addCacheConfig(cacheConfig);
+
+        config.getJetConfig().getInstanceConfig().setLosslessRestartEnabled(true);
         //end::hrconf[]
     }
 }

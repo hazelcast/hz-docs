@@ -1,0 +1,358 @@
+= Managing Map Memory
+:description: Depending on how you use maps, they may become too large for your cluster's memory, or the data may become stale and useless to your applications. To handle these situations, you can set expiration and eviction policies.
+
+{description}
+
+By default, maps have no size limits and data stays in them until you manually remove it.
+
+To automate the process of removing data from maps you can configure the following policies:
+
+* Expiration policy: Defines the age at which map entries should be removed.
+* Eviction policy: Defines the maximum size of a map and which entries should be removed when the map reaches the limit.
+
+IMPORTANT: Expiration and eviction policies do not apply to locked map entries. For information about locked map entries, see xref:locking-maps.adoc[Locking Maps].
+
+== Expiration Policy
+
+An expiration policy limits the lifetime of an entry stored inside a map. When an entry expires it can no longer be read from the map and is scheduled to be removed to release memory. The actual removal will occur during the next garbage collection cycle. 
+
+To configure an expiration policy, use the elements `time-to-live-seconds`and `max-idle-seconds`.
+
+=== time-to-live-seconds
+
+This element is relative to the time of a map's last write. For example a time to live (TTL) of 60 seconds means that an entry will be removed if it is not written to at least every 60 seconds.
+
+- Default value: 0 (disabled)
+- Accepted values: Integers between 0 and `Integer.MAX VALUE`.
+
+ By default, this configuration element applies to all entries in a map. To configure TTL for specific entries, see  <<evicting-specific-entries, Setting an Expiration Policy for Specific Entries>>.
+
+=== max-idle-seconds
+
+This element is relative to the time of the last `get()`, `put()`, `EntryProcessor.process()` or `containsKey()` method called on it. For example a setting of 60 seconds means that an entry will be removed if it is not written to or read from at least every 60 seconds.
+
+- Default value: 0 (disabled)
+- Accepted values: Integers between 0 and `Integer.MAX VALUE`.
+
+By default, this configuration element applies to all entries in a map. To configure TTL for specific entries, see  <<evicting-specific-entries, Setting an Expiration Policy for Specific Entries>>.
+
+NOTE: You cannot set this element to 1 second due to the loss of millisecond
+resolution on the entry timestamps. For example, assume that you create a record at time = 1 second
+(1000 milliseconds) and access it at wall clock time 1100 milliseconds and
+then again at 1400 milliseconds. In this case, the entry is deemed as idle.
+
+=== Example Configuration
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="default">
+        <time-to-live-seconds>60</time-to-live-seconds>
+        <max-idle-seconds>60</max-idle-seconds>
+    </map>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      time-to-live-seconds: 60
+      max-idle-seconds: 60
+----
+====
+
+== Eviction Policy
+
+An eviction policy limits the size of a map. If the size of the map grows larger than the limit, the eviction policy defines which entries to remove from the map to reduce its size. You can configure the size limit and eviction policy using the elements `size` and `eviction-policy`.
+
+=== size
+
+This element defines the maximum size of a map. When the maximum size is reached, map entries are removed based on the value of the `eviction-policy` element.
+
+- Default value: 0 (disabled)
+- Accepted values: Integers between 0 and `Integer.MAX VALUE`.
+
+If you want to set this element to any size other than 0, you must also set the `eviction-policy` property to a value other than `NONE`.
+
+==== Size Attributes
+
+When configuring the maximum size of maps, you can choose one of the follow attributes to define what to measure.
+
+* `max-size-policy`: Maximum size policy for eviction of the map. Available values are as follows:
+** `PER_NODE`: Maximum number of map entries in each cluster member. This is the default policy.
+** `PER_PARTITION`: Maximum number of map entries within each partition. Storage size depends
+on the partition count in a cluster member. This attribute should not be used often. For instance,
+avoid using this attribute with a small cluster. If the cluster is small, it hosts more partitions,
+and therefore map entries, than that of a larger cluster. Thus, for a small cluster, the overhead of removing entries per partition can impact overall performance.
+** `USED_HEAP_SIZE`: Maximum used heap size in megabytes per map for each Hazelcast instance.
+Please note that this policy does not work when xref:setting-data-format.adoc[in-memory format]
+is set to `OBJECT`, since the memory footprint cannot be determined when data is put as `OBJECT`.
+* `USED_HEAP_PERCENTAGE`: Maximum used heap size percentage per map for each Hazelcast instance.
+If, for example, a JVM is configured to have 1000 MB and this value is 10, then the map entries
+will be evicted when used heap size exceeds 100 MB. Please note that this policy does not work
+when xref:setting-data-format.adoc[in-memory format] is set to `OBJECT`, since the memory footprint
+cannot be determined when data is put as `OBJECT`.
+** `FREE_HEAP_SIZE`: Minimum free heap size in megabytes for each JVM.
+** `FREE_HEAP_PERCENTAGE`: Minimum free heap size percentage for each JVM. If, for example, a JVM
+is configured to have 1000 MB and this value is 10, then the map entries will be evicted when
+free heap size is below 100 MB.
+** `USED_NATIVE_MEMORY_SIZE`: ([navy]*Hazelcast Enterprise*) Maximum used native memory
+size in megabytes per map for each Hazelcast instance.
+** `USED_NATIVE_MEMORY_PERCENTAGE`: ([navy]*Hazelcast Enterprise*) Maximum used native
+memory size percentage per map for each Hazelcast instance.
+** `FREE_NATIVE_MEMORY_SIZE`: ([navy]*Hazelcast Enterprise*) Minimum free native memory
+size in megabytes for each Hazelcast instance.
+** `FREE_NATIVE_MEMORY_PERCENTAGE`: ([navy]*Hazelcast Enterprise*) Minimum free native
+memory size percentage for each Hazelcast instance.
+
+[[understanding-map-eviction]]
+==== Understanding Size Attributes
+
+Hazelcast measures the size of maps based on partitions. For example, when you specify a size using
+the `PER_NODE` attribute for `max-size`, Hazelcast calculates the maximum size for every partition. Hazelcast uses the following equation to calculate the maximum size of a partition:
+
+```
+partition-maximum-size = max-size * member-count / partition-count
+```
+
+NOTE: If the `partition-maximum-size` is less than 1 in the equation above, it will be set to 1
+(otherwise, the partitions would be emptied immediately by eviction due to the exceedance of
+`max-size` being less than 1).
+
+The eviction process starts according to this calculated partition maximum size when you try
+to put an entry. When entry count in that partition exceeds partition maximum size, eviction
+starts on that partition.
+
+Assume that you have the following figures as examples:
+
+* partition count: 200
+* entry count for each partition: 100
+* `max-size` (PER_NODE): 20000
+
+The total number of entries here is 20000 (partition count * entry count for each partition).
+This means you are at the eviction threshold since you set the `max-size` to 20000. When you
+try to put an entry:
+
+. the entry goes to the relevant partition
+. the partition checks whether the eviction threshold is reached (`max-size`)
+. only one entry will be evicted.
+
+As a result of this eviction process, when you check the size of your map, it is 19999. After
+this eviction, subsequent put operations do not trigger the next eviction until the map size
+is again close to the `max-size`.
+
+NOTE: The above scenario is simply an example that describes how the eviction process works.
+Hazelcast finds the most optimum number of entries to be evicted according to your cluster
+size and selected policy.
+
+=== eviction-policy
+
+This element defines which map entries to remove when the size of map grows larger than
+the value specified by the `size` element.
+
+- Accepted values:
+  * NONE: Default policy. If set, no items are evicted and the `size` element is ignored.
+  * LRU: The least recently used map entries are removed.
+  * LFU: The least frequently used map entries are removed.
+
+As well as these values, you can also develop and use your own eviction policy. See <<custom-eviction-policy, Creating a Custom Eviction Policy>>.
++
+
+=== Example Configuration
+
+This example removes the least-frequently-used map entries when a member has used up 75% of its off-heap memory.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="nativeMap">
+        <in-memory-format>NATIVE</in-memory-format>
+        <eviction max-size-policy="USED_NATIVE_MEMORY_PERCENTAGE" eviction-policy="LFU" size="75"/>
+    </map>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  map:
+    nativeMap:
+      in-memory-format: NATIVE
+      eviction:
+        eviction-policy: LFU
+        max-size-policy: USED_NATIVE_MEMORY_PERCENTAGE
+        size: 75
+----
+====
+
+
+== Setting an Expiration Policy and an Eviction Policy
+
+Eviction and expiration can be used together, in which case an entry is removed if at least one of the policies affects it.
+
+In this example, map entries in the `documents` map are removed in the following circumstances:
+
+- Any map entry is not used at least every 60 seconds
+- The number of map entries on a member exceeds 5000, in which case the least-recently-used entries are removed.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="default">
+        <time-to-live-seconds>60</time-to-live-seconds>
+        <max-idle-seconds>60</max-idle-seconds>
+        <eviction eviction-policy="LRU" max-size-policy="PER_NODE" size="5000"/>
+    </map>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      time-to-live-seconds: 60
+      max-idle-seconds: 60
+      eviction:
+        eviction-policy: LRU
+        max-size-policy: PER_NODE
+        size: 5000
+----
+====
+
+=== Fine-Tuning Map Eviction
+
+As well as setting an eviction policy, you can fine-tune map evictions related to the entry counts to be evicted, using the following Hazelcast properties:
+
+* `hazelcast.map.eviction.batch.size`: Specifies the maximum number of map entries that are evicted during a single eviction cycle. Its default value is 1, meaning at most 1 entry is evicted, which is typically fine.
+However, when you insert values during an eviction cycle, each iteration doubles the entry size. In this situation more than just a single entry should be evicted.
+* `hazelcast.map.eviction.sample.count`: Whenever a map eviction is required, a new sampling starts by the built-in sampler. The sampling algorithm selects a random sample from the underlying data storage and it results in a set of map entries. This property specifies the entry count of this sample. Its default value is 15.
+
+See also the xref:jcache:icache.adoc#eviction-algorithm[Eviction Algorithm section] to learn more details on evicting entries.
+
+[[evicting-specific-entries]]
+== Setting an Expiration Policy for Specific Entries
+
+To configure an expiration policy for a specific map entry, you can use the `ttl` and `ttlUnit` parameters of the `map.put()` method.
+
+`myMap.put( "1", "John", 50, TimeUnit.SECONDS )`
+
+In this example, the map entry with the key "1" will be evicted 50 seconds after it is written to the map.
+
+To set a maximum idle timeout for specific map entries, use the `maxIdle` and `maxIdleUnit` parameters.
+
+`myMap.put( "1", "John", 50, TimeUnit.SECONDS, 40, TimeUnit.SECONDS )`
+
+Here `ttl` is set as 50 seconds and `maxIdle` is set as 40 seconds.
+
+As well as the method parameters, you can also use the `map.setTTL()` method to change the time-to-live value of an existing entry.
+
+`myMap.setTTL( "1", 50, TimeUnit.SECONDS )`
+
+[[forced-eviction]]
+=== Forced Eviction (Enterprise Only)
+
+[blue]*Hazelcast Enterprise*
+
+Sometimes, the strategy set up in an eviction policy may not free enough memory and Hazelcast may throw an out-of-memory exception.
+
+If you are using Hazelcast Enterprise, Hazelcast can use forced eviction to remove more entries before throwing an exception.
+
+NOTE: Hazelcast can only use this feature for maps whose in-memory format is set to `NATIVE`.
+
+The forced eviction mechanism tries to free more memory in the following order:
+
+* When the normal eviction is not enough, forced eviction is triggered and first it tries to evict approx. 20% of the entries from the current partition. It retries this five times.
+* If the result of above step is still not enough, forced eviction applies the above step to all maps. This time it might perform eviction from some other partitions too, provided that they are owned by the same thread.
+* If that is still not enough to free up your memory, it evicts not the 20% but all the entries from the current partition.
+* If that is not enough, it will evict all the entries from the other data structures; from the partitions owned by the local thread.
+
+Finally, when all the above steps are not enough, Hazelcast throws a native `OutOfMemoryException`.
+
+When you have an evictable cache/map, you should safely write entries to it without facing with any memory shortages. Forced eviction helps to achieve this. Regular eviction removes one entry at a time while forced eviction can remove multiple entries, which can even be owned by other caches/maps.
+
+[[custom-eviction-policy]]
+== Creating a Custom Eviction Policy
+
+Apart from the policies such as LRU and LFU, which Hazelcast provides out-of-the-box, you can develop and use your own eviction policy. Because eviction is run by the Hazelcast cluster itself, these custom eviction policies can only be written in Java and implememted as part of starting up the cluster member. 
+
+To achieve this, you need to provide an implementation of `MapEvictionPolicyComparator` as in the following `OddEvictor` example:
+
+[source,java]
+----
+include::ROOT:example$/dds/map/MapCustomEvictionPolicyComparator.java[tag=mcep]
+----
+
+Then you can enable your policy by setting it via the method `MapConfig.getEvictionConfig().setComparatorClassName()` programmatically or via XML declaratively. Following is the example
+declarative configuration for the eviction policy `OddEvictor` implemented above:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="test">
+        ...
+        <eviction comparator-class-name="com.mycompany.OddEvictor"/>
+        ...
+    </map>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  map:
+    test:
+      eviction:
+        comparator-class-name: com.mycompany.OddEvictor
+----
+====
+
+If you Hazelcast with Spring, you can enable your policy as shown below.
+
+[source,xml]
+----
+<hz:map name="test">
+    <hz:map-eviction comparator-class-name="com.package.OddEvictor"/>
+</hz:map>
+----

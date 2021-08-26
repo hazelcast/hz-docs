@@ -18,9 +18,7 @@ public class SampleEncryptionAtRestConfiguration {
                 PersistenceConfig.getEncryptionAtRestConfig();
         encryptionAtRestConfig.setEnabled(true)
                 .setAlgorithm("AES/CBC/PKCS5Padding")
-                .setSalt("thesalt")
-                .setKeySize(128)
-                .setSecureStoreConfig(secureStore());
+                .setSecureStoreConfig(/* pass in a configuration object for a secure store here */);
         //end::encryptionatrest[]
         //tag::keystore[]
         JavaKeyStoreSecureStoreConfig keyStoreConfig =
@@ -39,9 +37,5 @@ public class SampleEncryptionAtRestConfiguration {
     }
 
     private static void configureSSL(SSLConfig sslConfig) {
-    }
-
-    private static SecureStoreConfig secureStore() {
-        return null;
     }
 }

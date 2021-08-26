@@ -1,0 +1,88 @@
+= Configuring Maps
+:description: Map configuration is part of the overall Hazelcast server configuration. When you create your map, it inherits the configuration that is set up on the server. It is important to plan your map configuration ahead of time, as you cannot change the configuration of a map once it is created without restarting your entire cluster.
+[[map-config]]
+
+{description}
+
+== Hazelcast Map Configuration Defaults
+
+The `hazelcast.xml`/`hazelcast.yaml` configuration included with your Hazelcast distribution includes the following default settings for maps. 
+
+* One synchronous backup
+* Binary in-memory format
+* All other features are disabled
+
+NOTE: To view all possible map settings, refer to the `hazelcast-all.xml` or `hazelcast-all.yaml` file included with your Hazelcast distribution. 
+
+If these settings are sufficient for your environment, you don't need to do anything else. When you create a map, the Hazelcast cluster will apply these settings to your map. 
+
+For details on map backups, refer to xref:backing-up-maps.adoc[].
+
+For details on in-memory format, refer to xref:setting-data-format.adoc[].
+
+== Modifying the Default Configuration
+
+You can create a default configuration for all maps for your environment by modifying the map configuration block named "default" in your `hazelcast.xml`/`hazelcast.yaml` file. In the following example, we set expiration timers for map entries. Map entries that are idle for an hour will be marked as eligible for removal if the cluster begins to run out of memory. Any map entry older than six hours will be marked as eligible for removal. 
+
+For more on entry expiration, go to xref:managing-map-memory.adoc[Managing Map Memory].
+
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="default">
+        <backup-count>1</backup-count> <!--1-->
+        <in-memory-format>BINARY</in-memory-format> <!--2-->
+        <max-idle-seconds>3600</max-idle-seconds>
+        <time-to-live-seconds>21600</time-to-live-seconds>
+    </map>
+    ...
+</hazelcast>
+----
+<1> We did not want to modify the default backup count. If this line were omitted, we would have no backups.
+<2> You must specify an in-memory format.
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+    map:
+        default:
+            backup-count: 1 #<1>
+            in-memory-format: BINARY #<2>
+            max-idle-seconds: 3600
+            time-to-live-seconds: 21600
+----
+<1> We did not want to modify the default backup count. If this line were omitted, we would have no backups.
+<2> You must specify an in-memory format.
+====
+
+== Multiple Map Configurations
+
+Your application may require multiple maps with different settings. To accomplish this, you can create multiple named map configurations. The Hazelcast cluster will apply the stored configuration to each map when the map is created, based on the name of the map. If there's no name match, the map will use the settings in the default configuration. 
+
+In this example, we're creating a configuration for the Customers map and setting the in-memory format to OBJECT. When we run our code, Hazelcast will match the map name to the configuration name and apply all the settings included under Customers. 
+
+image::ROOT:MapConfig2.png[map multi-config example, 433]
+
+Note that we specified the number of backups as well as the in-memory format. Hazelcast will only apply settings under the Customers configuration and ignore all others, including the default configuration. We want our data backed up, so we have to include this in the Customers configuration as well as the in-memory format. 
+
+== Using Wildcards
+
+image::ROOT:MapConfig1.png[map wildcard example, 468]
+
+Wildcards allow you to create one configuration and apply it to multiple maps. Here we have two map configurations. One sets the eviction timer to mark entries for removal after being untouched for one hour (3600 seconds). The other has no eviction policy. Because we used a wildcard in the configuration name, any map name beginning with Evict1Hr will use the Evict1Hr* configuration. Any other map will use whatever settings are part of the default configuration. 
+
+You can use wildcards to create standard configurations for your application, then apply those configurations to individual maps. As long as the map name passed to the Hazelcast cluster matches the wildcard string, the cluster will apply the specific configuration when it creates the map. 
+
+== Learn More
+
+For a complete discussion of Hazelcast configuration options and operations, go to the xref:configuration:understanding-configuration.adoc[configuration] section of the documentation. 

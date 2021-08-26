@@ -1,0 +1,108 @@
+= Setting the In-Memory Format of Map Entries
+:description: The in-memory format you set to store your data can have a significant impact on the performance of your application. When data is moved either between a client and the Hazelcast cluster or between cluster members, it is always in serialized (binary) format. Depending on your use case, it may be more efficient to store the data in that serialiized format, either on-heap or off-heap, or deserialize it back to the original object format.
+
+[[setting-in-memory-format]]
+
+{description}
+
+== In-Memory Format Operations
+
+The first thing to keep in mind is that serialization of your data always happens. The goal of setting the in-memory format is to mimimize the overhead of serialization by only performing the operation when necessary. 
+
+When data arrives at the Hazelcast cluster for loading into a map, it is in binary (serialized) format - a requirement for transmission over a network. By default, Hazelcast stores those map entries as-is, in binary (serialized) format in on-heap memory. 
+
+If the majority of your cluster operations are reads (`get`) and writes (`put`), leaving the data in `BINARY` format is most efficient. In a `put` operation, the application performing the put serializes the data for transmission over the network. The cluster member simply writes the received data to the map without any format changes. In a `get` operation, the cluster member returns a binary copy of the requested map entry. The application performs the necessary deserialization on the returned data. 
+
+image::ROOT:serialization1.png[binary in-memory format, 250]
+
+However, if the majority of your cluster operations are queries, deserialization overhead becomes a concern. Queries have to run against objects, not binary data. By storing your frequently-queried data in `OBJECT` format, you incur the deserialization overhead when the data is added to the map. The data is stored in the correct format for queries. Query results are serialized before being returned to the cluster member coordinating the query (see xref:query:how-distributed-query-works.adoc[How Distributed Query Works] for a complete description of how Hazelcast handles queries.) If you stored frequently-queried maps in binary format, the entire map would need to be deserialized within the cluster before the query could run. 
+
+image:ROOT:serialization2.png[object in-memory format, 400]
+
+You should also use the `OBJECT` format if you are performing processing within the cluster directly on the map data (e.g. using an xref:computing:entry-processor.adoc[entry processor]). 
+
+== Configuring In-Memory Format
+
+To configure how the cluster will store map data, set the `in-memory-format` element in the configuration:
+
+* `BINARY` (default): The data (both the key and value) is stored in serialized
+binary format. 
+* `OBJECT`: The data is stored in deserialized form. The key is still
+stored in binary format.
+* `NATIVE`: ([navy]*Hazelcast Enterprise*) The data is stored in serialized binary format, outside the JVM heap. 
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="objectMap">
+        <in-memory-format>OBJECT</in-memory-format>
+    </map>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  map:
+    objectMap:
+      in-memory-format: OBJECT
+----
+====
+
+[[using-high-density-memory-store-with-map]]
+== Storing Map Entries Off-Heap with High Density Memory Store (HDMS)
+
+[navy]*Hazelcast Enterprise*
+
+Hazelcast instances run within Java Virtual Machines (JVMs). JVMs use a process called Garbage Collection (GC) to manage memory utilization. GC is an interrupting process, and the larger the heap, the longer GC takes to complete. This interruption could cause your application to pause for tens of seconds (even minutes for really large heaps), badly affecting your application performance and response times. To avoid the GC delay, most JVMs are implemented with a maximum size of 4 to 8 GB. 
+
+The Hazelcast High-Density Memory Store (HDMS) overcomes the limitation of garbage collection, allowing you to deploy fewer cluster members with much larger memory configuratoins. Instead of relying on the Java garbage collection, Hazelcast stores the data off-heap and performs the necessary memory management and cleanup. Data stored using HDMS is kept in binary format.
+
+You can configure a map to use HDMS by setting the in-memory format to `NATIVE`. The following snippet is the declarative configuration example.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="nativeMap">
+        <in-memory-format>NATIVE</in-memory-format>
+    </map>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  map:
+    nativeMap:
+      in-memory-format: NATIVE
+----
+====
+
+Keep in mind that you should have already enabled HDMS usage for your cluster. See the xref:storage:high-density-memory.adoc#configuring-high-density-memory-store[Configuring High-Density Memory Store section].
+
+You can also benefit from the persistent memory technologies such as Intel(R) Optane(TM) DC to be used by HDMS. See the xref:storage:high-density-memory.adoc#using-persistent-memory[Using Persistent Memory section].
+
+Note that `NATIVE` memory stores data in binary format. Maps stored in HDMS have to be deserialized before they can be queried. A best practice is to use on-heap memory for maps that will be frequently queried when possible. 
+
+NOTE: See the xref:storage:high-density-memory.adoc[High-Density Memory Store section]
+for more information on the HDMS feature

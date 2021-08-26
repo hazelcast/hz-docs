@@ -1,0 +1,449 @@
+= Updating Map Entries
+:description: Maps are not static. You can update or remove individual map entries, a group of map entries, or the entire map.
+
+[[updating-map-entries]]
+
+{description}
+
+== Updating Individual Entries
+
+The simplest way to update a map entry is with the `map.put` method. If the key already exists in the map, Hazelcast will replace the stored value with the new value. If the key does not exist in the map, Hazelcast will add it to the map. This method returns a copy of the old value stored in the map. 
+
+[tabs] 
+==== 
+Java:: 
++ 
+--
+[source,java]
+----
+Map<Integer, String> countries = hzClient.getMap( "countries" );
+countries.put( 1, "Japan" );
+countries.put( 2, "France" );
+countries.put( 3, "USA" );
+countries.put( 4, "Turkey" );
+countries.put( 5, "Ukraine" );
+----
+--
+C++:: 
++ 
+-- 
+[source,cpp]
+----
+auto countries = hz_client.get_map("countries").get();
+countries->put<int, std::string>(1, "Japan").get();
+countries->put<int, std::string>(2, "France").get();
+countries->put<int, std::string>(3, "USA").get();
+countries->put<int, std::string>(4, "Turkey").get();
+countries->put<int, std::string>(5, "Ukraine").get();
+----
+--
+
+C Sharp:: 
++ 
+-- 
+[source,cs]
+----
+var countries = hzClient.GetMap("countries");
+countries.put( 1, "Japan" );
+countries.put( 2, "France" );
+countries.put( 3, "USA" );
+countries.put( 4, "Turkey" );
+countries.put( 5, "Ukraine" );
+----
+--
+
+Node.js:: 
++ 
+-- 
+[source,javascript]
+----
+const countries = await hzClient.getMap('countries');
+await countries.put( 1, "Japan" );
+await countries.put( 2, "France" );
+await countries.put( 3, "USA" );
+await countries.put( 4, "Turkey" );
+await countries.put( 5, "Ukraine" );
+----
+--
+Python:: 
++ 
+-- 
+[source,python]
+----
+countries = hzClient.get_map("countries").blocking()
+countries.put( 1, "Japan" )
+countries.put( 2, "France" )
+countries.put( 3, "USA" )
+countries.put( 4, "Turkey" )
+countries.put( 5, "Ukraine" )
+----
+--
+Go:: 
++ 
+-- 
+[source,go]
+----
+countries, _ := hzClient.GetMap("countries")
+countries.Put( 1, "Japan" );
+countries.Put( 2, "France" );
+countries.Put( 3, "USA" );
+countries.Put( 4, "Turkey" );
+countries.Put( 5, "Ukraine" );
+----
+--
+====
+
+If you want to ensure that you do not overwrite any existing values, use the `map.putIfAbsent` method. With this method, the put will only succeed if the value associated with the specified key is null. 
+
+Another update method is `map.replace`. This method returns a `true` (replacement succeeded) or `false` (replacement failed) rather than a map entry value. If the map entry does not already exist, this method will fail. 
+
+There are two variants of `map.replace`. In the first, you specify the key and the new value. As long as the key exists, the new value will overwrite any old value. In the second, you specify the key and a specific old value, then the new value. This will only succeed if the specified old value matches what is actually stored in the map. The following code sample attempts to update the map "countries" we created above. Results are explained in the callouts.
+
+[tabs] 
+==== 
+Java:: 
++ 
+--
+[source,java]
+----
+countries.replace( 1, "Korea" ); <1>
+countries.replace( 2, "France", "Spain" ); <2>
+countries.replace( 3, "United States", "Canada"); <3>
+----
+<1> Replaces any value for key 1 with "Korea". Key exists, so returns `true`. 
+<2> Replaces only if current value is "France". Value is "France", so returns `true`.
+<3> Replaces only if current value is "United States". Value is "USA", so replace fails and returns `false.`
+--
+C++:: 
++ 
+-- 
+[source,cpp]
+----
+countries->replace<int, std::string>(1, "Korea").get(); <1>
+countries->replace<int, std::string>(2, "France").get(); <2>
+countries->replace<int, std::string>(3, "United States", "Canada").get(); <3> 
+----
+<1> Replaces any value for key 1 with "Korea". Key exists, so returns `true`. 
+<2> Replaces only if current value is "France". Value is "France", so returns `true`.
+<3> Replaces only if current value is "United States". Value is "USA", so replace fails and returns `false.`
+--
+
+C Sharp:: 
++ 
+-- 
+[source,cs]
+----
+countries.replace( 1, "Korea" ); <1>
+countries.replace( 2, "France", "Spain" ); <2>
+countries.replace( 3, "United States", "Canada" ); <3>
+----
+<1> Replaces any value for key 1 with "Korea". Key exists, so returns `true`. 
+<2> Replaces only if current value is "France". Value is "France", so returns `true`.
+<3> Replaces only if current value is "United States". Value is "USA", so replace fails and returns `false.`
+--
+
+Node.js:: 
++ 
+-- 
+[source,javascript]
+----
+await countries.replace( 1, "Korea" ); <1>
+await countries.replace( 2, "France", "Spain" ); <2>
+await countries.replace( 3, "United States", "Canada" ); <3>
+----
+<1> Replaces any value for key 1 with "Korea". Key exists, so returns `true`. 
+<2> Replaces only if current value is "France". Value is "France", so returns `true`.
+<3> Replaces only if current value is "United States". Value is "USA", so replace fails and returns `false.`
+--
+Python:: 
++ 
+-- 
+[source,python]
+----
+countries.replace( 1, "Korea" ) <1>
+countries.replace( 2, "France", "Spain" ) <2>
+countries.replace( 3, "United States", "Canada" ) <3>
+----
+<1> Replaces any value for key 1 with "Korea". Key exists, so returns `true`. 
+<2> Replaces only if current value is "France". Value is "France", so returns `true`.
+<3> Replaces only if current value is "United States". Value is "USA", so replace fails and returns `false.`
+--
+Go:: 
++ 
+-- 
+[source,go]
+----
+countries.Put( 1, "Korea" ); <1>
+countries.Put( 2, "France", "Spain" ); <2>
+countries.Put( 3, "United States", "Canada" ); <3>
+----
+<1> Replaces any value for key 1 with "Korea". Key exists, so returns `true`. 
+<2> Replaces only if current value is "France". Value is "France", so returns `true`.
+<3> Replaces only if current value is "United States". Value is "USA", so replace fails and returns `false.`
+--
+====
+
+If you are working with an external system of record e.g. a database, you can use the MapLoader feature to automatically push updates and maintain synchronization between in-memory data and the external store. This feature, called MapLoader, is described fully in the xref:working-with-external-data.adoc[Working with External Data] page.
+
+== Bulk Updates 
+
+You can use `map.putAll` to copy the contents of one key/value store to another. Any keys that already exist in the map will be overwritten. 
+
+[tabs] 
+==== 
+Java:: 
++ 
+--
+[source,java]
+----
+HazelcastInstance client = HazelcastClient.newHazelcastClient();
+IMap<Integer, String> distributedMap = client.getMap("map");
+Map<Integer, String> map = new HashMap<>();
+map.put(1, "John");
+map.put(2, "Jack");
+map.put(3, "David");
+distributedMap.putAll(map);
+//size should be 3
+System.out.println(distributedMap.size());
+
+----
+--
+C++:: 
++ 
+-- 
+[source,cpp]
+----
+// Start the Hazelcast Client and connect to an already running Hazelcast Cluster on 127.0.0.1
+auto hz_client = hazelcast::new_client().get();
+// Get the Distributed Map from Cluster.
+auto map = hz_client.get_map("map").get();
+std::unordered_map<int, std::string> entries{{1, "John"}, {2, "Jack"}, {3, "David"}};
+map->put_all(entries).get();
+std::cout << map->get<int, std::string>(1).get() << std::endl;
+//prints jack
+std::cout << map->get<int, std::string>(2).get() << std::endl;
+//prints david
+std::cout << map->get<int, std::string>(1).get() << std::endl;
+----
+--
+
+C Sharp:: 
++ 
+-- 
+[source,cs]
+----
+await using var client = await HazelcastClientFactory.StartNewClientAsync();
+await using var map = await client.GetMapAsync<int, string>("map");
+await map.SetAllAsync(new Dictionary<int, string> { { 1, "John" }, { 2, "Jack" }, { 3, "David" } });
+
+// Size should be 3
+Console.WriteLine(await map.GetSizeAsync());
+----
+--
+
+Node.js:: 
++ 
+-- 
+[source,javascript]
+----
+const client = await Client.newHazelcastClient();
+const distributedMap = await client.getMap('map');
+await distributedMap.putAll([[1, 'John'], [2, 'Jack'], [3, 'David']]);
+
+//size should be 3
+console.log(await distributedMap.size());
+
+----
+--
+Python:: 
++ 
+-- 
+[source,python]
+----
+client = hazelcast.HazelcastClient()
+distributed_map = client.get_map("map").blocking()
+distributed_map.put_all({
+    1: "John",
+    2: "Jack",
+    3: "David"
+})
+
+# Size should be 3
+print(distributed_map.size())
+----
+--
+Go:: 
++ 
+-- 
+[source,go]
+----
+// error checking is omitted for brevity
+distributedMap, _ := hzClient.GetMap("map")
+entries := []types.Entry{
+	types.NewEntry(1, "John"),
+	types.NewEntry(2, "Jack"),
+	types.NewEntry(3, "David"),
+}
+distributedMap.PutAll(entries)
+size, _ := distributedMap.Size()
+fmt.Println(size)
+
+// error checking is omitted for brevity
+distributedMap, _ := hzClient.GetMap("map")
+----
+--
+====
+
+The method `map.replaceAll()` is used in this example to modify the entire contents of a map. When you use `map.replaceAll()`, all existing entries are affected, but keys with null values are not modified. This method is only available to Java clients.
+
+
+
+[source,java]
+----
+HazelcastInstance client = HazelcastClient.newHazelcastClient();
+IMap<Integer, String> distributedMap = client.getMap("map");
+Map<Integer, String> map = new HashMap<>();
+map.put(1, "John");
+map.put(2, "Jack");
+map.put(3, "David");
+distributedMap.putAll(map);
+distributedMap.replaceAll(new ToLowerCaseFunction());
+//prints john
+System.out.println(distributedMap.get(1));
+//prints jack
+System.out.println(distributedMap.get(2));
+//prints david
+System.out.println(distributedMap.get(3));
+
+
+----
+
+== Entry Processor
+
+The Hazelcast Entry Processor is an efficient way to perform updates to a map. Rather than retrieving an individual entry, modifying it at the client, then putting the modified data back into the map, Hazelcast performs the update operations within the cluster. This feature is covered in the xref:computing:entry-processor.adoc[Entry Processor] section of the documentation.
+
+== Deleting Individual Map Entries
+
+There are several methods available for removing individual entries from a map. The method you choose depends on the results you want to achieve, as described in the following table.
+
+[cols="1,1,1,1"]
+|===
+|Method|Erase in-memory|Erase from external data store|Returns
+
+|`map.evict(K)`
+|Y
+|N
+|true/false
+
+|`map.delete(K)`
+|Y
+|Y
+|true/false
+
+|`map.clear(K)`
+|Y
+|Y
+|void
+
+|`map.remove(K)`
+|Y
+|Y
+|removed value
+
+|===
+
+If you are not working with a external data store (e.g. database) using the MapLoader feature, `map.evict` and `map.delete` have the same effect. This feature is described in detail in the xref:working-with-external-data.adoc[Working With External Data] section of the documentation.  
+
+== Deleting Selected Map Entries
+
+To remove multiple entries from a map, you can use `map.removeAll` in combination with a predicate to remove entries that match a given criteria. If you are working with an external data store, this will remove the entries from both the in-memory store and the external store. Unlike the `map.remove` method, this does not return the removed values. 
+
+In the example below, assume a data set called Students. The data set has a field called gradYear. We want to remove all records of students with a gradYear of 2020.
+
+[tabs] 
+==== 
+Java:: 
++ 
+--
+[source,java]
+----
+Map<Integer, Student> studentmap = hzClient.getMap( "studentmap" );
+----
+--
+C++:: 
++ 
+-- 
+[source,cpp]
+----
+auto map = hz_client.get_map("studentmap").get();
+map->remove_all(hazelcast::client::query::equal_predicate(hz_client, "GradYear", 2020));
+----
+--
+
+C Sharp:: 
++ 
+-- 
+[source,cs]
+----
+await using var map = await client.GetMapAsync<int, Student>("studentMap");
+await map.RemoveAllAsync(Predicates.EqualTo(nameof(Student.GradYear), 2020));
+
+----
+--
+
+Node.js:: 
++ 
+-- 
+Not available for this client.
+--
+
+Python:: 
++ 
+-- 
+Not available for this client.
+--
+Go:: 
++ 
+-- 
+[source,go]
+----
+// error checking is omitted for brevity
+studentMap, _ := hzClient.GetMap("studentMap")
+studentMap.RemoveAll(predicate.Equal("GradYear", 2020))
+----
+--
+====
+
+== Removing Map Data or Map Data Structure
+
+You can remove all data from a map or remove the map itself. See the table below for the different methods and their results. 
+
+[cols="1,1"]
+|===
+|Method|Result
+
+|`map.evictAll`
+|Removes all unlocked map entries from in-memory storage
+
+Map data structure remains in memory
+
+|`map.clear`
+|Removes all map entries from in-memory storage
+
+Removes all entries from external data store
+
+Map data structure remains in memory
+
+|`map.destroy`
+|Removes data structure from in-memory storage
+
+Has no effect on external data store
+
+
+|===
+
+
+
+
+
+

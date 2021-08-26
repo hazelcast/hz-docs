@@ -1,0 +1,250 @@
+= Acting Upon Changes to a Map
+:description: You can set up monitoring of a map to look for specific events, such as adding an entry, updating a specific entry, or deleting an entry. You can use these events to trigger execution of code, or even intercept the event and change it before it affects the data in memory. 
+
+{description}
+
+== Listeners
+
+Hazelcast offers two methods for monitoring map activity. `MapListener` allows you to define actions that are triggered based on activity on any entry in the map. `EventListener` allows you to define actions based on activity taken on a specific map entry or set of map entries. You 'll use predicates to define the entries to be monitored for activity.
+
+
+== Listening to an Entire Map
+
+If you want to listen to changes to all map entries, see xref:events:object-events.adoc#listening-for-map-events[Listening for Map Events] for an explanation and example of the `MapListener` method. 
+
+
+== Listening for Specific Map Entries using Predicates
+
+[[listening-to-map-entries-with-predicates]]
+
+
+
+The easiest way to explain this is through an example. We are going to listen for changes made to the map entry for an employee with the surname "smith". First, let's create the `Employee` class.
+
+[tabs] 
+==== 
+Java:: 
++ 
+--
+[source,java]
+----
+include::ROOT:example$/dds/map/Employee.java[tag=emp]
+----
+--
+C++:: 
++
+--
+[source,cpp]
+----
+
+
+----
+--
+
+C Sharp:: 
++
+-- 
+[source,cs]
+----
+
+----
+--
+
+Node.js:: 
++ 
+-- 
+[source,javascript]
+----
+
+----
+--
+Python:: 
++ 
+-- 
+[source,python]
+----
+
+----
+--
+Go:: 
++ 
+-- 
+[source,go]
+----
+
+----
+--
+====
+
+
+Then, let's create a listener that tracks the `ADDED`, `UPDATED` and `REMOVED` entry events with the `surname` predicate.
+
+[tabs] 
+==== 
+Java:: 
++ 
+--
+[source,java]
+----
+include::ROOT:example$/dds/map/ListenerWithPredicate.java[tag=lwp]
+----
+--
+C++:: 
++
+--
+[source,cpp]
+----
+
+
+----
+--
+
+C Sharp:: 
++
+-- 
+[source,cs]
+----
+
+----
+--
+
+Node.js:: 
++ 
+-- 
+[source,javascript]
+----
+
+----
+--
+Python:: 
++ 
+-- 
+[source,python]
+----
+
+----
+--
+Go:: 
++ 
+-- 
+[source,go]
+----
+func main() {
+	// error handling is omitted for brevity
+	ctx := context.TODO()
+	client, _ := hazelcast.StartNewClient(ctx)
+	entryListenerConfig := hazelcast.MapEntryListenerConfig{
+		IncludeValue: true,
+		Predicate:    predicate.Equal("surname", "Smith"),
+	}
+	m, _ := client.GetMap(ctx, "somemap")
+	entryListenerConfig.NotifyEntryAdded(true)
+	entryListenerConfig.NotifyEntryRemoved(true)
+	entryListenerConfig.NotifyEntryUpdated(true)
+	entryListenerConfig.NotifyEntryEvicted(true)
+	entryListenerConfig.NotifyEntryLoaded(true)
+
+	m.AddEntryListener(ctx, entryListenerConfig, func(event *hazelcast.EntryNotified) {
+		switch event.EventType {
+		case hazelcast.EntryAdded:
+			fmt.Println("Entry Added:", event)
+		case hazelcast.EntryRemoved:
+			fmt.Println("Entry Removed:", event)
+		case hazelcast.EntryUpdated:
+			fmt.Println("Entry Updated:", event)
+		case hazelcast.EntryEvicted:
+			fmt.Println("Entry Remove:", event)
+		case hazelcast.EntryLoaded:
+			fmt.Println("Entry Loaded:", event)
+		}
+	})
+
+
+----
+--
+====
+
+
+NOTE: See xref:query:how-distributed-query-works.adoc[How Distributed Query Works] for more information on creating predicates. 
+
+When the listener is running, a change to any record with the name `smith` will display output similar to the one below. 
+
+```
+entryAdded:EntryEvent {Address[192.168.178.10]:5702} key=1,oldValue=null,
+value=Person{name= smith }, event=ADDED, by Member [192.168.178.10]:5702
+```
+
+In our example, we're sending an event log to the system output. You can replace this action with any code you want to run when the specified map event occurs. 
+
+NOTE: The default backwards-compatible event publishing strategy only publishes `UPDATED` events when map entries are updated to a value that matches the predicate with which the listener was registered. This implies that when using the default event publishing strategy, your listener is not notified about an entry whose value is updated from one that matches the predicate to a new value that does not match the predicate.
+
+When you configure Hazelcast members with property `hazelcast.map.entry.filtering.natural.event.types` set to `true`, handling of entry updates conceptually treats value transition as entry, update or exit with regards to the predicate value space. The following table compares how a listener is notified about an update to a map entry value under the default backwards-compatible Hazelcast behavior (when property `hazelcast.map.entry.filtering.natural.event.types` is not set or is set to `false`) versus when set to `true`:
+
+|===
+
+||  `hazelcast.map.entry.filtering.natural.event.types = false` (default)| `hazelcast.map.entry.filtering.natural.event.types = true`
+
+| When old value matches predicate, new value does not match predicate
+| No event is delivered to entry listener
+| `REMOVED` event is delivered to entry listener
+
+| When old value matches predicate, new value matches predicate
+| `UPDATED` event is delivered to entry listener
+| `UPDATED` event is delivered to entry listener
+
+| When old value does not match predicate, new value does not match predicate
+| No event is delivered to entry listener
+| No event is delivered to entry listener
+
+| When old value does not match predicate, new value matches predicate
+| `UPDATED` event is delivered to entry listener
+| `ADDED` event is delivered to entry listener
+|===
+
+== Interceptors
+
+Unlike listeners, interceptors can change the action taken on a map before it is completed. With listeners, you take an action after a method has been completed and the in-memory map has been modified. Interceptor actions are synchronous, allowing you to alter the behavior of a method, change its values, or totally cancel it.
+
+NOTE: Interceptors are a server-side feature. Because these operations run within the Hazelcast cluster natively, the interfaces that perform these functions are only available in Java.
+
+Map interceptors are chained, so adding the same interceptor to the same map more than once results in duplicated effects. This can easily happen when the interceptor is added to the map at member initialization, so that each member adds the same interceptor.
+
+When you add the interceptor in this way, be sure to implement the `hashCode()` method to return the same value for every instance of the interceptor.
+It is not strictly necessary, but it is a good idea to also implement `equals()` as this ensures that the map interceptor can be removed reliably.
+
+The map API has two methods for adding and removing an interceptor to the map:
+`addInterceptor` and `removeInterceptor`. See also the
+https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/map/MapInterceptor.html[`MapInterceptor` interface^]
+to learn about the methods used to intercept the changes in a map.
+
+Methods available within the `MapInterceptor` interface:
+
+[cols="1,1"]
+|===
+
+|`interceptGet`
+|Replace returned `map.get()` value with new value
+
+|`afterGet`
+|Action to take after `map.get()` operation is complete
+
+|`interceptPut`
+|Replace value in `map.put()` with new value
+
+|`afterPut`
+|Action to take after `map.put()` is complete
+
+|`interceptRemove`
+|Collects removed map entry
+
+|`afterRemove`
+|Action to take after `map.remove()` is complete
+
+|===
+
+The following is an example usage.
+
+[source,java]
+----
+include::ROOT:example$/dds/map/MapInterceptorMember.java[tag=mim]
+----

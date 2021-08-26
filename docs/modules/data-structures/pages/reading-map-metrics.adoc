@@ -1,0 +1,279 @@
+= Reading Map Metrics
+:description: By default, you can read metrics for a given map, such as the primary and backup entry count, last update time, and locked entry count on each member of your cluster. You can access these statistics for the entire map, for the map entries on a specific cluster member, or specific map entries. 
+
+{description}
+
+[[accessing-entry-statistics]]
+
+== Getting Statistics about All Map Entries
+
+To get statistics for all map entries that are owned by a member, use the `getLocalMapStats()` method of the Java member API (xref:overview:topology.adoc[embedded mode]). This method returns data only if the `statistics-enabled` element is set to `true`, which is the default. 
+
+NOTE: If you disable map statistics, statistics will not be available via the API, or in xref:{page-latest-supported-mc}@management-center:ROOT:index.adoc[Hazelcast Management Center].
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="myMap">
+        <statistics-enabled>true</statistics-enabled>
+    </map>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  map:
+    myMap:
+      statistics-enabled: true
+----
+====
+
+
+[source,java]
+----
+LocalMapStats mapStatistics = myMap.getLocalMapStats();
+System.out.println( "Number of entries owned by this member = "
+    + mapStatistics.getOwnedEntryCount() );
+----
+
+NOTE: If you need cluster-wide map statistics, you can get the local map statistics from all members of the cluster and combine them. Alternatively, you can see all map statistics in xref:{page-latest-supported-mc}@management-center:monitor-imdg:monitor-dds.adoc#managing-maps[Hazelcast Management Center].
+
+== Getting Statistics about a Specific Map Entry
+
+To get statistics for a specific map entry, you can use the `getEntryView(key)` method of one of the following available client libraries.
+To use this method, the map must have its `per-entry-statistics-enabled` element set to `true`.
+
+This method returns the following statistics:
+
+[cols="m,a"]
+|===
+|Statistic|Desscription
+
+|cost
+|Cost (in bytes) of the entry.
+
+|creationTime
+|Creation time of the entry.
+
+|expirationTime
+|Expiration time of the entry.
+
+|hits
+|Number of hits of the entry.
+
+|key
+|Key of the entry.
+
+|lastAccessTime
+|Last access time for the entry.
+
+|lastStoredTime
+|Last time the value was saved to a MapStore.
+
+|lastUpdateTime
+|Last time the value was updated.
+
+|maxIdle
+|Last set max idle time in milliseconds.
+
+|ttl
+|Last set time-to-live in milliseconds.
+
+|value
+|Value of the entry.
+
+|version
+|Version of the entry.
+
+|===
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="myMap">
+        <per-entry-statistics-enabled>true</per-entry-statistics-enabled>
+    </map>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  map:
+    myMap:
+      per-entry-statistics-enabled: true
+----
+====
+
+[tabs] 
+==== 
+Java (Embedded Mode):: 
++ 
+--
+[source,java]
+----
+HazelcastInstance hz = Hazelcast.newHazelcastInstance();
+
+EntryView entry = hz.getMap( "quotes" ).getEntryView( "key" );
+
+System.out.println ( "size in memory  : " + entry.getCost() );
+System.out.println ( "creationTime    : " + entry.getCreationTime() );
+System.out.println ( "expirationTime  : " + entry.getExpirationTime() );
+System.out.println ( "number of hits  : " + entry.getHits() );
+System.out.println ( "lastAccessedTime: " + entry.getLastAccessTime() );
+System.out.println ( "lastUpdateTime  : " + entry.getLastUpdateTime() );
+System.out.println ( "version         : " + entry.getVersion() );
+System.out.println ( "key             : " + entry.getKey() );
+System.out.println ( "value           : " + entry.getValue() );
+----
+--
+Java (Client/Server Mode):: 
++ 
+--
+[source,java]
+----
+HazelcastInstance hz = HazelcastClient.newHazelcastClient();
+
+EntryView entry = hz.getMap( "map" ).getEntryView( "key" );
+
+System.out.println ( "size in memory  : " + entry.getCost() );
+System.out.println ( "creationTime    : " + entry.getCreationTime() );
+System.out.println ( "expirationTime  : " + entry.getExpirationTime() );
+System.out.println ( "number of hits  : " + entry.getHits() );
+System.out.println ( "lastAccessedTime: " + entry.getLastAccessTime() );
+System.out.println ( "lastUpdateTime  : " + entry.getLastUpdateTime() );
+System.out.println ( "version         : " + entry.getVersion() );
+System.out.println ( "key             : " + entry.getKey() );
+System.out.println ( "value           : " + entry.getValue() );
+----
+--
+C++:: 
++ 
+--
+
+[source,cpp]
+----
+auto hz = hazelcast::new_client().get();
+auto map = hz.get_map( "map" ).get();
+auto entry = map->get_entry_view<std::string, std::string>("key").get();
+std::cout << "size in memory  : " << entry->cost << std::endl;
+std::cout << "creationTime    : " << entry->creation_time << std::endl;
+std::cout << "expirationTime  : " << entry->expiration_time << std::endl;
+std::cout << "number of hits  : " << entry->hits << std::endl;
+std::cout << "lastAccessedTime: " << entry->last_access_time << std::endl;
+std::cout << "lastUpdateTime  : " << entry->last_update_time << std::endl;
+std::cout << "version         : " << entry->version << std::endl;
+std::cout << "key             : " << entry->key << std::endl;
+std::cout << "value           : " << entry->value << std::endl;    
+
+
+----
+--
+
+C Sharp:: 
++ 
+-- 
+[source,cs]
+----
+await using var client = await HazelcastClientFactory.StartNewClientAsync();
+await using var map = await client.GetMapAsync<string, string>("map");
+var entry = await map.GetEntryViewAsync("key");
+
+Console.WriteLine($"Size in memory  : {entry.Cost}");
+Console.WriteLine($"Creation time   : {entry.CreationTime}");
+Console.WriteLine($"Expiration time : {entry.ExpirationTime}");
+Console.WriteLine($"Number of hits  : {entry.Hits}");
+Console.WriteLine($"Last access time: {entry.LastAccessTime}");
+Console.WriteLine($"Last update time: {entry.LastUpdateTime}");
+Console.WriteLine($"Last update time: {entry.LastUpdateTime}");
+Console.WriteLine($"Version         : {entry.Version}");
+Console.WriteLine($"Key             : {entry.Key}");
+Console.WriteLine($"Value           : {entry.Value}");
+----
+--
+
+Node.js:: 
++ 
+-- 
+[source,javascript]
+----
+const client = await Client.newHazelcastClient();
+const map = await client.getMap('map');
+const entryView = await map.getEntryView('key');
+console.log(`size in memory  :  ${entry.cost}`);
+console.log(`creationTime    : ${entry.creationTime}`);
+console.log(`expirationTime  : ${entry.expirationTime}`);
+console.log(`number of hits  : ${entry.hits}`);
+console.log(`lastAccessedTime: ${entry.lastAccessTime}`);
+console.log(`lastUpdateTime  : ${entry.lastUpdateTime}`);
+console.log(`version         : ${entry.version}`);
+console.log(`key             : ${entry.key}`);
+console.log(`value           : ${entry.value}`);
+
+
+----
+--
+
+Python:: 
++ 
+--
+[source,python]
+----
+client = hazelcast.HazelcastClient()
+entry = client.get_map("map").get_entry_view("key").result()
+print("size in memory  :", entry.cost)
+print("creationTime    :", entry.creation_time)
+print("expirationTime  :", entry.expiration_time)
+print("number of hits  :", entry.hits)
+print("lastAccessedTime:", entry.last_access_time)
+print("lastUpdateTime  :", entry.last_update_time)
+print("version         :", entry.version)
+print("key             :", entry.key)
+print("value           :", entry.value)
+----
+--
+Go:: 
++ 
+-- 
+[source,go]
+----
+// error handling is omitted for brevity
+hzclient, _ := hazelcast.StartNewClient()
+ctx := context.TODO()
+myMap, _ := hz.GetMap(ctx, "my-map")
+entry, _ := myMap.GetEntryView(ctx, "key")
+fmt.Println("Size in memory     :", entry.Cost)
+fmt.Println("Creation time      :", entry.CreationTime)
+fmt.Println("Expiration time    :", entry.ExpirationTime)
+fmt.Println("Number of hits     :", entry.Hits)
+fmt.Println("Last accessed time :", entry.LastAccessTime)
+fmt.Println("Last updated time  :", entry.LastUpdateTime)
+fmt.Println("Version            :", entry.Version)
+fmt.Println("Key                :", entry.Key)
+fmt.Println("Value              :", entry.Value)
+
+----
+--
+====
+

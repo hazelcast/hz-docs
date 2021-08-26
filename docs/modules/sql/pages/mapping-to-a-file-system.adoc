@@ -23,6 +23,239 @@ Depending on the <<supported-file-formats, format of your files>>, you may also 
 
 If you use Hazelcast Enterprise, you can set up permissions to restrict clients' access to your files. For details, see xref:pipelines:job-security.adoc[].
 
+== Configuration Options
+
+Use these options to configure the file connector, using either the xref:select.adoc[`CREATE MAPPING` statement] or a xref:expressions.adoc#file-table-functions[file table function].
+
+[tabs]
+==== 
+Statement:: 
++ 
+-- 
+```sql
+CREATE MAPPING my_files
+TYPE File
+OPTIONS (
+    /* insert configuration options here */
+)
+```
+--
+Function::
++
+--
+```sql
+SELECT * FROM TABLE(
+  JSON_FILE(/* insert configuration options here */)
+);
+```
+--
+====
+
+[cols="1a,1a,2a,2a"]
+|===
+|Option|Default|Description|Example
+
+|[[path]]`path` (required)
+|none
+|The absolute path to a directory in one of the <<supported-file-systems, supported file systems>>.
+
+This option does not support wildcard characters.
+
+If you omit a column list, Hazelcast will try to determine column names and types by reading a sample file in the given directory.
+
+|
+
+[tabs]
+==== 
+Statement:: 
++ 
+--
+```sql
+CREATE MAPPING my_files
+TYPE File
+OPTIONS (
+    'path' = '/path/to/directory',
+    'format' = 'json'
+)
+```
+--
+Function:: 
++ 
+--
+```sql
+SELECT * FROM TABLE(
+  JSON_FILE(path => '/path/to/directory')
+);
+```
+--
+====
+
+|[[format]]`format` (required)
+|none
+|The format of the file in the `path` directory.
+
+Valid values are:
+
+- <<avro, avro>>
+- <<csv, csv>>
+- <<json, json>>
+- <<parquet, parquet>>
+
+|
+[tabs]
+==== 
+Statement:: 
++ 
+--
+```sql
+CREATE MAPPING my_files
+TYPE File
+OPTIONS (
+    'path' = '/path/to/directory',
+    'format' = 'csv'
+)
+```
+--
+Function:: 
++ 
+--
+```sql
+SELECT * FROM TABLE(
+  CSV_FILE(path => '/path/to/directory')
+);
+```
+--
+====
+
+|[[glob]]`glob`
+|`*` (match all files)
+|A filename pattern that uses wildcard characters such as `*` or
+`?` to filter the files in the `path` directory.
+
+|If a directory contains JSON files named using the
+`YYYY-MM-DD.log` pattern, you can read all the files from January 2020 with the following `glob` argument:
+
+[tabs]
+==== 
+Statement:: 
++ 
+--
+```sql
+CREATE MAPPING my_orders
+TYPE File
+OPTIONS (
+    'path' = '/orders',
+    'format' = 'json',
+    'glob' = '2020-01-*.json'
+)
+```
+--
+Function:: 
++ 
+--
+```sql
+SELECT * FROM TABLE(
+  JSON_FILE(path => '/orders', glob => '2020-01-*.json')
+);
+```
+--
+====
+
+|[[ignoreFileNotFound]]`ignoreFileNotFound`
+|`false`
+|Return zero results instead of throwing an error when files in the `path` directory are not found.
+
+If you set this option to `true`, you must specify the column list.
+
+This option is not valid for xref:sql:expressions.adoc#file-table-functions[file table functions], because they always need at least one
+record from which to derive the column list.
+
+|
+```sql
+CREATE MAPPING my_orders
+id INT,
+order_date TIMESTAMP,
+amount BIGINT
+TYPE File
+OPTIONS (
+    'path' = '/orders',
+    'format' = 'json',
+    'glob' = '2020-01-*.json'
+    'ignoreFileNotFound' = 'true'
+)
+```
+
+|[[options]]options
+|none
+|Options to pass to the file system such as <<configuring-authentication-for-remote-file-systems, authentication options>>.
+|
+[tabs]
+==== 
+Statement:: 
++ 
+--
+```sql
+CREATE MAPPING my_orders
+TYPE File
+OPTIONS (
+    'path' = 's3a://example-bucket/path/in/the/bucket',
+    'format' = 'json',
+    'glob' = '2020-01-*.json'
+    'fs.s3a.endpoint' = 's3.us-west-2.amazonaws.com',
+    'fs.s3a.access.key' = 'my-access-key',
+    'fs.s3a.secret.key' = 'my-secret-key'
+    'fs.s3a.impl.disable.cache' = 'true'
+)
+```
+--
+Function:: 
++ 
+--
+```sql
+SELECT * FROM TABLE(
+  JSON_FILE(path => 's3a://example-bucket/path/in/the/bucket', glob => '2020-01-*.json', options => MAP[
+    'fs.s3a.endpoint','s3.us-west-2.amazonaws.com',
+    'fs.s3a.access.key','my-access-key',
+    'fs.s3a.secret.key','my-secret-key',
+    'fs.s3a.impl.disable.cache', 'true'])
+)
+```
+--
+====
+
+|[[sharedFileSystem]]`sharedFileSystem`
+|`false`
+|Read shared files only once instead of reading each copy on every member.
+|
+[tabs]
+==== 
+Statement:: 
++ 
+--
+```sql
+CREATE MAPPING my_orders
+TYPE File
+OPTIONS (
+    'path' = '/orders',
+    'format' = 'json',
+    'glob' = '2020-01-*.json'
+    'sharedFileSystem' = 'true'
+)
+```
+--
+Function:: 
++ 
+--
+```sql
+SELECT * FROM TABLE(
+  JSON_FILE(path => '/orders', glob => '2020-01-*.json', sharedFileSystem => 'true')
+);
+```
+--
+====
+
+|===
+
 == Supported File Systems
 
 Hazelcast supports the following file systems.
@@ -66,179 +299,6 @@ a|Included in both full and slim distributions of Hazelcast.
 
 Although these are the officially supported sources, you can also read from
 any file system that's compatible with Hadoop.
-
-== Configuration Options
-
-Use these options to configure the file connector, using either the xref:select.adoc[`CREATE MAPPING` statement] or a xref:expressions.adoc#file-table-functions[file table function].
-
-[cols="1m,1a,1a,1a,2a,2a"]
-|===
-|Option|Required or Optional|Default|Description|Example|Notes
-
-|path
-|Required
-|none
-|The absolute path to a single directory.
-|
-```sql
-CREATE MAPPING my_files
-TYPE File
-OPTIONS (
-    'path' = '/path/to/directory',
-    'format' = 'json'
-)
-```
-
-Or
-
-```sql
-SELECT * FROM TABLE(
-  JSON_FILE(path => '/path/to/directory')
-);
-```
-|This option does not support wildcard characters.
-
-If you omit a column list, Hazelcast will try to determine column names and types by reading a sample file in the given directory.
-
-|format
-|Required
-|none
-|The format of the file in the `path` directory.
-|
-```sql
-CREATE MAPPING my_files
-TYPE File
-OPTIONS (
-    'path' = '/path/to/directory',
-    'format' = 'csv'
-)
-```
-
-Or
-
-```sql
-SELECT * FROM TABLE(
-  CSV_FILE(path => '/path/to/directory')
-);
-```
-
-|SQL supports only the following file formats:
-
-- <<avro, Avro>>
-- <<csv, CSV>>
-- <<json, JSON>>
-- <<parquet, Parquet>>
-
-|glob
-|Optional
-|`*` (match all files)
-|A filename pattern that uses wildcard characters such as `*` or
-`?` to filter the files in the `path` directory.
-|If a directory contains JSON files named using the
-`YYYY-MM-DD.log` pattern, you can read all the files from January 2020 with the following `glob` argument:
-
-```sql
-CREATE MAPPING my_orders
-TYPE File
-OPTIONS (
-    'path' = '/orders',
-    'format' = 'json',
-    'glob' = '2020-01-*.json'
-)
-```
-
-Or
-
-```sql
-SELECT * FROM TABLE(
-  JSON_FILE(path => '/orders', glob => '2020-01-*.json')
-);
-```
-
-|
-
-|ignoreFileNotFound
-|Optional
-|`false`
-|Return zero results instead of throwing an error when files in the `path` directory are not found.
-|
-```sql
-CREATE MAPPING my_orders
-id INT,
-order_date TIMESTAMP,
-amount BIGINT
-TYPE File
-OPTIONS (
-    'path' = '/orders',
-    'format' = 'json',
-    'glob' = '2020-01-*.json'
-    'ignoreFileNotFound' = 'true'
-)
-```
-|If you set this option to `true`, you must specify the column list.
-
-This option is not valid for xref:sql:expressions.adoc#file-table-functions[file table functions], because they always need at least one
-record from which to derive the column list.
-
-|options
-|Optional
-|none
-|Options to pass to the file system such as <<configuring-authentication-for-remote-file-systems, authentication options>>.
-|
-```sql
-CREATE MAPPING my_orders
-TYPE File
-OPTIONS (
-    'path' = 's3a://example-bucket/path/in/the/bucket',
-    'format' = 'json',
-    'glob' = '2020-01-*.json'
-    'fs.s3a.endpoint' = 's3.us-west-2.amazonaws.com',
-    'fs.s3a.access.key' = 'my-access-key',
-    'fs.s3a.secret.key' = 'my-secret-key'
-    'fs.s3a.impl.disable.cache' = 'true'
-)
-```
-
-Or
-
-```sql
-SELECT * FROM TABLE(
-  JSON_FILE(path => 's3a://example-bucket/path/in/the/bucket', glob => '2020-01-*.json', options => MAP[
-    'fs.s3a.endpoint','s3.us-west-2.amazonaws.com',
-    'fs.s3a.access.key','my-access-key',
-    'fs.s3a.secret.key','my-secret-key',
-    'fs.s3a.impl.disable.cache', 'true'])
-)
-```
-
-|
-
-|sharedFileSystem
-|Optional
-|`false`
-|Read shared files only once instead of reading each copy on every member.
-|
-```sql
-CREATE MAPPING my_orders
-TYPE File
-OPTIONS (
-    'path' = '/orders',
-    'format' = 'json',
-    'glob' = '2020-01-*.json'
-    'sharedFileSystem' = 'true'
-)
-```
-
-Or
-
-```sql
-SELECT * FROM TABLE(
-  JSON_FILE(path => '/orders', glob => '2020-01-*.json', sharedFileSystem => 'true')
-);
-```
-
-|
-|===
 
 == Supported File Formats
 

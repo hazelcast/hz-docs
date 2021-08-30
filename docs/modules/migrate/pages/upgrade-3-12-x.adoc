@@ -1,7 +1,10 @@
 = Upgrading from IMDG Version 3.12.x
 
 This section lists the distribution, documentation and API changes for you to be
-aware when upgrading to Hazelcast 5.0 from IMDG 3.12.x releases.
+aware when you have been using IMDG 3.12.x and want to use Hazelcast 5.0.
+
+NOTE: See also xref:migrate:upgrade.adoc[Upgrading from IMDG and Jet Version 4.x]
+to learn about the changes that need to be considered while upgrading from IMDG 4.x to Hazelcast 5.0.
 
 NOTE: Hazelcast offers tools and features for a smooth migration from
 3.12 to Platform 5.0. See xref:migrate:migration-tool-imdg.adoc[here]
@@ -12,7 +15,7 @@ Major releases allow us to break compatibility in the wire protocols and API, as
 the previously deprecated API.
 
 As breaking changes have been made to the client and cluster member protocols, it is not possible
-to perform any in-place or rolling upgrade from a running IMDG 3.x cluster to Platform 5.0.
+to perform any in-place or rolling upgrade from a running IMDG 3.12.x cluster to Platform 5.0.
 The only way to upgrade to Platform 5.0 is to completely shutdown the cluster.
 
 == Removal of Hazelcast Client Module
@@ -27,8 +30,8 @@ are now available within the `com.hazelcast.core` module.
 
 The default `CachingProvider` is the client-side `CachingProvider`. In order to select the
 member-side `CachingProvider`, you can specify the member-side `CachingProvider` by defining
-the Hazelcast property `hazelcast.jcache.provider.type`. See the <<configuring-jcache-provider,
-Configuring JCache Provider>> section for more details.
+the Hazelcast property `hazelcast.jcache.provider.type`. See the
+xref:jcache:providers.adoc#configuring-jcache-provider[Configuring JCache Provider] section for more details.
 
 == Removal of User Defined Services
 
@@ -42,7 +45,8 @@ The removed SPI's classes will be kept to be used internally.
 
 * The `connection-attempt-period` and `connection-attempt-limit`
 configuration have been removed. Instead, the elements of
-`connection-retry` are now used. See the <<configuring-client-connection-retry>>
+`connection-retry` are now used. See
+xref:clients:java.adoc#configuring-client-connection-retry[Configuring Client Connection Retry]
 for the usage of those new elements.
 
 == Increasing the Member/Client Thread Counts
@@ -57,12 +61,12 @@ difference. If less than 20 cores are detected, 3+3 IO threads are used
 and the behavior remains the same as Hazelcast IMDG 3.x series.
 
 A smart client, by default, gets 3+3 (3 input and 3 output) I/O threads to
-speed up the performance. Before Hazelcast IMDG 4.0, this was
+speed up the performance. Previously, this was
 1+1. However, the client I/O can become a bottleneck with too few threads.
 If TLS/SSL is enabled, then by default a smart client
 makes use of 3+3 I/O threads which was already the case with previous versions.
 
-There is a new performance feature in Hazelcast IMDG 4.0 called
+There has been a new performance feature since IMDG 4.0 called
 thread overcommit. By default, Hazelcast creates more
 threads than it has cores, e.g., on a 20 cores machine it creates 28 threads;
 20 threads for the partition operations
@@ -78,10 +82,10 @@ It depends on the environment if this gives a performance boost or not.
 In some environments it can give a significant boost
 and in some it will give a significant loss; it is best to benchmark
 for your specific situation. If you are doing lots of queries or other tasks
-which are CPU-bound, e.g aggregations, you probably want to have as many cores available to partition
+which are CPU-bound, e.g., aggregations, you probably want to have as many cores available to partition
 operations as possible.
 
-See the <<threading-model, Threading Model section>> for more information on Hazelcast IMDG's threading model.
+See xref:cluster-performance:best-practices.adoc#threading-model[Threading Model] for more information on Hazelcast's threading model.
 
 == Optimizing for Single Threaded Usages
 
@@ -94,7 +98,7 @@ This is great for throughput, but in case of single threaded setups,
 it adds to the latency and therefore it reduces the throughput because threads
 need to be notified.
 
-With this release, Hazelcast IMDG detects the single threaded usage
+Hazelcast now detects the single threaded usage
 and tries to write through to the socket directly instead of handing
 it over to the I/O thread; this optimization is called "write-through".
 
@@ -105,7 +109,7 @@ a single threaded usage, the response is processed on the I/O thread
 so we can remove a thread notification and therefore get higher throughput.
 
 Both the write-through and response-through are enabled by default.
-If Hazelcast IMDG detects that there are many active threads,
+If Hazelcast detects that there are many active threads,
 response- and write-through are disabled so it won't cause a performance
 degradation.
 
@@ -461,8 +465,8 @@ public static class PortableNameExtractor implements ValueExtractor<ValueReader,
 == Removal of MapReduce
 
 MapReduce API has been removed, which was deprecated. Instead, you can use the
-<<aggregations>> on top of Query infrastructure and the
-https://docs.hazelcast.org/docs/jet/latest/manual/[Hazelcast Jet^]
+xref:query:aggregations.adoc[aggregations] on top of Query infrastructure and
+xref:pipelines:overview.adoc#what-is-the-jet-engine[Hazelcast Jet engine]
 distributed computing platform as its successors and replacements.
 
 See the following table for the before(MapReduce)/after(Hazelcast Jet)
@@ -514,7 +518,7 @@ Map<String, Long> counts =
 ----
 |===
 
-See the https://github.com/hazelcast/hazelcast-jet/tree/master/examples/wordcount[Jet Code Samples^] for a full insight.
+See the xref:architecture:distributed-computing.adoc#the-word-count-task[Word Count Task] for a full insight.
 
 == Refactoring of Migration Listener
 
@@ -613,11 +617,12 @@ for a full insight.
 
 == Defaulting to OpenSSL
 
-Hazelcast IMDG defaults to use OpenSSL when:
+Hazelcast defaults to use OpenSSL when:
 
-* when you use <<tlsssl, TLS/SSL>> and Hazelcast IMDG detects some <<integrating-openssl-boringssl, OpenSSL>> capabilities
+* when you use xref:security:tls-ssl.adoc[TLS/SSL] and Hazelcast detects some
+xref:security:integrating-openssl.adoc[OpenSSL] capabilities
 * the Java version is less than 11
-* no explicit <<configuring-hazelcast-for-openssl, SSLEngineFactory>> is configured.
+* no explicit xref:security:integrating-openssl.adoc#configuring-hazelcast-for-openssl[SSLEngineFactory] is configured.
 
 == Changes in Security Configurations
 
@@ -853,7 +858,7 @@ public PermissionCollection getPermissions(Subject subject, Class<? extends Perm
 
 === Changes in ClusterLoginModule
 
-`ClusterLoginModule` in Hazelcast IMDG 3.x contained four
+`ClusterLoginModule` in Hazelcast IMDG 3.12.x contained four
 abstract methods to alter the behavior of `LoginModule`:
 
 * `onLogin`
@@ -963,7 +968,7 @@ public class TestLoginModule extends ClusterLoginModule {
 
 === Changes in Credentials for Client Protocol
 
-In Hazelcast IMDG 3.x, the custom credentials coming through
+In Hazelcast IMDG 3.12.x, the custom credentials coming through
 the client protocol was always automatically deserialized. To
 avoid this, the `Credentials` interface has been redesigned in
 Hazelcast IMDG 4.0 to contain only the `getName()`
@@ -1060,7 +1065,7 @@ List of the supported ``Callback``s in Hazelcast IMDG 4.0:
 * `javax.security.auth.callback.NameCallback`
 * `javax.security.auth.callback.PasswordCallback`
 * `com.hazelcast.security.CredentialsCallback` (provides access to the incoming `Credentials` instance)
-* `com.hazelcast.security.EndpointCallback` (allows retrieving the remote host address, it's a replacement for `Credentials.getEndpoint()` in Hazelcast IMDG 3.x)
+* `com.hazelcast.security.EndpointCallback` (allows retrieving the remote host address, it's a replacement for `Credentials.getEndpoint()` in Hazelcast IMDG 3.12.x)
 * `com.hazelcast.security.ConfigCallback` (allows retrieving member's `Config` object)
 * `com.hazelcast.security.SerializationServiceCallback` (provides access to Hazelcast `SerializationService`)
 * `com.hazelcast.security.ClusterNameCallback` (provides access to Hazelcast cluster name sent by the connecting party)
@@ -1139,7 +1144,7 @@ See the following table for a before/after sample.
 ----
 |===
 
-See the <<split-brain-protection, Split-Brain Protection section>> for more information on network partitioning.
+See the xref:network-partitioning:split-brain-protection.adoc[Split-Brain Protection section] for more information on network partitioning.
 
 == Renaming getID to getClassId in IdentifiedDataSerializable
 
@@ -1185,7 +1190,8 @@ public interface IdentifiedDataSerializable extends DataSerializable {
 ----
 |===
 
-See <<identifieddataserializable, here>> for more information on `IdentifiedDataSerializable`.
+See xref:serialization:implementing-dataserializable.adoc#identifieddataserializable[here] for more information
+on `IdentifiedDataSerializable`.
 
 == Introducing Lambda Friendly Interfaces
 
@@ -1325,7 +1331,7 @@ The data structures and interfaces enhanced in this sense are listed below:
 
 == Removal of ICompletableFuture
 
-In Hazelcast IMDG 3.x series, `com.hazelcast.core.ICompletableFuture` was
+In Hazelcast IMDG 3.12.x series, `com.hazelcast.core.ICompletableFuture` was
 introduced to enable reactive programming style. `ICompletableFuture` was
 intended as a temporary, JDK 6 compatible replacement for `java.util.concurrent.CompletableFuture`
 that was introduced in Java 8. Since Hazelcast 4.0 requires Java 8, the user-facing
@@ -1607,11 +1613,11 @@ properties.put("some.other.property", "some-other-value");
 ----
 |===
 
-See the <<wan-replication, here>> for more information on WAN Replication.
+See the xref:wan:wan.adoc[here] for more information on WAN Replication.
 
 == WAN Replication SPI Changes
 
-In IMDG 3.x series, the WAN publisher SPI allowed you to plug into the lifecycle of a map/cache entry
+In IMDG 3.12.x series, the WAN publisher SPI allowed you to plug into the lifecycle of a map/cache entry
 and replicate the updates to another system. For example, you might implement replication to
 Kafka or some JMS queue or even write out map and cache event changes to a log on disk.
 The SPI was not very intuitive though:
@@ -1622,7 +1628,7 @@ Open Source or Enterprise edition.
 * There were cases of leaking internals which don't make sense for some custom implementations.
 * There were unused methods in the public SPI.
 
-In Hazelcast IMDG 4.0, we have provided a new and cleaner WAN publisher SPI. You only need to
+We have provided a new and cleaner WAN publisher SPI after 3.12.x. You only need to
 implement a single interface: `com.hazelcast.wan.WanPublisher`. This implementation can
 then be set in the WAN replication configuration and be used with both Hazelcast Open Source and
 Enterprise editions.
@@ -1657,7 +1663,7 @@ the `com.hazelcast.query.impl.predicate` package.
 Consequently, the public Predicate API now provides only interfaces (`Predicate`,
 `PagingPredicate` and `PartitionPredicate`) with no dependencies on any internal APIs.
 
-See the <<distributed-query, Distributed Query chapter>> for more information on predicates.
+See the xref:query:predicate-overview.adoc[Predicates API section] for more information on predicates.
 
 == Changing the UUID String Type to UUID
 
@@ -1722,14 +1728,14 @@ See the following table for the before/after sample implementations.
 After introduction of _CP Subsystem_ in Hazelcast IMDG 3.12,
 legacy implementations of the distributed concurrency APIs, e.g., `ILock` and `IAtomicLong`,
 had been deprecated.
-In IMDG 4.0, these deprecated implementations and additionally
+In IMDG 4.0 and afterwards, these deprecated implementations and additionally
 `ILock` and `ICondition` interfaces are completely removed.
 
-Differently from Hazelcast IMDG 3.12, _CP Subsystem_ received
-an _unsafe_ operation mode in IMDG 4.0 which provides weaker
+After Hazelcast IMDG 3.12, _CP Subsystem_ has received
+an _unsafe_ operation mode which provides weaker
 consistency guarantees similar to former implementations in Hazelcast IMDG 3.x series.
 
-For more information, see the <<cp-subsystem, CP Subsystem section>>.
+For more information, see the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem section].
 
 See the following table for the before/after samples.
 
@@ -1843,14 +1849,14 @@ has been used in the older IMDG versions still can be used:
 <merge-policy batch-size="100">LatestAccessMergePolicy</merge-policy>
 ```
 
-See <<configuring-merge-policies, here>> for more information on configuring merge policies.
+See xref:network-partitioning:split-brain-recovery.adoc#configuring-merge-policies[here] for more information on configuring merge policies.
 
 == Changes in AWS Configuration
 
 AWS programmatic configuration has been merged with a more universal configuration
 infrastructure common to all cloud providers. The declarative configuration
-remains unchanged. See https://github.com/hazelcast/hazelcast-aws/blob/master/README.md#configuration[here^]
-for more information on configuring Hazelcast IMDG on AWS.
+remains unchanged. See xref:deploy:deploying-on-aws.adoc[here]
+for more information on configuring Hazelcast on AWS.
 
 See the following table for the before/after samples.
 
@@ -1896,11 +1902,11 @@ The following deprecated cluster properties were removed:
 * `hazelcast.memcache.enabled`
 * `hazelcast.http.healthcheck.enabled`
 
-Please see the <<using-the-rest-endpoint-groups, Using the REST Endpoint Groups section>> on how
+Please see xref:maintain-cluster:rest-api.adoc#using-the-rest-endpoint-groups[Using the REST Endpoint Groups] on how
 to configure Hazelcast instance to expose REST endpoints.
-Please see the the <<health-check-and-monitoring, Health Check and Monitoring section>> on how
+Please see xref:maintain-cluster:monitoring.adoc#health-check-and-monitoring[Health Check and Monitoring] on how
 to enable the health check.
-Please see the <<memcache-client, Memcache Client section>> on how to enable memcache client
+Please see xref:clients:memcache.adoc[Memcache Client] on how to enable memcache client
 request listener service.
 
 == Removal of Deprecations in `LoginModuleConfig`
@@ -1921,14 +1927,14 @@ The following deprecated methods have been removed:
 
 In declarative configuration `backup-count` property should be used instead.
 
-See <<configuring-multimap, here>> for more information on configuring MultiMap.
+See xref:data-structures:multimap.adoc#configuring-multimap[here] for more information on configuring MultiMap.
 
 == Removal of Deprecations in `PartitioningStrategyConfig`
 
 Misspelled `setPartitionStrategy(PartitioningStrategy)` has been removed,
 `setPartitioningStrategy(PartitioningStrategy)` should be used instead.
 
-See <<partitioningstrategy, here>> for more information on configuring MultiMap.
+See xref:performance:data-affinity.adoc#partitioningstrategy[here] for more information on configuring MultiMap.
 
 == Removal of Deprecations in `ServiceConfig`
 
@@ -2119,8 +2125,8 @@ The output of the following endpoints has been changed to JSON:
 
 == Changes in the Diagnostics Configuration
 
-By introducing the <<metrics, metrics system>> in Hazelcast IMDG 4.0,
-the metrics collected by <<diagnostics, Diagnostics>>
+By introducing the xref:maintain-cluster:monitoring.adoc#metrics[metrics system] in Hazelcast IMDG 4.0 and afterwards,
+the metrics collected by xref:maintain-cluster:monitoring.adoc#diagnostics[Diagnostics]
 and the metrics system is shared.
 This has come with the following changes of the system
 properties that configure diagnostics:
@@ -2130,7 +2136,7 @@ Collecting debug metrics can be enabled by setting
 the `hazelcast.metrics.debug.enabled` or `hazelcast.client.metrics.debug.enabled`
 system properties to `true` for the members and clients respectively.
 * `hazelcast.diagnostics.metric.distributed.datastructures` is not anymore available
-since the data structure metrics are required for the other <<metric-consumers, Metric Consumers>>.
+since the data structure metrics are required for the other xref:maintain-cluster:monitoring.adoc#exposing-metrics[metric consumers].
 Therefore, they are collected by default and no need for enabling it for the diagnostics.
 
 == Changes in the Management Center Configuration
@@ -2157,7 +2163,7 @@ This has come with the following changes of the system properties that configure
 == Changes in the Event Journal Configuration
 
 Event journal configuration had been put as a top-level configuration
-element. With IMDG 4.0, this restriction has been removed; this means
+element. With IMDG 4.0 and afterwards, this restriction has been removed; this means
 event journal configuration now can be part of both map and cache
 configurations. This eliminates additionally specifying the map
 /cache names on the event journal configuration to connect it

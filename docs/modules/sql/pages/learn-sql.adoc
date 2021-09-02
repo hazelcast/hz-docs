@@ -24,7 +24,7 @@ xref:interactive-sql-kafka.adoc[Try the interactive example,window=_blank]
 
 == Step 1. Query Streaming Data from Apache Kafka
 
-In this step, you use SQL to query a Kafka topic and display the results.
+In this step, you use SQL to query a Kafka topic and display the results in the shell.
 
 . Connect to the SQL shell on your cluster member.
 +
@@ -101,7 +101,7 @@ docker run --name kafka --network hazelcast-network --rm hazelcast/hazelcast-qui
 --
 ====
 
-. In the SQL shell, configure the Kafka connector to allow Hazelcast to access data that is pushed to the Kafka server, using the xref:sql:create-mapping.adoc[`CREATE MAPPING` statement].
+. In the SQL shell, create a mapping to Kafka to allow Hazelcast to access data that is pushed to the Kafka server.
 +
 Here, you configure the connector to read trading information as JSON messages with the following fields:
 +
@@ -153,7 +153,7 @@ OPTIONS (
 --
 ====
 
-. Write a streaming query that filters trade events from Kafka and adds them to a table.
+. Write a streaming query that filters trade events from Kafka.
 +
 [source,sql]
 ----
@@ -194,13 +194,11 @@ You should see that Hazelcast has executed the query and filtered the results:
 
 == Step 2. Ingest Query Results into a Hazelcast Map
 
-As well as querying and transforming data, you can ingest results into other systems, including Hazelcast maps to avoid running redundant queries.
+To save your Kafka query results as a view that you can later access faster, you can cache them in Hazelcast by ingesting them into a map.
 
-However, because Kafka is a streaming source, your query continues to run until it is canceled and results are returned to the SQL shell as soon as they are ready.
+Because Kafka is a streaming source, your query continues to run until it is canceled and results are returned to the SQL shell as soon as they are ready. Therefore, to ingest data, you need to set up a _job_ to allow the streaming query to run in the background and insert the results into a map.
 
-To be able to ingest data, you need to set up a _job_ to allow the streaming query to run in the background and send the results elsewhere.
-
-. Create a mapping to a new map in which to store your streaming query results.
+. Create a mapping to a new map in which to ingest your streaming query results.
 +
 ```sql
 CREATE MAPPING tradeMap (
@@ -223,7 +221,7 @@ SELECT id, ticker, price, amount
 FROM trades;
 ```
 +
-**Note:** A streaming job will run indefinitely until it is explicitly canceled or the cluster is shut down. Even if you kill the shell connection, the job will continue running on the cluster.
+NOTE: A streaming job will run indefinitely until it is explicitly canceled or the cluster is shut down. Even if you kill the shell connection, the job will continue running on the cluster.
 
 . List your job to make sure that it was successfully submitted.
 +
@@ -275,13 +273,13 @@ DROP JOB ingest_trades;
 In the terminal where you started the Hazelcast member, you should see that the job is canceled as well as the time it was started and how long it ran for.
 
 ```
-Execution of job '062d-d578-9240-0001', execution 062d-d578-df80-0001 got terminated, reason=java.util.concurrent.CancellationException
-    Start time: 2021-05-13T16:31:14.410
-    Duration: 00:02:48.318
+Start time: 2021-05-13T16:31:14.410
+Duration: 00:02:48.318
 ```
 
 == Next Steps
 
+- xref:sql-overview.adoc[Learn about SQL]
 - xref:pipelines:configuring-jobs.adoc[]
 - xref:pipelines:job-management.adoc[]
 - xref:sql-statements.adoc#job-management[SQL statements for job management]

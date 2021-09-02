@@ -17,18 +17,18 @@ TIP: For a hands-on introduction to SQL, see xref:get-started-sql.adoc[].
 
 |Ad-hoc queries, also known as point queries or online transactional processing (OLTP) queries.
 |Retrieve a small subset of data quickly.
-|xref:get-started-sql.adoc[]
+|xref:get-started-sql.adoc#ad-hoc[]
 
 |Batch queries, also known as online analytical processing (OLAP) queries.
 |Query large datasets either in one or multiple systems and/or run aggregations on them to get deeper insights.
-|xref:get-started-sql.adoc[]
+|xref:get-started-sql.adoc#batch[]
 
 |Streaming queries, also known as continuous queries.
 |Keep an open connection to a streaming data source and run a continuous query to get near real-time updates.
 |xref:learn-sql.adoc[]
 
 |Federated queries 
-|Join tables from different datasets. Normally, querying in SQL is database or dataset-specific. However, with <<mappings, mappings>>, you can pull information from different sources and present a more complete picture of the data.
+|Query different datasets such as Kafka topics and Hazelcast maps, using a single query. Normally, querying in SQL is database or dataset-specific. However, with <<mappings, mappings>>, you can pull information from different sources and present a more complete picture of the data.
 |xref:get-started-sql-files.adoc[]
 
 |===
@@ -37,60 +37,40 @@ TIP: For a hands-on introduction to SQL, see xref:get-started-sql.adoc[].
 
 To connect to data sources and query them as if they were tables, the SQL service uses a concept called _mappings_.
 
-Mappings use Hazelcast xref:integrate:connectors.adoc[connectors] to give the SQL service essential information about the source's data model, data access patterns, and serialization formats.
+Mappings store essential metadata about the source's data model, data access patterns, and serialization formats so that the SQL service can connect to the data source and query it.
 
-You can create mappings to the following data sources:
+You can create mappings for the following data sources by using the xref:create-mapping.adoc[`CREATE MAPPING` statement]:
 
-- xref:mapping-to-a-file-system.adoc[Distributed maps]
+- xref:mapping-to-a-file-system.adoc[Hazelcast maps]
 - xref:mapping-to-kafka.adoc[Kafka topics]
 - xref:mapping-to-maps.adoc[File systems]
 
-== Schemas
-
-The SQL service exposes objects as tables in the following schemas:
-
-- `partitioned`: Existing maps in a local cluster that do not contain JSON values.
-
-- `public`: Any tables that have been filled with data, using mappings.
-
-- `information_schema`: Details about any mappings.
-
-If you don't name a schema in your query, Hazelcast first looks in the `public` schema and then in the `partitioned` schema.
-
 == Case Sensitivity
 
-Schema names, table names, and field names are case-sensitive.
+Mapping names and field names are case-sensitive.
 
-For example, you can access an exisiting `employee` map
-as `employee` or `partitioned.employee`, but not as `Employee`:
-
-[source,sql]
-----
-SELECT * FROM employee
-SELECT * FROM partitioned.employee
-----
+For example, you can access an `employee` map
+as `employee` but not as `Employee`.
 
 == Limitations
 
 SQL has the following limitations:
 
-- To use SQL, the Jet engine must be enabled.
+- The only supported Hazelcast data structure is map.
 +
-For details about enabling/disabling the Jet engine, see xref:pipelines:job-security.adoc[].
-
+You cannot query other data structures such as replicated maps.
+- No support for the `CREATE INDEX` statement.
++
+To create indexes for maps in Hazelcast, see xref:query:indexing-maps.adoc[]
+- No support for the `JSON` type.
++
+You can't use functions such as `JSON_VALUE` or `JSON_QUERY`.
+- Limited support for joins.
++
+See xref:sql:select.adoc#join-tables[Join Tables].
 - No support for window functions.
 +
 You cannot group or aggregate results in streaming queries.
-- Fewer connectors.
-+
-You can use only a subset of the available connectors in the Jet API.
-+
-See xref:pipelines:sources-sinks.adoc[].
-- Limited support for joins.
-+
-If you want to use joins, the data source on the right of the join must be a map.
-+
-See xref:sql:select.adoc#join-tables[Join Tables].
 
 == Supported Statements
 
@@ -101,13 +81,10 @@ For a list of supported statements, see xref:sql:sql-statements.adoc[].
 == How Hazelcast Executes SQL Statements
 
 When an SQL statement is submitted for execution, the SQL service parses and
-optimizes it using link:https://calcite.apache.org/[Apache Calcite]. The result is an executable plan that
+optimizes it using link:https://calcite.apache.org/[Apache Calcite]. The result is an executable plan in the form of a Jet graph that
 is cached and reused by subsequent executions of the same statement.
 
-The plan contains a tree of query fragments. A query fragment is a tree of
-operators that could be executed on a single member independently. Child
-fragments supply data to parent fragments, possibly over a network, until
-the root fragment is reached. The root fragment returns the query results.
+For details about how the Jet engine models data into graphs, see xref:architecture:distributed-computing.adoc[].
 
 == Next Steps
 

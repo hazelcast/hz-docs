@@ -1,5 +1,5 @@
 = Querying Maps with SQL
-:description: Use SQL to run optimized distributed queries on the keys and values of maps in a local cluster.
+:description: You can use SQL to run optimized distributed queries on the keys and values of maps in a local cluster.
 :page-aliases: query:querying-maps-sql.adoc
 
 {description}
@@ -35,11 +35,15 @@ The `this` alias is returned by a query only if the value does not contain an ob
 
 == Querying Objects in Map Entries
 
-If you store objects in a map, you can query the objects' fields only if they are serialized using one of the following options:
+If you store objects in a map, you can query the objects' top-level fields only if they are serialized using one of the following options:
 
-- xref:serialization:implementing-java-serializable.adoc[`Serializable`] - xref:serialization:implementing-dataserializable.adoc[`DataSerializable`], and xref:serialization:implementing-dataserializable.adoc#identifieddataserializable[`IdentifiedDataSerializable`] formats, Only public fields and getters are available. A public field is available with its exact name. A getter is available with the JavaBean naming conventions.
-- xref:serialization:implementing-portable-serialization.adoc[`Portable`] objects, the fields that are written in the `Portable.writePortable()` method are available using their exact names.
-- `HazelcastJsonValue` objects.
+- xref:serialization:implementing-java-serializable.adoc[`Serializable`] - xref:serialization:implementing-dataserializable.adoc[`DataSerializable`], and xref:serialization:implementing-dataserializable.adoc#identifieddataserializable[`IdentifiedDataSerializable`].
++
+Only public fields and getters are available. A public field is available with its exact name. A getter is available with the JavaBean naming conventions.
+- xref:serialization:implementing-portable-serialization.adoc[`Portable`].
++
+Only the fields that are written in the `Portable.writePortable()` method are available, using their exact names.
+- JSON.
 
 NOTE: You cannot query nested object fields using SQL.
 
@@ -72,6 +76,75 @@ SELECT __key, this, name, age FROM employee
 ----
 
 If both the key and value have fields with the same name, you may only query the key's field and not the value's field.
+
+== Querying Enums
+
+An enum is a user-defined type, which is mapped to the xref:data-types.adoc[`OBJECT` type] in SQL.
+
+If you use the Java client, you can use the following options to query enums:
+
+- xref:parameterized-queries.adoc[Use a parameterized query].
+- Create getter/setter methods that use the enum's ordinal or name.
+
+For example, consider a map whose values are `Employee` objects with the following fields.
+
+[cols="1,1"]
+|===
+| Name
+| Type
+
+|`name`
+|`String`
+
+|`age`
+|`Int`
+
+|`status`
+|`EmployeeStatus`
+|===
+
+And the `status` field is an enum called `EmployeeStatus`.
+
+```java
+public enum EmployeeStatus {
+  PENDING,
+  ACTIVE,
+  VACATION,
+  DELETED;
+}
+```
+
+To query employees who have a `VACATION` status, you could do either of the following:
+
+- Define a getter method that returns the string representation of the enum.
++
+```java
+public enum EmployeeStatus {
+  PENDING,
+  ACTIVE,
+  VACATION,
+  DELETED;
+
+  public String getEmployeeStatusString() {
+    return EmployeeStatus != null ? EmployeeStatus.name() : null;
+  }
+
+  public void setEmployeeStatusString(String newValue) {
+    EmployeeStatus = newValue == null ? null : EmployeeStatus.valueOf(newValue);
+  }
+}
+```
++
+```sql
+SELECT * FROM employees 
+WHERE getEmployeeStatusString='VACATION';
+```
+
+- Use a parameterized query with the Java client.
++
+```java
+sql.execute("SELECT * FROM employees WHERE employee.status = ?", EmployeeStatus.VACATION);
+```
 
 == Running Streaming Queries on Maps
 

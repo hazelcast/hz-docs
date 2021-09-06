@@ -113,28 +113,26 @@ Management Center, REST API and cluster management scripts.
 
 == Handling Slow Migrations
 
-While a cluster is migrating a member's partitions, the performance of the cluster may be affected by reduced throughput or temporary unavailability of data.
+While a cluster is migrating a member's partitions, its performance may be affected by reduced throughput or temporary unavailability of data.
 
 If you have lots of persisted data and you are concerned about how long it may take for your cluster to migrate data after a member fails to rejoin, you can configure the following options:
 
 - <<delaying-migrations, Delay migrations>>.
 +
-WARNING: Do not use this option if your cluster also stores in-memory data. This option stops the cluster from migrating in-memory data. As a result any data that is not persisted will be lost if the member restarts, including backups.
+WARNING: Do not configure a delay if your cluster also stores in-memory data that is not persisted. Clusters do not repartition their data if a member rejoins within the delay. As a result, any data that is not persisted will be lost if the member restarts within the delay, including backups.
 
 - <<synchronzing-persisted-data-faster, Synchronize persisted data faster>> while also allowing the cluster to continue migrations as usual.
 
 === Delaying Migrations
 
-Delaying migrations stops your cluster from migrating a failed member's data too soon. This option is useful if you have lots of persisted data that would take too long to migrate, and you want to give members more time to restart.
-
-You may want to set a rebalance delay when you expect members to shut down and restart quickly such as in the following scenarios:
+Delaying migrations stops your cluster from migrating a failed member's data too soon. This option is useful if you have lots of persisted data that would take too long to migrate, and you want to give members more time to restart. You may want to delay migrations when you expect members to shut down and restart quickly such as in the following scenarios:
 
 - You're carrying out a planned shutdown.
 - You're running a cluster on Kubernetes and expect members to be restarted quickly.
 
 To delay migrations during a single member failure, configure a _rebalance delay_, using the xref:ROOT:system-properties.adoc#rebalance-delay[`hazelcast.partition.rebalance.after.member.left.delay.seconds` property].
 
-WARNING: Do not use configure this propery if your cluster also stores in-memory data. A non-zero value will stop the cluster from migrating in-memory data. As a result any data that is not persisted will be lost if the member restarts, including backups. 
+WARNING: Do not configure a delay if your cluster also stores in-memory data that is not persisted. Clusters do not repartition their data if a member rejoins within the delay. As a result, any data that is not persisted will be lost if the member restarts within the delay, including backups.
 
 Assume the following:
 
@@ -142,7 +140,9 @@ Assume the following:
 * Member B is killed.
 * Member B restarts.
 
-If member B restarts within the rebalance delay, all its persisted data will be restored from disk and no migrations will take place.
+If member B restarts within the rebalance delay, all its persisted data will be restored from disk, and *the cluster will not xref:overview:data-partitioning.adoc#repartitioning[repartition] its data*. Any in-memory data in member B's partitions will be lost, and member B will still be listed as the owner of those partitions. So, even if the cluster has backups of in-memory data in maps, requests for that data will go to member B (unless the members have xref:data-structures:backing-up-maps.adoc#enabling-in-memory-backup-reads-embedded-mode[backup reads enabled]).
+
+NOTE: If members have backup reads enabled, some in-memory data may appear to have been kept. However, eventually the backups will be xref:consistency-and-replication:replication-algorithm.adoc#best-effort-consistency[synchronized with the primary partition] (member B).
 
 While the member is down, operations on partitions that are owned by that member will be retried until they either time out or the member restarts and executes the requested operation. As a result, this option is best when you prefer a latency spike rather than migrating data over the network.
 

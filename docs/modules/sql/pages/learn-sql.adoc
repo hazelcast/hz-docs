@@ -1,5 +1,5 @@
 = Get Started with SQL Over Kafka
-:description: Use an interactive SQL shell on your Hazelcast member to query real-time streaming data as it is being generated and ingest the results into a map.
+:description: In this tutorial, you use an interactive SQL shell on a Hazelcast member to query Kafka topics in real-time.
 :page-aliases: pipelines:learn-sql.adoc
 
 {description}
@@ -15,8 +15,8 @@ To complete this tutorial, you need the following:
 |A Hazelcast cluster in client/server mode and an instance of Management Center running on your local network 
 |xref:getting-started:get-started-binary.adoc[Start a Local Cluster]
 
-|Enable the Jet engine.
-|The Jet engine is needed to run SQL queries. For information on how to enable the Jet engine, see xref:pipelines:job-security.adoc[].
+|A connection to the SQL shell
+|xref:connecting-to-sql.adoc[]
 |===
 
 [.interactive-button]
@@ -24,44 +24,7 @@ xref:interactive-sql-kafka.adoc[Try the interactive example,window=_blank]
 
 == Step 1. Query Streaming Data from Apache Kafka
 
-In this step, you use SQL to query a Kafka topic and display the results in the shell.
-
-. Connect to the SQL shell on your cluster member.
-+
-[tabs]
-====
-Binary::
-+
---
-.Mac and Linux
-[source,shell]
-----
-bin/hz-cli sql
-----
-
-.Windows
-[source,shell]
-----
-bin/hz-cli.bat sql
-----
---
-Docker::
-+
---
-Replace the `$LOCAL_IP` placeholder with your member's local IP address.
-
-[source,shell,subs="attributes+"]
-----
-docker run --network hazelcast-network -it --rm hazelcast/hazelcast:{page-component-version} hazelcast --targets hello-world@$LOCAL_IP sql
-----
-
-The `--targets` parameter tells the SQL shell to connect to the member at the given IP address in a cluster called `hello-world`.
-
-TIP: Make sure you mount the `likes.csv` file on the container that's running your member.
---
-====
-
-. On the same device as your Hazelcast member, start a Kafka server.
+. On the same device as your Hazelcast member, start a Kafka broker.
 +
 [tabs]
 ====
@@ -101,19 +64,7 @@ docker run --name kafka --network hazelcast-network --rm hazelcast/hazelcast-qui
 --
 ====
 
-. In the SQL shell, create a mapping to Kafka to allow Hazelcast to access data that is pushed to the Kafka server.
-+
-Here, you configure the connector to read trading information as JSON messages with the following fields:
-+
-[source,json]
-----
-{
-  "id"
-  "ticker"
-  "price"
-  "amount"
-}
-----
+. In the SQL shell, create a Kafka mapping to allow Hazelcast to access messages in the `trades` topic.
 +
 [tabs]
 ====
@@ -152,8 +103,20 @@ OPTIONS (
 ----
 --
 ====
++
+Here, you configure the connector to read JSON values with the following fields:
++
+[source,json]
+----
+{
+  "id"
+  "ticker"
+  "price"
+  "amount"
+}
+----
 
-. Write a streaming query that filters trade events from Kafka.
+. Write a streaming query that filters trade messages from Kafka.
 +
 [source,sql]
 ----
@@ -172,7 +135,7 @@ You should see an empty table:
 +
 NOTE: Streaming queries like this one continue to run until you close the shell or kill the process with **Ctrl** + **C**.
 
-. In another terminal, open another connection to the SQL shell and push some messages to Kafka.
+. In another terminal, open another connection to the SQL shell and publish some messages to the `trades` topic.
 +
 [source,sql]
 ----
@@ -192,19 +155,79 @@ You should see that Hazelcast has executed the query and filtered the results:
 |EFGH             |                  1400|                 20|
 ```
 
-== Step 2. Ingest Query Results into a Hazelcast Map
+== Step 2. Enrich the Data in the Kafka Messages
 
-To save your Kafka query results as a view that you can later access faster, you can cache them in Hazelcast by ingesting them into a map.
+Kafka messages are often small and contain minimal data to reduce network latency. For example, the `trades` topic does not contain any information about the company that's associated with a given ticker. To get deeper insights from data in Kafka topics, you can join query results with data in other mappings.
 
-Because Kafka is a streaming source, your query continues to run until it is canceled and results are returned to the SQL shell as soon as they are ready. Therefore, to ingest data, you need to set up a _job_ to allow the streaming query to run in the background and insert the results into a map.
+. Create a mapping to a new map in which to store the company information that you'll use to enrich results from the `trades` topic.
++
+```sql
+CREATE MAPPING companies (
+__key BIGINT,
+ticker VARCHAR,
+company VARCHAR,
+marketcap BIGINT)
+TYPE IMap
+OPTIONS (
+'keyFormat'='bigint',
+'valueFormat'='json-flat');
+```
+
+. Add some entries to the `companies` map.
++
+```sql
+INSERT INTO companies VALUES
+(1, 'ABCD', 'The ABCD', 100000),
+(2, 'EFGH', 'The EFGH', 5000000);
+```
+
+. Use the xref:sql:select.adoc#join-tables[`JOIN` clause] to merge results from the `companies` map and `trades` topic so you can see which companies are being traded.
++
+```sql
+SELECT trades.ticker, companies.company, trades.amount
+FROM trades
+JOIN companies
+ON companies.ticker = trades.ticker;
+```
++
+```
++------------+-----------+----------+
+|ticker      |company    |    amount|
++------------+-----------+----------+
+```
+
+. In another SQL shell, publish some messages to the `trades` topic.
++
+[source,sql]
+----
+INSERT INTO trades VALUES
+  (1, 'ABCD', 5.5, 10),
+  (2, 'EFGH', 14, 20);
+----
+
+. Go back to the terminal where you created the streaming query that merges results from the `companies` map and `trades` topic.
++
+You should see that Hazelcast has executed the query.
++
+```
++------------+-----------+----------+
+|ticker      |company    |    amount|
++------------+-----------+----------+
+|ABCD        |The ABCD   |10        |
+|EFGH        |The EFGH   |20        |
+```
+
+== Step 3. Ingest Query Results into a Hazelcast Map
+
+To save your query results as a view that you can later access faster, you can cache them in Hazelcast by ingesting them into a map.
 
 . Create a mapping to a new map in which to ingest your streaming query results.
 +
 ```sql
-CREATE MAPPING tradeMap (
+CREATE MAPPING trade_map (
 __key BIGINT,
 ticker VARCHAR,
-price DECIMAL,
+company VARCHAR,
 amount BIGINT)
 TYPE IMap
 OPTIONS (
@@ -212,13 +235,15 @@ OPTIONS (
 'valueFormat'='json-flat');
 ```
 
-. Submit a streaming job to your cluster that will monitor your Kafka topic (`SELECT id, ticker, price, amount FROM trades`) for changes and store them in a map (`SINK INTO tradeMap`).
+. Submit a streaming job to your cluster that will monitor your `trade` topic for changes and store them in a map.
 +
 ```sql
 CREATE JOB ingest_trades AS
-SINK INTO tradeMap
-SELECT id, ticker, price, amount
-FROM trades;
+SINK INTO trade_map
+SELECT trades.id, trades.ticker, companies.company, trades.amount
+FROM trades
+JOIN companies
+ON companies.ticker = trades.ticker;
 ```
 +
 NOTE: A streaming job will run indefinitely until it is explicitly canceled or the cluster is shut down. Even if you kill the shell connection, the job will continue running on the cluster.
@@ -239,7 +264,7 @@ You should see a job called `ingest_trades`.
 +--------------------+
 ```
 
-. Publish some events to the Kafka topic.
+. Publish some messages to the Kafka topic.
 +
 ```sql
 INSERT INTO trades VALUES
@@ -247,13 +272,13 @@ INSERT INTO trades VALUES
 (2, 'EFGH', 14, 20);
 ```
 
-. Query your `tradeMap` map to see that the Kafka data has been added to it.
+. Query your `trade_map` map to see that the Kafka messages have been added to it.
 +
 ```sql
-SELECT * FROM tradeMap;
+SELECT * FROM trade_map;
 ```
 +
-You should see that the data coming from Kafka is being stored in your map.
+You should see that the data coming from the Kafka broker is being stored in your map.
 +
 ```
 +---------+---------+----------+------------+
@@ -263,6 +288,10 @@ You should see that the data coming from Kafka is being stored in your map.
 |        1|ABCD     |5.5000000…|          10|
 +---------+---------+----------+------------+
 ```
+
+== Step 4. Cancel the Job
+
+A streaming job will run indefinitely until it is explicitly canceled or the cluster is shut down. Even if you kill the shell connection, the job will continue running on the cluster.
 
 . To stop your streaming job, use the `DROP` statement to cancel it.
 +
@@ -279,7 +308,10 @@ Duration: 00:02:48.318
 
 == Next Steps
 
-- xref:sql-overview.adoc[Learn about SQL]
+To learn more about SQL, see xref:sql-overview.adoc[]
+
+To learn how to work with jobs, see the following:
+
 - xref:pipelines:configuring-jobs.adoc[]
 - xref:pipelines:job-management.adoc[]
 - xref:sql-statements.adoc#job-management[SQL statements for job management]

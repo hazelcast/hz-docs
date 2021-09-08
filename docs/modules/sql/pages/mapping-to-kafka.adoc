@@ -1,17 +1,12 @@
-= Mapping to Kafka Topics
-:description: Before you can query streaming data in Kafka topics, you need to create a mapping with the Kafka connector so that the SQL service knows how to access the topics in the most efficient way.
+= Mapping to Kafka
+:description: Before you can query streaming messages in Kafka topics, you need to create a mapping with the Kafka connector so that the SQL service knows how to access messages in the most efficient way.
 :page-aliases: sql:kafka-connector.adoc
 
 {description}
 
 == What is the Kafka Connector
 
-The Kafka connector allows you to create streaming queries with SQL that continuously query a given Kafka topic.
-
-Apache Kafka is a popular distributed, persistent log store which is a
-great fit for stream processing systems. Data in Kafka is structured
-as _topics_ and each topic consists of one or more partitions, stored in
-the Kafka cluster.
+The Kafka connector acts as a consumer or a producer so that you can create streaming queries that continuously query a given Kafka topic.
 
 == Installing the Connector
 
@@ -19,36 +14,46 @@ This connector is included in the full distribution of Hazelcast.
 
 If you're using the slim distribution, you must add the link:https://mvnrepository.com/artifact/com.hazelcast.jet/hazelcast-jet-kafka/{page-component-version}[`hazelcast-jet-kafka` module] to your member's classpath.
 
-NOTE: This connector is not supported on Solaris operating systems.
-
 == Kafka Security
 
 If you use Hazelcast Enterprise, your clients may need permissions to use this connector. For details, see xref:pipelines:job-security.adoc[].
 
-== Configuration Options
+== Creating a Kafka Mapping
 
-To create a mapping, you must tell Hazelcast how to serialize and deserialize the topic keys and topic messages.
+. Use the `CREATE MAPPING` statement to configure the following:
++
+```sql
+CREATE MAPPING my_topic <1>
+TYPE Kafka <2>
+OPTIONS (
+    'bootstrap.servers' = '127.0.0.1:9092' <3>
+);
+```
++
+<1> The name of the Kafka topic.
+<2> The name of the connector.
+<3> The address of the Kafka broker.
++
+NOTE: Any key/value pairs in the `OPTIONS()` function that are not recognized by Hazelcast are passed directly to the Kafka broker.
 
-Although Apache Kafka is schema-less, SQL assumes a schema in which all
-messages in a topic are of the same type (with some exceptions).
+. <<configuring-serializers,Configure serializers/deserializers>> for your messages.
 
-As well as <<primitives, primitives>>, Hazelcast supports the following formats:
+=== Configuring Serializers
 
+When creating a Kafka mapping, you must tell the Kafka connector how to serialize/deserialize the keys and values in Kafka messages.
+To read Kafka messages, the Kafka connector must be able to deserialize them. Similiarly, to publish messages to Kafka topics, the Kafka connector must be able to serialize them. You can tell Hazelcast how to serialize/deserialize keys and values by specifying the `keyFormat` and `valueFormat` fields in the `OPTIONS()` function.
+
+The Kafka connector supports serializers for the following formats:
+
+* <<primitives, Primitive>>
 * <<avro, Avro>>
-* <<json, JSON>>
+* <<json, JSON>> (values only)
 * <<java, Java>>
 
-Topic keys and values can be in different formats. Any options not recognized by
-Hazelcast are passed directly to the Kafka producer or consumer.
+==== Primitive Messages
 
-=== Primitives
-
-If you want to use one of the xref:sql:data-types.adoc[primitive types] (any supported SQL data
-type except `OBJECT`), you don't need to tell Hazelcast how to serialize or deserialize the data. Instead, Hazelcast will use the Java class
-that represents the primitive type.
-
-For example, if the topic key is an integer and the topic message is a
-string, use:
+For keys and values that are primitives, set the format as the SQL data type that corresponds to the primitive. For example, if the message key is an integer and the value is a
+string, use the `int` and `varchar` formats:
 
 ```sql
 CREATE MAPPING my_topic
@@ -60,7 +65,7 @@ OPTIONS (
 );
 ```
 
-In this case, the following options will be used automatically:
+The Kafka connector will apply a suitable serializer/deserializer automatically. For example:
 
 ```sql
 'key.serializer' = 'org.apache.kafka.common.serialization.IntegerSerializer',
@@ -69,16 +74,61 @@ In this case, the following options will be used automatically:
 'value.deserializer' = 'org.apache.kafka.common.serialization.StringDeserializer'
 ```
 
-=== Avro
+For a conversion table, see xref:data-types.adoc[].
 
-When using Avro, Hazelcast reads fields from the `GenericRecord` objects that are returned
-by the `KafkaAvroDeserializer` instance. When inserting data into a topic, Hazelcast creates an
-ad-hoc Avro schema named `jet.sql` from the mapping columns. As a result, you must provide a column list to the mapping.
+==== Avro Messages
 
-Hazelcast currently can't use custom
-Avro schemas to create objects, but it can use these schemas to read objects written
-through our ad-hoc schema as long as the field names and types match.
+For keys or values that are in the Avro format, you need to configure different options, depending on whether you have your own Avro schema.
 
+If you don't already have an Avro schema, <<mapping-column-names,map column names>> to the fields and types that you want to use in your schema. The Kafka connector uses these column names to create its own ad-hoc schema named `jet.sql`.
+
+```sql
+CREATE MAPPING my_topic (
+    <1>
+    __key VARCHAR,
+    ticker VARCHAR,
+    amount BIGINT,
+    price DECIMAL
+)
+TYPE Kafka
+OPTIONS (
+    'keyFormat' = 'varchar',
+    'valueFormat' = 'avro',
+    'bootstrap.servers' = '127.0.0.1:9092'
+);
+```
+
+<1> Column names
+
+If you already have an Avro schema, you must:
+
+- <<mapping-column-names,Map column names>> to the fields and types of your schema.
+- Provide the URL of your schema registry in the `schema.registry.url` field.
+
+```sql
+CREATE MAPPING my_topic (
+    <1>
+    __key VARCHAR,
+    ticker VARCHAR,
+    amount BIGINT,
+    price DECIMAL
+)
+TYPE Kafka
+OPTIONS (
+    'keyFormat' = 'varchar',
+    'valueFormat' = 'avro',
+    'bootstrap.servers' = '127.0.0.1:9092',
+    'schema.registry.url' = 'http://127.0.0.1:8081/' <2>
+);
+```
+
+<1> Column names
+<2> Schema registry
+
+Your schema registry will receive entries that contain an ID for the `jet.sql` schema.
+When you write new Avro objects to the Kafka topic, the Kafka connector uses its own ad-hoc schema named `jet.sql`. The Kafka connector creates this schema from the column names that you mapped in the `CREATE MAPPING` statement.
+
+.Avro type conversion
 [cols="m,m"]
 |===
 | SQL Type | Avro Type
@@ -105,39 +155,13 @@ a|`VARCHAR` and all other types
 
 All Avro types are a union of the `NULL` type and the actual type.
 
-```sql
-CREATE MAPPING my_topic (
-    __key VARCHAR,
-    ticker VARCHAR,
-    amount BIGINT,
-    price DECIMAL
-)
-TYPE Kafka
-OPTIONS (
-    'keyFormat' = 'varchar',
-    'valueFormat' = 'avro',
-    'bootstrap.servers' = '127.0.0.1:9092',
-    'schema.registry.url' = 'http://127.0.0.1:8081/'
-    /* more Kafka options ... */
-);
-```
+==== JSON Messages
 
-In this example, the key is a plain `Long` number, the value is serialized in the Avro format. `keyFormat` and `valueFormat` options are handled by
-Hazelcast, the rest is passed directly to Kafka producer or consumer.
-
-In this case
-`io.confluent.kafka.serializers.KafkaAvroSerializer` and
-`io.confluent.kafka.serializers.KafkaAvroDeserializer` are automatically
-added to allow Hazelcast to serialize and deserialze the Avro data.
-
-=== JSON
-
-The value will be stored as a JSON object. Hazelcast can't automatically
-determine the column list for this format, you must explicitly specify
-it:
+If values are in the JSON format, configure the `valueFormat` field as the `json` type, and <<mapping-column-names, map column names>> to the JSON keys.
 
 ```sql
 CREATE MAPPING my_topic(
+    <1>
     __key BIGINT,
     ticker VARCHAR,
     amount INT)
@@ -147,6 +171,8 @@ OPTIONS (
     'valueFormat' = 'json',
     'bootstrap.servers' = '127.0.0.1:9092');
 ```
+
+<1> Column list
 
 There are no additional options for this format.
 
@@ -161,14 +187,14 @@ you can't use functions like `JSON_VALUE` or `JSON_QUERY`. If your JSON
 documents don't all have the same fields or if they contain nested
 objects, the usability is limited.
 
-=== Java
+==== Java Messages
 
 Java serialization uses the
-Java objects exactly as `KafkaConsumer.poll()` returns them. You can use
-this option for objects serialized using Java serialization or any other
+Java objects exactly as the `KafkaConsumer.poll()` method returns them. You can use
+this format for objects serialized using Java serialization or any other
 serialization method.
 
-For this format you must specify the class name using `keyJavaClass` and
+For this format you must also specify the class name using `keyJavaClass` and
 `valueJavaClass` options, for example:
 
 ```sql
@@ -185,7 +211,7 @@ OPTIONS (
 ```
 
 If the Java class corresponds to one of the basic data types (numbers,
-dates, strings), that type will directly be used for the key or value
+dates, strings), that type will be used for the key or value
 and mapped as a column named `__key` for keys and `this` for values. In
 the example above, the key will be mapped with the `BIGINT` type. In
 fact, the above `keyFormat` and `keyJavaClass` options are equivalent to
@@ -194,17 +220,13 @@ fact, the above `keyFormat` and `keyJavaClass` options are equivalent to
 If the Java class is not one of the basic types, Hazelcast will analyze
 the class using reflection and use its properties as column names. It
 recognizes public fields and JavaBean-style getters. If some property
-has a non-primitive type, it will be mapped under the `OBJECT` type.
+has a non-primitive type, it will be mapped under the SQL `OBJECT` type.
 
-=== External Column Names
+=== Mapping Column Names
 
-You rarely need to specify the columns in DDL. If you do, you might need
-to specify the external name for the column.
+For JSON and Avro formats, you must specify the columns names in the mapping.
 
-The entries in a map naturally have _key_ and _value_ elements. Because
-of this, the format of the external name must be either `__key.<name>`
+For keys, the format of the column name must be either `__key.<name>`
 for a field in the key or `this.<name>` for a field in the value.
 
-The external name defaults to `this.<columnName>`, so normally you only
-need to specify it for key fields. There are also columns that represent
-the entire key and value objects, called `__key` and `this`.
+The column name defaults to `this.<columnName>`.

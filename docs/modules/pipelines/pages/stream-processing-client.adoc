@@ -211,6 +211,43 @@ Execution of job '062d-d578-9240-0001', execution 062d-d578-df80-0001 got termin
 	Duration: 00:02:48.318
 ```
 
+== Complete Code Sample
+
+[source,java]
+----
+package org.example;
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.jet.pipeline.Pipeline;
+import com.hazelcast.jet.pipeline.Sinks;
+import com.hazelcast.jet.pipeline.test.TestSources;
+
+public class App {
+  public static void main(String[] args) {
+    Pipeline evenNumberStream = buildEvenNumberStreamPipeline();
+    HazelcastInstance hz = Hazelcast.bootstrappedInstance();
+
+    try {
+        hz.getJet().newJob(evenNumberStream);
+    } finally {
+        hz.shutdown();
+    }
+  }
+
+  private static Pipeline buildEvenNumberStreamPipeline() {
+  Pipeline EvenNumberStream = Pipeline.create();
+  EvenNumberStream.readFrom(TestSources.itemStream(10))
+   .withoutTimestamps()
+   .filter(event -> event.sequence() % 2 == 0)
+   .setName("filter out odd numbers")
+   .writeTo(Sinks.logger());
+
+   return EvenNumberStream;
+  }
+}
+----
+
 == Next Steps
 
 Learn more about how to use the xref:{page-latest-supported-mc}@management-center:monitor-streaming:monitor-streaming.adoc[Management Center].

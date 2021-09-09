@@ -16,7 +16,7 @@ public class EnablingWRforCache {
 
         WanReplicationRef cacheWanRef = new WanReplicationRef();
         cacheWanRef.setName("my-wan-cluster");
-        cacheWanRef.setMergePolicyClassName("com.hazelcast.spi.merge.PassThroughMergePolicy");
+        cacheWanRef.setMergePolicyClassName(PassThroughMergePolicy.class.getName());
         cacheWanRef.setRepublishingEnabled(true);
         config.getCacheConfig("my-shared-cache").setWanReplicationRef(cacheWanRef);
 //end::wrcache[]

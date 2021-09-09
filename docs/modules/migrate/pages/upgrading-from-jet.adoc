@@ -1,0 +1,201 @@
+= Upgrading from Jet
+:description: This guide covers the most important changes that affect users of Jet 4.x who want to upgrade to Hazelcast.
+
+{description}
+
+This guide is not an overview of the new features in Hazelcast {page-component-version}. This release includes other enhancements that don't need any special attention during an upgrade. For a complete list of changes, see the xref:ROOT:release-notes.adoc[release notes].
+
+== Before you Upgrade
+
+If you are using Jet Enterprise version 4.x, you can export the state of your existing jobs and continue running them on the upgraded cluster. See xref:migration-tool-jet.adoc[].
+
+== Semantic Versioning
+
+Hazelcast {page-component-version} uses https://semver.org/[semantic versioning]:
+
+* MAJOR version when you make incompatible API changes
+* MINOR version when you add functionality in a backwards-compatible manner
+* PATCH version when you make backwards-compatible issue fixes.
+
+== Version Compatibility
+
+Hazelcast {page-component-version} is compatible only with the Job and Pipeline APIs of Jet 4.x. As a result, jobs that were running on Jet 4.x clusters can still be executed on Hazelcast {page-component-version} clusters.
+
+Hazelcast {page-component-version} *is not* compatible with any other aspects of Jet 4.x. You cannot upgrade using rolling upgrades and you cannot connect to the cluster using version 4.x of clients).
+
+Hazelcast {page-component-version} is not compatible with versions of Management Center before {page-component-version}.
+
+== Distributions
+
+Jet 4.x came in `slim` and `fat` distributions. Hazelcast {page-component-version} is now available in the following distributions:
+
+- Slim
+** Hazelcast runtime
+** Default configuration files (not example ones)
+** Scripts
+** SQL
+** Management Center
+
+- Full
+
+** Hazelcast and its modules contained in the former `hazelcast-all`
+** AWS discovery plugin
+** Kubernetes discovery plugin
+** GCP discovery plugin
+** Azure discovery plugin
+** Hazelcast Hibernate
+** Hazelcast Spring
+** Default configuration files, including examples
+** Scripts
+** SQL
+** Jet extensions
+** Management center
+
+For a complete list of contents in each distribution, see xref:deploy-installing-upgrading.adoc#full-and-slim-packages[Full and Slim Packages].
+
+NOTE: The `hazelcast-all` module has been removed.
+
+=== Scripts
+
+Some scripts in both distributions have been renamed. See the following table to find out what's changed:
+
+.Comparison of scripts in Jet 4.x and Hazelcast {page-component-version}
+[cols="1a,1a"]
+|===
+| Jet 4.x | Hazelcast {page-component-version}
+
+|
+
+`/bin`
+
+-- `common.sh`
+
+-- `jet`
+
+-- `jet-cluster-admin`
+
+-- `jet-cluster-cp-admin`
+
+-- `jet-start`
+
+-- `jet-start.bat`
+
+-- `jet-stop`
+
+-- `jet-stop.bat`
+
+-- `jet.bat`
+
+|
+
+`/bin`
+
+-- `common.sh`
+
+-- `hz-cli`
+
+-- `hz-start`
+
+-- `hz-healthcheck`
+
+-- `hazelcast-stop`
+
+-- `hz-cluster-admin`
+
+-- `hz-cluster-cp-admin`
+
+-- `hz-start.bat`
+
+-- `hz-stop.bat`
+
+-- `hz-cli.bat`
+
+|===
+
+== Code Samples
+
+Jet code samples are now in the Hazelcast code samples repository. See link:https://github.com/hazelcast/hazelcast-code-samples/tree/master/jet[GitHub].
+
+== Configuration
+
+Hazelcast {page-component-version} includes important changes to Jet engine configuration.
+
+=== Jet Properties
+
+In the Java API, properties in the `JetProperties` object have been merged into the `ClusterProperty` object.
+
+Jet properties are now prefixed with `hazelcast`. For example `jet.job.scan.period` is now `hazelcast.jet.job.scan.period`. Any Jet properties that do not include this prefix are deprecated.
+
+=== Configuration Files
+
+The Jet configuration elements have been added to
+the XML/YAML files of IMDG. For the Jet engine related configuration elements, see the
+https://github.com/hazelcast/hazelcast/blob/master/hazelcast/src/main/resources/hazelcast-full-example.yaml#L3490[example YAML file on GitHub].
+
+Hazelcast 5.0 checks and validates your YAML configurations during a cluster startup.
+According to this validation:
+
+* The top-level `hazelcast` object must exist. 
+* Client and member YAML configurations must be separate (not in the same file).
+* There must be no case insensitive enum values.
+
+While upgrading to Hazelcast 5.0, if a YAML configuration violates any of these rules,
+the cluster will not start. You need to either edit and update your YAML configuration files
+accordingly or disable the validation by setting the `hazelcast.config.schema.validation.enabled` property to `false`.
+
+== Entry Points
+
+The `Jet` class, which was the main entry point of Jet 4.x,
+has been deprecated and replaced by the link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/core/HazelcastInstance.html[`HazelcastInstance` class].
+
+The `JetInstance` class, which
+represented an instance of a Jet member or client has been been deprecated and replaced by the link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/jet/JetService.html[`JetService` class].
+
+The`JetInstance.bootstrappedInstance()` method been deprecated and replaced by `HazelcastInstance.bootstrappedInstance()`.
+
+Use the following table to find out which new class to use instead of JetInstance`.
+
+.JetInstance Replacements
+[cols="1a,1m"]
+|===
+|JetInstance Usage|New class
+
+| Submitting streaming/batch jobs to the cluster and managing them.
+|JetService
+
+|Accessing Hazelcast data structures.
+a|`HazelcastInstance`
+
+The only exception is Jet observables. An observable is a Jet data structure and we ported it to the `JetService` class. 
+
+|Performing cluster operations such as shutting down the cluster.
+|HazelcastInstance
+|===
+
+To access Jet related services, you should now use the link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/core/HazelcastInstance.html#getJet--[`HazelcastInstance.getJet()` method] to get an instance of the `JetService` object.
+
+[tabs] 
+==== 
+Jet 4.x:: 
++ 
+-- 
+```java
+HazelcastInstance hz = Hazelcast.newHazelcastInstance();
+JetInstance jet = hz.getJetInstance();
+```
+--
+Hazelcast:: 
++ 
+-- 
+```java
+HazelcastInstance hz = Hazelcast.newHazelcastInstance();
+JetService jet = hz.getJet();
+```
+--
+====
+
+== Enabling the Jet Engine
+
+In embedded mode (Hazelcast as a classic Java process), Jet is disabled by default. As a result, you cannot use Jet APIs or SQL unless you enable the Jet engine.
+
+See xref:pipelines:job-security.adoc[].

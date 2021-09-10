@@ -22,7 +22,7 @@ To complete this tutorial, you need the following:
 [.interactive-button]
 xref:interactive-sql-kafka.adoc[Try the interactive example,window=_blank]
 
-== Step 1. Query Streaming Data from Apache Kafka
+== Step 1. Set Up a Kafka Broker
 
 . On the same device as your Hazelcast member, start a Kafka broker.
 +
@@ -64,8 +64,10 @@ docker run --name kafka --network hazelcast-network --rm hazelcast/hazelcast-qui
 --
 ====
 
-. In the SQL shell, create a Kafka mapping to allow Hazelcast to access messages in the `trades` topic.
-+
+== Step 2. Create a Mapping to Kafka
+
+In the SQL shell, create a Kafka mapping to allow Hazelcast to access messages in the `trades` topic.
+
 [tabs]
 ====
 Binary::
@@ -80,7 +82,7 @@ CREATE MAPPING trades (
     amount BIGINT)
 TYPE Kafka
 OPTIONS (
-    'valueFormat' = 'json',
+    'valueFormat' = 'json-flat',
     'bootstrap.servers' = '127.0.0.1:9092'
 );
 ----
@@ -97,15 +99,15 @@ CREATE MAPPING trades (
     amount BIGINT)
 TYPE Kafka
 OPTIONS (
-    'valueFormat' = 'json',
+    'valueFormat' = 'json-flat',
     'bootstrap.servers' = 'kafka:9092'
 );
 ----
 --
 ====
-+
+
 Here, you configure the connector to read JSON values with the following fields:
-+
+
 [source,json]
 ----
 {
@@ -115,6 +117,8 @@ Here, you configure the connector to read JSON values with the following fields:
   "amount"
 }
 ----
+
+== Step 3. Run a Streaming Query on the Kafka Topic
 
 . Write a streaming query that filters trade messages from Kafka.
 +
@@ -155,7 +159,7 @@ You should see that Hazelcast has executed the query and filtered the results:
 |EFGH             |                  1400|                 20|
 ```
 
-== Step 2. Enrich the Data in the Kafka Messages
+== Step 4. Enrich the Data in the Kafka Messages
 
 Kafka messages are often small and contain minimal data to reduce network latency. For example, the `trades` topic does not contain any information about the company that's associated with a given ticker. To get deeper insights from data in Kafka topics, you can join query results with data in other mappings.
 
@@ -217,7 +221,7 @@ You should see that Hazelcast has executed the query.
 |EFGH        |The EFGH   |20        |
 ```
 
-== Step 3. Ingest Query Results into a Hazelcast Map
+== Step 5. Ingest Query Results into a Hazelcast Map
 
 To save your query results as a view that you can later access faster, you can cache them in Hazelcast by ingesting them into a map.
 
@@ -289,7 +293,7 @@ You should see that the data coming from the Kafka broker is being stored in you
 +---------+---------+----------+------------+
 ```
 
-== Step 4. Cancel the Job
+== Step 6. Cancel the Job
 
 A streaming job will run indefinitely until it is explicitly canceled or the cluster is shut down. Even if you kill the shell connection, the job will continue running on the cluster.
 

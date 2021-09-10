@@ -27,8 +27,6 @@ link:https://docs.docker.com/engine/install/[Install Docker for Linux]
 
 link:https://docs.docker.com/docker-for-windows/install/[Install Docker for Windows]
 
-|Your local IP address
-|link:https://lifehacker.com/how-to-find-your-local-and-external-ip-address-5833108[How to Find Your Local IP Address^]
 |===
 
 == Step 1. Start a Local Member
@@ -44,9 +42,9 @@ In this step, you use the Hazelcast Docker image to start a local single-member 
 docker network create hazelcast-network
 ----
 +
-This network makes it easier for you to connect to your cluster and add other services that need to communicate with your cluster.
+Docker networks make it easier for you to connect to your cluster and add other services that need to communicate with your cluster.
 
-. To start a member, execute the Docker `run` command. Replace the `$LOCAL_IP` placeholder with your local IP address.
+. To start a member, execute the Docker `run` command.
 +
 [source,shell,subs="attributes+"]
 ----
@@ -55,32 +53,27 @@ docker run \
     --network hazelcast-network \
     --rm \
     -e HZ_CLUSTERNAME=hello-world \
-    -e HZ_NETWORK_PUBLICADDRESS=$LOCAL_IP:5701 \
     -p 5701:5701 hazelcast/hazelcast:{page-component-version}
 ----
 +
-Hazelcast parameters:
+Hazelcast environment variables:
 +
-- `HZ_CLUSTERNAME`: Sets the name of your cluster.
-- `HZ_NETWORK_PUBLICADDRESS`: Sets the public IP address of the member to allow members and clients in the same local network to connect to it. 
+- `HZ_CLUSTERNAME`: The name of your cluster.
 +
 Docker parameters:
 +
 - `-it`: Starts an interactive session, allowing you to stop the member with *Ctrl+C*.
 - `--rm`: Tells Docker to remove the container from its local cache after it exits.
 - `--network`: Allows you to connect to clusters, using an alias.
+- `-p`: Expost port 5701 to allow external clients to connect to the member's Docker container.
 
-You should see your cluster name in the console:
+You should see your cluster name in the console along with the IP address of the Docker container:
 
 image:platform-cluster-name.png[Platform console displays the cluster name 'hello-world']
 
 == Step 2. Write Data to Memory
 
-Hazelcast has lots of distributed data structures available for writing data to memory on your cluster.
-
-One of the most popular ways of writing data to memory is to use a distributed map.
-
-Maps store key/value pairs called entries, which are replicated and distributed across a cluster.
+Hazelcast has lots of distributed data structures available for writing data to memory on your cluster. One of the most popular ways of writing data to memory is to use a distributed map. Maps store key/value pairs called entries, which are replicated and distributed across a cluster.
 
 [tabs] 
 ====
@@ -90,27 +83,28 @@ SQL::
 
 . In a new terminal window, start the SQL shell.
 +
-Replace the `$LOCAL_IP` placeholder with your member’s local IP address.
+Replace the `$DOCKER_IP` placeholder with the IP address of your member's Docker container.
 +
 [source,shell]
 ----
-docker run --network hazelcast-network -it --rm hazelcast/hazelcast:5.0-SNAPSHOT hazelcast --targets hello-world@$LOCAL_IP sql
+docker run --network hazelcast-network -it --rm hazelcast/hazelcast:5.0-SNAPSHOT hz-cli --targets hello-world@$DOCKER_IP sql
 ----
 +
 The `--targets` parameter tells the SQL shell to connect to the member at the given IP address in a cluster called `hello-world`.
 
-. Use the following SQL statement to create a map and add data to it.
+. Create a map and add data to it.
 +
 [source,sql]
 ----
-CREATE MAPPING myDistributedMap TYPE IMap OPTIONS ('keyFormat'='varchar','valueFormat'='varchar');
+CREATE MAPPING my_distributed_map TYPE IMap OPTIONS ('keyFormat'='varchar','valueFormat'='varchar');
 
-SINK INTO myDistributedMap VALUES('1', 'John');
-SINK INTO myDistributedMap VALUES('2', 'Mary');
-SINK INTO myDistributedMap VALUES('3', 'Jane');
+SINK INTO my_distributed_map VALUES
+('1', 'John'),
+('2', 'Mary'),
+('3', 'Jane');
 ----
 
-. Use the following command to exit the SQL shell.
+. Exit the SQL shell.
 +
 [source,shell]
 ----
@@ -132,33 +126,28 @@ Java::
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.core.IMap;
+import com.hazelcast.map.IMap;
 
 public class MapSample {
   public static void main(String[] args) {
 
     ClientConfig clientConfig = new ClientConfig();
     clientConfig.setClusterName("hello-world"); <1>
-    clientConfig.getNetworkConfig().addAddress("$LOCAL_IP"); <2>
 
-    HazelcastInstance hz = HazelcastClient.newHazelcastClient(); <3>
-    IMap map = hz.getMap("my-distributed-map"); <4>
+    HazelcastInstance client = HazelcastClient.newHazelcastClient(clientConfig); <2>
+    IMap map = client.getMap("my-distributed-map"); <3>
 
-    <5>
+    <4>
     map.put("1", "John");
     map.put("2", "Mary");
     map.put("3", "Jane");
-
-    hz.shutdown(); <6>
   }
 }
 ----
 <1> The name of the cluster that you want to connect to.
-<2> The IP address of a member. In this tutorial, you are running the member on the same network as the client, so replace this placeholder with your member's local IP address.
-<3> Create a client instance, using your configuration.
-<4> Create a map called `my-distributed-map`.
-<5> Write some keys and values to the map.
-<6> Disconnect from the member.
+<2> Create a client instance, using your configuration.
+<3> Create a map called `my-distributed-map`.
+<4> Write some keys and values to the map.
 --
 
 C++::
@@ -176,28 +165,23 @@ C++::
 int main() {
   hazelcast::client::client_config config;
   config.set_cluster_name("hello-world"); <1>
-  config.get_network_config().add_address(address("$LOCAL_IP")); <2>
 
-  auto hz = hazelcast::new_client(std::move(config)).get(); <3>
+  auto client = hazelcast::new_client(std::move(config)).get(); <2>
 
-  auto map = hz.get_map("my-distributed-map").get(); <4>
+  auto map = client.get_map("my-distributed-map").get(); <3>
 
-  <5>
+  <4>
   map->put<std::string, std::string>("1", "John").get();
   map->put<std::string, std::string>("2", "Mary").get();
   map->put<std::string, std::string>("3", "Jane").get();
-
-  hz.shutdown(); <6>
 
   return 0;
 }
 ----
 <1> The name of the cluster that you want to connect to.
-<2> The IP address of a member. In this tutorial, you are running the member on the same network as the client, so replace this placeholder with your member's local IP address.
-<3> Create a client instance, using your configuration.
-<4> Create a map called `my-distributed-map`.
-<5> Write some keys and values to the map.
-<6> Disconnect from the member.
+<2> Create a client instance, using your configuration.
+<3> Create a map called `my-distributed-map`.
+<4> Write some keys and values to the map.
 --
 
 C Sharp::
@@ -220,28 +204,23 @@ namespace Hazelcast.Examples.Org.Website.Samples
     {
       var options = new HazelcastOptionsBuilder().Build();
       options.ClusterName = "hello-world"; <1>
-      options.Networking.Addresses.Add("$LOCAL_IP"); <2>
 
-      var hz = await HazelcastClientFactory.StartNewClientAsync(options); <3>
+      var client = await HazelcastClientFactory.StartNewClientAsync(options); <2>
 
-      var map = hz.GetMap("my-distributed-map"); <4>
+      var map = client.GetMap("my-distributed-map"); <3>
 
-      <5>
+      <4>
       map.put("1", "John");
       map.put("2", "Mary");
       map.put("3", "Jane");
-
-      hz.Shutdown(); <6>
     }
   }
 }
 ----
 <1> The name of the cluster that you want to connect to.
-<2> The IP address of a member. In this tutorial, you are running the member on the same network as the client, so replace this placeholder with your member's local IP address.
-<3> Create a client instance, using your configuration.
-<4> Create a map called `my-distributed-map`.
-<5> Write some keys and values to the map.
-<6> Disconnect from the member.
+<2> Create a client instance, using your configuration.
+<3> Create a map called `my-distributed-map`.
+<4> Write some keys and values to the map.
 --
 
 Node.js::
@@ -264,23 +243,16 @@ const { Client } = require('hazelcast-client');
 
 (async () => {
   try {
-    const hz = await Client.newHazelcastClient({
+    const client = await Client.newHazelcastClient({
       clusterName: 'hello-world', <1>
-      network: {
-        clusterMembers: [
-          '$LOCAL_IP' <2>
-        ]
-      }
-    }); <3>
+    }); <2>
 
-    const map = await hz.getMap('my-distributed-map'); <4>
+    const map = await client.getMap('my-distributed-map'); <3>
 
-    <5>
+    <4>
     await map.put('1', 'John');
     await map.put('2', 'Mary');
     await map.put('3', 'Jane');
-
-    await hz.shutdown(); <6>
 
   } catch (error) {
     console.error('Error occurred:', error);
@@ -288,11 +260,9 @@ const { Client } = require('hazelcast-client');
 })();
 ----
 <1> The name of the cluster that you want to connect to.
-<2> The IP address of a member. In this tutorial, you are running the member on the same network as the client, so replace this placeholder with your member's local IP address.
-<3> Create a client instance, using your configuration.
-<4> Create a map called `my-distributed-map`.
-<5> Write some keys and values to the map.
-<6> Disconnect from the member.
+<2> Create a client instance, using your configuration.
+<3> Create a map called `my-distributed-map`.
+<4> Write some keys and values to the map.
 --
 
 Python::
@@ -312,29 +282,23 @@ pip install hazelcast-python-client
 import hazelcast
 
 if __name__ == "__main__":
-  hz = hazelcast.HazelcastClient(
+  client = hazelcast.HazelcastClient(
   cluster_name="hello-world", <1>
-  cluster_members=[
-      "$LOCAL_IP", <2>
-  ]) <3>
+  ) <2>
 
   # Create a Distributed Map in the cluster
-  map = hz.get_map("my-distributed-map").blocking() <4>
+  map = client.get_map("my-distributed-map").blocking() <3>
 
-  <5>
+  <4>
   map.put("1", "John")
   map.put("2", "Mary")
   map.put("3", "Jane")
 
-  <6>
-  hz.shutdown()
 ----
 <1> The name of the cluster that you want to connect to.
-<2> The IP address of a member. In this tutorial, you are running the member on the same network as the client, so replace this placeholder with your member's local IP address.
-<3> Create a client instance, using your configuration.
-<4> Create a map called `my-distributed-map`.
-<5> Write some keys and values to the map.
-<6> Disconnect from the member.
+<2> Create a client instance, using your configuration.
+<3> Create a map called `my-distributed-map`.
+<4> Write some keys and values to the map.
 --
 
 Go::
@@ -356,27 +320,23 @@ import "github.com/hazelcast/hazelcast-go-client"
 func mapSampleRun() {
   cb := hazelcast.NewConfigBuilder()
 
-  cb.Cluster().SetName("hello-world"). <1>
-  SetAddrs("$LOCAL_IP") <2>
+  cb.Cluster().SetName("hello-world") <1>
 
-  hz, err := hazelcast.StartNewClientWithConfig(cb) <3>
+  client, err := hazelcast.StartNewClientWithConfig(cb) <2>
 
-	mp, _ := hz.GetMap("my-distributed-map") <4>
+	mp, _ := client.GetMap("my-distributed-map") <3>
 
-  <5>
+  <4>
 	mp.Put("1", "John")
 	mp.Put("2", "Mary")
 	mp.Put("3", "Jane")
 
-	hz.Shutdown() <6>
 } 
 ----
 <1> The name of the cluster that you want to connect to.
-<2> The IP address of a member. In this tutorial, you are running the member on the same network as the client, so replace this placeholder with your member's local IP address.
-<3> Create a client instance, using your configuration.
-<4> Create a map called `my-distributed-map`.
-<5> Write some keys and values to the map.
-<6> Disconnect from the member.
+<2> Create a client instance, using your configuration.
+<3> Create a map called `my-distributed-map`.
+<4> Write some keys and values to the map.
 
 NOTE: The configuration builder is not thread-safe. Complete the configuration in a single go routine. Do not pass the builder to other go routines without synchronizing them.
 --
@@ -388,12 +348,12 @@ Management Center is a user interface for managing and monitoring your cluster.
 
 In this step, you start a local instance of Management Center and use it to view your cluster's statistics.
 
-. Start Management Center. Replace the `$LOCAL_IP` placeholder with your local IP address.
+. Start Management Center.
 +
 [source,shell]
 ----
 docker run \
-    -e HZ_CLUSTERNAME=hello-world -e HZ_NETWORK_PUBLICADDRESS=$LOCAL_IP:5701 \
+    --network hazelcast-network \
     -p 8080:8080 hazelcast/management-center:latest-snapshot
 ----
 
@@ -401,18 +361,22 @@ docker run \
 +
 image:mc-dev-mode.png[Enabling dev mode in Management center]
 
-. Enter your cluster name and the local IP address of your member.
+. Enter your cluster's name and IP address.
 +
 You should see that you cluster is in an active state and has a single member. An active cluster is one that is operating without restrictions. To learn more about cluster states, see xref:management:cluster-utilities.adoc#cluster-states[Cluster States].
 +
 image:mc-active-cluster.png[An active cluster in Management Center]
 
-. Click *View Cluster* and go to *Storage* > *Maps*.
+. Click *View Cluster* and go to *Clients*.
++
+You should see that two clients are connected to your cluster member: Management Center and the Hazelcast client that you used to write data to a map.
 
+. Go to *Storage* > *Maps*.
++
 You should see that your cluster has a map called `my-distributed-map` with three entries (keys and values). You'll also see the total amount of memory that those entries are taking up in your cluster.
-
++
 image:mc-distributed-map.png[Map metrics in Management Center]
-
++
 For now, the backup memory is 0 because you don't have any other members in your cluster on which to back up your map entries.
 
 To back up your map, you need to scale up your cluster.
@@ -427,14 +391,13 @@ In this step, you add two more members to your cluster.
 
 . Open a new terminal and execute the Docker `run` command again to start another member.
 +
-NOTE: Each container must publish port 5701 to a different port on the host machine. On this member, port 5701 is published to port 5702 on the host machine.
+NOTE: Each container must expose port 5701 from a different port on the host machine. On this member, port 5701 is exposed to port 5702 on the host machine.
 +
 [source,shell,subs="attributes+"]
 ----
 docker run \
     --name my-second-member --network hazelcast-network \
     -e HZ_CLUSTERNAME=hello-world \
-    -e HZ_NETWORK_PUBLICADDRESS=$LOCAL_IP:5702 \
     -p 5702:5701 hazelcast/hazelcast:{page-component-version}
 ----
 
@@ -445,7 +408,6 @@ docker run \
 docker run \
     --name my-third-member --network hazelcast-network \
     -e HZ_CLUSTERNAME=hello-world \
-    -e HZ_NETWORK_PUBLICADDRESS=$LOCAL_IP:5703 \
     -p 5703:5701 hazelcast/hazelcast:{page-component-version}
 ----
 +
@@ -455,7 +417,7 @@ image:three-member-cluster.png[Console message displays three members connected 
 +
 NOTE: Running more than one member on a single host is useful for testing Hazelcast, but it's not suitable for production.
 
-. Back in Management Center, open *Storage* > *Maps* again.
+. Back in Management Center, go to *Storage* > *Maps* again.
 +
 You should see that the backup memory is the same as the entry memory, meaning that all your map entries have now been copied and distributed among the other two cluster members.
 
@@ -483,7 +445,7 @@ Now that you have a local cluster, you can continue your journey with the follow
 
 - xref:pipelines:stream-processing-client.adoc[Get started with Data Processing] by learning how to use the Java Jet API.
 
-If you just want to go straight into deploying a production-ready cluster, see our xref:ROOT:production-checklist.adoc[production checklist].
+If you just want to go straight into deploying a production-ready cluster, see xref:ROOT:production-checklist.adoc[].
 
 Explore the tools Hazelcast offers for the following use cases:
 
@@ -494,12 +456,16 @@ Explore the tools Hazelcast offers for the following use cases:
 
 Or, if you're interested in learning more about topics that we introduced in this tutorial, see the following resources:
 
-- xref:clients:hazelcast-clients.adoc[]
+- xref:deploy:installing-using-docker.adoc[].
 
-- Get more details on GitHub about link:https://github.com/hazelcast/hazelcast-docker[how to use the Hazelcast Docker image]
+- xref:management:cluster-utilities.adoc#cluster-states[Cluster states]
 
-- Get detailed information about maps and other xref:data-structures:distributed-data-structures.adoc[data structures].
+- xref:clients:hazelcast-clients.adoc[Clients]
 
-- Learn more about how to use the xref:{page-latest-supported-mc}@management-center:ROOT:index.adoc[Management Center].
+- xref:overview:data-partitioning.adoc[Data partitioning]
 
-- Learn how Hazelcast can xref:network-partitioning:network-partitioning.adoc[handle network partitions] with a feature called split-brain protection.
+- xref:data-structures:distributed-data-structures.adoc[Maps and other data structures]
+
+- xref:{page-latest-supported-mc}@management-center:ROOT:index.adoc[Management Center]
+
+- xref:network-partitioning:network-partitioning.adoc[Network partitioning]

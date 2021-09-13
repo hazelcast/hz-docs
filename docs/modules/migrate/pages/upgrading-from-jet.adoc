@@ -15,15 +15,149 @@ For help canceling jobs, see xref:pipelines:job-management.adoc[].
 
 See xref:pipelines:submitting-jobs.adoc[].
 
+== Compatibility
+
+Hazelcast {page-component-version} is compatible only with the Job and Pipeline APIs of Jet 4.x. As a result, you can resubmit jobs that were running on Jet 4.x clusters to a {page-component-version} cluster. But, you *cannot* do the following:
+
+- Upgrade to {page-component-version} using rolling upgrades.
+- Connect to a {page-component-version} cluster using version 4.x of clients.
+- Resubmit jobs from snapshots that were made on Jet 4.x clusters.
+- Use versions of Management Center before {page-component-version}.
+
+== Jet Engine Security
+
+In embedded mode (Hazelcast in the same JVM as your application), you cannot use Jet APIs or SQL by default. These features are disabled for security reasons. For more information about security in the Jet engine and how to enable/disable features, see xref:pipelines:job-security.adoc[].
+
 == Configuration
 
 Hazelcast {page-component-version} includes important changes to Jet engine configuration.
 
+=== IMDG Configuration
+
+The following methods for configuring the underlying IMDG instance of Jet have been removed from the `JetConfig` object:
+
+- `getHazelcastConfig()`
+- `configureHazelcast()`
+- `setHazelcastConfig()`
+
+If you used the link:https://jet-start.sh/javadoc/4.5/com/hazelcast/jet/config/JetConfig.html[`JetConfig` object] to configure IMDG, you should replace instances of `JetConfig` with link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/config/Config.html[`Config`].
+
+[tabs] 
+==== 
+Jet 4.x:: 
++ 
+-- 
+```java
+JetConfig config = new JetConfig().configureHazelcast(c -> {
+  c.getNetworkConfig().setPort(8000);
+  c.setClusterName("jet-dev");
+  });
+
+JetInstance jet = Jet.newJetInstance(config);
+```
+--
+Hazelcast:: 
++ 
+-- 
+```java
+Config config = new Config() ;
+config.setPort(8000);
+config.setClusterName("jet-dev");
+
+HazelcastInstance hz = Hazelcast.newHazelcastInstance(config);
+```
+--
+====
+
+=== InstanceConfig
+
+The link:https://jet-start.sh/javadoc/4.5/com/hazelcast/jet/config/InstanceConfig.html[`InstanceConfig` object] has been removed and all its methods have been added to the `JetConfig` object.
+
+[tabs] 
+==== 
+Jet 4.x:: 
++ 
+-- 
+```java
+JetConfig jetConfig = new JetConfig();
+jetConfig.getInstanceConfig().setCooperativeThreadCount(4);
+```
+--
+Hazelcast:: 
++ 
+-- 
+```java
+JetConfig jetConfig = new JetConfig();
+jetConfig.setCooperativeThreadCount(4);
+```
+--
+====
+
+=== Configuration Loaders
+
+All configuration loader methods have been moved from the `JetConfig` object to the `Config` (Hazelcast configuration) object. Some of these methods have been renamed. If you used Jet configuration loaders, use the following table to find out what you should replace in your code:
+
+[cols="1m,1a"]
+|===
+|Jet method |Hazelcast method
+
+|JetConfig.loadDefault()
+|`Config.loadDefault()` or `Config.load()`
+
+|JetConfig.loadFromClasspath()
+|`Config.loadFromClasspath()`
+
+|JetConfig.loadFromFile()
+|`Config.loadFromFile()`
+
+|JetConfig.loadXmlFromStream()
+|`Config.loadFromStream()`
+
+|JetConfig.loadXmlFromString()
+|`Config.loadFromString()`
+
+|JetConfig.loadYamlFromStream()
+|`Config.loadFromStream()`
+
+|JetConfig.loadYamlFromString()
+|`Config.loadFromString()`
+
+|===
+
 === Jet Properties
 
-In the Java API, properties in the `JetProperties` object have been merged into the `ClusterProperty` object.
+In the Java API, properties in the link:https://jet-start.sh/javadoc/4.5/com/hazelcast/jet/core/JetProperties.html[`JetProperties` object] have been merged into the link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/spi/properties/ClusterProperty.html[`ClusterProperty` object].
 
-Jet properties are now prefixed with `hazelcast`. For example `jet.job.scan.period` is now `hazelcast.jet.job.scan.period`. Any Jet properties that do not include this prefix are deprecated.
+The following Jet properties have been removed:
+
+- `jet.home`
+- `jet.imdg.version.mismatch.check.disabled`
+
+All Jet system properties are now prefixed with `hazelcast`. For example `jet.job.scan.period` is now `hazelcast.jet.job.scan.period`. Any Jet system properties that do not include this prefix have been deprecated.
+
+If you use the Java API to set system properties, you must now use the `Config` object instead of the `JetConfig` object.
+
+[tabs] 
+==== 
+Jet 4.x:: 
++ 
+-- 
+```java
+JetConfig config = new JetConfig() ;
+config.setProperty( "hazelcast.property.foo", "value" );
+```
+--
+Hazelcast:: 
++ 
+-- 
+```java
+Config config = new Config() ;
+config.setProperty( "hazelcast.property.foo", "value" );
+```
+--
+====
+
+See xref:configuration:configuring-with-system-properties.adoc[].
 
 === Configuration Files
 
@@ -31,7 +165,7 @@ The Jet configuration elements have been added to
 the XML/YAML files of IMDG. For the Jet engine related configuration elements, see the
 https://github.com/hazelcast/hazelcast/blob/master/hazelcast/src/main/resources/hazelcast-full-example.yaml#L3490[example YAML file on GitHub].
 
-Hazelcast 5.0 checks and validates your YAML configurations during a cluster startup.
+Hazelcast {page-component-version} checks and validates your YAML configurations during a cluster startup.
 According to this validation:
 
 * The top-level `hazelcast` object must exist. 
@@ -42,36 +176,13 @@ While upgrading to Hazelcast 5.0, if a YAML configuration violates any of these 
 the cluster will not start. You need to either edit and update your YAML configuration files
 accordingly or disable the validation by setting the `hazelcast.config.schema.validation.enabled` property to `false`.
 
-== Entry Points
+== API Entry Points
 
 The `Jet` class, which was the main entry point of Jet 4.x,
 has been deprecated and replaced by the link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/core/HazelcastInstance.html[`HazelcastInstance` class].
 
 The `JetInstance` class, which
-represented an instance of a Jet member or client has been been deprecated and replaced by the link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/jet/JetService.html[`JetService` class].
-
-The`JetInstance.bootstrappedInstance()` method been deprecated and replaced by `HazelcastInstance.bootstrappedInstance()`.
-
-Use the following table to find out which new class to use instead of JetInstance`.
-
-.JetInstance Replacements
-[cols="1a,1m"]
-|===
-|JetInstance Usage|New class
-
-| Submitting streaming/batch jobs to the cluster and managing them.
-|JetService
-
-|Accessing Hazelcast data structures.
-a|`HazelcastInstance`
-
-The only exception is Jet observables. An observable is a Jet data structure and we ported it to the `JetService` class. 
-
-|Performing cluster operations such as shutting down the cluster.
-|HazelcastInstance
-|===
-
-To access Jet related services, you should now use the link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/core/HazelcastInstance.html#getJet--[`HazelcastInstance.getJet()` method] to get an instance of the `JetService` object.
+represented an instance of a Jet member or client has been been deprecated and replaced by the link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/jet/JetService.html[`JetService` class]. To access Jet related services, you should now use the link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/core/HazelcastInstance.html#getJet--[`HazelcastInstance.getJet()` method] to get an instance of the `JetService` object.
 
 [tabs] 
 ==== 
@@ -79,8 +190,7 @@ Jet 4.x::
 + 
 -- 
 ```java
-HazelcastInstance hz = Hazelcast.newHazelcastInstance();
-JetInstance jet = hz.getJetInstance();
+JetInstance jet = Jet.newJetInstance();
 ```
 --
 Hazelcast:: 
@@ -93,61 +203,165 @@ JetService jet = hz.getJet();
 --
 ====
 
-== Enabling the Jet Engine
+Use the following table to find out which new class to use instead of JetInstance`.
 
-In embedded mode (Hazelcast as a classic Java process), Jet is disabled by default. As a result, you cannot use Jet APIs or SQL unless you enable the Jet engine.
+.JetInstance Replacements
+[cols="1a,1m"]
+|===
+|Usage|New class
 
-See xref:pipelines:job-security.adoc[].
+| Submitting streaming/batch jobs to the cluster and managing them.
+|JetService
+
+|Accessing Hazelcast data structures.
+a|`HazelcastInstance`
+
+The only exception is Jet observables. An observable is a Jet data structure that is part of the `JetService` class. 
+
+|Performing cluster operations such as shutting down the cluster.
+|HazelcastInstance
+|===
+
+The `JetInstance.bootstrappedInstance()` method has also been deprecated and replaced by `HazelcastInstance.bootstrappedInstance()`.
+
+[tabs] 
+==== 
+Jet 4.x:: 
++ 
+-- 
+```java
+JetInstance jet = Jet.bootstrappedInstance();
+```
+--
+Hazelcast:: 
++ 
+-- 
+```java
+HazelcastInstance hz = Hazelcast.bootstrappedInstance();
+JetService jet = hz.getJet();
+```
+--
+====
+
+== Lossless Cluster Restart
+
+The `hot-restart-persistence` configuration has been renamed to `persistence`. If you use lossless cluster restart, you must update your configuration with this change.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+  <persistence enabled="true">
+    <base-dir>/mnt/persistence</base-dir>
+    <backup-dir>/mnt/hot-backup</backup-dir>
+  </persistence>
+  <jet>
+    <instance>
+      <lossless-restart-enabled>true</lossless-restart-enabled>
+    </instance>
+  </jet>
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  persistence:
+    enabled: true
+    base-dir: /mnt/persistence
+    backup-dir: /mnt/hot-backup
+  jet:
+    instance:
+      lossless-restart-enabled: true
+----
+--
+====
+
+Persistence files are now saved to the directory that's set in the xref:storage:configuring-persistence.adoc#persistence-base-dir[`persistence.base-dir` field]. In Jet 4.x, these files were saved to the directory that was set in the `jet.home` property. However, this property has been removed. See the <<jet-properties, changes to Jet properties>> on this page.
+
+See xref:storage:configuring-persistence.adoc[].
+
+== SQL
+
+The slim distribution of Hazelcast {page-component-version} does not include the SQL module. If you use the slim distribution with SQL, link:https://mvnrepository.com/artifact/com.hazelcast/hazelcast-sql[download the `hazelcast-sql` module]. For a complete list of contents in each distribution of Hazelcast {page-component-version}, see xref:deploy:installing-upgrading.adoc#full-and-slim-packages[Full and Slim Packages].
+
+In the `information_schema.mappings` table, the following column names have been changed to make them consistent with the ANSI SQL standard. If you queried this table in Jet, make sure to use the correct column names in Hazelcast {page-component-version}.
+
+.Changes to column names in the information_schema.mapping tables
+[cols="1m,1m"]
+|===
+|Column name in Jet|Column name in Hazelcast {page-component-version}
+
+|mapping_catalog
+|table_catalog
+
+|mapping_schema
+|table_schema
+
+|mapping_name
+|table_name
+
+|===
+
+The JSON serialization format has been renamed to `json-flat`, and the `JSON_FILE()` table function has been renamed to `JSON_FLAT_FILE`. If you queried JSON with SQL in Jet, make sure to replace `json` with `json-flat`.
+
+[tabs] 
+==== 
+Jet 4.x:: 
++ 
+-- 
+```sql
+CREATE MAPPING my_files
+TYPE File
+OPTIONS (
+    'path' = '/path/to/directory',
+    'format' = 'json'
+)
+```
+
+```sql
+SELECT * FROM TABLE(
+  JSON_FILE(path => '/path/to/directory')
+);
+```
+--
+Hazelcast:: 
++ 
+-- 
+```sql
+CREATE MAPPING my_files
+TYPE File
+OPTIONS (
+    'path' = '/path/to/directory',
+    'format' = 'json-flat'
+)
+```
+
+```sql
+SELECT * FROM TABLE(
+  JSON_FLAT_FILE(path => '/path/to/directory')
+);
+```
+--
+====
+
+See xref:query:sql-overview.adoc[].
 
 == Code Samples
 
-Jet code samples are now in the Hazelcast code samples repository. See link:https://github.com/hazelcast/hazelcast-code-samples/tree/master/jet[GitHub].
+Jet code samples have been moved to the Hazelcast code samples repository. See link:https://github.com/hazelcast/hazelcast-code-samples/tree/master/jet[GitHub].
 
-== Version Compatibility
+== Scripts
 
-Hazelcast {page-component-version} uses https://semver.org/[semantic versioning]:
-
-* MAJOR version when you make incompatible API changes
-* MINOR version when you add functionality in a backwards-compatible manner
-* PATCH version when you make backwards-compatible issue fixes.
-
-Hazelcast {page-component-version} is compatible only with the Job and Pipeline APIs of Jet 4.x. As a result, jobs that were running on Jet 4.x clusters can still be executed on Hazelcast {page-component-version} clusters.
-
-Hazelcast {page-component-version} *is not* compatible with any other aspects of Jet 4.x. You cannot upgrade using rolling upgrades and you cannot connect to the cluster using version 4.x of clients).
-
-Hazelcast {page-component-version} is not compatible with versions of Management Center before {page-component-version}.
-
-== Distributions
-
-Jet 4.x came in `slim` and `fat` distributions. Hazelcast {page-component-version} is now available in the following distributions:
-
-- Slim
-** Hazelcast runtime
-** Default configuration files (not example ones)
-** Scripts
-
-- Full
-
-** Hazelcast and its modules contained in the former `hazelcast-all`
-** AWS discovery plugin
-** Kubernetes discovery plugin
-** GCP discovery plugin
-** Azure discovery plugin
-** Hazelcast Hibernate
-** Hazelcast Spring
-** Default configuration files, including examples
-** Scripts
-** SQL
-** Jet extensions
-** Management center
-
-For a complete list of contents in each distribution, see xref:deploy:installing-upgrading.adoc#full-and-slim-packages[Full and Slim Packages].
-
-NOTE: The `hazelcast-all` module has been removed.
-
-=== Scripts
-
-Some scripts in both distributions have been renamed. See the following table to find out what's changed:
+Most scripts in the `bin` directory have been renamed. If you have any automated processes that use these scripts, update them to use the new scripts.
 
 .Comparison of scripts in Jet 4.x and Hazelcast {page-component-version}
 [cols="1a,1a"]
@@ -184,20 +398,20 @@ Some scripts in both distributions have been renamed. See the following table to
 
 -- `hz-cli`
 
--- `hz-start`
-
--- `hz-healthcheck`
-
--- `hazelcast-stop`
-
 -- `hz-cluster-admin`
 
 -- `hz-cluster-cp-admin`
 
+-- `hz-start`
+
 -- `hz-start.bat`
+
+-- `hz-stop`
 
 -- `hz-stop.bat`
 
 -- `hz-cli.bat`
+
+-- `hz-healthcheck`
 
 |===

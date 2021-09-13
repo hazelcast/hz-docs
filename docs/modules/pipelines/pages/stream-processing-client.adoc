@@ -62,7 +62,7 @@ private static Pipeline buildEvenNumberStreamPipeline() {
 <2> Read from the dummy data source. Every 10 seconds, the `itemStream()` method emits `SimpleEvent` objects that contain an increasing sequence number.
 <3> Tell Hazelcast that you do not plan on using timestamps to process the data.
 <4> Filter out any even numbers from the stream. The `filter()` method receives the `SimpleEvent` objects from the dummy source. 
-<5> Set the name of the job that you can use to manage it in the future for tasks such as canceling the job.
+<5> Set the name of this processing stage. Naming a processing stage makes it easier to recognize in the xref:{page-latest-supported-mc}@management-center:monitor-streaming:jobs.adoc#job-details[DAG view] of Management Center.
 <6> Send the result of the streaming process to the console. A pipeline without any sinks is not valid.
 +
 Each method such as `readFrom()` or `writeTo()` results in a pipeline _stage_. The stage resulting from a `writeTo()` operation is called a
@@ -210,6 +210,43 @@ Execution of job '062d-d578-9240-0001', execution 062d-d578-df80-0001 got termin
 	Start time: 2021-05-13T16:31:14.410
 	Duration: 00:02:48.318
 ```
+
+== Complete Code Sample
+
+[source,java]
+----
+package org.example;
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.jet.pipeline.Pipeline;
+import com.hazelcast.jet.pipeline.Sinks;
+import com.hazelcast.jet.pipeline.test.TestSources;
+
+public class App {
+  public static void main(String[] args) {
+    Pipeline evenNumberStream = buildEvenNumberStreamPipeline();
+    HazelcastInstance hz = Hazelcast.bootstrappedInstance();
+
+    try {
+        hz.getJet().newJob(evenNumberStream);
+    } finally {
+        hz.shutdown();
+    }
+  }
+
+  private static Pipeline buildEvenNumberStreamPipeline() {
+  Pipeline EvenNumberStream = Pipeline.create();
+  EvenNumberStream.readFrom(TestSources.itemStream(10))
+   .withoutTimestamps()
+   .filter(event -> event.sequence() % 2 == 0)
+   .setName("filter out odd numbers")
+   .writeTo(Sinks.logger());
+
+   return EvenNumberStream;
+  }
+}
+----
 
 == Next Steps
 

@@ -1,36 +1,36 @@
-= Migrating Between IMDG 3.x/4.x and Platform 5.0 Releases
+= Migrating Data Between IMDG 3.12.x and 4.x/5.0 Releases
 
 [blue]*Hazelcast Enterprise Feature*
 
 == Using Migration Tool
 
-NOTE: If you want to migrate between 3.12/4.x and 5.0 releases
+NOTE: If you want to migrate between 3.12.x and 4.x/5.x releases
 using this tool, you need to contact the Hazelcast Sales department at
 sales@hazelcast.com. Our existing Enterprise Edition users
 (IMDG Enterprise (4.x, 3.12.x) and IMDG Enterprise HD (3.12.x)) can contact
 support@hazelcast.com.
 
 This section outlines a solution for migrating user data from a
-running IMDG 3.x/4.x cluster to a Platform 5.0 cluster and vice versa using
+running IMDG 3.12.x cluster to IMDG 4.x or Platform 5.x cluster and vice versa using
 the migration tool, which is a specialized variant of Hazelcast's WAN replication feature.
 
 [IMPORTANT]
 ====
 * The migration tool does not take into account migrating clients.
-You will have to adapt your code to use 5.0 clients, run both 3.12/4.x and 5.0 clients
-and clusters side by side, and gradually transfer traffic from 3.12/4.x clients to 5.0 clients.
+You will have to adapt your code to use 5.0 clients, run both 3.12.x and 4.x/5.x clients
+and clusters side by side, and gradually transfer traffic from 3.12.x clients to 4.x/5.x clients.
 We will outline this solution in the <<client-migration, Client Migration section>>.
-* The tool does not provide any way to avoid recompiling code between Hazelcast 3.12/4.x and Platform 5.0,
+* The tool does not provide any way to avoid recompiling code between Hazelcast 3.12.x and 4.x/5.x,
 be it the code using members or client instances. It only migrates the member data and does not provide
-any 3.12/4.x compatible API on a 5.0 member or client.
-* The tool provides a migration path from a Hazelcast 3.12/4.x cluster to a 5.0 cluster,
+any 3.12.x compatible API on a 4.x/5.x member or client.
+* The tool provides a migration path from a Hazelcast 3.12.x cluster to a 4.x or 5.x cluster,
 not from any previous 3.x versions.
 * See also the <<limitations-and-known-issues, Limitations and Known Issues section>> for more
 limitations when using the migration tool.
 ====
 
 The migration tool introduces a new type of Hazelcast member instance,
-both for 3.12/4.x and 5.0. We will distinguish between two types of members:
+both for 3.12.x and 4.x/5.x. We will distinguish between two types of members:
 "migration" and "plain" members.
 
 The "migration" members are the instances which are
@@ -38,13 +38,13 @@ available as non-public releases and are able to accept connections and packets
 from members of a different major version. They use more memory, have higher GC pressure
 and CPU usage in certain scenarios, all to be able to process messages from two different
 major versions. Once you request the migration tool using the channels mentioned above, you will be getting the special
-distribution library of your preference: `3.12/4.x-migration.jar`, for example, `4.2.1-migration.jar`.
+distribution library of your preference: `4.x-migration.jar`, for example, `4.2.1-migration.jar`.
 You can start a migration member out of this library as you start a member in a regular Hazelcast
 distribution; see the xref:getting-started:install-hazelcast.adoc#using-java[Install Hazelcast] and
 xref:getting-started:get-started-java.adoc[Start a Cluster] sections.
 
 NOTE: The "migration" members have a compatibility serialization service that knows how to deal
-with classes whose serialization changed across 3.12/4.x and 5.0 versions, e.g. `Strings`.
+with classes whose serialization changed across 3.12.x and 4.x/5.x versions, e.g. `Strings`.
 
 On the other hand, "plain" members are the regular public releases with
 a minimal amount of compatibility code. In the examples going forward, we will be using
@@ -55,80 +55,80 @@ accept connections and process messages from members of another major version.
 However, you might combine "plain" and "migration" members to form a single cluster.
 
 In other words, "migration" members are simply new non-public Hazelcast
-releases which are compatible with "plain" or "regular" 3.12.x/4.x or 5.0 members.
+releases which are compatible with "plain" or "regular" 3.12.x or 4.x/5.x members.
 
 [#example-migration-scenarios]
 === Example Migration Scenarios
 
-**Migrating from 3.12/4.x to 5.0 (ACTIVE/PASSIVE):**
+**Migrating from 3.12 to 4.x/5.x (ACTIVE/PASSIVE):**
 
-image:ROOT:migration-scenario1.png[Migrating 3.12 -> 5.0]
+image:ROOT:migration-scenario1.png[Migrating 3.12 -> 4.x/5.x]
 
 The diagram above outlines how you can perform the migration
-from 3.12/4.x to a 5.0 cluster. Below we describe the diagram and
+from 3.12.x to a 4.x/5.x cluster. Below we describe the diagram and
 process in more details.
-In case you are using an additional 3.12 cluster for Disaster Recovery (DR),
-please read the <<wan-event-forwarding, WAN Event Forwarding section>> for more information after reading this chapter.
+In case you are using an additional 3.12.x cluster for Disaster Recovery (DR),
+please read <<wan-event-forwarding, WAN Event Forwarding>> for more information after reading this section.
 
-1. The first step is to setup the 3.12/4.x cluster. You can also use your existing 3.12/4.x clusters.
-The members of the 3.12/4.x cluster should have a minor version of at least 3.12/4.x (any patch version). You need to setup WAN replication between the 3.12/4.x and 5.0 clusters as stated
-in the 3rd step below.
-2. Next, setup a 5.0 cluster. It must have at least one "migration" member and
-all other ("plain") members should be 5.0. The "migration" member can also be a "lite" member while the other "plain" members need not be.
+1. The first step is to setup the 3.12.x cluster. You can also use your existing 3.12.x clusters.
+The members of the 3.12.x cluster should have a minor version of at least 3.12 (any patch version). You need to setup WAN replication between the 3.12.x and 4.x/5.x clusters as stated in the 3rd step below.
+2. Next, setup a 4.x or 5.x cluster. It must have at least one "migration" member and
+all other ("plain") members should be 4.x/5.x. The "migration" member can also be
+a "lite" member while the other "plain" members need not be.
 Making the "migration" member a "lite" member will also simplify further migration steps.
-The exact ratio of "migration" and "plain" members depends on your environment. In some cases it will not be possible to mix members of different "types" (or versions, for example in PCF) and in those cases you can create a cluster comprised entirely out of "migration" members. In other cases, the exact ratio of member types depends on parameters such as the map and cache mutation rate on the source cluster, the WAN tuning parameters, the resources given to the 5.0 cluster members, the load on the 5.0 cluster which isn't related to the migration process, if "migration" members are lite members or not and many more. A good rule of thumb is starting with the same number of "migration" members as the number of members which are usually involved in WAN replication (if you were already using WAN replication to replicate data between different clusters) or to simply use an equal number of "migration" and "plain" members and then decrease the number of "migration" members if testing the migration scenario shows that the decreased number can handle the migration load.
+The exact ratio of "migration" and "plain" members depends on your environment. In some cases it will not be possible to mix members of different "types" (or versions, for example in PCF) and in those cases you can create a cluster comprised entirely out of "migration" members. In other cases, the exact ratio of member types depends on parameters such as the map and cache mutation rate on the source cluster, the WAN tuning parameters, the resources given to the 4.x/5.x cluster members, the load on the 4.x/5.x cluster which isn't related to the migration process, if "migration" members are lite members or not and many more. A good rule of thumb is starting with the same number of "migration" members as the number of members which are usually involved in WAN replication (if you were already using WAN replication to replicate data between different clusters) or to simply use an equal number of "migration" and "plain" members and then decrease the number of "migration" members if testing the migration scenario shows that the decreased number can handle the migration load.
 3. Add WAN replication between the two clusters. As always, this can be done using the static
-configuration and can be added dynamically. The key point is that the 3.12/4.x cluster needs to
-replicate only to the "migration" members of the 5.0 cluster. Other "plain" members are
-unable to process messages from 3.12/4.x members and WAN replication must not replicate to these members.
-Other than that, the WAN replication configuration on the 3.12/4.x cluster is the same as any other WAN replication towards a 3.12/4.x cluster and no special configuration is needed.
+configuration and can be added dynamically. The key point is that the 3.12.x cluster needs to
+replicate only to the "migration" members of the 4.x/5.x cluster. Other "plain" members are
+unable to process messages from 3.12.x members and WAN replication must not replicate to these members.
+Other than that, the WAN replication configuration on the 3.12.x cluster is the same as any other WAN replication towards a 3.12.x cluster and no special configuration is needed.
 See also the xref:wan:wan.adoc[WAN Replication section] for the details.
 4. After the clusters have been started and WAN replication has been added,
 you can use WAN sync for `IMap` or wait until enough entries have been replicated in case of `IMap` or `ICache`.
-5. After enough data has been replicated to the 5.0 cluster, you can shut down the 3.12/4.x cluster. You can check if your map data is in sync by using merkle tree sync with the caveat that in some edge cases, the merkle tree consistency check may indicate that the clusters are out-of-sync while in reality they are actually in-sync. In other cases, once WAN sync completes successfully and if there are no errors, the map data should be synchronized.
+5. After enough data has been replicated to the 4.x/5.x cluster, you can shut down the 3.12.x cluster. You can check if your map data is in sync by using merkle tree sync with the caveat that in some edge cases, the merkle tree consistency check may indicate that the clusters are out-of-sync while in reality they are actually in-sync. In other cases, once WAN sync completes successfully and if there are no errors, the map data should be synchronized.
 See <<limitations-and-known-issues, Limitations and Known Issues section>> for more information when using merkle trees for consistency checks.
-6. Finally, you can simply shut down the 5.0 "migration" members or do a rolling restart of these members to "plain" members. If your 5.0 cluster was comprised entirely out of "migration" members, you will need to do a rolling restart of the entire cluster (for example, when migrating in PCF). At this point, the 5.0 cluster should have only "plain" members.
-You can also continue using this cluster or continue onto rolling upgrade to 5.0, for instance.
+6. Finally, you can simply shut down the 4.x/5.x "migration" members or do a rolling restart of these members to "plain" members. If your 4.x/5.x cluster was comprised entirely out of "migration" members, you will need to do a rolling restart of the entire cluster (for example, when migrating in PCF). At this point, the 4.x/5.x cluster should have only "plain" members.
+You can also continue using this cluster or continue onto rolling upgrade to 4.x/5.x, for instance.
 
-**Migrating from 5.0 to 3.12/4.x (ACTIVE/PASSIVE):**
+**Migrating from 4.x/5.x to 3.12.x (ACTIVE/PASSIVE):**
 
-image:ROOT:migration-scenario2.png[Migrating 5.0 -> 3.12]
+image:ROOT:migration-scenario2.png[Migrating 4.x/5.x -> 3.12.x]
 
-The diagram above outlines how you can perform the migration from 5.0 to a 3.12/4.x cluster.
-In case you are using an additional 5.0 cluster for Disaster Recovery (DR),
+The diagram above outlines how you can perform the migration from 4.x/5.x to a 3.12.x cluster.
+In case you are using an additional 4.x/5.x cluster for Disaster Recovery (DR),
 please read the <<wan-event-forwarding, WAN Event Forwarding section>> for more information after reading this chapter. The process is analogous to the
-3.12/4.x -> 5.0 migration but we will describe the diagram and process in more details below:
+3.12 -> 4.x/5.x migration but we will describe the diagram and process in more details below:
 
-1. The first step is to set up the 5.0 cluster. You can also use an existing 5.0 cluster.
+1. The first step is to set up the 4.x/5.x cluster. You can also use an existing 4.x/5.x cluster.
 You need to set up WAN replication
-between the 5.0 cluster and the 3.12/4.x cluster but this will be described soon.
-2. Next, set up a 3.12/4.x cluster. It must have at least one "migration" member and all other
-("plain") members should have a version of 3.12/4.x (any patch level). The "migration" member
+between the 4.x/5.x cluster and the 3.12.x cluster but this will be described soon.
+2. Next, set up a 3.12.x cluster. It must have at least one "migration" member and all other
+("plain") members should have a version of 3.12 (any patch level). The "migration" member
 can also be a "lite" member while other "plain" members need not be. Making the "migration"
 member a "lite" member will also simplify further migration steps. The exact ratio of "migration" and "plain" members depends on your environment. In some cases it will not be possible to mix members of different "types" (or versions, for example in PCF) and in those cases you can create a cluster comprised entirely out of "migration" members. In other cases, the exact ratio of member types depends on parameters such as the map and cache mutation
-rate on the source cluster, the WAN tuning parameters, the resources given to the 3.12/4.x cluster members, the load on the 3.12/4.x cluster which isn't related to the migration process, if
+rate on the source cluster, the WAN tuning parameters, the resources given to the 3.12.x cluster members, the load on the 3.12.x cluster which isn't related to the migration process, if
 "migration" members are lite members or not and many more. A good rule of thumb is starting with the same number of "migration" members as the number of members which are usually involved in WAN replication (if you were already using WAN replication to replicate data between different clusters) or to simply use an equal number of "migration" and "plain" members and then decrease the number of "migration" members if testing the migration scenario shows that the decreased number can handle the migration load.
 3. Set up WAN replication between the two clusters. As always, this can be done using static
 configuration and can be added dynamically. The key point is that the 5.0 cluster needs to
-replicate only to the "migration" members of the 3.12/4.x cluster. Other "plain" members are unable to process messages from 5.0 members and WAN replication must not replicate to these members.
-Other than that, the WAN replication configuration on the 5.0 cluster is the same as any other
-WAN replication towards a 5.0 cluster and no special configuration is needed.
+replicate only to the "migration" members of the 3.12.x cluster. Other "plain" members are unable to process messages from 4.x/5.x members and WAN replication must not replicate to these members.
+Other than that, the WAN replication configuration on the 4.x/5.x cluster is the same as any other
+WAN replication towards a 4.x/5.x cluster and no special configuration is needed.
 4. After the clusters have been started and WAN replication has been added, you can use WAN sync for `IMap` or wait until enough entries have been replicated in case of `IMap` or `ICache`.You can check if your map data is in sync by using merkle tree sync with the caveat that in some edge cases, the merkle tree consistency check may indicate that the clusters are out-of-sync while in reality they are actually in-sync. In other cases, once WAN sync completes successfully and if there are no errors, the map data should be synchronized.
 See <<limitations-and-known-issues, Limitations and Known Issues section>> for more information when using merkle  trees for consistency checks.
-5. After enough data has been replicated to the 3.12/4.x cluster, you can shut down the 5.0 cluster.
-6. Finally, you can simply shut down the 3.12/4.x "migration" members or do a rolling restart of
-these members to "plain" members. If your 3.12/4.x cluster was comprised entirely out of "migration" members, you will need to do a rolling restart of the entire cluster (for example, when migrating in PCF). At this point, the 3.12/4.x cluster should have only "plain" members.
+5. After enough data has been replicated to the 3.12.x cluster, you can shut down the 4.x/5.x cluster.
+6. Finally, you can simply shut down the 3.12.x "migration" members or do a rolling restart of
+these members to "plain" members. If your 3.12.x cluster was comprised entirely out of "migration" members, you will need to do a rolling restart of the entire cluster (for example, when migrating in PCF). At this point, the 3.12.x cluster should have only "plain" members.
 
-**Bidirectional Migrating between 3.12/4.x and 5.0 (ACTIVE/ACTIVE):**
+**Bidirectional Migrating between 3.12.x and 4.x/5.x (ACTIVE/ACTIVE):**
 
-image:ROOT:migration-scenario3.png[Migrating 3.12 <-> 5.0]
+image:ROOT:migration-scenario3.png[Migrating 3.12 <-> 4.x/5.x]
 
 The diagram above outlines how you can perform a bidirectional migration
-between 3.12/4.x and 5.0. In case you are using additional 3.12/4.x or 5.0 clusters for Disaster Recovery (DR), please read the <<wan-event-forwarding, WAN Event Forwarding section>> for more information after reading this chapter.
+between 3.12.x and 4.x/5.x. In case you are using additional 3.12.x or 4.x/5.x clusters for Disaster Recovery (DR), please read the <<wan-event-forwarding, WAN Event Forwarding section>> for more information after reading this chapter.
 The process is simply a combination of the first two scenarios:
 
-1. The first step is to set up the 3.12/4.x and 5.0 clusters. You can also use existing clusters.
-The 3.12/4.x cluster must have at least one "migration" member and the 5.0 cluster must also have at least one "migration" member. The "migration" member can also be a "lite" member while other "plain" members need not be. Making the "migration" member a "lite" member will also simplify further migration steps. Other "plain" members of the 3.12/4.x cluster can be of any patch version. The exact ratio of "migration" and "plain" members depends on your environment. In some cases it will not be possible to mix members of different "types" (or versions, for example in PCF) and in those cases you can create a cluster comprised entirely out of "migration" members. In other cases, the exact ratio of member types depends on parameters such as the map and cache mutation
+1. The first step is to set up the 3.12.x and 4.x/5.x clusters. You can also use existing clusters.
+Each of these clusters must have at least one "migration" member. The "migration" member can also be a "lite" member while other "plain" members need not be. Making the "migration" member a "lite" member will also simplify further migration steps. Other "plain" members of the 3.12/4.x cluster can be of any patch version. The exact ratio of "migration" and "plain" members depends on your environment. In some cases it will not be possible to mix members of different "types" (or versions, for example in PCF) and in those cases you can create a cluster comprised entirely out of "migration" members. In other cases, the exact ratio of member types depends on parameters such as the map and cache mutation
 rate on the source cluster, the WAN tuning parameters, the resources given to the cluster
 members, the load on the clusters which isn't related to the migration process, if "migration"
 members are lite members or not and many more. A good rule of thumb is starting with
@@ -157,7 +157,7 @@ the entire cluster (for example, when migrating in PCF).
 [#wan-event-forwarding]
 **WAN Event Forwarding:**
 
-image:ROOT:migration-scenario4.png[WAN event forwarding]
+image:ROOT:migration-scenario4.png[WAN Event Forwarding]
 
 Finally, we show how clusters of different major versions can be linked
 so that you can form complex topologies with WAN replication. The key restrictions
@@ -166,20 +166,20 @@ that you need to keep in mind when combining are as follows:
 1. If you are connecting members of different major versions, the recipient/target
 of the connection must be a "migration" member and not a "plain" member.
 2. If a cluster contains a "migration" member, it may also contain "plain" members
-but with the added restriction that 4.x "plain" members should be at least 4.0.2 and at most 4.2 (any patch version). The 3.x "plain" members can be of any patch version. Once migration has finished and "migration" members have been shut down, this restriction is lifted.
+but with the added restriction that 4.x "plain" members should be at least 4.0.2 and at most 4.2 (any patch version). The 3.12.x "plain" members can be of any patch version. Once migration has finished and "migration" members have been shut down, this restriction is lifted.
 3. If the cluster is a source/active/sender cluster replicating towards another cluster
-of another major version, the source cluster must be of the minor versions 3.12/4.x.
+of another major version, the source cluster must be of the minor versions 3.12 and 4.x/5.x.
 The patch level is irrelevant, unless the source cluster is also a target cluster for another
 WAN replication, where must adhere to the first two rules.
 
 In case you were using an additional cluster for disaster recovery, you will need to set up
 WAN event forwarding from the migration target cluster to a new DR cluster and only after the migration
 process has finished may you shut down the source cluster and its' DR cluster. For example, see the following image
-for an example setup when migrating from 3.12/4.x to 5.0 with additional DR clusters.
+for an example setup when migrating from 3.12.x to 4.x/5.x with additional DR clusters.
 
-image:ROOT:migration-scenario5.png[Migrating 3.12 -> 5.0 with Disaster Recovery sites]
+image:ROOT:migration-scenario5.png[Migrating 3.12.x -> 4.x/5.x with Disaster Recovery sites]
 
-In the example above, once the migration is complete, you may shut down the 3.12/4.x DR and primary sites.
+In the example above, once the migration is complete, you may shut down the 3.12.x and 4.x/5.x DR and primary sites.
 
 [#limitations-and-known-issues]
 === Limitations and Known Issues
@@ -203,7 +203,7 @@ and creating more litter for the GC to clean up.
 
 **Issues when using merkle trees and keys and values of specific classes:**
 
-The serialized format of some classes changed between 3.12/4.x and 5.0 and
+The serialized format of some classes changed between 3.12.x and 4.x/5.x and
 merkle trees may report that there are differences between two IMaps while
 in fact there is none. For WAN sync using merkle trees, this means the source
 cluster might transmit more entries than what is necessary to bring the two IMaps
@@ -215,24 +215,24 @@ Some examples of classes that exhibit this behavior when used as keys or values 
 [#client-migration]
 === Client Migration
 
-With Hazelcast 4.0, in addition to all the serialization changes done on the member side,
+Starting with Hazelcast IMDG 4.0, in addition to all the serialization changes done on the member side,
 there have been many changes in how the client connects and interacts with the cluster.
-On top of this, Hazelcast 4.0 introduced new features not available in 3.x and
-removed some features that were present in 3.x. Because of these changes
-it is not possible to maintain the "illusion" of connecting to a 4.x cluster with a 3.x member.
+On top of this, Hazelcast 4.x/5.x introduced new features not available in 3.12.x and
+removed some features that were present in 3.12.x. Because of these changes
+it is not possible to maintain the "illusion" of connecting to a 4.x/5.x cluster with a 3.12.x member.
 
-The general suggestion on approaching the migration of clients between 3.x and 4.x clusters is shown in the image below.
+The general suggestion on approaching the migration of clients between 3.12.x and 4.x/5.x clusters is shown in the image below.
 
 image:ROOT:client-migration.png[Client migration scenario]
 
-As shown, the 3.x clients should stay connected to the 3.12 cluster and
-the 4.x clients should stay connected to the 5.0 cluster. The migration tool
-ensures that the data between 3.12 and 5.0 members is in-sync. You can then
-gradually transfer applications from the 3.x clients to applications using 4.x clients.
-After all applications are using the 4.x clients and reading/writing data from/to the 5.0 members,
-the 3.12 cluster and the 3.x clients can be shut down.
+As shown, the 3.12.x clients should stay connected to the 3.12 cluster and
+the 4.x/5.x clients should stay connected to the 4.x/5.x cluster. The migration tool
+ensures that the data between 3.12.x and 4.x/5.x members is in-sync. You can then
+gradually transfer applications from the 3.12.x clients to applications using 4.x or 5.x clients.
+After all applications are using the 4.x/5.x clients and reading/writing data from/to the 4.x/5.x members,
+the 3.12.x cluster and the 3.12.x clients can be shut down.
 
-The same suggestion applies when migrating back from 5.0 to 3.12, only with the versions reversed.
+The same suggestion applies when migrating back from 4.x/5.x to 3.12.x, only with the versions reversed.
 
 == Using Rolling Upgrades
 

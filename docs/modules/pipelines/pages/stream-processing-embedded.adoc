@@ -13,74 +13,135 @@ To complete this tutorial, you need the following:
 
 |An embedded Hazelcast cluster 
 |xref:getting-started:get-started-java.adoc[Start a Local Cluster]
+|Maven
+|link:https://maven.apache.org/download.cgi[Download Maven]
+
 |===
 
-== Step 1. Write a Stream Processing Pipeline
+== Step 1. Step Up the Project
 
-With Hazelcast, you can specify data processing steps, using the Jet API. This API creates a series of tasks that can be submitted to a Hazelcast cluster as a job.
+First, you need to setup a Java project that you can later package and submit to your Hazelcast cluster.
+
+. Check that you have Maven installed.
++
+```bash
+mvn -v
+```
++
+If Maven is installed, you should see some information about the Maven installation, which looks similar to the following:
++
+```
+Apache Maven 3.8.1 (05c21c65bdfed0f71a2f2ada8b84da59348c4c5d)
+Maven home: /usr/local/Cellar/maven/3.8.1/libexec
+Java version: 16.0.1, vendor: Homebrew, runtime: /usr/local/Cellar/openjdk/16.0.1/libexec/openjdk.jdk/Contents/Home
+Default locale: en_GB, platform encoding: UTF-8
+OS name: "mac os x", version: "10.15.7", arch: "x86_64", family: "mac"
+```
+
+. Create the following structure in a project directory of your choice.
++
+----
+📄 pom.xml
+📂 src
+  📂 main
+    📂 java
+      📄 EvenNumberStream.java
+----
+
+. Add the following to your `pom.xml` file to set your project’s name, version, and its dependencies on external libraries such as Hazelcast.
++
+Replace the `${jdk.version}` placeholder with your JDK version.
++
+[source,xml,subs="attributes+"]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.example</groupId>
+    <artifactId>hz-example</artifactId>
+    <version>0.1.0</version>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.hazelcast</groupId>
+            <artifactId>hazelcast</artifactId>
+            <version>{page-component-version}</version>
+        </dependency>
+    </dependencies>
+
+
+    <properties>
+        <maven.compiler.source>${jdk.version}</maven.compiler.source>
+        <maven.compiler.target>${jdk.version}</maven.compiler.target>
+    </properties>
+
+</project>
+----
+
+== Step 2. Build your Stream Processing Pipeline
+
+With Hazelcast, you can specify data processing steps, using the Java Jet API. This API defines a series of tasks that can be submitted to a Hazelcast cluster as a job.
 
 The general pattern of a data processing pipeline is to read data from a data source, process (or transform) it, and write the results to a data sink. You can visualize these steps as a linear process:
 
 readFromSource -> transform -> writeToSink
 
-In this step, you create a pipeline that reads a stream of incrementing numbers from a dummy data source and prints only even numbers, using the console as a sink.
+In this step, you create a pipeline that reads a stream of incrementing numbers from a test data source and prints only even numbers, using the console as a sink.
 
-Write a `buildEvenNumberStreamPipeline()` method for your `App` class:
+. Add the following to your `EvenNumberStream.java` file.
 
 [source,java]
 ----
-private static Pipeline buildEvenNumberStreamPipeline() {
-  Pipeline evenNumberStream = Pipeline.create(); <1>
-  evenNumberStream.readFrom(TestSources.itemStream(10)) <2>
-   .withoutTimestamps() <3>
-   .filter(event -> event.sequence() % 2 == 0) <4>
-   .setName("filter out odd numbers") <5>
-   .writeTo(Sinks.logger()); <6>
+package org.example;
 
-   return evenNumberStream;
+import com.hazelcast.config.Config;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.jet.pipeline.Pipeline;
+import com.hazelcast.jet.pipeline.Sinks;
+import com.hazelcast.jet.pipeline.test.TestSources;
+
+public class EvenNumberStream {
+  public static void main(String[] args) {
+
+    Pipeline pipeline = Pipeline.create(); <1>
+    pipeline.readFrom(TestSources.itemStream(10)) <2>
+      .withoutTimestamps() <3>
+      .filter(event -> event.sequence() % 2 == 0) <4>
+      .setName("filter out odd numbers") <5>
+      .writeTo(Sinks.logger()); <6>
+
+    HazelcastInstance hz = Hazelcast.bootstrappedInstance(); <7>
+
+    hz.getJet().newJob(pipeline); <8>
+  }
 }
 ----
 
 <1> Initialize an empty pipeline.
 <2> Read from the dummy data source. Every 10 seconds, the `itemStream()` method emits `SimpleEvent` objects that contain an increasing sequence number.
-<3> Tell Hazelcast that you do not plan on using timestamps to process the data.
+<3> Tell Hazelcast that you do not plan on using timestamps to process the data. Timestamps are useful for time-sensitive processes such as aggregating streaming data. In this example, you aren't aggregating data.
 <4> Filter out any even numbers from the stream. The `filter()` method receives the `SimpleEvent` objects from the dummy source. 
-<5> Set the name of the job that you can use to manage it in the future for tasks such as canceling the job.
+<5> Set the name of this processing stage. Naming a processing stage makes it easier to recognize in the <<step-4-monitor-your-jobs-in-management-center, DAG view>> of Management Center.
 <6> Send the result of the streaming process to the console. A pipeline without any sinks is not valid.
+<7> Create a bootstrapped Hazelcast member. This bootstrapped member allows you to submit your pipeline as a packaged class to a running cluster, using the`hazelcast submit` command.
+<8> Pass your pipeline to the bootstrapped Jet engine.
 
 Each method such as `readFrom()` or `writeTo()` results in a pipeline _stage_. The stage resulting from a `writeTo()` operation is called a
 _sink stage_ and you can't attach more stages to it. All other stages are
 called _compute stages_ and expect you to attach further stages to them.
 
-== Step 2. Submit the Job to your Cluster
 
-After creating a pipeline, you can tell Hazelcast to run it by submitting it to Hazelcast, using the `JetService` object.
+== Step 3. Execute the Application
 
-. Add this code to your `main()` method:
-+
-[source,java]
-----
-<1>
-Config config = new Config();
-JetConfig jetConfig = config.getJetConfig();
-jetConfig.setEnabled(true);
-HazelcastInstance hz = Hazelcast.newHazelcastInstance(config);
+To start Hazelcast members and run your pipeline code, use Maven to compile and execute your `EvenNumberStream` class.
 
-Pipeline evenNumberStream = buildEvenNumberStreamPipeline(); <2>
-
-try {
-    hz.getJet().newJob(evenNumberStream); <3>
-} finally {
-    hz.shutdown(); <4>
-}
-----
-+
-<1> xref:pipelines:job-security.adoc[Enable the Jet engine].
-<2> Get a reference to the pipeline.
-<3> xref:pipelines:submitting-jobs.adoc[Submit the job] to the Hazelcast member.
-<4> Shut down the member when the job is canceled.
-
-. Execute the code.
+```bash
+mvn compile exec:java -Dexec.mainClass="org.example.EvenNumberStream"
+```
 
 In the console, you'll see your members form a cluster. Then, you'll see the output of your job, where the sequence numbers are all even:
 
@@ -108,7 +169,7 @@ digraph DAG {
 }
 ```
 
-This data is a visual representation of how the Jet service optimizes your jobs for distributed execution. You can learn more about this concept in xref:architecture:distributed-computing.adoc[].
+This plan is a visual representation of how the Jet service optimizes your jobs for distributed execution. You can learn more about this concept in xref:architecture:distributed-computing.adoc[].
 
 To visualize these execution plans, you can use tools such as link:http://viz-js.com[http://viz-js.com]. For example, this execution plan looks like this:
 
@@ -128,7 +189,6 @@ digraph DAG {
 [source,java]
 ----
 package org.example;
-
 import com.hazelcast.config.Config;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
@@ -136,34 +196,20 @@ import com.hazelcast.jet.pipeline.Pipeline;
 import com.hazelcast.jet.pipeline.Sinks;
 import com.hazelcast.jet.pipeline.test.TestSources;
 
-import java.util.Map;
-
 public class App {
-    public static void main(String[] args) {
-        Config config = new Config();
-        JetConfig jetConfig = config.getJetConfig();
-        jetConfig.setEnabled(true).setResourceUploadEnabled(true);
-        HazelcastInstance hz = Hazelcast.newHazelcastInstance(config);
+  public static void main(String[] args) {
 
-        Pipeline evenNumberStream = buildEvenNumberStreamPipeline();
+    Pipeline evenNumberStream = Pipeline.create();
+    evenNumberStream.readFrom(TestSources.itemStream(10))
+      .withoutTimestamps()
+      .filter(event -> event.sequence() % 2 == 0)
+      .setName("filter out odd numbers")
+      .writeTo(Sinks.logger());
 
-        try {
-            hz.getJet().newJob(evenNumberStream);
-        } finally {
-            hz.shutdown();
-        }
+    HazelcastInstance hz = Hazelcast.bootstrappedInstance();
 
-    }
-    private static Pipeline buildEvenNumberStreamPipeline() {
-        Pipeline evenNumberStream = Pipeline.create();
-        evenNumberStream.readFrom(TestSources.itemStream(10))
-       .withoutTimestamps()
-       .filter(event -> event.sequence() % 2 == 0)
-       .setName("filter out odd numbers")
-       .writeTo(Sinks.logger());
-
-        return evenNumberStream;
-    }
+    hz.getJet().newJob(evenNumberStream);
+  }
 }
 ----
 
@@ -172,3 +218,7 @@ TIP: For more code samples, see this link:https://github.com/hazelcast/hazelcast
 == Next Steps
 
 Explore all the xref:pipelines:sources-sinks.adoc[built-in sources and sinks] that you can plug into your own pipelines.
+
+xref:submitting-jobs.adoc[].
+
+xref:transforms.adoc[].

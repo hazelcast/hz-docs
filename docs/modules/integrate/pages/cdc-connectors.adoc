@@ -1,0 +1,96 @@
+= CDC Connector
+
+Change Data Capture (CDC) refers to the process of observing changes
+made to a database and extracting them in a form usable by other
+systems, for the purposes of replication, analysis and many more.
+
+Change Data Capture is especially important to Hazelcast, because it allows
+for the _streaming of changes from databases_, which can be efficiently
+processed by the Jet engine.
+
+Implementation of CDC in Hazelcast is based on
+link:https://debezium.io/[Debezium]. Hazelcast offers a generic Debezium source
+which can handle CDC events from link:https://debezium.io/documentation/reference/1.1/connectors/index.html[any database supported by Debezium],
+but we're also striving to make CDC sources first class citizens in Hazelcast.
+The ones for MySQL and PostgreSQL already are.
+
+== Installing the Connector
+
+This connector is included in the full and slim distributions of Hazelcast.
+
+== CDC as a Source
+
+We have following types of CDC sources:
+
+* link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/jet/cdc/DebeziumCdcSources.html[DebeziumCdcSources]:
+  generic source for all databases supported by Debezium
+* link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/jet/cdc/mysql/MySqlCdcSources.html[MySqlCdcSources]:
+  specific, first class Jet CDC source for MySQL databases (also based
+  on Debezium, but benefiting the full range of convenience Jet can
+  additionally provide)
+* link:https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/jet/cdc/postgres/PostgresCdcSources.html[PostgresCdcSources]:
+  specific, first class CDC source for PostgreSQL databases (also based
+  on Debezium, but benefiting the full range of convenience Hazelcast can
+  additionally provide)
+
+For the setting up a streaming source of CDC data is just the matter of pointing it at the right database via configuration:
+
+```java
+Pipeline pipeline = Pipeline.create();
+pipeline.readFrom(
+    MySqlCdcSources.mysql("customers")
+            .setDatabaseAddress("127.0.0.1")
+            .setDatabasePort(3306)
+            .setDatabaseUser("debezium")
+            .setDatabasePassword("dbz")
+            .setClusterName("dbserver1")
+            .setDatabaseWhitelist("inventory")
+            .setTableWhitelist("inventory.customers")
+            .build())
+    .withNativeTimestamps(0)
+    .writeTo(Sinks.logger());
+```
+
+For an example of how to use CDC data see xref:pipelines:cdc.adoc[our tutorial].
+
+=== Fault Tolerance
+
+CDC sources offer at least-once processing guarantees. The source
+periodically saves the database write ahead log offset for which it had
+dispatched events and in case of a failure/restart it will replay all
+events since the last successfully saved offset.
+
+Unfortunately, however, there is no guarantee that the last saved offset
+is still in the database changelog. Such logs are always finite and
+depending on the DB configuration can be relatively short, so if the CDC
+source has to replay data for a long period of inactivity, then there
+can be a data loss. With careful management though we can say that
+at-least once guarantee can practically be provided.
+
+== CDC as a Sink
+
+Change data capture is a source-side functionality in Jet, but we also
+offer some specialized sinks that simplify applying CDC events to a map, which gives you the ability to reconstruct the contents of the
+original database table. The sinks expect to receive `ChangeRecord`
+objects and apply your custom functions to them that extract the key and
+the value that will be applied to the target map.
+
+For example, a sink mapping CDC data to a `Customer` class and
+maintaining a map view of latest known email addresses per customer
+(identified by ID) would look like this:
+
+```java
+Pipeline p = Pipeline.create();
+p.readFrom(source)
+ .withoutTimestamps()
+ .writeTo(CdcSinks.map("customers",
+    r -> r.key().toMap().get("id"),
+    r -> r.value().toObject(Customer.class).email));
+```
+
+[NOTE]
+====
+The key and value functions have certain limitations. They can be used to map only to objects which the Hazelcast member can deserialize, which unfortunately doesn't include user code submitted as a part of the job. So in the above example it's OK to have `String` email values, but we wouldn't be able to use `Customer` directly.
+
+If user code has to be used, then the problem can be solved with the help of the User Code Deployment feature. Example configs for that can be seen in our xref:pipelines:cdc-join.adoc#7-start-hazelcast-jet[CDC Join tutorial].
+====

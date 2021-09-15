@@ -1,0 +1,520 @@
+= Creating a Mapping to a File System
+:description: Before you can query data in files, you need to create a mapping with the unified file connector so that the SQL service knows how to access the data in the most efficient way.
+:page-aliases: sql:file-connector.adoc
+
+{description}
+
+NOTE: You can only read from file sources. You cannot yet use files as a sink in SQL.
+
+== What is the Unified File Connector
+
+The unified file connector provides a simple way to read files across different sources. Using this connector, you can read files from the local filesystem, HDFS, and cloud storage systems such as Amazon S3, Google Cloud Storage, or Azure Blob Storage. This connector supports various data formats, including, CSV, JSON, and Avro.
+
+== Installing the Connector
+
+To read from a local or shared filesystem, you do not need to install any additional modules as these are included in Hazelcast.
+
+To access Hadoop or any of the cloud-based file systems, you may need to add one of the downloadable modules listed in
+<<supported-storage-systems, Supported Storage Systems>> to your members' classpaths.
+
+Depending on the <<supported-file-formats, format of your files>>, you may also need to add other modules to the classpath.
+
+== File Security
+
+If you use Hazelcast Enterprise, you can set up permissions to restrict clients' access to your files. For details, see xref:pipelines:job-security.adoc[].
+
+== Configuration Options
+
+Use these options to configure the file connector, using either the xref:select.adoc[`CREATE MAPPING` statement] or a xref:expressions.adoc#file-table-functions[file table function].
+
+[tabs]
+==== 
+Statement:: 
++ 
+-- 
+```sql
+CREATE MAPPING my_files
+TYPE File
+OPTIONS (
+    /* insert configuration options here */
+)
+```
+--
+Function::
++
+--
+```sql
+SELECT * FROM TABLE(
+  JSON_FLAT_FILE(/* insert configuration options here */)
+);
+```
+--
+====
+
+[cols="1a,1a,2a,2a"]
+|===
+|Option|Default|Description|Example
+
+|[[path]]`path` (required)
+|none
+|The absolute path to a directory in one of the <<supported-file-systems, supported file systems>>.
+
+This option does not support wildcard characters.
+
+If you omit a column list, Hazelcast will try to determine column names and types by reading a sample file in the given directory.
+
+|
+
+[tabs]
+==== 
+Statement:: 
++ 
+--
+```sql
+CREATE MAPPING my_files
+TYPE File
+OPTIONS (
+    'path' = '/path/to/directory',
+    'format' = 'json-flat'
+)
+```
+--
+Function:: 
++ 
+--
+```sql
+SELECT * FROM TABLE(
+  JSON_FLAT_FILE(path => '/path/to/directory')
+);
+```
+--
+====
+
+|[[format]]`format` (required)
+|none
+|The format of the file in the `path` directory.
+
+Valid values are:
+
+- <<avro, avro>>
+- <<csv, csv>>
+- <<json, json>>
+- <<parquet, parquet>>
+
+|
+[tabs]
+==== 
+Statement:: 
++ 
+--
+```sql
+CREATE MAPPING my_files
+TYPE File
+OPTIONS (
+    'path' = '/path/to/directory',
+    'format' = 'csv'
+)
+```
+--
+Function:: 
++ 
+--
+```sql
+SELECT * FROM TABLE(
+  CSV_FILE(path => '/path/to/directory')
+);
+```
+--
+====
+
+|[[glob]]`glob`
+|`*` (match all files)
+|A filename pattern that uses wildcard characters such as `*` or
+`?` to filter the files in the `path` directory.
+
+|If a directory contains JSON files named using the
+`YYYY-MM-DD.log` pattern, you can read all the files from January 2020 with the following `glob` argument:
+
+[tabs]
+==== 
+Statement:: 
++ 
+--
+```sql
+CREATE MAPPING my_orders
+TYPE File
+OPTIONS (
+    'path' = '/orders',
+    'format' = 'json-flat',
+    'glob' = '2020-01-*.json'
+)
+```
+--
+Function:: 
++ 
+--
+```sql
+SELECT * FROM TABLE(
+  JSON_FLAT_FILE(path => '/orders', glob => '2020-01-*.json')
+);
+```
+--
+====
+
+|[[ignoreFileNotFound]]`ignoreFileNotFound`
+|`false`
+|Return zero results instead of throwing an error when files in the `path` directory are not found.
+
+If you set this option to `true`, you must specify the column list.
+
+This option is not valid for xref:sql:expressions.adoc#file-table-functions[file table functions], because they always need at least one
+record from which to derive the column list.
+
+|
+```sql
+CREATE MAPPING my_orders
+id INT,
+order_date TIMESTAMP,
+amount BIGINT
+TYPE File
+OPTIONS (
+    'path' = '/orders',
+    'format' = 'json-flat',
+    'glob' = '2020-01-*.json'
+    'ignoreFileNotFound' = 'true'
+)
+```
+
+|[[options]]options
+|none
+|Options to pass to the file system such as <<configuring-authentication-for-remote-file-systems, authentication options>>.
+|
+[tabs]
+==== 
+Statement:: 
++ 
+--
+```sql
+CREATE MAPPING my_orders
+TYPE File
+OPTIONS (
+    'path' = 's3a://example-bucket/path/in/the/bucket',
+    'format' = 'json-flat',
+    'glob' = '2020-01-*.json'
+    'fs.s3a.endpoint' = 's3.us-west-2.amazonaws.com',
+    'fs.s3a.access.key' = 'my-access-key',
+    'fs.s3a.secret.key' = 'my-secret-key'
+    'fs.s3a.impl.disable.cache' = 'true'
+)
+```
+--
+Function:: 
++ 
+--
+```sql
+SELECT * FROM TABLE(
+  JSON_FLAT_FILE(path => 's3a://example-bucket/path/in/the/bucket', glob => '2020-01-*.json', options => MAP[
+    'fs.s3a.endpoint','s3.us-west-2.amazonaws.com',
+    'fs.s3a.access.key','my-access-key',
+    'fs.s3a.secret.key','my-secret-key',
+    'fs.s3a.impl.disable.cache', 'true'])
+)
+```
+--
+====
+
+|[[sharedFileSystem]]`sharedFileSystem`
+|`false`
+|Read shared files only once instead of reading each copy on every member.
+|
+[tabs]
+==== 
+Statement:: 
++ 
+--
+```sql
+CREATE MAPPING my_orders
+TYPE File
+OPTIONS (
+    'path' = '/orders',
+    'format' = 'json-flat',
+    'glob' = '2020-01-*.json'
+    'sharedFileSystem' = 'true'
+)
+```
+--
+Function:: 
++ 
+--
+```sql
+SELECT * FROM TABLE(
+  JSON_FLAT_FILE(path => '/orders', glob => '2020-01-*.json', sharedFileSystem => 'true')
+);
+```
+--
+====
+
+|===
+
+== Supported File Systems
+
+Hazelcast supports the following file systems.
+
+If you use the slim distribution of Hazelcast, be sure to add the respective modules to your members' classpaths.
+
+NOTE: Any path that does not start with a schema is considered local or shared on the Hazelcast members.
+
+[cols="a,m,m"]
+|===
+|Storage System|Module|Example path
+
+|Member Filesystems (both shared and local)
+a|Included in both full and slim distributions of Hazelcast.
+|path/to/a/directory
+
+|Hadoop Distributed File System (HDFS)
+|link:https://mvnrepository.com/artifact/com.hazelcast.jet/hazelcast-jet-hadoop-all/{page-component-version}[hazelcast-jet-hadoop-all]
+|hdfs://path/to/a/directory
+
+|Amazon S3
+|link:https://mvnrepository.com/artifact/com.hazelcast.jet/hazelcast-jet-files-s3/{page-component-version}[hazelcast-jet-files-s3]
+|s3a://example-bucket/path/in/the/bucket
+
+|Google Cloud Storage
+|link:https://mvnrepository.com/artifact/com.hazelcast.jet/hazelcast-jet-files-gcs/{page-component-version}[hazelcast-jet-files-gcs]
+|gs://example-bucket/path/in/the/bucket
+
+|Windows Azure Blob Storage
+|link:https://mvnrepository.com/artifact/com.hazelcast.jet/hazelcast-jet-files-azure/{page-component-version}[hazelcast-jet-files-azure]
+|wasbs://example-container@examplestorageaccount.blob.core.windows.net/path/in/the/container
+
+|Azure Data Lake Generation 1
+|link:https://mvnrepository.com/artifact/com.hazelcast.jet/hazelcast-jet-files-azure/{page-component-version}[hazelcast-jet-files-azure]
+|adl://exampledatalake.azuredatalakestore.net/path/in/the/container
+
+|Azure Data Lake Generation 2
+|link:https://mvnrepository.com/artifact/com.hazelcast.jet/hazelcast-jet-files-azure/{page-component-version}[hazelcast-jet-files-azure]
+|abfs://example-container@exampledatalakeaccount.dfs.core.windows.net/path/in/the/container
+|===
+
+Although these are the officially supported sources, you can also read from
+any file system that's compatible with Hadoop.
+
+== Supported File Formats
+
+Hazelcast supports reading from the following file formats.
+
+=== Avro
+
+The Avro format allows you to read data from files in the Avro Object Container File
+format. To use the Avro format you must have the
+`hazelcast-jet-avro` module on your members' classpaths.
+
+```sql
+CREATE MAPPING users
+TYPE File
+OPTIONS (
+    'path' = '/users',
+    'format' = 'avro',
+    'glob' = '*.avro'
+)
+```
+
+[cols="m,m"]
+|===
+| Avro Type | SQL Type
+
+|BOOLEAN
+|BOOLEAN
+
+|INT
+|INT
+
+|LONG
+|BIGINT
+
+|FLOAT
+|REAL
+
+|DOUBLE
+|DOUBLE
+
+|STRING
+|VARCHAR
+
+a| All other types
+| OBJECT
+|===
+
+=== CSV
+
+CSV files must have a header. If you omit the column
+list from the `CREATE MAPPING` statement, Hazelcast will try to infer the column names from the file header. Columns lists that do not match any
+header fields are ignored.
+
+```sql
+CREATE MAPPING my_files
+TYPE File
+OPTIONS (
+    'path' = '/path/to/directory',
+    'format' = 'csv'
+)
+```
+
+All columns are stored in the `VARCHAR` type.
+
+=== JSON
+
+JSON files must be in the link:https://jsonlines.org/[JSON Lines] format.
+
+JSON files are expected to contain one valid JSON document per
+line and be `UTF-8` encoded. If you omit any mapping columns from the
+declaration, Hazelcast infers names and types based on a sample.
+
+```sql
+CREATE MAPPING my_files
+TYPE File
+OPTIONS (
+    'path' = '/path/to/directory',
+    'format' = 'json-flat'
+)
+```
+
+[cols="m,m"]
+|===
+| JSON type | SQL Type
+
+|BOOLEAN
+|BOOLEAN
+
+|NUMBER
+|DOUBLE
+
+|STRING
+|VARCHAR
+
+a|All other types
+| OBJECT
+
+|===
+
+=== Parquet
+
+Apache Parquet is a columnar storage format. It describes how the data
+is stored on disk. It doesn't specify how the data is supposed to be
+deserialized, and it uses other libraries to achieve that. Namely we use
+Apache Avro for deserialization.
+
+Parquet has a dependency on Hadoop, so it can be used only with one of
+the Hadoop based modules.
+
+```sql
+CREATE MAPPING my_files
+TYPE File
+OPTIONS (
+    'path' = 'hdfs://path/to/directory',
+    'format' = 'parquet'
+    /* more Hadoop options ... */
+)
+```
+
+== Changing the Default Data Type
+
+Depending on the <<supported-file-formats, file format>> that you choose, data is converted to a default SQL type. For example, the CSV format uses the `VARCHAR` type for all fields in the file.
+
+To change this default type, name the columns
+explicitly in the column list while creating the mapping. For example, if you specify `INT` manually on a header field of a CSV file, the behavior would be as if `CAST(column
+AS INT)` were used to convert `VARCHAR` to `INT`.
+
+```sql
+CREATE MAPPING my_files (
+  name VARCHAR,
+  id INT
+)
+TYPE File
+OPTIONS (
+    'path' = '/path/to/directory',
+    'format' = 'csv'
+)
+```
+
+For details which data types can be converted to others, see xref:data-types.adoc[].
+
+
+== Configuring Authentication for Remote File Systems
+
+To access data on remote file systems (files that aren't on Hazelcast members), you must also configure the authentication credentials in <<options, `options`>>.
+
+=== Amazon S3
+
+To connect to Amazon S3, you must add the following authentication credentials as keys and values in `options`.
+
+`fs.s3a.access.key`
+`fs.s3a.secret.key`
+
+If your file is not stored in the default region (`us-west-1`), you must also provide your region in the `fs.s3a.endpoint` option.
+
+```sql
+CREATE MAPPING nasdaqlisted
+TYPE File
+OPTIONS (
+    'path' = 's3a://diagnostic-test-alexander/',
+    'format' = 'csv',
+    'glob' = 'nasdaqlisted.txt',
+    'fs.s3a.endpoint' = 's3.us-west-2.amazonaws.com',
+    'fs.s3a.access.key' = 'my-access-key',
+    'fs.s3a.secret.key' = 'my-secret-key'
+);
+```
+
+For additional ways to authenticate see the
+link:https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html#Authenticating_with_S3[Hadoop-AWS documentation]
+and
+link:https://docs.aws.amazon.com/sdk-for-java/v2/developer-guide/credentials.html[Amazon S3 documentation]
+.
+
+=== Google Cloud Storage
+
+Provide a location of the keyfile via
+`google.cloud.auth.service.account.json.keyfile` source option.
+
+NOTE: The file must be available on all cluster members.
+
+For additional ways to authenticate see
+link:https://github.com/GoogleCloudDataproc/hadoop-connectors/blob/master/gcs/CONFIGURATION.md#authentication[Google Cloud Hadoop connector].
+
+=== Windows Azure Blob Storage
+
+Provide an account key via
+`fs.azure.account.key.<your account name>.blob.core.windows.net` source
+option.
+
+For additional ways to authenticate see
+link:https://hadoop.apache.org/docs/stable/hadoop-azure/index.html[Hadoop Azure Blob Storage]
+support.
+
+=== Azure Data Lake Generation 1
+
+Provide the following options:
+
+- `fs.adl.oauth2.access.token.provider.type`
+- `fs.adl.oauth2.refresh.url`
+- `fs.adl.oauth2.client.id`
+- `fs.adl.oauth2.credential`
+
+For additional ways to authenticate see
+link:https://hadoop.apache.org/docs/stable/hadoop-azure-datalake/index.html[Hadoop Azure Data Lake Support]
+
+=== Azure Data Lake Generation 2
+
+For additional ways to authenticate see
+link:https://hadoop.apache.org/docs/stable/hadoop-azure/abfs.html[Hadoop Azure Data Lake Storage Gen2]
+
+=== Turning off Authentication Caching
+
+To improve performance, authentication credentials are cached by default. However, cache credentials may cause issues
+when xref:pipelines:submitting-jobs.adoc[submitting jobs] that use different credentials, or even the
+same jobs with new credentials such as after credentials rotation.
+
+To turn off authentication caching, set the
+`fs.<prefix>.impl.disable.cache` option to `true`, where `<prefix>` is the schema of your <<supported-file-systems, file system>>.

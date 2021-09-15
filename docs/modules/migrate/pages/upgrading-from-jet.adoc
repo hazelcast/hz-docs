@@ -26,11 +26,39 @@ Hazelcast {page-component-version} is compatible only with the Job and Pipeline 
 
 == Jet Engine Security
 
-In embedded mode (Hazelcast in the same JVM as your application), you cannot use Jet APIs or SQL by default. These features are disabled for security reasons. For more information about security in the Jet engine and how to enable/disable features, see xref:pipelines:job-security.adoc[].
+In embedded mode (Hazelcast in the same JVM as your application), you cannot use Jet APIs or SQL by default. These features are disabled for security reasons. For more information about security in the Jet engine and how to enable/disable the Jet engine, see xref:pipelines:job-security.adoc[].
 
 == Configuration
 
-Hazelcast {page-component-version} includes important changes to Jet engine configuration.
+By default, Hazelcast {page-component-version} looks for configurations in the following order and applies only the first one that it finds:
+
+. A `Config` object
+
+. A YAML or XML file whose path is given in the `hazelcast.config` system property
+
+. A `hazelcast.xml` file in the working directory
+
+. A `hazelcast.xml` file on the classpath
+
+. A `hazelcast.yaml` file in the working directory
+
+. A `hazelcast.yaml` file on the classpath
+
+NOTE: You can also override these configurations, using system properties or environment variables. See xref:configuration:overriding-configuration-settings.adoc[].
+
+Jet 4.x did not offer an option to configure it using XML. As a result, you must do one of the following:
+
+- Add your configurations to the `Config` object.
++
+Some of the `JetConfig` API has been moved to the `Config` object. See <<imdg-configuration, IMDG Configuration>>, <<instanceconfig,InstanceConfig>>, and <<configuration-loaders, Configuration Loaders>>, and <<jet-properties, Jet Properties>> on this page.
+- Pass the path of your YAML file to the `hazelcast.config` system property.
++
+For the Jet engine related configuration fields, see the
+https://github.com/hazelcast/hazelcast/blob/master/hazelcast/src/main/resources/hazelcast-full-example.yaml#L3490[example YAML file].
+NOTE: If your YAML file is invalid, the member will not start. Hazelcast {page-component-version} checks and validates your YAML configurations during a cluster startup. See <<yaml-file-validation, YAML File Validation>> on this page.
+- Add your configurations to the `hazelcast.xml` file.
++
+For the Jet engine related configuration elements, see the https://github.com/hazelcast/hazelcast/blob/master/hazelcast/src/main/resources/hazelcast-full-example.yaml#L3490[example XML file] on GitHub.
 
 === IMDG Configuration
 
@@ -71,7 +99,7 @@ HazelcastInstance hz = Hazelcast.newHazelcastInstance(config);
 
 === InstanceConfig
 
-The link:https://jet-start.sh/javadoc/4.5/com/hazelcast/jet/config/InstanceConfig.html[`InstanceConfig` object] has been removed and all its methods have been added to the `JetConfig` object.
+The link:https://jet-start.sh/javadoc/4.5/com/hazelcast/jet/config/InstanceConfig.html[`InstanceConfig` object] has been deprecated and all its methods have been added to the `JetConfig` object.
 
 [tabs] 
 ==== 
@@ -159,22 +187,17 @@ config.setProperty( "hazelcast.property.foo", "value" );
 
 See xref:configuration:configuring-with-system-properties.adoc[].
 
-=== Configuration Files
-
-The Jet configuration elements have been added to
-the XML/YAML files of IMDG. For the Jet engine related configuration elements, see the
-https://github.com/hazelcast/hazelcast/blob/master/hazelcast/src/main/resources/hazelcast-full-example.yaml#L3490[example YAML file on GitHub].
+=== YAML File Validation
 
 Hazelcast {page-component-version} checks and validates your YAML configurations during a cluster startup.
 According to this validation:
 
-* The top-level `hazelcast` object must exist. 
-* Client and member YAML configurations must be separate (not in the same file).
-* There must be no case insensitive enum values.
+- The top-level `hazelcast` object must exist. 
+- Client and member YAML configurations must be separate (not in the same file).
+- There must be no case insensitive enum values.
 
 While upgrading to Hazelcast 5.0, if a YAML configuration violates any of these rules,
-the cluster will not start. You need to either edit and update your YAML configuration files
-accordingly or disable the validation by setting the `hazelcast.config.schema.validation.enabled` property to `false`.
+the cluster will not start. You need to either edit and update your YAML configuration files or disable the validation by setting the `hazelcast.config.schema.validation.enabled` property to `false`.
 
 == API Entry Points
 

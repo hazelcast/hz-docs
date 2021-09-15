@@ -4,7 +4,7 @@ Hazelcast 5.0 is a major release which unifies
 the former Hazelcast IMDG and Jet products in a
 single solution. The changes are summarized below.
 
-For information on upgrading from previous IMDG and Jet
+For information about upgrading from previous IMDG and Jet
 releases, see the xref:migrate:upgrade.adoc[Upgrading to Hazelcast 5.0 section].
 
 To learn about the changes in previous IMDG and Jet releases, see https://docs.hazelcast.org/docs/rn/[IMDG release notes] and
@@ -48,9 +48,6 @@ the classes not matching to any other serialization methods are serialized in th
 +
 See the xref:serialization:compact-serialization.adoc[Compact Serialization section].
 https://github.com/hazelcast/hazelcast/pull/19017[#19017]
-* **Merkle Tree for ICache:** Like Hazelcast maps, now caches (`ICache`) also support
-the Delta WAN Synchronization using Merkle trees.
-https://github.com/hazelcast/hazelcast/pull/18898[#18898]
 
 * **Security for Jet Engine Jobs:** The Jet engine allows you to upload custom code as well as access data
 outside of Hazelcast such as files on the device that's running a member. You can secure your Hazelcast member
@@ -58,8 +55,23 @@ against malicious uses of the Jet API. See the xref:pipelines:job-security.adoc[
 
 == Breaking Changes
 
-=== BETA API Changes
+=== API Changes
 
+* For Google Cloud Storage (GCS) file sources, the `SecuredFunction` interface now returns a list of permissions instead of a single
+permission. Previously, Hazelcast was returning only the permission for the bucket to be read, and this was causing a source to be
+possibly exploited for gaining information whether some file exists in the system. Now, Hazelcast also returns a permission
+for the keyfile that is required to read a bucket on GCS.
++
+https://github.com/hazelcast/hazelcast/pull/19407[#19407]
+* The "Hot Restart Persistence" feature name has been changed to "Persistence"; with this change
+we've performed various cleanups in its API:
+** The `HotRestartService` has been deprecated; see <<removed-deprecated-features, Deprecated Features>>.
+** Renamed `com.hazelcast.hotrestart.BackupTask` as `com.hazelcast.persistence.BackupTask`.
+** Renamed `com.hazelcast.hotrestart.BackupTaskState` as `com.hazelcast.persistence.BackupTaskState`.
+** Added the `isBackupEnabled()` to `PersistenceService`/`HotRestartService` that does
+not have a default implementation.
++
+https://github.com/hazelcast/hazelcast/pull/19404[#19404]
 * After the unification of cloud discovery plugins (see <<cloud-discovery-plugins, here>>,
 the exception class for the failure in generating `SSLSocketFactory` is changed from
 `KubernetesClientException` to `RestClientException` for the Kubernetes plugin.
@@ -314,12 +326,17 @@ https://github.com/hazelcast/hazelcast/pull/18425[#18425]
 
 * Added `queueFillPercent` metric to show how full the WAN replication queue is, in percentage.
 https://github.com/hazelcast/hazelcast/pull/19431[#19431]
+* Introduced a warning when the users create a job JAR to submit via `hz-cli` and Hazelcast detects `hazelcast`
+or `hazelcast-enterprise` is packaged in it.
+https://github.com/hazelcast/hazelcast/issues/19426[#19426]
 * The README of `hazelcast/hazelcast` GitHub repository has been completely
 rewritten to reflect the unification of former Hazelcast IMDG and Jet products.
 https://github.com/hazelcast/hazelcast/pull/19061[#19061]
 * The `hazelcast-sql` module is now covered by the Hazelcast Community License; before,
 it was Apache License, Version 2.
 https://github.com/hazelcast/hazelcast/pull/18957[#18957]
+* Added the merkle tree support for caches to speed up the migration process during a cluster rebalancing.
+https://github.com/hazelcast/hazelcast/pull/18898[#18898]
 * Added the client console entry point to the Hazelcast command line
 interface; you can now use the `hazelcast console` command to start
 the client console application.
@@ -352,6 +369,9 @@ https://github.com/hazelcast/hazelcast/pull/17428[#17428]
 
 == Fixes
 
+* Fixed an issue where the wildcard configuration mechanism was not working
+correctly if a matching pattern has the same prefix and suffix.
+https://github.com/hazelcast/hazelcast/issues/19357[#19357]
 * If the connector permission for file includes wildcard (*) then any file in the system could be
 read by using `..` in the path in connector. See the below example:
 +
@@ -449,6 +469,12 @@ https://github.com/hazelcast/hazelcast/issues/17834[#17834]
 ** `hazelcast.client.statistics.period.seconds`
 +
 https://github.com/hazelcast/hazelcast/pull/19219[#19219]
+* The `HotRestartService` class has been deprecated; use `PersistenceService` instead.
+https://github.com/hazelcast/hazelcast/pull/19404[#19404]
+* The following property have been removed:
+** `hazelcast.hotrestart.free.native.memory.percentage`
++
+https://github.com/hazelcast/hazelcast/pull/19404[#19404]
 * Former `Jet`, `JetInstance` and `JetCacheManager` classes have been deprecated.
 See xref:migrate:upgrade.adoc#depreciation-of-the-jet-and-jetinstance-classes[here]
 for details. Accordingly `JetInstance` has been removed from Hazelcast's command line

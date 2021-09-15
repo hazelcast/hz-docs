@@ -27,68 +27,124 @@ xref:deploy:running-in-modular-java.adoc[Using JDK 11+ with Modular Java]
 
 |Add Hazelcast to your project as a dependency
 |xref:install-hazelcast.adoc#use-java[Install Hazelcast for Java]
+
+|Maven
+|link:https://maven.apache.org/download.cgi[Download Maven]
+
 |===
 
-== Step 1. Start a Hazelcast Cluster
+== Step 1. Step Up the Project
 
-Hazelcast clusters consist of servers that we call members. These members communicate with each other to form a distributed network. It's these members that store and process your data in memory.
+First, you need to setup a Java project that you can later execute to start a Hazelcast cluster and interact with it.
 
-In this step, you use the Java API to start a three-member cluster called `hello-world`.
-
-. Import the dependencies and create an `App` class.
+. Check that you have Maven installed.
 +
+```bash
+mvn -v
+```
++
+If Maven is installed, you should see some information about the Maven installation, which looks similar to the following:
++
+```
+Apache Maven 3.8.1 (05c21c65bdfed0f71a2f2ada8b84da59348c4c5d)
+Maven home: /usr/local/Cellar/maven/3.8.1/libexec
+Java version: 16.0.1, vendor: Homebrew, runtime: /usr/local/Cellar/openjdk/16.0.1/libexec/openjdk.jdk/Contents/Home
+Default locale: en_GB, platform encoding: UTF-8
+OS name: "mac os x", version: "10.15.7", arch: "x86_64", family: "mac"
+```
+
+. Create the following structure in a project directory of your choice.
++
+----
+📄 pom.xml
+📂 src
+  📂 main
+    📂 java
+      📄 HelloWorld.java
+----
+
+. Add the following to your `pom.xml` file to set your project’s name, version, and its dependencies on external libraries such as Hazelcast.
++
+Replace the `${jdk.version}` placeholder with your JDK version.
++
+[source,xml,subs="attributes+"]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.example</groupId>
+    <artifactId>hz-example</artifactId>
+    <version>0.1.0</version>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.hazelcast</groupId>
+            <artifactId>hazelcast</artifactId>
+            <version>{page-component-version}</version>
+        </dependency>
+    </dependencies>
+
+
+    <properties>
+        <maven.compiler.source>${jdk.version}</maven.compiler.source>
+        <maven.compiler.target>${jdk.version}</maven.compiler.target>
+    </properties>
+
+</project>
+----
+
+== Step 2. Build a Hazelcast Cluster
+
+Hazelcast clusters consist of servers called _members_ that communicate with each other to form a distributed network. It's these members that store and process your data in memory.
+
+In this step, you use the Java API to build a three-member cluster called `hello-world`.
+
+Add the following to your `HelloWorld.java` file.
+
 [source,java]
 ----
+package org.example;
+
+<1>
 import com.hazelcast.config.Config;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
-import java.util.Map;
 
-public class App {
+public class HelloWorld {
   public static void main(String[] args) {
+    Config helloWorldConfig = new Config();
+    helloWorldConfig.setClusterName("hello-world"); <2>
+
+    <3>
+    HazelcastInstance hz = Hazelcast.newHazelcastInstance(helloWorldConfig);
+    HazelcastInstance hz2 = Hazelcast.newHazelcastInstance(helloWorldConfig);
+    HazelcastInstance hz3 = Hazelcast.newHazelcastInstance(helloWorldConfig);
   }
 }
 ----
 
-. To start a member in your JVM, create an instance of Hazelcast inside the `main()` method, using the `Hazelcast.newHazelcastInstance()` method.
-+
-[source,java]
-----
-Config helloWorldConfig = new Config();
-helloWorldConfig.setClusterName("hello-world");
+<1> Import the Hazelcast packages that you'll need.
+<2> Configure the name of your Hazelcast cluster.
+<3> Start three members in your JVM by creating three instances of Hazelcast. A JVM can host multiple Hazelcast members, but each member can be a part of only one cluster.
 
-HazelcastInstance hz = Hazelcast.newHazelcastInstance(helloWorldConfig);
-----
-+
-Here, the cluster is configured with the name `hello-world`. A JVM can host multiple Hazelcast members, but each member can be a part of only one cluster.
+Now, you can use your Hazelcast members to interact with the Hazelcast API such as by writing data to memory.
 
-. To add more members to your `hello-world` cluster, create more instances of Hazelcast with the same configuration object.
-+
-[source,java]
-----
-HazelcastInstance hz2 = Hazelcast.newHazelcastInstance(helloWorldConfig);
-HazelcastInstance hz3 = Hazelcast.newHazelcastInstance(helloWorldConfig);
-----
-+
-When you run this program, your members will find and connect to each other automatically to form your `hello-world` cluster. You can learn more about how members do this in xref:clusters:discovery-mechanisms.adoc[].
+== Step 3. Write Data to Memory
 
-Now, you can use your Hazelcast instances to interact with the Hazelcast API such as by writing data to memory.
+Hazelcast has lots of distributed data structures available for writing data to memory on your cluster. One of the most popular ways of writing data to memory is to use a distributed map. Maps store key/value pairs called entries, which are replicated and distributed across a cluster.
 
-== Step 2. Write Data to Memory
+Write data to a distributed map called `my-distributed-map`.
 
-Hazelcast has lots of distributed data structures available for writing data to memory on your cluster.
-
-One of the most popular ways of writing data to memory is to use a distributed map.
-
-Maps store key/value pairs called entries, which are replicated and distributed across a cluster.
-
-. Write data to a distributed map called `my-distributed-map`.
-+
 [tabs] 
 ==== 
 Map API:: 
 + 
 --
+Add the following to the bottom of your `Main` class:
+
 [source,java]
 ----
 Map<String, String> map = hz.getMap("my-distributed-map");
@@ -100,28 +156,32 @@ System.out.println(map.get("1"));
 System.out.println(map.get("2"));
 System.out.println(map.get("3"));
 ----
-NOTE: The `Map` object is a distributed implementation of a Java map, which extends the standard `java.util.concurrent.ConcurrentMap` interface and hence the `java.util.Map` interface. As a result, Hazelcast maps make it easy for Java developers to perform operations like reading and writing, using the well known `map.get()` and `map.put()` methods.
+NOTE: The `Map` object is a distributed implementation of a Java map, which extends the standard `java.util.Map` interface. As a result, you can use the well known `map.get()` and `map.put()` methods.
 --
 SQL:: 
 + 
 --
-To use SQL in embedded mode, you must first do the following:
+To use SQL in embedded mode, you must add the `hazelcast-sql` module to your `pom.xml` file.
 
-- Add the `hazelcast-sql` dependency to your project.
-- xref:pipelines:job-security.adoc[Enable the Jet engine].
-+
+```xml
+<!-- https://mvnrepository.com/artifact/com.hazelcast/hazelcast-sql -->
+<dependency>
+    <groupId>com.hazelcast</groupId>
+    <artifactId>hazelcast-sql</artifactId>
+    <version>5.0-BETA-2</version>
+    <scope>test</scope>
+</dependency>
+```
+
+Then, add the following to the bottom of your `Main` class:
+
 [source,java]
 ----
 JetConfig jetConfig = helloWorldConfig.getJetConfig();
-jetConfig.setEnabled(true);
+jetConfig.setEnabled(true); <1>
 HazelcastInstance hz = Hazelcast.newHazelcastInstance(helloWorldConfig);
-----
 
-Then, pass any SQL statement to the SQL engine.
-
-[source,java]
-----
-SqlService sql = hz.getSql();
+SqlService sql = hz.getSql(); <2>
 String createMappingQuery = "CREATE MAPPING myDistributedMap\n"
   + "TYPE IMap\n"
   + "OPTIONS ('keyFormat'='varchar','valueFormat'='varchar')";
@@ -148,13 +208,22 @@ try (SqlResult result = sql.execute(scanQuery)) {
   }
 }
 ----
+
+<1> Enable the Jet engine so that you can execute SQL queries on your cluster.
+<2> Pass your SQL queries to the SQL engine, using the `getSql()` method.
 --
 ====
 
-. Execute the program.
-+
+== Step 4. Execute the Program
+
+Use Maven to compile and execute your Java project.
+
+```bash
+mvn compile exec:java -Dexec.mainClass="org.example.HelloWorld"
+```
+
 You should see something like the following in the console:
-+
+
 ```
 Members {size:3, ver:3} [
 	Member [192.168.1.164]:5701 - 672970d4-6cc1-48cc-8cfd-f71a1a05f4f6
@@ -162,18 +231,20 @@ Members {size:3, ver:3} [
 	Member [192.168.1.164]:5703 - 079d8eed-8516-4137-b569-489666170f07
 ]
 ```
-+
+
 Here, the local IP address of the cluster is 192.168.1.164, and 3 members are running on ports 5701, 5702, and 5703 respectively.
-+
+
+Your members connected to each other automatically to form your `hello-world` cluster. You can learn more about how members do this in xref:clusters:discovery-mechanisms.adoc[].
+
 Then, you should see the values in your map:
-+
+
 ```
 John
 Mary
 Jane
 ```
 
-. Stop the program.
+To shut down your cluster, press *Ctrl+C*.
 
 == Complete Code Samples
 
@@ -188,7 +259,7 @@ import com.hazelcast.core.HazelcastInstance;
 
 import java.util.Map;
 
-public class App {
+public class HelloWorld {
   public static void main(String[] args) {
     Config helloWorldConfig = new Config();
     helloWorldConfig.setClusterName("hello-world");
@@ -202,7 +273,6 @@ public class App {
     map.put("2", "Mary");
     map.put("3", "Jane");
 
-    System.out.println(map.size());
     System.out.println(map.get("1"));
     System.out.println(map.get("2"));
     System.out.println(map.get("3"));
@@ -225,7 +295,7 @@ import com.hazelcast.sql.SqlService;
 import java.util.Arrays;
 import java.util.List;
 
-public class App {
+public class HelloWorld {
   public static void main(String[] args) {
     Config helloWorldConfig = new Config();
     helloWorldConfig.setClusterName("hello-world");

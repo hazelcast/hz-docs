@@ -1,0 +1,44 @@
+= Socket Connector
+
+The socket sources and sinks open a TCP socket to the supplied address
+and either read from or write to the socket. The sockets are text-based
+and may only read or write text data.
+
+== Installing the Connector
+
+This connector is included in the full and slim distributions of Hazelcast.
+
+== Socket as a Source
+
+A simple example of the source is below:
+
+```java
+Pipeline p = Pipeline.create();
+p.readFrom(Sources.socket("localhost", 8080, StandardCharsets.UTF_8))
+ .withoutTimestamps()
+ .map(line -> /* parse line */)
+ .writeTo(Sinks.logger());
+```
+
+This will connect to a socket on port 8080 and wait to receive some
+lines of text, which will be sent as an item for the next step in the
+pipeline to process.
+
+Please note that Hazelcast will not create any server sockets, this
+should be handled outside of the pipeline.
+
+== Socket as a Sink
+
+When used as a sink, it will send a line of text for each input item,
+similar to how the source works:
+
+```java
+Pipeline p = Pipeline.create();
+p.readFrom(Sources.itemStream(10))
+ .withoutTimestamps()
+ .map(e -> e.toString())
+ .writeTo(Sinks.socket("localhost", 8080));
+```
+
+Any disconnections from either source or sink will cause the job to fail,
+so this source is mostly aimed for simple IPC or testing.

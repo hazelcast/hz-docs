@@ -1,0 +1,53 @@
+= Test Source Connectors
+:description: Test sources make it convenient to get started with pipelines without having to use an actual data source. They can also be used for unit testing different pipelines where you can expect a more deterministic import.
+
+== Installing the Connector
+
+This connector is included in the full and slim distributions of Hazelcast.
+
+== Test Batch Source
+
+The `items` source offers a simple batch source where the supplied list
+of items are output:
+
+```java
+Pipeline p = Pipeline.create();
+p.readFrom(TestSources.items(1, 2, 3, 4))
+ .writeTo(Sinks.logger());
+```
+
+This pipeline will emit the following items, and then the job will terminate:
+
+```text
+12:33:01.780 [ INFO] [c.h.j.i.c.W.loggerSink#0] 1
+12:33:01.780 [ INFO] [c.h.j.i.c.W.loggerSink#0] 2
+12:33:01.780 [ INFO] [c.h.j.i.c.W.loggerSink#0] 3
+12:33:01.780 [ INFO] [c.h.j.i.c.W.loggerSink#0] 4
+```
+
+== Test Streaming Source
+
+The test streaming source emits an infinite stream of `SimpleEvent`s at
+the requested rate (in this case, 10 items per second):
+
+```java
+p.readFrom(TestSources.itemStream(10))
+ .withNativeTimestamp(0)
+ .writeTo();
+```
+
+After submitting this job, you can expect infinite output like:
+
+```
+12:33:36.774 [ INFO] [c.h.j.i.c.W.loggerSink#0] SimpleEvent(timestamp=12:33:36.700, sequence=0)
+12:33:36.877 [ INFO] [c.h.j.i.c.W.loggerSink#0] SimpleEvent(timestamp=12:33:36.800, sequence=1)
+12:33:36.976 [ INFO] [c.h.j.i.c.W.loggerSink#0] SimpleEvent(timestamp=12:33:36.900, sequence=2)
+12:33:37.074 [ INFO] [c.h.j.i.c.W.loggerSink#0] SimpleEvent(timestamp=12:33:37.000, sequence=3)
+12:33:37.175 [ INFO] [c.h.j.i.c.W.loggerSink#0] SimpleEvent(timestamp=12:33:37.100, sequence=4)
+12:33:37.274 [ INFO] [c.h.j.i.c.W.loggerSink#0] SimpleEvent(timestamp=12:33:37.200, sequence=5)
+```
+
+Each `SimpleEvent` has a sequence which is monotonically increased and
+also a timestamp which is derived from `System.currentTimeMillis()`.
+For more information using these sources in a testing environment, refer
+to the <<testing, Testing>> section.

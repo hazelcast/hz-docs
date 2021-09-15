@@ -1,0 +1,146 @@
+= Mapping to Hazelcast Maps
+:description: Before you can query entries in maps, you need to create a mapping with the map connector so that the SQL service knows how to access the entries in the most efficient way.
+:page-aliases: sql:imap-connector.adoc
+
+{description}
+
+== What is the Map Connector
+
+The map connector allows you to create mappings to a distributed map in a local Hazelcast cluster. 
+
+== Installing the Connector
+
+This connector is included in Hazelcast.
+
+== Map Security
+
+If you use Hazelcast Enterprise, you can set up permissions to restrict clients' access to maps.
+
+For example, to restrict reads on maps, you can use the `create` and `read` permissions. To restrict inserts, you can use the `put` permission.
+
+For details, see xref:security:native-client-security.adoc[].
+
+== Creating a Mapping to a Map
+
+To create a mapping to a map in SQL, you must tell Hazelcast how to serialize/deserialize the keys and values by specifying options in the xref:sql:create-mapping.adoc[`CREATE MAPPING` statement].
+
+=== Primitives
+
+For maps whose keys and values are primitives, you need to set the following options to the SQL type that corresponds to the primitive:
+
+- `keyFormat`
+- `valueFormat` 
+
+For example, to create a mapping for `IMap<Integer, String>`:
+
+```sql
+CREATE MAPPING my_map
+TYPE IMap
+OPTIONS (
+    'keyFormat'='int',
+    'valueFormat'='varchar'
+)
+```
+
+For a reference, see xref:data-types.adoc[].
+
+=== Portable Objects
+
+If your map's keys or values are serialized to xref:serialization:implementing-portable-serialization.adoc[portable], you need to provide the following additional options:
+
+* `keyPortableFactoryId`/ `valuePortableFactoryId`
+* `keyPortableClassId`/ `valuePortableClassId`
+* `keyPortableVersion`/ `valuePortableVersion` (optional, default is `0`)
+
+For example, to create a mapping for a map where both key and value are portable:
+
+```sql
+CREATE MAPPING my_map
+TYPE IMap
+OPTIONS (
+    'keyFormat' = 'portable',
+    'keyPortableFactoryId' = '123',
+    'keyPortableClassId' = '456',
+    'keyPortableVersion' = '0',  -- optional
+    'valueFormat' = 'portable',
+    'valuePortableFactoryId' = '123',
+    'valuePortableClassId' = '789',
+    'valuePortableVersion' = '0'  -- optional
+)
+```
+
+If you omit a column list from the `CREATE MAPPING` statement, Hazelcast will
+resolve the column names and types by looking at the `ClassDefinition`
+found using the given factory ID, class ID, and version.
+
+If the `ClassDefinition` with the given IDs is not known to the cluster,
+you must provide a column list so that Hazelcast can use it to create the `ClassDefinition`.
+
+For more information about `Portable` see xref:serialization:implementing-portable-serialization.adoc[].
+
+=== JSON Objects
+
+For maps whose values are stored in JSON, you must declare the field names in the column list.
+
+For example, to create a mapping for a map whose values are JSON objects with the `ticker` and `amount` fields:
+
+```sql
+CREATE MAPPING my_map(
+    __key BIGINT,
+    ticker VARCHAR,
+    amount INT)
+TYPE IMap
+OPTIONS (
+    'keyFormat' = 'bigint',
+    'valueFormat' = 'json-flat')
+```
+
+There are no additional options for this format.
+
+By default, Hazelcast serializes JSON into `HazelcastJsonValue` objects, which allows you to query its fields.
+
+JSON's type system doesn't match SQL's exactly. For example, JSON
+numbers have unlimited precision, but such numbers are typically not
+portable. We convert SQL integer and floating-point types into JSON
+numbers. We convert the `DECIMAL` type, as well as all temporal types,
+to JSON strings.
+
+NOTE: Hazelcast doesn't yet support the `JSON` type from the SQL standard. As a result, you can't use functions like `JSON_VALUE` or `JSON_QUERY`.
+
+=== Java Objects
+
+For maps whose keys or values are serialized with Java serialization, `DataSerializable` or `IdentifiedDataSerializable`, you need to provide the name of the Java class into which you want to serialize data, using the following additional options:
+
+- 'keyJavaClass'
+- 'valueJavaClass'
+
+For example:
+
+```sql
+CREATE MAPPING my_map
+TYPE IMap
+OPTIONS (
+    'keyFormat' = 'java',
+    'keyJavaClass' = 'java.lang.Long',
+    'valueFormat' = 'java',
+    'valueJavaClass' = 'com.example.Person')
+```
+
+If the Java class corresponds to one of the basic data types (numbers,
+dates, strings), that type will be used for the key or value
+and mapped as a column named `__key` for keys and `this` for values. In
+the example above, the key will be mapped with the `BIGINT` type. In
+fact, the above `keyFormat` and `keyJavaClass` duo is equivalent to
+`'keyFormat'='bigint'`.
+
+If the Java class is not one of the basic types:
+
+- Hazelcast will analyze the class using reflection and use its properties as column names.
++
+Hazelcast recognizes public fields and JavaBean-style getters. If some property has a non-primitive type, it will be mapped under the `OBJECT` type.
+- The class must be available to the cluster.
++
+You can either add the class to the
+members' classpaths by creating a JAR file and adding it to the `lib`
+directory, or you can use user code deployment. User code deployment
+must be enabled on the members, see xref:clusters:deploying-code-from-clients.adoc[] for details.

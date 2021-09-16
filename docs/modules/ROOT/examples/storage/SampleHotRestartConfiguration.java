@@ -15,6 +15,7 @@ public class SamplePersistenceConfiguration {
         .setDataLoadTimeoutSeconds(900)
         .setClusterDataRecoveryPolicy(PersistenceClusterDataRecoveryPolicy.FULL_RECOVERY_ONLY)
         .setAutoRemoveStaleData(true);
+        .setRebalanceDelaySeconds(0)
         config.setPersistenceConfig(PersistenceConfig);
 
         MapConfig mapConfig = config.getMapConfig("test-map");

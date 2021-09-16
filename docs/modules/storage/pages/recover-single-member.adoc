@@ -4,14 +4,28 @@
 
 {description}
 
+== Before you Begin
+
+You should have a good understand of how Hazelcast partitons data. See xref:overview:data-partitioning.adoc#repartitioning[].
+
 == How Clusters Handle Single-Member Failures
 
 By default, if a cluster detects that a member is restarting and attempting to rejoin, the cluster’s master member will ask the member to send its partition table for validation.
 
 If the master member validates that the partition table was correct at the time the member left the cluster, the member loads its persisted data from disk.
 
-If the cluster <<handling-invalid-partitions, cannot validate the member's partition table>> for whatever reason, the member stops trying to join the cluster and shuts down. The cluster will not allow the member to rejoin until it has deleted its persistence store. The cluster then recovers the missing member's data from backups and
+If the cluster cannot validate the member's partition table for whatever reason, the member stops trying to join the cluster and shuts down. The cluster will not allow the member to rejoin until it has deleted its persistence store. The cluster then recovers the missing member's data from backups and
 redistributes it among the remaining cluster members.
+
+You can configure what should happen if a cluster cannot validate a member's partition table. See <<handling-invalid-partitions, Handling Invalid Partitions>> on this page.
+
+While a cluster is migrating a member's partitions, its performance may be affected by reduced throughput or temporary unavailability of data. If you have lots of persisted data and you are concerned about how long it may take for your cluster to migrate data after a member fails to rejoin, you can configure the following options:
+
+- <<delaying-migrations, Delay migrations>>.
++
+WARNING: Do not configure a delay if your cluster also stores in-memory data that is not persisted. Clusters do not repartition their data if a member rejoins within the delay. As a result, any data that is not persisted will be lost if the member restarts within the delay, including backups.
+
+- <<synchronzing-persisted-data-faster, Synchronize persisted data faster>> while also allowing the cluster to continue migrations as usual.
 
 == Handling Invalid Partitions
 
@@ -111,36 +125,69 @@ Hazelcast cannot make progress on timeouts automatically. Then, the overall
 process can be managed manually via aforementioned methods, i.e.,
 Management Center, REST API and cluster management scripts.
 
-== Handling Slow Migrations
+== Delaying Migrations
 
-While a cluster is migrating a member's partitions, its performance may be affected by reduced throughput or temporary unavailability of data.
+Delaying migrations stops a cluster from migrating a failed member's data too soon. When a cluster stores lots of persisted data, it may take a long time to repartition the data after a member leaves the cluster. But, you may expect members to shut down and restart quickly, in which case the cluster doesn't need to repartition the data as soon as a member leaves. You can delay migrations for as long as you expect a member to rejoin the cluster.
 
-If you have lots of persisted data and you are concerned about how long it may take for your cluster to migrate data after a member fails to rejoin, you can configure the following options:
-
-- <<delaying-migrations, Delay migrations>>.
-+
-WARNING: Do not configure a delay if your cluster also stores in-memory data that is not persisted. Clusters do not repartition their data if a member rejoins within the delay. As a result, any data that is not persisted will be lost if the member restarts within the delay, including backups.
-
-- <<synchronzing-persisted-data-faster, Synchronize persisted data faster>> while also allowing the cluster to continue migrations as usual.
-
-=== Delaying Migrations
-
-Delaying migrations stops your cluster from migrating a failed member's data too soon. This option is useful if you have lots of persisted data that would take too long to migrate, and you want to give members more time to restart. You may want to delay migrations when you expect members to shut down and restart quickly such as in the following scenarios:
+For example, you may want to delay migrations for the following scenarios:
 
 - You're carrying out a planned shutdown.
 - You're running a cluster on Kubernetes and expect members to be restarted quickly.
 
-To delay migrations during a single member failure, configure a _rebalance delay_, using the xref:ROOT:system-properties.adoc#rebalance-delay[`hazelcast.partition.rebalance.after.member.left.delay.seconds` property].
+To delay migrations during a single member failure, configure a _rebalance delay_, using the `rebalance-delay-seconds` option.
 
 WARNING: Do not configure a delay if your cluster also stores in-memory data that is not persisted. Clusters do not repartition their data if a member rejoins within the delay. As a result, any data that is not persisted will be lost if the member restarts within the delay, including backups.
 
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <persistence enabled="true">
+    <rebalance-delay-seconds>
+      240
+    </rebalance-delay-seconds>
+  </persistence>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  persistence:
+    enabled: true
+    rebalance-delay-seconds: 240
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+PersistenceConfig PersistenceConfig = new PersistenceConfig()
+.setEnabled(true)
+.setRebalanceDelaySeconds(240);
+
+config.setPersistenceConfig(PersistenceConfig);
+----
+--
+====
+
 Assume the following:
 
-* A cluster consists of members A, B, and C with Persistence enabled.
+* A cluster consists of members A, B, and C with persistence enabled.
 * Member B is killed.
 * Member B restarts.
 
-If member B restarts within the rebalance delay, all its persisted data will be restored from disk, and *the cluster will not xref:overview:data-partitioning.adoc#repartitioning[repartition] its data*. Any in-memory data in member B's partitions will be lost, and member B will still be listed as the owner of those partitions. So, even if the cluster has backups of in-memory data in maps, requests for that data will go to member B (unless the members have xref:data-structures:backing-up-maps.adoc#enabling-in-memory-backup-reads-embedded-mode[backup reads enabled]).
+If member B restarts within the rebalance delay, all its persisted data will be restored from disk, and *the cluster will not repartition its data*. Any in-memory data in member B's partitions will be lost, and member B will still be listed as the owner of those partitions. So, even if the cluster has backups of in-memory data in maps, requests for that data will go to member B (unless the members have xref:data-structures:backing-up-maps.adoc#enabling-in-memory-backup-reads-embedded-mode[backup reads enabled]).
 
 NOTE: If members have backup reads enabled, some in-memory data may appear to have been kept. However, eventually the backups will be xref:consistency-and-replication:replication-algorithm.adoc#best-effort-consistency[synchronized with the primary partition] (member B).
 
@@ -150,7 +197,7 @@ If member B does not restart within the rebalance delay, the cluster recovers me
 redistributes the data among the remaining members (members A and C
 in this case). If member B is later restarted, it recovers its persisted data from disk and brings it up-to-date with data from members A and C. If Merkle trees are enabled on available data structures, migrations use those to request only missing persisted data. For details about how members use Merkle trees, see <<synchronizing-persisted-data-faster, Synchronizing Persisted Data Faster>>.
 
-=== Synchronizing Persisted Data Faster
+== Synchronizing Persisted Data Faster
 
 When a failed member rejoins the cluster, it populates its in-memory stores with data from disk that may be stale. If you have lots of persisted data as well as in-memory data that you don't want to lose, you can configure your data structures to generate a Merkle tree. The Merkle tree stores the state of persisted data in a way that other cluster members can quickly read, compare with their own, and check the delta for what is missing. This way, after a restart, the member can send its Merkle tree to the cluster and request only the missing data, reducing the amount of data sent over the network.
 

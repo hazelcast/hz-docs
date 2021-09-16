@@ -18,7 +18,8 @@ It supports only the legacy Hazelcast IMDG 3.x versions between 3.6.x and 3.12.x
 
 == Get the Evaluation Tool
 
-You can find the tool at ??? (Link to GitHub repo).
+The tool is included in the Hazelcast full distribution package; see xref:deploy:installing-upgrading.adoc#installing-using-download-archives[here]
+for information on the packages. You can also have it using Maven under `com.hazelcast` with the name "Hazelcast 3 Connector".
 
 == Copy Data From 3.x to 5.x
 
@@ -125,7 +126,7 @@ by providing its name and the client configuration mentioned above:
 +
 [source,java]
 ----
-Sink<Entry<Object, Object>> sink = Hz3Sinks.map(targetMap, HZ3_CLIENT_CONFIG);
+Sink<Entry<Object, Object>> sink = Hz3Sinks.remoteMap(targetMap, HZ3_CLIENT_CONFIG);
 ----
 . Create the pipeline to copy the 5.x map data to 3.x map:
 +
@@ -225,6 +226,31 @@ of 3.x member/client and connector.
 ----
 hz.getJet().newJob(p, config);
 ----
+
+== Serialization Considerations
+
+Since this tool sends/receives data over a network or to/from a store, e.g., map,
+the data objects go through a (de)serialization. 
+
+If your data objects use the following serialization interfaces, then you need to
+implement and register the related object factories/serializers:
+
+* xref:serialization:implementing-dataserializable.adoc#identifieddataserializable[IdentifiedDataSerializable]
+* xref:serialization:implementing-portable-serialization.adoc[Portable]
+* xref:serialization:custom-serialization.adoc[Custom Serialization]
+
+See the above links for information on how you can implement and register object factories. For custom serialization,
+you only need to register your serializer, without any factory.
+
+NOTE: Implementation and/or registration of factories and custom serializers should be done only on the
+Hazelcast 5.0 side; there is no need to perform these on the 3.x data since it does not need to
+deserialize objects.
+
+If your data objects use the following serialization interfaces, you do not to perform
+additional steps as for the above ones; Hazelcast takes care of the serializations out of the box:
+
+* xref:serialization:implementing-java-serializable.adoc[Java Serializable and Externalizable]
+* xref:serialization:implementing-dataserializable.adoc[DataSerializable]
 
 == Code Sample
 

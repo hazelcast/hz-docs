@@ -80,7 +80,6 @@ Hazelcast has lots of distributed data structures available for writing data to 
 SQL:: 
 + 
 --
-
 . In a new terminal window, start the SQL shell.
 +
 Replace the `$DOCKER_IP` placeholder with the IP address of your member's Docker container.
@@ -337,12 +336,249 @@ func mapSampleRun() {
 <2> Create a client instance, using your configuration.
 <3> Create a map called `my-distributed-map`.
 <4> Write some keys and values to the map.
-
-NOTE: The configuration builder is not thread-safe. Complete the configuration in a single go routine. Do not pass the builder to other go routines without synchronizing them.
 --
 ====
 
-== Step 3. Set up Management Center
+== Step 3. Read Data from Memory
+
+You can read the data that you just wrote to memory by connecting to the member with a different client and requesting data from the member.
+
+[tabs] 
+====
+SQL:: 
++ 
+--
+. In a new terminal window, start the SQL shell.
++
+Replace the `$DOCKER_IP` placeholder with the IP address of your member's Docker container.
++
+[source,shell,subs="attributes+"]
+----
+docker run --network hazelcast-network -it --rm hazelcast/hazelcast:{full-version} hz-cli --targets hello-world@$DOCKER_IP sql
+----
+
+. Query all data in the map.
++
+[source,sql]
+----
+SELECT * FROM my_distributed_map;
+----
++
+```
++--------------------+--------------------+
+|__key               |this                |
++--------------------+--------------------+
+|3                   |Jane                |
+|1                   |John                |
+|2                   |Mary                |
++--------------------+--------------------+
+```
+
+. Exit the SQL shell.
++
+[source,shell]
+----
+exit
+----
+
+--
+
+Java:: 
++ 
+--
+
+[source,java]
+----
+import com.hazelcast.client.HazelcastClient;
+import com.hazelcast.client.config.ClientConfig;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+
+public class MapSample {
+  public static void main(String[] args) {
+
+    ClientConfig clientConfig = new ClientConfig();
+    clientConfig.setClusterName("hello-world");
+
+    HazelcastInstance client = HazelcastClient.newHazelcastClient(clientConfig);
+
+    <1>
+    IMap map = client.getMap("my-distributed-map");
+    for (Map.Entry<String, String> entry : map.entrySet()) {
+      System.out.println(entry.getKey() + " " + entry.getValue());
+    }
+
+    client.shutdown(); <2>
+  }
+}
+----
+<1> Request all data in the map and print it to the console.
+<2> Disconnect from the member.
+--
+
+C++::
++
+--
+
+[source,cpp]
+----
+#include <hazelcast/client/hazelcast_client.h>
+
+int main() {
+  hazelcast::client::client_config config;
+  config.set_cluster_name("hello-world");
+
+  auto client = hazelcast::new_client(std::move(config)).get();
+
+  auto map = client.get_map("my-distributed-map").get();
+
+  <1>
+  auto map = client.get_map("my-distributed-map").get();
+  auto entries = map->entry_set<std::string, std::string>().get();
+  for (auto &entry : map->entry_set<std::string, std::string>().get()) {
+    std::cout << entry.first << " " << entry.second << std::endl;
+  }
+
+  client.shutdown(); <2>
+
+  return 0;
+}
+----
+<1> Request all data in the map and print it to the console.
+<2> Disconnect from the member.
+--
+
+C Sharp::
++
+--
+
+[source,cs]
+----
+using Hazelcast.Client;
+using System;
+using System.Threading.Tasks;
+
+namespace Hazelcast.Examples.Org.Website.Samples
+{
+  public class MapSample
+  {
+    public static async Task Main(string[] args)
+    {
+      var options = new HazelcastOptionsBuilder().Build();
+      options.ClusterName = "hello-world";
+
+      await using var client = await HazelcastClientFactory.StartNewClientAsync(options);
+
+      <1>
+      var map = await client.GetMapAsync<string, string>("my-distributed-map");
+      foreach (var entry in await map.GetEntriesAsync())
+        Console.WriteLine($"{entry.Key}: {entry.Value}");
+
+      client.Shutdown(); <2>
+    }
+  }
+}
+----
+<1> Request all data in the map and print it to the console.
+<2> Disconnect from the member.
+--
+
+Node.js::
++
+--
+
+[source,javascript]
+----
+
+const { Client } = require('hazelcast-client');
+
+(async () => {
+  try {
+    const client = await Client.newHazelcastClient({
+      clusterName: 'hello-world',
+    });
+
+    <1>
+    const map = await client.getMap('my-distributed-map');
+    for (const [key, value] of await map.entrySet()) {
+        console.log(`${key} ${value}`);
+    }
+
+    await hz.shutdown(); <2>
+
+  } catch (error) {
+    console.error('Error occurred:', error);
+  }
+})();
+----
+<1> Request all data in the map and print it to the console.
+<2> Disconnect from the member.
+--
+
+Python::
++
+--
+
+[source,python]
+----
+import hazelcast
+
+if __name__ == "__main__":
+  client = hazelcast.HazelcastClient(
+  cluster_name="hello-world",
+  )
+
+  <1>
+  my_map = client.get_map("my-distributed-map").blocking()
+  for key, value in my_map.entry_set():
+    print(key, value)
+
+  client.shutdown() <2>
+
+----
+<1> Request all data in the map and print it to the console.
+<2> Disconnect from the member.
+--
+
+Go::
++
+--
+
+[source,go]
+----
+import "github.com/hazelcast/hazelcast-go-client"
+
+func mapSampleRun() {
+  cb := hazelcast.NewConfigBuilder()
+
+  cb.Cluster().SetName("hello-world")
+
+  client, err := hazelcast.StartNewClientWithConfig(cb) 
+
+  <1>
+  ctx := context.TODO()
+  myMap, err := client.GetMap(ctx, "my-distributed-map")
+  if err != nil {
+    // handle the error
+  }
+  entries, err := myMap.GetEntrySet(ctx)
+  if err != nil {
+    // handle the error
+  }
+  for key, value := range entries {
+    fmt.Println(key, value)
+  }
+
+  hz.Shutdown() <2>
+
+} 
+----
+<1> Request all data in the map and print it to the console.
+<2> Disconnect from the member.
+--
+====
+
+== Step 4. Set up Management Center
 
 Management Center is a user interface for managing and monitoring your cluster.
 
@@ -381,7 +617,7 @@ For now, the backup memory is 0 because you don't have any other members in your
 
 To back up your map, you need to scale up your cluster.
 
-== Step 4. Scale your Cluster
+== Step 5. Scale your Cluster
 
 If your cluster starts to run out of memory, you can add more members to it and they will distribute their data across the new members.
 
@@ -427,7 +663,7 @@ image:backup-count.png[Entries and their backups are distributed evenly across t
 +
 You should see that entries and their backups are distributed evenly across each member. This process is called partitioning. You can learn more about this subject in xref:overview:data-partitioning.adoc[].
 
-== Step 5. Simulate a Member Failure
+== Step 6. Simulate a Member Failure
 
 If a member fails for any reason, the other cluster members use their backups to repartition the data across the remaining cluster members.
 

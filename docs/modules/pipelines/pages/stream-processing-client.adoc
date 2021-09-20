@@ -11,6 +11,9 @@ To complete this tutorial, you need the following:
 |===
 |Prerequisites|Useful resources
 
+|A full Hazelcast distribution (Docker or Binary)
+|xref:install-hazelcast.adoc#use-the-binary[Install Hazelcast]
+
 |JDK 8 - 11
 |
 xref:deploy:supported-jvms.adoc[Supported Java Virtual Machines]
@@ -67,6 +70,17 @@ Replace the `${jdk.version}` placeholder with your JDK version.
     <groupId>org.example</groupId>
     <artifactId>hz-example</artifactId>
     <version>0.1.0</version>
+
+    <repositories>
+        <repository>
+            <id>snapshot-repository</id>
+            <name>Maven2 Snapshot Repository</name>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+        </repository>
+    </repositories>
 
     <dependencies>
         <dependency>
@@ -140,8 +154,13 @@ called _compute stages_ and expect you to attach further stages to them.
 
 == Step 3. Start a Hazelcast Member
 
-In this step, you use the Hazelcast Docker image to start a local single-member cluster to which you can submit your pipeline as a job.
+In this step, you start a local single-member cluster to which you can submit your pipeline as a job.
 
+[tabs] 
+==== 
+Docker:: 
++ 
+--
 . Create a new Docker network called `hazelcast-network`.
 +
 [source,shell]
@@ -168,6 +187,23 @@ Docker parameters:
 - `--rm`: Tells Docker to remove the container from its local cache after it exits.
 - `--network`: Allows you to connect to clusters, using an alias.
 - `-p`: All member containers must publish port 5701 under a different host machine port.
+--
+Binary:: 
++ 
+-- 
+.Mac and Linux
+[source,shell]
+----
+bin/hz-start
+----
+
+.Windows 
+[source,shell]
+----
+bin/hz-start.bat
+----
+--
+====
 
 == Step 4. Submit your Job to the Member
 
@@ -181,24 +217,71 @@ mvn package
 
 . From the Hazelcast home directory execute the `hazelcast submit` command.
 +
+[tabs] 
+==== 
+Docker:: 
++ 
+--
 Replace the following placeholders:
 
-- $PATH_TO_JAR_FILE: The path to your packaged JAR file.
+- $PATH_TO_TARGET: The absolute path to your `target` directory.
 - $MEMBER_IP: The IP address of the member to which to submit the job.
 +
-NOTE: To avoid the need to specify your main class in the `hazelcast submit` command, you should also set the `Main-Class` attribute in the `MANIFEST.MF`. Both Maven and Gradle can be configured to do this, refer to their docs.
-+
-```bash
-docker run -it --network hazelcast-network -v $PATH_TO_JAR_FILE:/jars --rm hazelcast/hazelcast:5.0-SNAPSHOT hz-cli -t $MEMBER_IP submit -c org.example.EvenNumberStream /jars/hz-example-0.1.0.jar
-```
-+
+[source,bash,subs="attributes+"]
+----
+docker run -it --network hazelcast-network -v $PATH_TO_TARGET:/jars --rm hazelcast/hazelcast:{full-version} hz-cli -t $MEMBER_IP submit -c org.example.EvenNumberStream /jars/hz-example-0.1.0.jar
+----
+
 In the console of your Hazelcast member, you should see that a new job has been submitted and it's running on your cluster.
+--
+Binary:: 
++ 
+--
+Replace the `$PATH_TO_JAR_FILE` placeholder with the absolute or relative path to your packaged JAR file.
+
+.Mac and Linux
+[source,shell]
+----
+bin/hz-cli submit --class org.example.EvenNumberStream $PATH_TO_JAR_FILE
+----
+
+.Windows 
+[source,shell]
+----
+bin/hz-start.bat submit --class org.example.EvenNumberStream $PATH_TO_JAR_FILE
+----
+--
+====
++
+TIP: To avoid the need to specify your main class in the `hazelcast submit` command, you should also set the `Main-Class` attribute in the `MANIFEST.MF`.
 
 . To see a list of running jobs on your cluster, execute the `list-jobs` command:
 +
+[tabs] 
+==== 
+Docker:: 
++ 
+--
 ```bash
 docker run -it --network hazelcast-network hazelcast/hazelcast hz-cli -t $MEMBER_IP list-jobs
 ```
+--
+Binary:: 
++ 
+--
+.Mac and Linux
+[source,shell]
+----
+bin/hz-cli list-jobs
+----
+
+.Windows 
+[source,shell]
+----
+bin/hz-start.bat list-jobs
+----
+--
+====
 +
 You should see the following:
 +
@@ -215,7 +298,46 @@ NOTE: A job with a streaming source will run indefinitely until explicitly cance
 
 With Management Center, you can monitor the status of your jobs and manage the lifecycle of existing jobs in your cluster.
 
-. In the left navigation panel of Management Center, go to *Streaming* > *Jobs*.
+. Start Management Center.
++
+[tabs] 
+==== 
+Docker:: 
++ 
+--
+[source,shell]
+----
+docker run \
+    --network hazelcast-network \
+    -p 8080:8080 hazelcast/management-center:latest-snapshot
+----
+--
+Binary:: 
++ 
+--
+.Mac and Linux
+[source,shell]
+----
+management-center/bin/start.sh
+----
+
+.Windows
+[source,shell]
+----
+management-center/bin/start.bat
+----
+--
+====
+
+. In a web browser, go to localhost:8080 and enable dev mode.
++
+image:getting-started:mc-dev-mode.png[Enabling dev mode in Management center]
+
+. Enter your cluster's name (`dev`) and IP address.
++
+image:getting-started:mc-active-cluster.png[An active cluster in Management Center]
+
+. In the left menu of Management Center, go to *Streaming* > *Jobs*.
 +
 You should see that your job is running.
 +

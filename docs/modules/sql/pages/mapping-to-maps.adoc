@@ -22,11 +22,9 @@ For details, see xref:security:native-client-security.adoc[].
 
 == Creating a Mapping to a Map
 
-To create a mapping to a map in SQL, you must tell Hazelcast how to serialize/deserialize the keys and values by specifying options in the xref:sql:create-mapping.adoc[`CREATE MAPPING` statement].
+To create a mapping to a map in SQL, you must tell Hazelcast how to serialize/deserialize the keys and values by specifying the `keyFormat` and `valueFormat` options in the `CREATE MAPPING` statement.
 
-=== Primitives
-
-For maps whose keys and values are primitives, you need to set the following options to the SQL type that corresponds to the primitive:
+For maps whose keys and values are primitives, you need to set these options to the SQL type that corresponds to the primitive:
 
 - `keyFormat`
 - `valueFormat` 
@@ -44,9 +42,16 @@ OPTIONS (
 
 For a reference, see xref:data-types.adoc[].
 
+For object formats, you must specify other options, depending on the serialization format:
+
+* <<portable-objects, Portable>>
+* Compact
+* JSON
+* Java
+
 === Portable Objects
 
-If your map's keys or values are serialized to xref:serialization:implementing-portable-serialization.adoc[portable], you need to provide the following additional options:
+If your map's keys or values are portable, you need to provide the following additional options:
 
 * `keyPortableFactoryId`/ `valuePortableFactoryId`
 * `keyPortableClassId`/ `valuePortableClassId`
@@ -76,7 +81,42 @@ found using the given factory ID, class ID, and version.
 If the `ClassDefinition` with the given IDs is not known to the cluster,
 you must provide a column list so that Hazelcast can use it to create the `ClassDefinition`.
 
-For more information about `Portable` see xref:serialization:implementing-portable-serialization.adoc[].
+For more information about this serialization option, see xref:serialization:implementing-portable-serialization.adoc[].
+
+=== Compact Objects
+
+If your map's keys or values are compact, you need to provide the following additional options:
+
+* `keyCompactTypeName`
+* `valueCompactTypeName`
+
+The column list is mandatory and Hazelcast will create the `Compact` objects 
+schema based on the column list.
+
+The benefit of this format is that it doesn't deserialize the whole key
+or value when reading only a subset of fields. Also it doesn't require a
+custom Java class to be defined on the cluster, so it's usable for
+non-Java clients similar to `Portable`. And it is more space-efficient than 
+`Portable`.
+
+Example mapping where both key and value are `Compact`:
+
+```sql
+CREATE MAPPING my_map( 
+	id INT EXTERNAL NAME "__key.id",
+	name VARCHAR ,
+	surname VARCHAR,
+	age INT)
+TYPE IMap
+OPTIONS (
+    'keyFormat' = 'compact',
+    'keyCompactTypeName' = 'personId',
+    'valueFormat' = 'compact',
+    'valueCompactTypeName' = 'person',
+)
+```
+
+For more information about this serialization option, see xref:serialization:compact-serialization.adoc[].
 
 === JSON Objects
 

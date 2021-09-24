@@ -15,12 +15,12 @@ If you need to synchronize Hazelcast data across a wide area network (WAN), you'
 
 If you're using Hazelcast Enterprise:
 
-- Set up your license key.
+- Set up your license key. See xref:getting-started:get-started-enterprise.adoc[]
 - Use the `hazelcast-enterprise:{full-version}` Docker image.
 
 == Starting a Cluster
 
-The default network mode in Docker is bridge, in which all containers run in a single network that is not accessible outside of the Docker host. As a result, if you run members on Docker containers on different hosts, you must allow them to discover and connect to each other using one of the following methods:
+The default network mode in Docker is bridge. In this mode, all containers run in a single network that is not accessible outside of the Docker host. If you run members on Docker containers on different hosts, you must allow them to discover and connect to each other using one of the following methods:
 
 - Host network mode (Linux only)
 - Port mapping
@@ -31,6 +31,8 @@ WARNING: These methods open Hazelcast members to the public. Anybody who can rea
 
 To allow members and clients on different hosts to discover each other with multicast, you can use the `host` network mode. This mode allows members to share the host’s network stack from their Docker containers.
 
+NOTE: Members will discover and connect to each other automatically only if your local network supports multicast. If your network does not support multicast, members will not form a cluster. In this case, you can try <<port-mapping, port mapping>>.
+
 [source,bash,subs="attributes+"]
 ----
 docker run --rm --network host --name member1 hazelcast/hazelcast:{full-version}
@@ -39,24 +41,22 @@ docker run --rm --network host --name member2 hazelcast/hazelcast:{full-version}
 
 In this mode, each member is available on the internal (private) IP address of the Docker host.
 
-NOTE: Members will only discover and connect to each other automatically if your local network supports multicast. If your network does not support multicast, you can try <<port-mapping, port mapping>>.
-
 === Port Mapping
 
-To allow members and clients on different hosts to discover each other over TCP/IP, you can map ports from the Docker host (the device that's running Docker) and tell Hazelcast to listen to your public IP address.
+To allow members and clients on different hosts to discover each other over TCP/IP, you can map ports from the Docker host (the device that's running Docker) and tell Hazelcast to listen to your internal IP address.
 
-TIP: You'll need the public IP address of your Docker host. You can find it on this web page: link:https://www.whatismyip.com/[https://www.whatismyip.com].
-
+TIP: You'll need the internal IP address of your Docker host.
 
 . Configure your members to connect over TCP/IP.
++
+NOTE: The default configuration file in Docker containers is `/opt/hazelcast/config/hazelcast-docker.xml`.
+If you want to use another file, you can specify the path to it relative to the `hazelcast` directory, using the `HAZELCAST_CONFIG` environment variable. You can see an example of this property under <<custom-hazelcast-configuration-file, Custom Hazelcast Configuration File>>.
 +
 [tabs]
 ====
 XML::
 +
 --
-Edit the default `hazelcast.xml` file.
-
 [source,xml]
 ----
 <network>
@@ -65,8 +65,8 @@ Edit the default `hazelcast.xml` file.
     </multicast>
     <tcp-ip enabled="true"> <2>
         <member-list> <3>
-            <member>192.168.1.12</member>
-            <member>192.168.1.13</member>
+            <member>192.168.1.12:5701</member>
+            <member>192.168.1.13:5701</member>
         </member-list>
     </tcp-ip>
   </join>
@@ -76,8 +76,6 @@ Edit the default `hazelcast.xml` file.
 YAML::
 +
 --
-Edit the `hazelcast.yml` file.
-
 [source,yaml]
 ----
 hazelcast:
@@ -88,17 +86,15 @@ hazelcast:
       tcp-ip: <2>
         enabled: true
         member-list: <3>
-          - 192.168.1.12
-          - 192.168.1.13
+          - 192.168.1.12:5701
+          - 192.168.1.13:5701
 ----
-
-NOTE: By default, Hazelcast loads the XML file. To run Hazelcast with this YAML configuration, use the `hazelcast.config` cluster property. You can see an example of this property under <<custom-hazelcast-configuration-file, Custom Hazelcast Configuration File>>.
 --
 ====
 +
 <1> Disable multicast.
 <2> Enable TCP/IP.
-<3> List the public IP addresses of all your Docker hosts. You should specify the port number only if you change the default Hazelcast port 5701.
+<3> List the socket address of all your Docker hosts.
 
 . Start a member on the first Docker host.
 +
@@ -113,7 +109,7 @@ docker run --rm --name member1 \
 [source,bash,subs="attributes+"]
 ----
 docker run --rm --name member1 \
-  -e "JAVA_OPTS=-Dhazelcast.local.publicAddress=192.168.1.12" -p 5701:5701 hazelcast/hazelcast:{full-version}
+  -e "JAVA_OPTS=-Dhazelcast.local.publicAddress=192.168.1.13" -p 5701:5701 hazelcast/hazelcast:{full-version}
 ----
 
 In the member logs, you should see that your members connected to each other:
@@ -143,9 +139,9 @@ We recommend you leave this as-is and control Hazelcast's memory size with the
 Docker parameter `--memory`. For example, this will start Hazelcast with 1.6
 GB assigned to the JVM:
 
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
-docker run --memory 2g --rm hazelcast/hazelcast
+docker run --memory 2g --rm hazelcast/hazelcast:{full-version}
 ----
 
 === JAVA_OPTS
@@ -153,9 +149,9 @@ docker run --memory 2g --rm hazelcast/hazelcast
 To change the JVM parameters directly, use the `JAVA_OPTS` environment
 variable. Hazelcast passes it to the JVM when starting. For example:
 
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
-docker run --memory 2g -e JAVA_OPTS="-XX:MaxRAMPercentage=85.0" --rm hazelcast/hazelcast
+docker run --memory 2g -e JAVA_OPTS="-XX:MaxRAMPercentage=85.0" --rm hazelcast/hazelcast:{full-version}
 ----
 
 Make sure to leave enough free RAM for Metaspace and other overheads.
@@ -167,19 +163,21 @@ by replacing the default ones in the container at
 `/opt/hazelcast`. We recommend that you use the default
 configuration file as a starting point:
 
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
-docker run --rm hazelcast/hazelcast cat /opt/hazelcast/hazelcast.yaml > hazelcast.yaml
+docker run --rm hazelcast/hazelcast:{full-version} \
+cat /opt/hazelcast/config/examples/hazelcast-docker.yaml \
+> hazelcast.yaml
 ----
 
 Now edit the file and apply it when starting Hazelcast:
 
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 docker run \
--v "$(pwd)"/hazelcast.yaml:/opt/hazelcast/hazelcast.yaml \
--e "JAVA_OPTS=-Dhazelcast.config=/opt//hazelcast/hazelcast.yml" \
--p:5701:5701 hazelcast/hazelcast
+-v "$(pwd)"/hazelcast.yml:/opt/hazelcast/hazelcast.yml \
+-e HAZELCAST_CONFIG=hazelcast.yml \
+-p:5701:5701 hazelcast/hazelcast:{full-version}
 ----
 
 === Extend Hazelcast's CLASSPATH with Custom Jars and Files
@@ -188,22 +186,22 @@ If you have to add more classes or files to Hazelcast's classpath, one way to
 do it is to put them in a directory such as `ext`, mount it to the
 container, and set the `CLASSPATH` environment variable:
 
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 docker run \
 -v /path/to/ext:/opt/hazelcast/ext \
 -e CLASSPATH="/opt/hazelcast/ext/" \
--p:5701:5701 hazelcast/hazelcast
+-p:5701:5701 hazelcast/hazelcast:{full-version}
 ----
 
 If you have just one file to add, it's simpler to mount it directly to the
 Hazelcast `lib` directory:
 
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 docker run \
 -v /path/to/my.jar:/opt/hazelcast-jet/lib/my.jar \
--p:5701:5701 hazelcast/hazelcast
+-p:5701:5701 hazelcast/hazelcast:{full-version}
 
 ----
 
@@ -212,9 +210,9 @@ docker run \
 You can set the logging level using the `LOGGING_LEVEL` environment
 variable:
 
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
-docker run -e LOGGING_LEVEL=DEBUG hazelcast/hazelcast
+docker run -e LOGGING_LEVEL=DEBUG hazelcast/hazelcast:{full-version}
 ----
 
 Available logging levels are (from highest to lowest): `FATAL`, `ERROR`,
@@ -223,16 +221,16 @@ Available logging levels are (from highest to lowest): `FATAL`, `ERROR`,
 If you need more control over logging, you can supply your own
 `log4j2.properties` file. Use the default one as the starting point:
 
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
-docker run --rm hazelcast/hazelcast cat /opt/hazelcast/log4j2.properties > log4j2.properties
+docker run --rm hazelcast/hazelcast:{full-version} cat /opt/hazelcast/log4j2.properties > log4j2.properties
 ----
 
 Edit the file and mount it when starting Hazelcast:
 
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
-docker run -v /path/to/log4j2.properties:/opt/hazelcast/log4j2.properties hazelcast/hazelcast
+docker run -v /path/to/log4j2.properties:/opt/hazelcast/log4j2.properties hazelcast/hazelcast:{full-version}
 ----
 
 == Building a Custom Image from the Slim Image

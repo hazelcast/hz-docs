@@ -1,4 +1,4 @@
-= Handling Member Failures
+= Handling Member Failures with Persistence Enabled
 :description: Cluster members that have persisted data on disk handle member failures differently, depending on whether members fail during a cluster restart or if a single member leaves the cluster. You can configure how your clusters handle each scenario.
 :page-enterprise: true
 
@@ -19,6 +19,9 @@
 |partition table
 |Table that stores members' partition replica assignments and the partition table version.
 
+|persistence store
+|The files that contain persisted data.
+
 |validation timeout
 |Number of seconds that the cluster allows for members to rejoin and send their partition table to the master member. See the xref:configuring-persistence.adoc#persistence-validation-timeout-seconds[`validation-timeout-seconds`] configuration option
 |===
@@ -33,13 +36,13 @@ The rejoining member loads its persisted data from disk and rejoins the cluster 
 - The master member validates that the partition table was correct at the time that the rejoining member left the cluster.
 - The rejoining member loads its persisted data from disk within the data load timeout.
 
-If these conditions are not met, the rejoining member stops trying to join the cluster and shuts down. The cluster does not allow that member to rejoin until it has deleted its persistence store.
+If these conditions are not met, the rejoining member stops trying to join the cluster and shuts down. The cluster does not allow that member to rejoin until it has deleted its persistence store. The cluster then tries to recover the missing member’s data from backups and repartitions the data.
 
-The cluster then tries to recover the missing member’s data from backups and repartitions the data.
+image:single-member-failure.svg[Flowchart that shows the process a cluster follows when a single member fails and leaves the cluster]
 
 If you want rejoining members to automatically delete their persistence stores when their partition tables are invalid, set the xref:configuring-persistence.adoc#persistence-auto-remove-stale-data[`auto-remove-stale-data`] option to true.
 
-NOTE: A joining member that crashes while in an `ACTIVE` state will generally not consider its data stale. Instead, the member will reload its data from disk and then synchronize it with other cluster members as needed. Only in some exceptional circumstances will the master member consider the joining member's data stale.
+NOTE: Only in exceptional circumstances will the master member consider a rejoining member's data stale. Instead, the member will reload its data from disk and then synchronize it with other cluster members as needed. 
 
 If you have lots of persisted data and you are concerned about how long it may take for your cluster to migrate data after a member fails to rejoin, you can do the following:
 
@@ -57,7 +60,9 @@ By default, a restarting cluster waits until the following conditions are met:
 - The master member validates that *all* members' partition tables are correct.
 - *All* members load their persisted data from disk within the data load timeout.
 
-The cluster fails to start if any of the following conditions are not met.
+The cluster fails to start if any of these conditions are not met.
+
+image:full-cluster-restart.svg[Flowchart that shows the process a cluster follows when one or more members fail to start after a full cluster restart]
 
 To handle cases where the master member rejects a rejoining member because of invalid partitions, you must use <<force-start, force start>> to delete all data from every member's persistence store and restart the cluster.
 
@@ -73,7 +78,7 @@ WARNING: Do not configure a delay if your cluster also stores in-memory data tha
 
 === Force Start
 
-Force start is a procedure whereby all cluster members delete their persistence stores and generate new UUIDs. By default, clusters are configured to wait until all members have restarted after a whole cluster restart. But, during a cluster restart, some members can crash permanently and then be unable to recover from the failure. At this point, the cluster cannot start until all running members have deleted their persistence store and generated new UUIDs.
+Force start is a procedure where all cluster members delete their persistence stores and generate new UUIDs. By default, clusters are configured to wait until all members have restarted after a whole cluster restart. But, during a cluster restart, some members can crash permanently and then be unable to recover from the failure. At this point, the cluster cannot start until all running members have deleted their persistence store and generated new UUIDs.
 
 WARNING: Force start deletes all data in your cluster members' persistence stores.
 

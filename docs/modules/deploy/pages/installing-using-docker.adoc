@@ -15,12 +15,12 @@ If you need to synchronize Hazelcast data across a wide area network (WAN), you'
 
 If you're using Hazelcast Enterprise:
 
-- Set up your license key.
+- Set up your license key. See xref:getting-started:get-started-enterprise.adoc[]
 - Use the `hazelcast-enterprise:{full-version}` Docker image.
 
 == Starting a Cluster
 
-The default network mode in Docker is bridge, in which all containers run in a single network that is not accessible outside of the Docker host. As a result, if you run members on Docker containers on different hosts, you must allow them to discover and connect to each other using one of the following methods:
+The default network mode in Docker is bridge. In this mode, all containers run in a single network that is not accessible outside of the Docker host. If you run members on Docker containers on different hosts, you must allow them to discover and connect to each other using one of the following methods:
 
 - Host network mode (Linux only)
 - Port mapping
@@ -31,6 +31,8 @@ WARNING: These methods open Hazelcast members to the public. Anybody who can rea
 
 To allow members and clients on different hosts to discover each other with multicast, you can use the `host` network mode. This mode allows members to share the host’s network stack from their Docker containers.
 
+NOTE: Members will discover and connect to each other automatically only if your local network supports multicast. If your network does not support multicast, members will not form a cluster. In this case, you can try <<port-mapping, port mapping>>.
+
 [source,bash,subs="attributes+"]
 ----
 docker run --rm --network host --name member1 hazelcast/hazelcast:{full-version}
@@ -39,24 +41,22 @@ docker run --rm --network host --name member2 hazelcast/hazelcast:{full-version}
 
 In this mode, each member is available on the internal (private) IP address of the Docker host.
 
-NOTE: Members will only discover and connect to each other automatically if your local network supports multicast. If your network does not support multicast, you can try <<port-mapping, port mapping>>.
-
 === Port Mapping
 
-To allow members and clients on different hosts to discover each other over TCP/IP, you can map ports from the Docker host (the device that's running Docker) and tell Hazelcast to listen to your public IP address.
+To allow members and clients on different hosts to discover each other over TCP/IP, you can map ports from the Docker host (the device that's running Docker) and tell Hazelcast to listen to your internal IP address.
 
-TIP: You'll need the public IP address of your Docker host. You can find it on this web page: link:https://www.whatismyip.com/[https://www.whatismyip.com].
-
+TIP: You'll need the internal IP address of your Docker host.
 
 . Configure your members to connect over TCP/IP.
++
+NOTE: The default configuration file in Docker containers is `/opt/hazelcast/config/hazelcast-docker.xml`.
+If you want to use another file, you can specify the path to it relative to the `hazelcast` directory, using the `HAZELCAST_CONFIG` environment variable. You can see an example of this property under <<custom-hazelcast-configuration-file, Custom Hazelcast Configuration File>>.
 +
 [tabs]
 ====
 XML::
 +
 --
-Edit the default `hazelcast.xml` file.
-
 [source,xml]
 ----
 <network>
@@ -65,8 +65,8 @@ Edit the default `hazelcast.xml` file.
     </multicast>
     <tcp-ip enabled="true"> <2>
         <member-list> <3>
-            <member>192.168.1.12</member>
-            <member>192.168.1.13</member>
+            <member>192.168.1.12:5701</member>
+            <member>192.168.1.13:5701</member>
         </member-list>
     </tcp-ip>
   </join>
@@ -76,8 +76,6 @@ Edit the default `hazelcast.xml` file.
 YAML::
 +
 --
-Edit the `hazelcast.yml` file.
-
 [source,yaml]
 ----
 hazelcast:
@@ -88,17 +86,15 @@ hazelcast:
       tcp-ip: <2>
         enabled: true
         member-list: <3>
-          - 192.168.1.12
-          - 192.168.1.13
+          - 192.168.1.12:5701
+          - 192.168.1.13:5701
 ----
-
-NOTE: By default, Hazelcast loads the XML file. To run Hazelcast with this YAML configuration, use the `hazelcast.config` cluster property. You can see an example of this property under <<custom-hazelcast-configuration-file, Custom Hazelcast Configuration File>>.
 --
 ====
 +
 <1> Disable multicast.
 <2> Enable TCP/IP.
-<3> List the public IP addresses of all your Docker hosts. You should specify the port number only if you change the default Hazelcast port 5701.
+<3> List the socket address of all your Docker hosts.
 
 . Start a member on the first Docker host.
 +
@@ -113,7 +109,7 @@ docker run --rm --name member1 \
 [source,bash,subs="attributes+"]
 ----
 docker run --rm --name member1 \
-  -e "JAVA_OPTS=-Dhazelcast.local.publicAddress=192.168.1.12" -p 5701:5701 hazelcast/hazelcast:{full-version}
+  -e "JAVA_OPTS=-Dhazelcast.local.publicAddress=192.168.1.13" -p 5701:5701 hazelcast/hazelcast:{full-version}
 ----
 
 In the member logs, you should see that your members connected to each other:
@@ -177,8 +173,8 @@ Now edit the file and apply it when starting Hazelcast:
 [source,bash]
 ----
 docker run \
--v "$(pwd)"/hazelcast.yaml:/opt/hazelcast/hazelcast.yaml \
--e "JAVA_OPTS=-Dhazelcast.config=/opt//hazelcast/hazelcast.yml" \
+-v "$(pwd)"/hazelcast.yml:/opt/hazelcast/hazelcast.yml \
+-e HAZELCAST_CONFIG=hazelcast.yml \
 -p:5701:5701 hazelcast/hazelcast
 ----
 

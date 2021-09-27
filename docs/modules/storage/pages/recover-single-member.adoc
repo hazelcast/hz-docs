@@ -32,25 +32,21 @@ By default, if a cluster detects that a missing member is restarting and attempt
 
 The rejoining member loads its persisted data from disk and rejoins the cluster only if the following conditions are met:
 
-- The master member receives the partition table within the validation timeout.
+- The master member receives the partition table within 120 seconds (the validation timeout).
 - The master member validates that the partition table was correct at the time that the rejoining member left the cluster.
-- The rejoining member loads its persisted data from disk within the data load timeout.
+- The rejoining member loads its persisted data from disk within 900 seconds (the data load timeout).
 
-If these conditions are not met, the rejoining member stops trying to join the cluster and shuts down. The cluster does not allow that member to rejoin until it has deleted its persistence store. The cluster then tries to recover the missing member’s data from backups and repartitions the data.
+If these conditions are not met, the rejoining member deletes its persistence store, generates a new UUID, and rejoins the cluster. The rest of the cluster then tries to recover the missing member’s data from backups and repartitions it.
 
 image:single-member-failure.svg[Flowchart that shows the process a cluster follows when a single member fails and leaves the cluster]
 
-If you want rejoining members to automatically delete their persistence stores when their partition tables are invalid, set the xref:configuring-persistence.adoc#persistence-auto-remove-stale-data[`auto-remove-stale-data`] option to true.
+If you do not want rejoining members to automatically delete their persistence stores when their partition tables are invalid, set the xref:configuring-persistence.adoc#persistence-auto-remove-stale-data[`auto-remove-stale-data`] option to `false`.
 
 NOTE: Only in exceptional circumstances will the master member consider a rejoining member's data stale. Instead, the member will reload its data from disk and then synchronize it with other cluster members as needed. 
 
-If you have lots of persisted data and you are concerned about how long it may take for your cluster to migrate data after a member fails to rejoin, you can do the following:
+If you have lots of persisted data and you are concerned about how long it may take for your cluster to repartition data after a member fails to rejoin, see <<delaying-repartitioning, Delaying Repartitioning>>.
 
-- <<delaying-migrations, Delay migrations>>.
-+
 WARNING: Do not configure a delay if your cluster also stores in-memory data that is not persisted. Clusters do not repartition their data if a member rejoins within the delay. As a result, any data that is not persisted will be lost if the member restarts within the delay, including backups.
-
-- <<synchronzing-persisted-data-faster, Synchronize persisted data faster>> while also allowing the cluster to continue migrations as usual.
 
 == What Happens When the Whole Cluster Restarts
 
@@ -64,17 +60,13 @@ The cluster fails to start if any of these conditions are not met.
 
 image:full-cluster-restart.svg[Flowchart that shows the process a cluster follows when one or more members fail to start after a full cluster restart]
 
-To handle cases where the master member rejects a rejoining member because of invalid partitions, you must use <<force-start, force start>> to delete all data from every member's persistence store and restart the cluster.
+To handle cases where the master member rejects a rejoining member because of invalid partitions, you can use <<force-start, force start>> to delete all data from every member's persistence store and restart the cluster.
 
 To allow the cluster to restart without all cluster members, you can configure the cluster to use <<partial-start, partial start>>.
 
-If you have lots of persisted data and you are concerned about how long it may take for your cluster to migrate data after a member fails to rejoin, you can do the following:
+If you have lots of persisted data and you are concerned about how long it may take for your cluster to repartition after a member fails to rejoin, see <<delaying-repartitioning, Delaying Repartitioning>>.
 
-- <<delaying-migrations, Delay migrations>>.
-+
 WARNING: Do not configure a delay if your cluster also stores in-memory data that is not persisted. Clusters do not repartition their data if a member rejoins within the delay. As a result, any data that is not persisted will be lost if the member restarts within the delay, including backups.
-
-- <<synchronzing-persisted-data-faster, Synchronize persisted data faster>> while also allowing the cluster to continue migrations as usual.
 
 === Force Start
 
@@ -133,18 +125,18 @@ To trigger a manual partial start, use one of the following options before the `
 
 - xref:management:cluster-utilities.adoc#example-usages-for-cluster-sh[Cluster management scripts]
 
-== Delaying Migrations
+== Delaying Repartitioning
 
-Delaying migrations stops a cluster from migrating a failed member's data too soon. When a cluster stores lots of persisted data, it may take a long time to repartition the data after a member leaves the cluster. But, you may expect members to shut down and restart quickly, in which case the cluster doesn't need to repartition the data as soon as a member leaves. You can delay migrations for as long as you expect members to rejoin the cluster.
+You can make a cluster wait for a period of time before repartitioning after one or more members fail to rejoin. When a cluster stores lots of persisted data, it may take a long time to repartition the data after a member leaves the cluster. But, you may expect members to shut down and restart quickly, in which case the cluster doesn't need to repartition the data as soon as a member leaves. You can delay repartitioning for as long as you expect members to rejoin the cluster.
 
-For example, you may want to delay migrations for the following scenarios:
+For example, you may want to delay repartitioning for the following scenarios:
 
 - You're carrying out a planned shutdown.
 - You're running a cluster on Kubernetes and expect members to be restarted quickly.
 
-To delay migrations during a single member failure, configure a _rebalance delay_, using the xref:configuring-persistence.adoc#persistence-rebalance-delay-seconds[`rebalance-delay-seconds`] option.
+To delay repartitioning during a single member failure, configure a _rebalance delay_, using the xref:configuring-persistence.adoc#persistence-rebalance-delay-seconds[`rebalance-delay-seconds`] option.
 
-WARNING: Do not configure a delay if your cluster also stores in-memory data that is not persisted. Clusters do not repartition their data if a member rejoins within the delay. As a result, any data that is not persisted will be lost if the member restarts within the delay, including backups.
+WARNING: If your cluster also stores in-memory data that is not persisted, do not configure a rebalance delay. Clusters do not repartition in-memory data if a member rejoins within the delay. As a result, any data that is not persisted will be lost if the member restarts within the delay, including backups.
 
 [tabs] 
 ==== 
@@ -203,7 +195,7 @@ While the member is down, operations on partitions that are owned by that member
 
 If member B does not restart within the rebalance delay, the cluster recovers member B's data from backups and
 repartitions the data among the remaining members (members A and C
-in this case). If member B is later restarted, it recovers its persisted data from disk and brings it up-to-date with data from members A and C. If Merkle trees are enabled on available data structures, migrations use those to request only missing persisted data. For details about how members use Merkle trees, see <<synchronizing-persisted-data-faster, Synchronizing Persisted Data Faster>>.
+in this case). If member B is later restarted, it recovers its persisted data from disk and brings it up-to-date with data from members A and C. If Merkle trees are enabled on available data structures, members use those to request only missing persisted data. For details about how members use Merkle trees, see <<synchronizing-persisted-data-faster, Synchronizing Persisted Data Faster>>.
 
 == Synchronizing Persisted Data Faster
 
@@ -217,7 +209,7 @@ On map and JCache data structures, you can configure the following options to en
 
 |`merkle-tree.enabled`
 |Whether a Merkle tree is generated for the data structure.
-|disabled
+|enabled
 |
 [tabs] 
 ==== 

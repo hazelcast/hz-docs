@@ -5,7 +5,7 @@ Hazelcast provides a REST interface: it provides an HTTP service
 in each cluster member so that you can access your data
 structures and cluster using the HTTP protocol.
 
-== Enabling the REST API
+== Enabling REST API
 
 REST service is **disabled** in the configuration by default.
 You should enable it on your cluster members to use the REST client
@@ -41,7 +41,7 @@ hazelcast:
 ----
 ====
 
-== Changing the Default Port
+== Changing Default Port
 
 Hazelcast uses `5701` as the default port for REST API communications.
 To change it you can use the advanced network configuration as shown in
@@ -87,7 +87,7 @@ See the xref:clusters:network-configuration.adoc#setting-up-rest-server-socket-e
 You can also use the xref:clusters:network-configuration.adoc#port[Port configuration element] to change the default
 port for REST API.
 
-== Enabling the Endpoint Groups
+== Enabling Endpoint Groups
 
 Hazelcast uses grouped endpoints to provide the communication
 via REST interface. In this section, as an example, we show various operations
@@ -166,7 +166,7 @@ Content-Length: 0
 < Content-Length: 0
 ```
 
-=== Creating/Updating Entries in a Map for REST Client
+=== Creating/Updating Entries in a Map
 
 You can put a new `key1/value1` entry into a map by using `POST` call to
 `+http://<member IP address>:<port>/hazelcast/rest/maps/mapName/key1+` URL.
@@ -205,7 +205,7 @@ curl -v -H "Content-Type: text/plain" -d "bar"
     http://<member IP address>:<port>/hazelcast/rest/maps/mapName/foo
 ----
 
-=== Retrieving Entries from a Map for REST Client
+=== Retrieving Entries from a Map
 
 If you want to retrieve an entry, you can use a `GET` call
 to `+http://<member IP address>:<port>/hazelcast/rest/maps/mapName/key1+`.
@@ -240,7 +240,7 @@ It returns the following if there is no mapping for the given key:
 
 Similarly to the `POST` call, Hazelcast will strip the trailing slash from your `GET` call.
 
-=== Removing Entries from a Map for REST Client
+=== Removing Entries from a Map
 
 You can use a `DELETE` call to remove an entry. An example `DELETE` call is shown below with its response.
 
@@ -267,7 +267,7 @@ curl -v -X DELETE http://<member IP address>:<port>/hazelcast/rest/maps/mapName
 < Content-Length: 0
 ----
 
-=== Offering Items on a Queue for REST Client
+=== Offering Items on a Queue
 
 You can use a `POST` call to create an item on the queue. An example is shown below.
 
@@ -295,7 +295,7 @@ It returns the following if the queue is full and the item is not able to be off
 < Content-Length: 0
 ----
 
-=== Retrieving Items from a Queue for REST Client
+=== Retrieving Items from a Queue
 
 You can use a `DELETE` call for retrieving items from a queue.
 Note that you should state the poll timeout while polling for queue events by an extra path parameter.
@@ -327,7 +327,7 @@ there is no item on the queue to be returned.
 < Content-Length: 0
 ----
 
-=== Getting the size of the queue for REST Client
+=== Getting the Queue Size
 
 [source,shell]
 ----
@@ -345,7 +345,7 @@ Below is an example response.
 5
 ----
 
-== Checking the Status of the Cluster for REST Client
+== Checking Cluster Status
 
 Besides the above operations, you can check the status of your cluster,
 an example of which is shown below.
@@ -390,7 +390,7 @@ The response is as follows:
 }
 ----
 
-== Checking the Name of the Instance for REST Client
+== Checking Instance Name
 
 Additionally, you can check the name of any instance of your cluster.
 An example is shown below.
@@ -417,7 +417,133 @@ You can even put an HTTP load-balancer in front of your cluster members for load
 
 NOTE: You need to handle the failures on REST polls as there is no transactional guarantee.
 
-== Using the REST Endpoint Groups
+== Managing Cluster's State
+[[using-rest-api-for-cluster-management]]
+
+Besides the Management Center's xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#persistence[Persistence tab] and
+the script xref:management:cluster-utilities.adoc#using-the-hz-cluster-admin-script[hz-cluster-admin], you can also use the REST API to manage your cluster's state.
+The following are the operations you can perform.
+
+NOTE: Some of the REST calls listed below need their REST endpoint groups to be enabled.
+See the <<using-the-rest-endpoint-groups, REST Endpoint Groups section>> on how to enable them.
+
+Also note that the value of `$\{PASSWORD}` in the following calls is checked only if
+the security is xref:security:enabling-jaas.adoc[enabled] in Hazelcast, i.e., if you have Hazelcast Enterprise Edition.
+If the security is disabled, the `$\{PASSWORD}` can be left empty.
+
+[cols="5a"]
+.REST API calls
+|===
+|**Open Source commands**
+
+* _Checking if a member is ready to be used:_
++
+When a member joins the cluster, you can check whether it is ready to be used with the following HTTP call.
+It should return the `200` status code, meaning that the member can be safely used.
+Otherwise, it returns the `503` status code indicating the member is not available yet.
+Only HTTP GET request method is supported.
++
+[source,shell]
+----
+curl http://127.0.0.1:${PORT}/hazelcast/health/ready
+----
+* _Getting the cluster state:_
++
+To get the state of the cluster, use the following command:
++
+[source,shell]
+----
+curl --data "${CLUSTERNAME}&${PASSWORD}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/state
+----
++
+* _Changing the cluster state:_
++
+To change the state of the cluster to `frozen`, use the following command:
++
+[source,shell]
+----
+curl --data "${CLUSTERNAME}&${PASSWORD}&${STATE}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/changeState
+----
++
+* _Shutting down the cluster:_
++
+To shutdown the cluster, use the following command:
++
+[source,shell]
+----
+curl --data "${CLUSTERNAME}&${PASSWORD}"  http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/clusterShutdown
+----
++
+* _Querying the current cluster version:_
++
+To get the current cluster version, use the following `curl` command:
++
+[source,shell]
+----
+curl http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/version
+  {"status":"success","version":"3.9"}
+----
+
+|[[partial-start-force-start]]**Enterprise commands**
+
+* _Partial starting the cluster:_
++
+To partial start the cluster when persistence is enabled, use the following command:
++
+[source,shell]
+----
+curl --data "${CLUSTERNAME}&${PASSWORD}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/partialStart/
+----
++
+* _Force starting the cluster:_
++
+To force start the cluster when persistence is enabled, use the following command:
++
+[source,shell]
+----
+curl --data "${CLUSTERNAME}&${PASSWORD}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/forceStart/
+----
++
+NOTE: You can also perform the above operations (partialStart and forceStart) using
+the *Persistence* tab of Hazelcast Management Center or using the script `hz-cluster-admin`.
+See the xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#persistence[Persistence]
+and xref:management:cluster-utilities.adoc#using-the-hz-cluster-admin-script[hz-cluster-admin] sections.
++
+* _Initiating Hot Backup:_
++
+To initiate the Hot Backup, use the following `curl` command:
++
+[source,shell]
+----
+curl --data "${CLUSTERNAME}&${PASSWORD}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/hotBackup
+----
++
+* _Changing the cluster version:_
++
+To upgrade the cluster version, after having upgraded all members of your cluster to
+a new minor version, use the following `curl` command:
++
+[source,shell]
+----
+curl --data "${CLUSTERNAME}&${PASSWORD}&${CLUSTER_VERSION}" http://127.0.0.1:${PORT}/hazelcast/rest/management/cluster/version
+----
++
+For example, assuming the default cluster name and password, issue the following command to any member
+of the cluster to upgrade from cluster version 3.8 to 3.9:
++
+[source,shell]
+----
+curl --data "dev&dev-pass&3.9" http://127.0.0.1:5701/hazelcast/rest/management/cluster/version
+  {"status":"success","version":"3.9"}
+----
++
+NOTE: You can also perform the above cluster version operations using Hazelcast Management Center
+or using the script `hz-cluster-admin`. See the xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#rolling-upgrade[Rolling Member Upgrades]
+and xref:management:cluster-utilities.adoc#using-the-hz-cluster-admin-script[hz-cluster-admin] sections.
+|===
+
+== Using REST Endpoint Groups
+[[using-the-rest-endpoint-groups]]
 
 Hazelcast members exposes various REST endpoints and these are grouped.
 REST endpoint groups are as follows:

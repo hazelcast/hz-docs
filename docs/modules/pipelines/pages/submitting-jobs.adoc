@@ -1,15 +1,15 @@
 = Submitting Jobs
 :description: Submit data pipelines to a Hazelcast cluster for execution.
 
-To execute a data pipeline it needs to be submitted to the cluster as a job. Once the job is submitted, it's distributed automatically to all the cluster members and will be executed on all members by default.
+To execute a data pipeline it needs to be submitted to the cluster as a job. Once the job is submitted, it's distributed automatically to all the cluster members and executed on all members.
 
 To run a job, a Hazelcast member must have access to all classes that are used in the job. Depending on how you submit a job, you may also need to upload those classes to your cluster.
 
-NOTE: Hazelcast cannot check xref:security:native-client-security.adoc#permissions[client permissions] in code that's uploaded with a job. In uploaded code, clients can access data or features without permission.
+NOTE: Hazelcast cannot check client permissions in code that's uploaded with a job. In uploaded code, clients can access data or features without permission.
 
 == Submitting a Job from the CLI
 
-The `hazelcast submit` command of the CLI allows you to upload all classes that are used in your job automatically.
+The `submit` command of the CLI allows you to upload all classes that are used in your job automatically.
 
 ```bash
 bin/hz-cli submit <jar file>
@@ -36,7 +36,7 @@ try {
 
 NOTE: The bootstrapped instance disables auto discovery, so we recommend not using this instance in embedded mode.
 
-By default, the `hazelcast submit` command  executes the `Main` class of the
+By default, the `submit` command  executes the `Main` class of the
 provided JAR file and submits the job to a member at `dev@localhost`.
 
 To execute a different class use the `--class` option of the `submit` command.
@@ -45,16 +45,16 @@ To execute a different class use the `--class` option of the `submit` command.
 bin/hz-cli submit --class MainClass <jar file> [<arguments>...]
 ```
 
-Or to submit the job to a member at a different address, use one of the following options of the `hazelcast` command:
+Or to submit the job to a member at a different address, use one of the following options of the `hz-cli` command:
 
-* `-t`: An optional name of the cluster and comma-separated member addresses to which you want to connect.
+* `-t`: Comma-separated list of member names and addresses to which you want to connect.
 * `-f`: Path to a client config file, which can be used instead of the `-t` option.
 
 The `submit` command has the following additional options:
 
 * `-v`: Verbose mode, which will show the connection logs and
   exception stack traces, if any.
-* `-n`: Job name to use, will override the xref:configuring-jobs.adoc#setting-the-job-name[one set in the `JobConfig` object].
+* `-n`: Job name to use. This option overrides the xref:configuring-jobs.adoc#setting-the-job-name[one set in the `JobConfig` object].
 * `-s`: Name of the initial xref:configuring-jobs.adoc#setting-a-processing-guarantee-for-streaming-jobs[snapshot] to start the job from.
 
 Example:
@@ -68,9 +68,9 @@ bin/hz-cli \
   [<arguments>...]
 ```
 
-== Submitting a Job using a Hazelcast Client or Embedded Mode
+== Submitting a Job using a Java Client or Embedded Mode
 
-If you are using a Hazelcast client as part of an application and need to
+If you are using the Java client as part of an application and need to
 submit jobs within that application, you can use the Hazelcast client
 to directly submit jobs:
 
@@ -115,7 +115,7 @@ NOTE: After making changes to the `lib` directory, you must restart the member b
 
 [WARNING]
 ====
-You cannot upload the following classes using the API or the CLI. These classes must be uploaded at the same time as the member starts.
+You cannot upload the following classes using the Jet API or the `CLI. These classes must be uploaded at the same time as the member starts.
 
 * xref:serialization:serialization.adoc#serialization-of-data-types[Custom Serializers]
 * Map features such as EntryProcessor or MapLoader and MapStore
@@ -140,6 +140,49 @@ startup.
 +
 NOTE: After making changes to the `lib` directory, you must restart the member before it will recognize the new files.
 - Add the path to your JAR files, using the `CLASSPATH=<path_to_jar>` environment variable when starting a Hazelcast member.
+
+== Submitting a Job from a Dockerfile
+
+You can also create your own Docker image using Dockerfiles
+to start Hazelcast and submit jobs.
+
+Create a Dockerfile as follows:
+
+[source,dockerfile,subs="attributes+"]
+----
+FROM hazelcast/hazelcast:{full-version}
+ADD examples/hello-world.jar /examples/
+ENV HAZELCAST_MEMBER_ADDRESS 172.17.0.2
+CMD ["sh", "-c", "hz-cli -t $HAZELCAST_MEMBER_ADDRESS submit /examples/hello-world.jar"]
+----
+
+The Hazelcast address is exposed through the `HAZELCAST_MEMBER_ADDRESS` environment
+variable, with the default value of `172.17.0.2`. This makes it easy to
+pass a different address with `docker run -e HAZELCAST_MEMBER_ADDRESS=<another.one>`.
+
+Then, you create your own Docker image using the following command, giving it the name `hazelcast-hello-world`:
+
+[source,bash]
+----
+docker build . -t hazelcast-hello-world
+----
+
+You will see an output similar to the following:
+
+[source,bash]
+----
+Sending build context to Docker daemon  77.35MB
+...
+Successfully built 6bc0f527b69c
+Successfully tagged hazelcast-hello-world:latest
+----
+
+Finally, you submit the job as follows:
+
+[source,bash]
+----
+docker run -it hazelcast-hello-world
+----
 
 == Options for Packaging Dependencies
 
@@ -166,7 +209,7 @@ class MyJob {
 
 The lambda `x -> x * x` will get compiled by Java into an anonymous
 class with a name like `MyJob$$Lambda$30/0x00000008000a1840`. These and
-other classes which may be depend by these functions need to present
+other classes which may depend on these functions need to be present
 on the members that will be executing the job. Hazelcast supports several ways to make these classes available on the members.
 
 === Uber JAR

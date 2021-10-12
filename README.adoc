@@ -27,115 +27,127 @@ This section describes some important information about how this repository is s
 
 == Release Workflow
 
-Documentation for new releases is hosted in versioned branches that are prefixed with `v/`.
+Documentation for new releases is hosted in versioned branches that are prefixed with `v/`. The `latest-dev` content (snapshot content) is stored in the `main` branch.
 
-We support documentation for the latest patch releases of minor versions. For example, content for the `4.1` version is hosted in the `v/4.1` branch. This branch contains content for the latest patch release of version 4.1.
+We support documentation for the latest patch releases of minor versions. For example, content for the `5.0` version is hosted in the `v/5.0` branch. This branch contains content for the latest patch release of version 5.0.
 
-The `latest-dev` content (snapshot content) is stored in the `main` branch.
+NOTE: The documentation build process is triggered whenever you create a new branch with the `v/` prefix, push to an existing `v/` branch, or push to the `main` branch.
 
-The documentation build process is triggered whenever you create a new branch with the `v/` prefix, push to an existing `v/` branch, or push to the `main` branch.
+=== Snapshot Releases
+
+Add the new snapshot version to the following:
+
+[cols="1m,1m,1m,1m"]
+|===
+|Repository|Branch|File|Fields
+
+|hz-docs
+|main
+|docs/antora.yml
+a|
+- `version`
+- `display_version`
+- `full-version`
+- `asciidoc.attributes.page-latest-supported-java-client`
+
+|hazelcast-docs
+a|`main` and `develop`
+|_redirects
+|/hazelcast/latest-dev/*
+
+|
+|
+|search-config.json
+a|
+- `start_urls.tags`
+- `start_urls.variables.version`
+
+|management-center-docs
+|main
+|docs/antora.yml
+|asciidoc.attributes.page-latest-supported-hazelcast
+
+|===
+
+=== Latest Releases
+
+Add the `major.minor` version to the following:
+
+[cols="1m,1m,1m,1m"]
+|===
+|Repository|Branch|File|Fields
+
+|hz-docs
+|v/{major.minor version}
+|docs/antora.yml
+|
+- version
+- display_version
+
+|hazelcast-docs
+a|`main` and `develop`
+|_redirects
+|/hazelcast/latest/*
+
+|
+|
+|search-config.json
+| Create a new  object in the `start_urls` array.
+[source,yaml]
+----
+{
+  "url": "https://docs.hazelcast.com/hazelcast/(?P<version>.*?)/",
+  "tags": [
+    "hazelcast-{major.minor version}"
+  ],
+  "variables": {
+    "version": ["{major.minor version}"]
+  },
+  "selectors_key": "hz"
+}
+----
+
+|management-center-docs
+a|The `v/{version}` branch where `version` is the value of the `asciidoc.attributes.page-latest-supported-mc` field in the `docs/antora.yml` file of the `hz-docs` repository
+|docs/antora.yml
+|asciidoc.attributes.page-latest-supported-hazelcast
+
+|===
+
+Add the full version `major.minor.patch` to the following:
+
+[cols="1m,1m,1m"]
+|===
+|Repository|File|Fields
+
+|hz-docs
+|docs/antora.yml
+|
+- full-version
+- asciidoc.attributes.page-latest-supported-java-client
+|===
 
 === Patch Releases
 
-This section guides you through the steps for releasing documentation for patch releases.
+In the `v/` branch for the minor version whose patch you are releasing, update the `asciidoc.attributes.full-version` field in the `antora.yml` file to the new patch version. For example, if you are releasing version 5.0.3, find the `v/5.0` branch and update the `asciidoc.attributes.full-version` field in the `antora.yml` file with 5.0.3.
 
-. In the `v/` branch for the minor version whose patch you are releasing, update the `asciidoc.attributes.full-version` field in the `antora.yml` file to the new patch version. For example, if you are releasing version 4.1.3, find the `v/4.1` branch and update the `asciidoc.attributes.full-version` field in the `antora.yml` file with 4.1.3.
-+
 NOTE: As soon as you push content to this branch, GitHub will trigger a new build of the site, which will include your new content.
 
-. If you are releasing a new `latest` version, submit a pull request to the `develop` branch of the link:{url-playbook}[`hazelcast/hazelcast-docs`] repository to do the following:
-+
-- Update the `_redirects` file with your release version of Hazelcast.
-+
-NOTE: This file is where we alias the `latest` path in URLs.
-+
-[source,bash]
-----
-# Redirect latest hazelcast alias to the latest version
-/hazelcast/latest/*  /hazelcast/5.1/:splat 200!
-----
-+
-- In the `search-config.json` file, change the value of the `variables.version` field to your release version.
-+
-NOTE: This file is where we specify which documentation version to index for the search.
-+
-[source,json]
-----
-{
-  "index_name": "prod_hazelcast_docs",
-  "start_urls": [
-    {
-      "url": "https://docs.hazelcast.com/hazelcast/(?P<version>.*?)/",
-      "tags": [
-        "hazelcast"
-      ],
-      "variables": {
-        "version": ["5.1"]
-      },
-----
+=== Creating Release Branches
 
-== Major and Minor Releases
-
-This section guides you through the steps for releasing documentation for major and minor releases.
-
-. Create a new release branch from the `main` branch. For example if you’re working on content for version 5.1, create a release branch named `5.1`. You can add the new content and/or fixes to this branch before the release.
-
-. In the `antora.yml` file of your release branch, do the following:
+. If you are releasing a new major version, create a release branch from the `main` branch.
 +
-- Update the `version`, `display_version`, and `asciidoc.attributes.full-version` fields with the major and minor version of Hazelcast that you are releasing.
-+
-- Delete the `prerelease` field.
-+
-For example version `5.0-SNAPSHOT` becomes `5.0`.
-+
-[source,yaml]
-----
-version: '5.0'
-display_version: '5.0'
-asciidoc:
-  attributes:
-    full-version: '5.0'
-----
+For example, if you are releasing version 5.1, create a new release branch named `5.1` from the `main` branch.
 
-. If you are releasing a new `latest-dev` version, in the `antora.yml` file of the `main` branch, increment the `version` field to the `latest-dev` version. For example, `5.1-SNAPSHOT` becomes `5.2-SNAPSHOT`.
+. Update the fields mentioned in <<latest-releases, Latest Releases>>.
 
-. When you're ready to release, create the maintenance branch from the release branch. For example if you are releasing version 5.1, create a maintenance branch called `v/5.1` from the `5.1` branch.
+. When you are ready to release, create a maintentance branch from the release branch.
 +
 NOTE: As soon as you push the maintenance branch to the repository, GitHub will trigger a new build of the site, which will include your new content.
 
-. In the `develop` branch of the `hazelcast/hazelcast-docs` repository, submit a pull request to update the `_redirects` file with the new versions of Hazelcast.
+. Make sure to delete the release branch.
 +
-NOTE: This file is where we alias the `latest-dev` and `latest` paths in URLs.
-+
-[source,bash]
-----
-# Redirect latest hazelcast alias to the latest version
-/hazelcast/latest/*  /hazelcast/5.1/:splat 200!
-# Redirect latest-dev hazelcast alias to the latest-dev version
-/hazelcast/latest-dev/*  /hazelcast/5.2-snapshot/:splat 200!
-----
-
-- In the `develop` branch of the `hazelcast/hazelcast-docs` repository, submit a pull request to update the `search-config.json` file with the new versions of Hazelcast.
-+
-NOTE: This file is where we specify which documentation version to index for the search.
-+
-[source,json]
-----
-{
-  "index_name": "prod_hazelcast_docs",
-  "start_urls": [
-    {
-      "url": "https://docs.hazelcast.com/hazelcast/(?P<version>.*?)/",
-      "tags": [
-        "hazelcast"
-      ],
-      "variables": {
-        "version": ["5.1"]
-      },
-----
-
-. Delete the release branch. For example, if you released version `5.1`, delete the `5.1` branch. This step helps to keep the repository clean of release branches.
-
+For example, if you released version `5.1`, delete the `5.1` branch. This step helps to keep the repository clean of release branches.
 
 == GitHub Actions
 
@@ -153,6 +165,10 @@ To automate some elements of the build process, this repository includes the fol
 |build-site.yml
 |Builds the production documentation site by sending a build hook to Netlify (the hosting platform that we use)
 |On a push to the `main` branch and any `v/` maintenance branches
+
+|backport.yml
+|Backports commits to maintenance branches
+|On a push to the `main` branch that originated from a pull request with the `backport` label
 |===
 
 == Contributing

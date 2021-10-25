@@ -1,93 +1,115 @@
 = Cluster and Member States
-[[managing-cluster-and-member-states]]
-:description: By changing the state of a cluster, you can grant or restrict cluster operations such as migrations as well as change the behavior of those operations.
+:description: Cluster states determine what cluster operations are available. By changing the state of a cluster, you can grant or restrict cluster operations such as repartitioning as well as change the behavior of those operations.
 
 {description}
 
-== Changing a Cluster's State
+You may want to change a cluster's state to do the following: 
 
-To change a cluster's state, you can use the https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/cluster/Cluster.html[`changeClusterState()`method] or use xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#cluster-state[Management Center].
+- Add multiple new members to the cluster without triggering repartitioning after each member joins.
+- Perform maintenance on a cluster without triggering repartitioning.
 
-NOTE: You cannot change a cluster's state to anything other than `ACTIVE` when members are moving data among each other.
+== Before you Begin
 
-The following snippet from the `Cluster` interface shows
-the methods used to manage your cluster's states.
+You should have a good understanding of data partitioning in Hazelcast clusters. See xref:overview:data-partitioning.adoc[].
 
-[source,java]
-----
-public interface Cluster {
-    ClusterState getClusterState();
-    void changeClusterState(ClusterState newState);
-    void changeClusterState(ClusterState newState, TransactionOptions transactionOptions);
-    void shutdown();
-    void shutdown(TransactionOptions transactionOptions);
-}
-----
+.Glossary
+[cols="1e,1a"]
+|===
+|Term|Definition
+
+|migration
+|When a primary partition's ownership is transferred from one member to another. Partition ownership is decided by the cluster’s master member and is followed by the physical movement of data over the network.
+
+|promotion
+|When the first replica of a partition becomes the primary. This operation requires no movement of data over the network.
+
+|replica sync
+|When the primary partition owner sends its data to replica owners for synchronization.
+|===
 
 == Cluster States
 
 By default, all clusters are in an `ACTIVE` state. In this state, the cluster operates without restrictions.
 
-In all other states, the cluster *cannot move data among other members* such as in the following circumstances:
-
-- Repartitioning data in the cluster
-- Creating backup replicas of partitions
-- Running Jobs that use partitioned data
-
-As a result, you cannot change a cluster's state to anything other than `ACTIVE` when members are moving data among each other.
-
-Where cluster states differ is in what other restrictions are applied to the cluster.
+All other cluster states restrict the operations on a cluster:
 
 .Differences among cluster states
-[cols="1m,1a,3a,2a"]
+[cols="1m,1a,1a,1a,1a,2a"]
 |===
-|State|New members can join|Restrictions|Use case
+|State|New members|Migrations|Promotions|Replica sync|Use case
 
 |ACTIVE
 |Yes ✅ 
-|None
+|Yes ✅ 
+|Yes ✅ 
+|Yes ✅ 
 |Normal cluster operation
 
 |NO_MIGRATION
-|Yes ✅ 	
-|Data cannot be moved among cluster members.
+|Yes ✅ 
+|No ❌
+|Yes ✅ 
+|Yes ✅ 
+
 |Adding multiple new members to the cluster without triggering repartitioning after each member joins.
 
 |FROZEN
 |No ❌
-|
-Data cannot be moved among cluster members.
+|No ❌
+|No ❌
+|Yes ✅ 
 
-Backup partitions cannot be promoted to primary. If a member leaves the cluster, the partitions owned by that member are unavailable until it rejoins or the cluster is put back into an `ACTIVE` state.
 |Performing maintenance on a cluster without triggering repartitioning.
+
 
 |PASSIVE
 |No ❌
-|
-Data cannot be moved among cluster members.
+|No ❌
+|No ❌
+|Yes ✅ 
 
-The cluster *allows only the following*:
-
-- Replication operations (keeping backups partitions in sync with the primary partitions)
-- Read-only operations such as `map.get()` and `cache.get()` methods
-- Cluster heartbeat tasks
 |Used internally during graceful cluster-wide shutdowns.
+
+In this state, only read operations such as the `map.get()` and `map.put()` methods are allowed.
 
 |IN_TRANSITION
 |No ❌
-|Repartitioning and replication tasks are paused until the state is changed.
-|Used internally as a temporary state.
+|No ❌
+|No ❌
+|No ❌
+|Used internally as a temporary state while the cluster state is still changing.
 
-NOTE: When an error is thrown during a state transition, that error is propagated immediately. Hazelcast does not try to transition the cluster state again.
+NOTE: If an error occurs during a state change, Hazelcast does not try to change the cluster state again. 
 
+Repartitioning and backup operations are paused until the state is changed.
 |===
+
+=== Frozen vs No Migration
+
+The difference between the `FROZEN` state and the `NO_MIGRATION` state is in what happens when a member leaves the cluster.
+
+In a `NO_MIGRATION` state, when a member leaves the cluster, the first replica of each partition owned by that member is promoted and partitions remain available.
+
+In a `FROZEN` state, when a member leaves the cluster, the partitions owned by that member are unavailable until it rejoins or the cluster is put back into an `ACTIVE` state.
 
 == Member States
 
 Individual members can be in the following states:
 
-* `ACTIVE`: Members are in this state when the state of a cluster is `ACTIVE` or `FROZEN`.
+* `ACTIVE`: Members are in this state when the state of a cluster is `ACTIVE` or `FROZEN`. See <<cluster-states, Cluster States>> on this page.
 * `PASSIVE`: Members transition to this state in the following circumstances:
-** During a graceful shutdown. When the graceful shutdown process is completed, the member's state changes to `SHUT_DOWN`.
+** During a graceful shutdown.
++
+When the graceful shutdown process is completed, the member's state changes to `SHUT_DOWN`.
 ** When the cluster's state is manually changed to `PASSIVE`.
 * `SHUT_DOWN`: Members transition to this state when they are shut down. Members in this state reject all operations and invocations and cannot be restarted.
+
+== Changing a Cluster's State
+
+To change a cluster's state, you can use one of the following:
+
+- The https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/cluster/Cluster.html[`changeClusterState()` method]
+- xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#cluster-state[Management Center]
+- The xref:management:cluster-utilities.adoc#example-usages-for-hz-cluster-admin[`hz-cluster-admin` script]
+
+NOTE: You cannot change a cluster's state to anything other than `ACTIVE` while members are repartitioning or backing up data.

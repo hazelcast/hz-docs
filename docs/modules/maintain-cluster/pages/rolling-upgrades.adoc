@@ -1,105 +1,100 @@
 = Rolling Upgrades
-:description:
+:description: You can use rolling upgrades to upgrade the version of Hazelcast members in a running cluster without interrupting the operation of the cluster.
 [[rolling-upgrades]]
 
 {description}
 
-[blue]*Hazelcast Enterprise Feature*
+== Before you Begin
 
-This chapter explains the procedure of upgrading the version of Hazelcast members in a running cluster without interrupting the operation of the cluster.
+Hazelcast uses semantic versioning, where versions appear in the following format:
+
+`major.minor.patch`
+
+For example, in version `5.1.0`, `5` is the major version, `1` is the minor verson, and `0` is the patch version.
 
 [[terminology]]
-== Terminology
+.Glossary
+[cols="1e,1a"]
+|===
+|Term|Definition
 
-* **Minor version**: A version change after the decimal point, e.g.,
-5.1 and 5.2.
-* **Patch version**: A version change after the second decimal point,
-e.g., 5.2.1 and 5.2.2.
-* **Member codebase version**: The `major.minor.patch` version of the
+|member codebase version
+|The `major.minor.patch` version of the
 Hazelcast binary on which the member executes. For example, when running
 on `hazelcast-5.2.jar`, your member's codebase version is `5.2.0`.
-* **Cluster version**: The `major.minor` version at which the cluster
+
+|cluster version
+|The `major.minor` version at which the cluster
 operates. This ensures that cluster members are able to communicate using
 the same cluster protocol and
 determines the feature set exposed by the cluster.
+|===
 
 [[hazelcast-members-compatibility-guarantees]]
-== Hazelcast Members Compatibility Guarantees
+=== Compatibility Guarantees
 
-Hazelcast members operating on binaries of the same major and minor
-version numbers are compatible regardless of patch version.
-For example, in a cluster with members running on version 5.2.1,
-it is possible to perform a rolling upgrade to 5.2.2 by shutting
-down, upgrading to `hazelcast-5.2.2.jar` binary and starting each
-member one by one. Rolling upgrade for patch versions
-is supported in the open source and Enterprise editions of Hazelcast.
+To allow you to use rolling upgrades, Hazelcast commits to the following compatibility guarantees for GA (general availability) releases:
 
-Also, each minor version is compatible with the previous one. Rolling upgrade for minor versions is supported in the
-Enterprise edition of Hazelcast.
+- Hazelcast members operating on the same major and minor
+cluster version are always compatible, regardless of patch version.
 
-The compatibility guarantees described above are given in the context of
-rolling member upgrades and only apply to GA (general availability) releases.
-It is never advisable to run a cluster with members running on different 
-patch or minor versions for prolonged periods of time.
+- Each minor version is always compatible with the previous one.
+
+As a result, you can use rolling upgrades to upgrade clusters to the following member codebase versions:
+
+- A new patch version of the same major and minor version (Open Source and Enterprise)
+- The next minor version of the same major version (Enterprise only)
 
 [[rolling-upgrade-procedure]]
-== Rolling Upgrade Procedure
+== Performing a Rolling Upgrade
 
-NOTE: The version numbers used in this chapter are examples.
+. Gracefully shut down an existing member.
++
+See xref:shutdown.adoc#shutting-down-a-hazelcast-member[Shutting Down a Hazelcast Member].
 
-Let's assume a cluster with four members running on codebase version
-`5.1.0` with cluster version `5.1`, that should be upgraded to codebase version
-`5.2.0` and cluster version `5.2`. The rolling upgrade process for this cluster,
-i.e., replacing existing `5.1.0` members one by one with an upgraded
-one at version `5.2.0`, includes the following steps which should be repeated for each member:
+. Wait until all partition migrations are completed.
++
+During migrations, members cannot join or leave the cluster.
 
-* Gracefully shut down an existing `5.1.0` member.
-* Wait until all partition migrations are completed; during migrations,
-membership changes (member joins or removals) are not allowed.
-* Update the member with the new `5.2.0` Hazelcast binaries.
-* Start the member and wait until it joins the cluster. You should
-see something like the following in your logs:
+. Upgrade the member's codebase to a new patch version or the next minor version.
++
+NOTE: To upgrade the codebase to the next minor version, you need an Enterprise license.
+
+. Start the member and wait until it joins the cluster.
++
+You should see something like the following in your logs:
 +
 ```
  ...
- INFO: [192.168.2.2]:5701 [cluster] [5.2] Hazelcast Enterprise 5.2 (20170630 - a67dc3a) starting at [192.168.2.2]:5701
+ INFO: [192.168.2.2]:5701 [cluster] [{new codebase version}] <1>
+ Hazelcast Enterprise {new codebase version} (20170630 - a67dc3a) starting at [192.168.2.2]:5701
  ...
- INFO: [192.168.2.2]:5701 [cluster] [5.2] Cluster version set to 5.1
+ INFO: [192.168.2.2]:5701 [cluster] [{new codebase version}] Cluster version set to {previous codebase version} <2>
 ```
++
+<1> The member's codebase version. Once the member locates the existing cluster members, it sends its join request to the master member. The master member validates that the new member is allowed to join the cluster and lets the new member know that the cluster is currently operating on the previous cluster version.
+<2> The member sets its cluster version to the previous one and starts operating normally.
++
+WARNING: Do not run members on different codebase versions for prolonged periods of time.
 
-The version in brackets (`[5.2]`) still denotes the member's codebase version
-(running on the hypothetical `hazelcast-enterprise-5.2.jar` binary).
-Once the member locates the existing cluster members, it sends its join request to the master.
-The master validates that the new member is allowed to join the cluster and
-lets the new member know that the cluster is currently operating at `5.1` cluster version.
-The new member sets `5.1` as its cluster version and starts operating normally.
+. Repeat this process for each member in the cluster.
++
+When all members of the cluster have been upgraded to the new codebase version, the cluster will still be operating on the previous cluster version. In order to use the new codebase version the cluster version must be upgraded to that version, using a rolling upgrade.
 
-At this point all members of the cluster have been upgraded to codebase version `5.2.0`
-but the cluster still operates at cluster version `5.1`. In order to use `5.2` features
-the cluster version must be changed to `5.2`.
-
-NOTE: Rolling upgrade can be used for one version at a time,
-e.g., 4.n to 4.n+1. You cannot upgrade
-your members, for example, from 5.1 to 5.3 in a single rolling upgrade session.
-
-[[upgrading-cluster-version]]
-== Upgrading Cluster Version
-
-You have the following options to upgrade the cluster version:
-
-* Using xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#rolling-upgrade[Management Center].
-* Using the xref:management:cluster-utilities.adoc#using-the-hz-cluster-admin-script[hz-cluster-admin] script.
+. [[upgrading-cluster-version]]Trigger a rolling upgrade on the cluster, using one of the following:
++
+* xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#rolling-upgrade[Management Center].
++
+NOTE: To use Management Center, you need to upgrade your version of Management Center *before* upgrading the member version. Management Center is compatible with the previous minor version of
+Hazelcast. For example, Management Center 5.2 works with both Hazelcast 5.1 and 5.2. To change your cluster version to 5.2, you need Management Center 5.2.
+* xref:management:cluster-utilities.adoc#using-the-hz-cluster-admin-script[hz-cluster-admin] script.
++
+NOTE: To use this script, you must enable the `CLUSTER_WRITE`
+REST endpoint group (its default is disabled). See
+xref:maintain-cluster:rest-api.adoc#using-the-rest-endpoint-groups[REST Endpoint Groups].
 * Allow the cluster to <<enabling-auto-upgrading, auto-upgrade>>.
 
-Note that you need to enable the REST API to use either of the above methods
-to upgrade your cluster version. For this, enable the `CLUSTER_WRITE`
-REST endpoint group (its default is disabled). See the
-xref:clients:rest.adoc#using-the-rest-endpoint-groups[REST Endpoint Groups section] on how to enable them.
-
-Also note that you need to upgrade your Management Center version *before* upgrading the member version if you want to
-change the cluster version using Management Center. Management Center is compatible with the previous minor version of
-Hazelcast. For example, Management Center 5.2 works with both Hazelcast
-5.1 and 5.2. To change your cluster version to 5.2, you need Management Center 5.2.
+The cluster is now operating on the new codebase version: Both the codebase version and the cluster version have been upgraded.
 
 == Enabling Auto-Upgrading
 

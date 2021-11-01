@@ -790,3 +790,103 @@ for more information about the `advanced-network` element.
 When you enable or disable a REST endpoint group, all the endpoints in that group
 are enabled or disabled, respectively. For the examples above, we disabled the endpoints
 belonging to the `HEALTH_CHECK` endpoint group.
+
+== Security
+[[rest-api-security]]
+
+As mentioned previously in this section, REST API is disabled by default and this is for security reasons.
+Once it is enabled for a given endpoint group, some endpoints belonging to that group can be called by any application.
+
+REST API does not check xref:security:native-client-security#permissions[permissions], that you may configure for the other clients.
+If you set permissions for the REST API, keep in mind that they will not be enforced.
+
+On the other hand, you can request authentications for various REST API endpoints. These are the following:
+
+* `/hazelcast/rest/wan/sync/map`
+* `/hazelcast/rest/wan/sync/allmaps`
+* `/hazelcast/rest/wan/clearWanQueues`
+* `/hazelcast/rest/wan/addWanConfig`
+* `/hazelcast/rest/wan/pausePublisher`
+* `/hazelcast/rest/wan/stopPublisher`
+* `/hazelcast/rest/wan/resumePublisher`
+* `/hazelcast/rest/wan/consistencyCheck/map`
+* `/hazelcast/rest/management/cluster/version (POST)`
+* `/hazelcast/rest/management/cluster/clusterShutdown`
+* `/hazelcast/rest/management/cluster/changeState`
+* `/hazelcast/rest/management/cluster/memberShutdown`
+* `/hazelcast/rest/management/cluster/forceStart`
+* `/hazelcast/rest/management/cluster/partialStart`
+* `/hazelcast/rest/management/cluster/nodes`
+* `/hazelcast/rest/cp-subsystem/groups`
+* `/hazelcast/rest/cp-subsystem/members`
+* `/hazelcast/rest/cp-subsystem/reset`
+* `/hazelcast/health/cluster-state`
+* `/hazelcast/rest/log-level (GET)`
+* `/hazelcast/rest/log-level (POST)`
+* `/hazelcast/rest/log-level/reset`
+* `/hazelcast/rest/license (POST)`
+
+Here is a configuration example to request authentication for a REST endpoint.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <security enabled="true">
+        <realms>
+            <realm name="realm1">
+                <authentication>
+                    <simple>
+                        <user username="test" password="a1234">
+                        </user>
+                    </simple>
+                </authentication>
+                <identity>
+                   <username-password username="memberUN" password="memberP" />
+               </identity>
+            </realm>
+        </realms>
+        <member-authentication realm="realm1" />
+    </security>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+security:
+    enabled: true
+    realms:
+      - name: realm1
+        authentication:
+          simple:
+            users:
+              - username: test
+                password: 'a1234'
+        identity:
+          username-password:
+            username: memberUN
+              - username: test
+                password: memberP
+    member-authentication:
+      realm: realm1
+----
+====
+
+Note that you should enable security in the configuration, i.e., you should have the Hazelcast Enterprise edition.
+Assuming we have the above authentication configuration, the following is a REST call for the `/hazelcast/rest/management/cluster/state` endpoint, which includes the username and password as call parameters:
+
+```
+curl --data "test&a1234" https://<member IP address>:<port>/hazelcast/rest/management/cluster/state
+```
+
+NOTE: In the above configuration example, `identity` is for the members that may
+join the cluster. This way you can use the `identity` credentials to authenticate new members
+and `simple` authentication credentials for the REST calls; if there is no `identity` configuration,
+and you want to add more members to the cluster, they will fail to join it.

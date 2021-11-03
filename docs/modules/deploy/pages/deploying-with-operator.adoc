@@ -137,6 +137,32 @@ You can configure the `expose-externally` field with the following properties:
 ** `NodePortNodeName`: Hazelcast clients are inside the same network as the Kubernetes nodes, so clients can access a member by the hostname of its Kubernetes node.
 ** `LoadBalancer`: Hazelcast clients are outside the Kubernetes network and can access members via the the external IP assigned to the LoadBalancer service.
 
+WARNING: Your Kubernetes cluster should be able to assign public IPs to LoadBalancer services to connect to Hazelcast from outside Kubernetes.
+
+WARNING: If NodePorts are used (`discoveryServiceType: NodePort` or `memberAccess: NodePortExternalIP`), then the Kubernetes nodes should have access from outside Kubernetes. This includes both the node IPs and ports.
+
+=== Google Kubernetes Engine
+
+If you are using Google Kubernetes Engine (GKE) and trying to connect to Hazelcast from outside Kubernetes, then you need to consider the following:
+
+- The Kubernetes cluster should not be private.
+- If NodePorts are used (`discoveryServiceType: NodePort` or `memberAccess: NodePortExternalIP`), a firewall rule for each Hazelcast member should be added to allow TCP traffic on node ports.
+
+=== Amazon Elastic Kubernetes Service
+
+If you are using Amazon Elastic Kubernetes Service (EKS) and trying to connect to Hazelcast from outside Kubernetes, then you need to consider the following:
+
+- Having the VPC of the EKS cluster configured only with private subnets is not recommended.
+- If NodePorts are used (`discoveryServiceType: NodePort` or `memberAccess: NodePortExternalIP`), the VPC of the EKS cluster should be configured only with public subnets. Additionally, inbound rules for the node ports should be added to the nodes' security groups.
+- AWS load balancers are assigned with hostnames by default. Since it takes some time to resolve these hostnames, the member pods might fail to start with `CrashLoopBackOff` status in the beginning. But the pods will be running fine eventually after a couple of restarts.
+
+=== Azure Kubernetes Service
+
+If you are using Azure Kubernetes Service (AKS) and trying to connect to Hazelcast from outside Kubernetes, then you need to consider the following:
+
+- The Kubernetes cluster should not be private.
+- If NodePorts are used (`discoveryServiceType: NodePort` or `memberAccess: NodePortExternalIP`), the node pools should be created by using `--enable-node-public-ip` flag. Additionally, the required inbound rules should be added for network security groups (NSGs) to allow access to node IPs and ports.
+
 == Check that the Hazelcast Cluster is Running
 
 To check if a cluster is running, see the `status` field of the Hazelcast resource.
@@ -158,7 +184,7 @@ The `readyMembers` field represents the number of Hazelcast members that are con
 
 WARNING: Use the `readyMembers` field only for informational purposes. This field is not always accurate. Some members may have joined or left the cluster since this field was last updated.
 
-=== Start Management Center
+== Start Management Center
 
 You can monitor the Hazelcast cluster by starting the Management Center. You can create `ManagementCenter` custom resource file as `management-center.yaml`.
 

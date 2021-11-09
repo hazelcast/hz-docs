@@ -1,0 +1,256 @@
+
+image:hazelcast:pipelines:pipeline.png[A pipeline flowing from a source to a sink]
+
+== Step 1. Create a Mapping to a Map
+
+Before you can query data in a map, you need to create a mapping to one, using the map connector.
+
+. In the SQL shell, configure the map connector to set up an SQL connection to a new map called `cities`.
++
+[source,sql]
+----
+CREATE MAPPING cities
+TYPE IMap OPTIONS ('keyFormat'='varchar', 'valueFormat'='varchar');
+----
+
+. Add some countries and their capital cities to the map.
++
+[source,sql]
+----
+INSERT INTO cities VALUES
+('Australia','Canberra'),
+('Croatia','Zagreb'),
+('Czech Republic','Prague'),
+('England','London'),
+('Turkey','Ankara'),
+('United States','Washington, DC');
+----
++
+The first argument of the `VALUES` command is the key of the map entry and the second argument is the value.
+
+== [[ad-hoc]]Step 2. Run Ad-Hoc Queries
+
+. Use the `SELECT` statement to query all data in the map.
++
+[source,sql]
+----
+SELECT * FROM cities;
+----
++
+You should see the following:
++
+[source,shell]
+----
++--------------------+--------------------+
+|__key               |this                |
++--------------------+--------------------+
+|England             |London              |
+|United States       |Washington, DC      |
+|Czech Republic      |Prague              |
+|Turkey              |Ankara              |
+|Croatia             |Zagreb              |
+|Australia           |Canberra            |
++--------------------+--------------------+
+----
+
+. Query only the countries by filtering on the `__key` column.
++
+[source,sql]
+----
+SELECT __key FROM cities;
+----
++
+```
++--------------------+
+|__key               |
++--------------------+
+|England             |
+|United States       |
+|Czech Republic      |
+|Turkey              |
+|Croatia             |
+|Australia           |
++--------------------+
+```
+
+. Query only the cities by filtering on the `this` column.
++
+[source,sql]
+----
+SELECT this FROM cities;
+----
++
+```
++--------------------+
+|this                |
++--------------------+
+|London              |
+|Washington, DC      |
+|Prague              |
+|Ankara              |
+|Zagreb              |
+|Canberra            |
++--------------------+
+```
+
+. Give your query results more context by adding an alias to the `__key` and `this` columns.
++
+NOTE: This clause does not rename the column in the table.
++
+[source,sql]
+----
+SELECT __key AS countries, this AS cities
+FROM cities;
+----
++
+```
++--------------------+--------------------+
+|countries           |cities              |
++--------------------+--------------------+
+|England             |London              |
+|United States       |Washington, DC      |
+|Czech Republic      |Prague              |
+|Turkey              |Ankara              |
+|Croatia             |Zagreb              |
+|Australia           |Canberra            |
++--------------------+--------------------+
+```
+
+. Use a filter to display only countries where the name of the capital city is at least 8 characters long.
++
+[source,sql]
+----
+SELECT __key AS countries FROM cities WHERE LENGTH(this) >= 8;
+----
++
+```
++--------------------+
+|countries           |
++--------------------+
+|United States       |
+|Australia           |
++--------------------+
+```
+
+. Use another filter to display only countries beginning with the letter C where the name of the capital city is at least 6 characters long.
++
+[source,sql]
+----
+SELECT __key AS countries
+FROM cities
+WHERE LENGTH(this) >= 6 AND __key LIKE 'C%';
+----
++
+```
++--------------------+
+|countries           |
++--------------------+
+|Czech Republic      |
+|Croatia             |
++--------------------+
+```
+
+. Configure the map connector to create a new map table called `population2020`.
++
+[source,sql]
+----
+CREATE MAPPING population2020
+TYPE IMap OPTIONS ('keyFormat'='varchar', 'valueFormat'='int');
+----
+
+. Add the 2020 populations of the following cities.
++
+[source,sql]
+----
+INSERT INTO population2020 VALUES
+('Canberra', 354644),
+('Zagreb', 804200),
+('Prague', 1227332),
+('London', 8174100),
+('Ankara', 4890893),
+('Washington, DC', 601723);
+----
+
+. Use the `JOIN` clause to merge results from the `cities` and `population2020` tables so you can see which countries had the most populated captial cities in 2020.
++
+[source,sql]
+---- 
+SELECT cities.__key AS country, cities.this AS city, population2020.this AS population
+FROM cities
+JOIN population2020
+ON cities.this = population2020.__key;
+----
++
+```
++--------------------+--------------------+------------+
+|country             |city                |  population|
++--------------------+--------------------+------------+
+|England             |London              |     8174100|
+|United States       |Washington, DC      |      601723|
+|Czech Republic      |Prague              |     1227332|
+|Croatia             |Zagreb              |      804200|
+|Australia           |Canberra            |      354644|
++--------------------+--------------------+------------+
+```
+
+. Use the `ORDER BY` clause to order the results alphabetically by country.
++
+[source,sql]
+----
+SELECT cities.__key AS country, cities.this AS city, population2020.this AS population
+FROM cities
+JOIN population2020
+ON cities.this = population2020.__key
+ORDER BY cities.__key;
+----
++
+```
++--------------------+--------------------+------------+
+|country             |city                |  population|
++--------------------+--------------------+------------+
+|Australia           |Canberra            |      354644|
+|Croatia             |Zagreb              |      804200|
+|Czech Republic      |Prague              |     1227332|
+|England             |London              |     8174100|
+|United States       |Washington, DC      |      601723|
++--------------------+--------------------+------------+
+```
+
+. Use the `SUM()` function to find the total population of all the cities in 2020.
++
+[source,sql]
+----
+SELECT SUM(population2020.this) AS total_population
+FROM population2020;
+----
++  
+You should see the following:
++
+```
++--------------------+
+|    total_population|
++--------------------+
+|            16052892|
++--------------------+
+```
+
+. Filter for cities that had a population of more than 1,000,000 in 2020.
++
+[source,sql]
+----
+SELECT population2020.__key AS large_cities
+FROM population2020
+GROUP BY population2020.__key HAVING SUM(population2020.this) > 1000000;
+----
++
+```
++--------------------+
+|large_cities        |
++--------------------+
+|Prague              |
+|London              |
+|Ankara              |
++--------------------+
+```
++
+The `HAVING` clause allows you to filter aggregations like you would with the `WHERE` clause for non-aggregated queries.

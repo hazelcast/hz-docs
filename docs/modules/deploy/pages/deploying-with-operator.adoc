@@ -1,13 +1,11 @@
-= Deploy a Cluster with the Enterprise Operator (Preview)
+= Deploy a Cluster with the Hazelcast Platform Operator for Kubernetes
 [[deploying-with-operator]]
 
-NOTE: Hazelcast Enterprise Operator is currently in the early alpha preview stage, but it will soon become the preferred way of installing Hazelcast in Kubernetes/OpenShift environments.
+The simplest way of installing and operating your Hazelcast Platform cluster in the Kubernetes (and OpenShift) environments is to use Hazelcast Platform Operator.
 
-The simplest way of installing and operating your Hazelcast Enterprise cluster in the Kubernetes (and OpenShift) environments is to use Hazelcast Enterprise Operator.
+== Deploy Hazelcast Platform Operator
 
-== Deploy Hazelcast Enterprise Operator
-
-You can deploy Hazelcast Enterprise Operator by creating the following `bundle.yaml` file.
+You can deploy Hazelcast Platform Operator by creating the following `bundle.yaml` file.
 
 [source,yaml,subs="attributes+"]
 ----
@@ -21,11 +19,11 @@ Then, you can apply it to your Kubernetes cluster with the following command.
 kubectl apply -f bundle.yaml
 ----
 
-At this point, your Hazelcast Enteprise Operator should be up and running. You can check it with the following command.
+At this point, your Hazelcast Platform Operator should be up and running. You can check it with the following command.
 
 [source,shell]
 ----
-kubectl logs deployment.apps/hazelcast-enterprise-controller-manager
+kubectl logs deployment.apps/hazelcast-platform-controller-manager
 ----
 
 ```
@@ -55,20 +53,9 @@ kubectl apply -k .
 
 Note that you'll need to add a parameter `-n <your-namespace>` to all further commands.
 
-== Create Secret with Hazelcast License Key
+== Start Hazelcast cluster
 
-Hazelcast Enteprise requires having the license key specified as Kubernetes Secret.
-
-NOTE: If you don't have Hazelcast Enterprise License Key, please check xref:deploy:using-enterprise-edition.adoc#requesting-a-license-key[Requesting a License Key]
-
-[source,shell]
-----
-kubectl create secret generic hazelcast-license-key --from-literal=license-key=<YOUR LICENSE KEY>
-----
-
-== Start Hazelcast Enterprise Cluster
-
-Finally, you can create `Hazelcast` Custom Resource file as `hazelcast.yaml`.
+After installing and running Hazelcast Platform Operator, you can create a Hazelcast cluster. First, create `Hazelcast` Custom Resource file as `hazelcast.yaml`.
 
 [source,yaml,subs="attributes+"]
 ----
@@ -80,6 +67,46 @@ Apply it with the following command to start the Hazelcast cluster.
 [source,shell]
 ----
 kubectl apply -f hazelcast.yaml
+----
+
+After some time, you can verify that Hazelcast cluster is up and running by checking the Hazelcast member logs.
+
+[source,shell]
+----
+kubectl logs pod/hazelcast-sample-0
+----
+
+```
+Members {size:3, ver:3} [
+        Member [10.36.8.3]:5701 - ccf31703-de3b-4094-9faf-7b5d0dc145b2 this
+        Member [10.36.7.2]:5701 - e75bd6e2-de4b-4360-8113-040773d858b7
+        Member [10.36.6.2]:5701 - c3d105d2-0bca-4a66-8519-1cacffc05c98
+]
+```
+
+== Start Hazelcast Enterprise Cluster
+
+Hazelcast Enterprise requires having the license key specified as Kubernetes Secret.
+
+NOTE: If you don't have Hazelcast Enterprise License Key, please check xref:deploy:using-enterprise-edition.adoc#requesting-a-license-key[Requesting a License Key]
+
+[source,shell]
+----
+kubectl create secret generic hazelcast-license-key --from-literal=license-key=<YOUR LICENSE KEY>
+----
+
+Finally, you can create `Hazelcast` Custom Resource file as `hazelcast.yaml`.
+
+[source,yaml,subs="attributes+"]
+----
+include::ROOT:example$/operator/hazelcast-enterprise.yaml[]
+----
+
+Apply it with the following command to start the Hazelcast cluster.
+
+[source,shell]
+----
+kubectl apply -f hazelcast-enterprise.yaml
 ----
 
 After a moment, you can verify that Hazelcast cluster is up and running by checking the Hazelcast member logs.
@@ -166,6 +193,26 @@ If you are using Azure Kubernetes Service (AKS) and trying to connect to Hazelca
 == Check that the Hazelcast Cluster is Running
 
 To check if a cluster is running, see the `status` field of the Hazelcast resource.
+
+The status can be checked using the command below.
+
+[source,shell]
+----
+kubectl get hazelcast
+----
+
+```
+NAME        STATUS    MEMBERS
+hazelcast   Running   3/3
+```
+
+You can use the following command for the long format.
+
+[source,shell]
+----
+kubectl get hazelcast -o=yaml
+----
+
 [source,yaml,subs="attributes+"]
 ----
 status:
@@ -179,6 +226,8 @@ The `phase` field represents the current status of the cluster, and can contain 
 * `Running`: The cluster is up and running.
 * `Pending`: The cluster is in the process of starting.
 * `Failed`: An error occurred while starting the cluster.
+
+Any additional info such as validation errors will be provided in the `message` field.
 
 The `readyMembers` field represents the number of Hazelcast members that are connected to the cluster.
 
@@ -227,12 +276,25 @@ MANCENTER_IP=$( kubectl get service managementcenter-sample -o jsonpath='{.statu
 
 == Clean up
 
-Run the following commands to remove Hazelcast cluster, Management Center, Hazelcast License Key Secret, and Hazelcast Enterprise Operator.
+You can run the commands below to remove Hazelcast cluster and  Management Center.
 
 [source,shell]
 ----
 kubectl delete -f hazelcast.yaml
 kubectl delete -f management-center.yaml
+----
+
+If you installed Hazelcast Enterprise, run the following commands to remove Hazelcast Enterprise cluster and Hazelcast License Key Secret.
+
+[source,shell]
+----
+kubectl delete -f hazelcast-enterprise.yaml
 kubectl delete secret hazelcast-license-key
+----
+
+Finally, run the command below to delete Hazelcast Platform Operator deployment.
+
+[source,shell]
+----
 kubectl delete -f bundle.yaml
 ----

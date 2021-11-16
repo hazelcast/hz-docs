@@ -33,8 +33,11 @@ Before you can query data in a map, you need to create a mapping to one, using t
 +
 [source,sql]
 ----
-CREATE MAPPING cities
-TYPE IMap OPTIONS ('keyFormat'='varchar', 'valueFormat'='varchar');
+CREATE MAPPING cities (
+__key INT, 
+countries VARCHAR, 
+cities VARCHAR)
+type IMap OPTIONS('keyFormat'='int', 'valueFormat'='json-flat');
 ----
 
 . Add some countries and their capital cities to the map.
@@ -42,12 +45,14 @@ TYPE IMap OPTIONS ('keyFormat'='varchar', 'valueFormat'='varchar');
 [source,sql]
 ----
 INSERT INTO cities VALUES
-('Australia','Canberra'),
-('Croatia','Zagreb'),
-('Czech Republic','Prague'),
-('England','London'),
-('Turkey','Ankara'),
-('United States','Washington, DC');
+(1, 'United Kingdom','London'),
+(2, 'United Kingdom','Manchester'),
+(3, 'United States', 'New York'),
+(4, 'United States', 'Los Angeles'),
+(5, 'Turkey', 'Ankara'),
+(6, 'Turkey', 'Istanbul'),
+(7, 'Brazil', 'Sao Paulo'),
+(8, 'Brazil', 'Rio de Janeiro');
 ----
 +
 The first argument of the `VALUES` command is the key of the map entry and the second argument is the value.
@@ -65,112 +70,122 @@ You should see the following:
 +
 [source,shell]
 ----
-+--------------------+--------------------+
-|__key               |this                |
-+--------------------+--------------------+
-|England             |London              |
-|United States       |Washington, DC      |
-|Czech Republic      |Prague              |
-|Turkey              |Ankara              |
-|Croatia             |Zagreb              |
-|Australia           |Canberra            |
-+--------------------+--------------------+
++------------+--------------------+--------------------+
+|       __key|countries           |cities              |
++------------+--------------------+--------------------+
+|           2|United Kingdom      |Manchester          |
+|           6|Turkey              |Ankara              |
+|           1|United Kingdom      |London              |
+|           7|Brazil              |Sao Paulo           |
+|           8|Brazil              |Rio de Janeiro      |
+|           5|Turkey              |Istanbul            |
+|           4|United States       |Los Angeles         |
+|           3|United States       |New York            |
++------------+--------------------+--------------------+
+
 ----
 
-. Query only the countries by filtering on the `__key` column.
+. Query only the countries by filtering on the `countries` column.
 +
 [source,sql]
 ----
-SELECT __key FROM cities;
+SELECT countries FROM cities;
 ----
 +
 ```
 +--------------------+
-|__key               |
+|countries           |
 +--------------------+
-|England             |
-|United States       |
-|Czech Republic      |
+|United Kingdom      |
 |Turkey              |
-|Croatia             |
-|Australia           |
+|United Kingdom      |
+|Brazil              |
+|Brazil              |
+|Turkey              |
+|United States       |
+|United States       |
 +--------------------+
 ```
 
-. Query only the cities by filtering on the `this` column.
+. Query only the cities by filtering on the `cities` column.
 +
 [source,sql]
 ----
-SELECT this FROM cities;
+SELECT cities FROM cities;
 ----
 +
 ```
 +--------------------+
-|this                |
+|cities              |
 +--------------------+
-|London              |
-|Washington, DC      |
-|Prague              |
+|Manchester          |
 |Ankara              |
-|Zagreb              |
-|Canberra            |
+|London              |
+|Sao Paulo           |
+|Rio de Janeiro      |
+|Istanbul            |
+|Los Angeles         |
+|New York            |
 +--------------------+
 ```
 
-. Give your query results more context by adding an alias to the `__key` and `this` columns.
+. Change the output to display cities first. Change the column labels. Place the city names in alphabetical order.
 +
 NOTE: This clause does not rename the column in the table.
 +
 [source,sql]
 ----
-SELECT __key AS countries, this AS cities
-FROM cities;
-----
-+
-```
-+--------------------+--------------------+
-|countries           |cities              |
-+--------------------+--------------------+
-|England             |London              |
-|United States       |Washington, DC      |
-|Czech Republic      |Prague              |
-|Turkey              |Ankara              |
-|Croatia             |Zagreb              |
-|Australia           |Canberra            |
-+--------------------+--------------------+
-```
-
-. Use a filter to display only countries where the name of the capital city is at least 8 characters long.
-+
-[source,sql]
-----
-SELECT __key AS countries FROM cities WHERE LENGTH(this) >= 8;
-----
-+
-```
-+--------------------+
-|countries           |
-+--------------------+
-|United States       |
-|Australia           |
-+--------------------+
-```
-
-. Use another filter to display only countries beginning with the letter C where the name of the capital city is at least 6 characters long.
-+
-[source,sql]
-----
-SELECT __key AS countries
+SELECT cities AS City, countries AS Country
 FROM cities
-WHERE LENGTH(this) >= 6 AND __key LIKE 'C%';
+ORDER BY cities;
+----
++
+```
++--------------------+--------------------+
+|City                |Country             |
++--------------------+--------------------+
+|Ankara              |Turkey              |
+|Istanbul            |Turkey              |
+|London              |United Kingdom      |
+|Los Angeles         |United States       |
+|Manchester          |United Kingdom      |
+|New York            |United States       |
+|Rio de Janeiro      |Brazil              |
+|Sao Paulo           |Brazil              |
++--------------------+--------------------+
+
+```
+
+. Use a filter to display only countries where the name of the city is at least 11 characters long.
++
+[source,sql]
+----
+SELECT countries FROM cities WHERE LENGTH(cities) >= 11;
 ----
 +
 ```
 +--------------------+
 |countries           |
 +--------------------+
-|Czech Republic      |
-|Croatia             |
+|Brazil              |
+|United States       |
++--------------------+
+```
+
+. Use another filter to display only city names beginning with the letter L where the length is > 6.
++
+[source,sql]
+----
+SELECT cities AS City
+FROM cities
+WHERE cities LIKE 'L%' AND LENGTH(cities) >6;
+----
++
+```
++--------------------+
+|City                |
++--------------------+
+|Los Angeles         |
 +--------------------+
 ```
 
@@ -178,8 +193,11 @@ WHERE LENGTH(this) >= 6 AND __key LIKE 'C%';
 +
 [source,sql]
 ----
-CREATE MAPPING population2020
-TYPE IMap OPTIONS ('keyFormat'='varchar', 'valueFormat'='int');
+CREATE MAPPING population2020 (
+__key INT,
+cities VARCHAR,
+population INT,
+TYPE IMap OPTIONS ('keyFormat'='int', 'valueFormat'='json-flat');
 ----
 
 . Add the 2020 populations of the following cities.
@@ -187,58 +205,63 @@ TYPE IMap OPTIONS ('keyFormat'='varchar', 'valueFormat'='int');
 [source,sql]
 ----
 INSERT INTO population2020 VALUES
-('Canberra', 354644),
-('Zagreb', 804200),
-('Prague', 1227332),
-('London', 8174100),
-('Ankara', 4890893),
-('Washington, DC', 601723);
+(1, 'London', 9304016),
+(2, 'Manchester', 2730076),
+(3, 'New York', 8622357),
+(4, 'Los Angeles', 4085014),
+(5, 'Sao Paulo', 12396372),
+(6, 'Rio de Janeiro', 6775561),
+(7, 'Istanbul', 14804116),
+(8, 'Ankara', 3517182);
 ----
 
 . Use the `JOIN` clause to merge results from the `cities` and `population2020` tables so you can see which countries had the most populated captial cities in 2020.
 +
 [source,sql]
 ---- 
-SELECT cities.__key AS country, cities.this AS city, population2020.this AS population
+SELECT cities.countries AS country, cities.cities AS city, population2020.population AS population
 FROM cities
 JOIN population2020
-ON cities.this = population2020.__key;
+ON cities.cities = population2020.cities;
 ----
 +
 ```
 +--------------------+--------------------+------------+
 |country             |city                |  population|
 +--------------------+--------------------+------------+
-|England             |London              |     8174100|
-|United States       |Washington, DC      |      601723|
-|Czech Republic      |Prague              |     1227332|
-|Turkey              |Ankara              |     4890893|
-|Croatia             |Zagreb              |      804200|
-|Australia           |Canberra            |      354644|
-+--------------------+--------------------+------------+
-```
+|United Kingdom      |Manchester          |     2730076|
+|Turkey              |Ankara              |     3517182|
+|United Kingdom      |London              |     9304016|
+|Brazil              |Sao Paulo           |    12396372|
+|Brazil              |Rio de Janeiro      |     6775561|
+|Turkey              |Istanbul            |    14804116|
+|United States       |Los Angeles         |     4085014|
+|United States       |New York            |     8622357|
++--------------------+--------------------+------------+```
 
-. Use the `ORDER BY` clause to order the results alphabetically by country.
+. Use the `ORDER BY` clause to order the results based on population, largest first.
 +
 [source,sql]
 ----
-SELECT cities.__key AS country, cities.this AS city, population2020.this AS population
+SELECT cities.countries AS country, cities.cities AS city, population2020.population AS population
 FROM cities
 JOIN population2020
-ON cities.this = population2020.__key
-ORDER BY cities.__key;
+ON cities.cities = population2020.cities
+ORDER BY population2020.population DESC;
 ----
 +
 ```
 +--------------------+--------------------+------------+
 |country             |city                |  population|
 +--------------------+--------------------+------------+
-|Australia           |Canberra            |      354644|
-|Croatia             |Zagreb              |      804200|
-|Czech Republic      |Prague              |     1227332|
-|England             |London              |     8174100|
-|Turkey              |Ankara              |     4890893|
-|United States       |Washington, DC      |      601723|
+|Turkey              |Istanbul            |    14804116|
+|Brazil              |Sao Paulo           |    12396372|
+|United Kingdom      |London              |     9304016|
+|United States       |New York            |     8622357|
+|Brazil              |Rio de Janeiro      |     6775561|
+|United States       |Los Angeles         |     4085014|
+|Turkey              |Ankara              |     3517182|
+|United Kingdom      |Manchester          |     2730076|
 +--------------------+--------------------+------------+
 ```
 
@@ -246,7 +269,7 @@ ORDER BY cities.__key;
 +
 [source,sql]
 ----
-SELECT SUM(population2020.this) AS total_population
+SELECT SUM(population2020.population) AS total_population
 FROM population2020;
 ----
 +  
@@ -256,30 +279,78 @@ You should see the following:
 +--------------------+
 |    total_population|
 +--------------------+
-|            16052892|
+|            62234694|
 +--------------------+
+
 ```
 
-. Filter for cities that had a population of more than 1,000,000 in 2020.
+. Filter for cities that had a population of more than 5,000,000 in 2020.
 +
 [source,sql]
 ----
-SELECT population2020.__key AS large_cities
+SELECT population2020.cities AS large_cities
 FROM population2020
-GROUP BY population2020.__key HAVING SUM(population2020.this) > 1000000;
+WHERE population2020.population > 5000000;
+GROUP BY population2020.__key HAVING SUM(population2020.this) > 5000000;
 ----
 +
 ```
 +--------------------+
 |large_cities        |
 +--------------------+
-|Prague              |
+|New York            |
+|Rio de Janeiro      |
 |London              |
-|Ankara              |
+|Istanbul            |
+|Sao Paulo           |
 +--------------------+
+```
+. Display the names of countries and the sum of the city populations. Order by population in ascending order.
++
+[source,sql]
+----
+SELECT cities.countries AS country, sum(population2020.population) AS total_population
+FROM cities
+JOIN population2020
+ON cities.cities = population2020.cities
+GROUP BY cities.countries
+ORDER by sum(population2020.population);
+----
++
+```
++--------------------+--------------------+
+|country             |    total_population|
++--------------------+--------------------+
+|United Kingdom      |            12034092|
+|United States       |            12707371|
+|Turkey              |            18321298|
+|Brazil              |            19171933|
++--------------------+--------------------+
+```
++
+
+. Display the names of countries and the sum of the city populations where the sum is > 15000000.
++
+[source,sql]
+----
+SELECT cities.countries AS country, sum(population2020.population) AS total_population
+FROM cities
+JOIN population2020
+ON cities.cities = population2020.cities
+GROUP BY cities.countries HAVING SUM(population2020.populations) > 5000000;
+----
++
+```
++--------------------+--------------------+
+|country             |    total_population|
++--------------------+--------------------+
+|Turkey              |            18321298|
+|Brazil              |            19171933|
++--------------------+--------------------+
 ```
 +
 The `HAVING` clause allows you to filter aggregations like you would with the `WHERE` clause for non-aggregated queries.
+
 
 == Next Steps
 

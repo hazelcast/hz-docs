@@ -8,10 +8,10 @@ can use Hazelcast's Persistence feature to persist data on disk.
 
 In this tutorial, you will:
 
-. Start a Hazelcast Enterprise cluster with three members
+. Start a Hazelcast Enterprise cluster with three members for which persistence is enabled
 . Create a map with data in it
 . Shut down the cluster
-. Restart the cluster and see the Persistence feature in action
+. Restart the cluster and see the persistence feature in action
 
 == Before You Begin
 
@@ -29,6 +29,9 @@ link:https://docs.docker.com/engine/install/[Install Docker for Linux]
 
 link:https://docs.docker.com/docker-for-windows/install/[Install Docker for Windows]
 
+|Trial license
+|https://trialrequest.hazelcast.com/[Hazelcast website]
+
 |Docker image for the full Hazelcast distribution
 |xref:get-started-enterprise.adoc[Install Hazelcast Enterprise]
 
@@ -39,12 +42,13 @@ link:https://docs.docker.com/docker-for-windows/install/[Install Docker for Wind
 
 == Step 1. Start a Member with Persistence Enabled
 
-Run the following Docker command:
+We will start our first member in a cluster called `hello-world`. Run the following Docker command:
 
 [source,shell]
 ----
 docker run \
     --name first-member --network hazelcast-network \
+    --rm \
     -e HZ_CLUSTERNAME=hello-world \
     -e HZ_LICENSEKEY=<your license key> \
     -e HZ_PERSISTENCE_ENABLED=true \ <1>
@@ -54,27 +58,132 @@ docker run \
 ----
 
 <1> The environment variable to enable the persistence feature for the member
-<2> The environment variable to enable the persistence feature for the map
-<3> By default, the Persistence feature creates the `/opt/hazelcast/persistence` directory to store persisted data.
+<2> The environment variable to enable the persistence feature for a map
+<3> By default, the persistence feature creates the `/opt/hazelcast/persistence` directory to store the persisted data.
 However, using a Docker image, you cannot create any files inside the container. This line of the command mounts a directory
-On your local to the container. This way, the container will use that local folder to save the persisted data.
+on your local to the container. This way, the container will use that local folder to save the persisted data.
 
-You can see from the terminal logs that persistence is enabled:
+Note that we've also enabled persistence for a map called `mydistributedmap` in the `HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true` line.
+It is a best practice to provide the configuration for a data structure, in this case a map, before it is created.
+This way, the map will have the already-provided configuration when it is created, which we will perform in Step 3 below.
 
-image:persistence-enabled.png[Console displays that the persistence is enabled for this member]
+Your first member is started now, you can see from its terminal logs that persistence is enabled:
+
+image:persistence-enabled.png[Startup logs display that the persistence is enabled for this member]
 
 == Step 2. Start More Members
 
-???
+Run the following Docker commands on new terminals.
+
+[source,shell]
+----
+docker run \
+    --name second-member --network hazelcast-network \
+    --rm \
+    -e HZ_CLUSTERNAME=hello-world \
+    -e HZ_LICENSEKEY=<your license key> \
+    -e HZ_PERSISTENCE_ENABLED=true \
+    -e HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true \
+    -v ~/persist:/opt/hazelcast/persistence \
+    -p 5702:5701 hazelcast/hazelcast-enterprise:5.0
+----
+
+[source,shell]
+----
+docker run \
+    --name third-member --network hazelcast-network \
+    --rm \
+    -e HZ_CLUSTERNAME=hello-world \
+    -e HZ_LICENSEKEY=<your license key> \
+    -e HZ_PERSISTENCE_ENABLED=true \
+    -e HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true \
+    -v ~/persist:/opt/hazelcast/persistence \
+    -p 5703:5701 hazelcast/hazelcast-enterprise:5.0
+----
+
+You can now see all three members are started on the terminal forming a cluster:
+
+image:persist-cluster.png[Cluster has been started]
+
+Note the member IP addresses and ports since you will need them in the following steps.
 
 == Step 3. Create a Map
 
-???
+In this step, we create a map called `mydistributedmap` with three entries.
 
-== Step 3. Shut Down the Cluster
+. In a new terminal window, start the SQL shell; you are going to run commands in the SQL shell after this step.
++
+[source,shell]
+----
+docker run --network hazelcast-network -it --rm hazelcast/hazelcast:5.0 hz-cli --targets hello-world@<IP address of one of the members> sql
+----
+. Create the map.
++
+[source,shell]
+----
+CREATE MAPPING mydistributedmap TYPE IMap OPTIONS ('keyFormat'='varchar','valueFormat'='varchar');
+----
+. Add data to the map.
++
+[source,shell]
+----
+SINK INTO mydistributedmap VALUES
+('1', 'John'),
+('2', 'Mary'),
+('3', 'Jane');
+----
+. Exit the SQL shell using the `exit` command.
 
-??? Show what happens when the whole cluster goes down ???
+== Step 4. Monitor the Map
+
+Now, let's check our map in Management Center.
+
+. Open a new terminal and start Management Center.
++
+[source,shell]
+----
+docker run \
+    --network hazelcast-network \
+    -p 8080:8080 hazelcast/management-center:latest-snapshot
+----
+. In a web browser, go to localhost:8080 and enable Dev Mode.
++
+image:mc-dev-mode.png[Enabling dev mode in Management center]
+. You will see a **Connect** box on the screen; click on it and enter your cluster's name (`hello-world`) and IP addresses/ports of three members.
++
+image:connect-cluster.png[Connecting Management Center to the cluster]
+. Once you click on the **Connect** button, you should see that the cluster is in an active state and has three members.
++
+image:cluster-connected.png[Management Center is now connected to the cluster]
+. Click on **View Cluster** and go to **Storage > Maps**. You can confirm that the map we've created in Step 3 has data with three entries.
++
+image:cluster-maps.png[Map listing]
+. As an optional step, if you want to see the details of `mydistributedmap`, click on it on the screen shown above and check the "Map Statistics" box.
++
+image:map-details.png[Map details]
+
+== Step 5. Shut Down the Cluster
+
+Now, we are going to shut down the whole cluster using Management Center.
+
+. While in Management Center, go to **Cluster > Administration**, and select the **Cluster State** tab. 
++
+image:cluster-state.png[Shutting down the cluster]
+. Click on the **Shutdown** button and confirm it on the dialog shown afterwards.
+
+Management Center now shows that it is disconnected from the cluster. You can also confirm
+this by checking the terminals where you started the members; they are now exited to the shell, meaning all the members are gone.
+
+== Step 6. Restart the Cluster
+
+In this step, we are going to start the cluster by starting all the members; run the commands in Step 1 and Step 2 above.
+
+== Step 7. Check the Map Data
+
+Once all the members are started, go to Management Center, and you can see that it reconnects to the cluster.
+Check your map as instructed in Step 4 above; you will see the map and its data has been recovered.
+If the persistence was not enabled, the data would be lost in case of a cluster shutdown. 
 
 NOTE: See xref:storage:persistence.adoc[Persisting Data on a Cluster] if you're
-interested in learning more about the topics introduced in this tutorial.
+interested in learning more about the topics introduced in this tutorial along with the detailed configurations for the persistence feature.
 

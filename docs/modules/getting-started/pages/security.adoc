@@ -1,13 +1,13 @@
 = Secure Cluster
-:description: This tutorial guides you on securing the communication within a cluster using the TLS protocol.
+:description: This tutorial guides you on securing the communication between a cluster member and client using the security feature's identity configuration.
 
-{description} We recommend you to secure your deployments; without security, unauthorized members or clients may access
+{description} This way the member will accept and authorize connections from the clients which have the matching identity configurations.
+We recommend you to secure your deployments; without security, unauthorized members or clients may access
 the cluster and use the cluster resources.
 
 In this tutorial, you will:
 
-. Prepare to enable the security feature (keystore)
-. Start a Hazelcast Enterprise cluster with TLS enabled and configured
+. Start a Hazelcast Enterprise member with security enabled and configured
 . Connect a client which is configured to be authorized
 . Try to connect another client which does not respect to the security requirements
 
@@ -30,82 +30,283 @@ link:https://docs.docker.com/docker-for-windows/install/[Install Docker for Wind
 |Docker image for the full Hazelcast distribution
 |xref:get-started-enterprise.adoc[Install Hazelcast Enterprise]
 
-|Docker network with the name `hazelcast-network`
-|Use the `docker network create hazelcast-network` command 
-
 |===
 
-== Step 1. Generate a keystore
+== Step 1. Configure the Enterprise Member
 
-To be able to enable TLS, you need to first create a keystore with a self-signed certificate,
-if you already don't have.
-The keystore will be then used as a parameter while starting the cluster members.
+Since the configuration for security is more detailed, we are going to use a Hazelcast configuration file
+and pass it to the Docker command, instead of giving all the configuration options in a single Docker command.
 
-. Create a directory in which the keystore will be stored.
+In an existing or new directory, place a `hazelcast.yaml` (or `xml`) file with the following content.
+
+[tabs]
+====
+YAML::
 +
-[source,shell]
+--
+
+[source,yaml]
 ----
-mkdir keystore
+hazelcast:
+  cluster-name: hello-world
+  license-key: <your license key>
+  security:
+    enabled: true
+    realms:
+      - name: passwordRealm
+        identity:
+          username-password:
+            username: member1
+            password: s3crEt
+  member-authentication:
+    realm: passwordRealm
 ----
-. Generate the key pairs.
+--
+
+XML::
 +
+[source,xml]
+----
+<hazelcast>
+    <cluster-name>hello-world</cluster-name>
+    <security enabled="true">
+        <realms>
+            <realm name="passwordRealm">
+                <identity>
+                    <username-password username="member1" password="s3crEt" />
+                </identity>
+            </realm>
+        </realms>
+        <member-authentication realm="passwordRealm" />
+    </security>
+</hazelcast>
+----
+====
+
+With this configuration, we are telling to the member to accept connections only from the clients
+having the credentials `member1` and `s3crEt`.
+
+== Step 2. Start the Member
+
+Run the following command.
+
 [source,shell]
 ----
-keytool -validity 365 -genkeypair -alias server -keyalg EC -keystore ./keystore/server.keystore -storepass 123456 -keypass 123456 -dname CN=localhost
+docker run \
+    --net=host \
+    -e JAVA_OPTS="-Dhazelcast.config=/opt/hazelcast/config_ext/hazelcast.yaml" -v ~/config:/opt/hazelcast/config_ext hazelcast/hazelcast-enterprise:5.0
 ----
-. Create the certificate file.
+
+This command starts the member with the configuration provided in Step 1 above. 
+Here, `~/config` is the path to the directory in which the configuration file resides.
+You should replace it with the directory path you've created.
+
+Our member is up and running now:
+
+[source,shell]
+----
+Members {size:1, ver:1} [
+	Member [192.168.1.101]:5701 - cfc75512-a9c5-4798-bcca-450b7bf3c105 this
+]
+----
+
+== Step 3. Connect a Client
+
+
+[tabs]
+====
+Python::
 +
-[source,shell]
-----
-keytool -export -alias server -keystore ./keystore/server.keystore -storepass 123456 -file ./keystore/server.crt
-----
-. Add the certificate to keystore.
+--
+
+. Create a new project in your preferred Python IDE
+. Run `pip install hazelcast-python-client` in the IDE's terminal
+. Create a Python file, e.g., `myPyClient.py` containing the following code.
 +
+[source,python]
+----
+import hazelcast
+
+client = hazelcast.HazelcastClient(
+    cluster_members=["192.168.1.101:5701"],
+    cluster_name="hello-world",
+    creds_username="member1",
+    creds_password="s3crEt"
+)
+
+client.shutdown()
+----
+. Run `python myPyClient.py` in the IDE.
+--
+
+Go::
++
+
+. In a terminal, create a new directory and go into it.
+. Run `go mod init <name of the directory>`.
+. Run `go get github.com/hazelcast/hazelcast-go-client`.
+. While in this directory, create a `go` file, e.g., `main.go` containing the following code.
++
+[source,go]
+----
+package main
+
+import (
+	"context"
+
+	"github.com/hazelcast/hazelcast-go-client"
+)
+
+func main() {
+	ctx := context.TODO()
+	config := hazelcast.Config{}
+	cc := &config.Cluster
+	cc.Network.SetAddresses("192.168.1.101:5701")
+	cc.Name = "hello-world"
+	creds := &cc.Security.Credentials
+	creds.Username = "member1"
+	creds.Password = "s3crEt"
+	client, err := hazelcast.StartNewClientWithConfig(ctx, config)
+	if err != nil {
+		panic(err)
+	}
+	client.Shutdown(ctx)
+}
+----
+. Run `go run main.go` in the terminal.
+
+Java::
++
+
+. Install the xref:getting-started:install-hazelcast.adoc#use-java[Java client library].
+. In your preferred Java IDE, create a new project to include a class containing the following code.
++
+[source,java]
+----
+import com.hazelcast.client.HazelcastClient;
+import com.hazelcast.client.config.ClientConfig;
+
+public class SecuredClient {
+  public static void main(String[] args) {
+
+ClientConfig clientConfig = new ClientConfig();
+        clientConfig.setClusterName("hello-world");
+        clientConfig.getSecurityConfig().setUsernamePasswordIdentityConfig("member1","s3crEt");
+        HazelcastClient.newHazelcastClient(clientConfig);
+
+  }
+}
+----
+. Run the `SecuredClient` class in the IDE.
+
+C Sharp::
++
+
+. Install the latest http://hazelcast.github.io/hazelcast-csharp-client/4.0.1/doc/obtaining.html[C Sharp client library]
+. In your preferred C# IDE, create a new project to include a class containing the following code.
++
+[source,cs]
+----
+var username = "member1";
+var password = "s3crEt";
+
+var options = new HazelcastOptionsBuilder();
+    .With(o => {
+        o.Authentication.ConfigureUsernamePasswordCredentials(username, password);
+    })
+    .Build();
+
+var client = await HazelcastClientFactory.StartNewClientAsync(options);
+----
+. Run this class in the IDE.
+
+Node.js::
++
+
+. Install the Node.js client library: `npm install hazelcast-client`
+. In your preferred Node.js IDE, create a new project to include the following script.
++
+[source,javascript]
+----
+const { Client } = require('hazelcast-client');
+class UsernamePasswordCredentials {
+    constructor(username, password, endpoint) {
+        this.username = username;
+        this.password = password;
+        this.endpoint = endpoint;
+        this.factoryId = 1;
+        this.classId = 1;
+    }
+    readPortable(reader) {
+        this.username = reader.readString('username');
+        this.endpoint = reader.readString('password');
+        this.password = reader.readString('endpoint');
+    }
+    writePortable(writer) {
+        writer.writeString('username', this.username);
+        writer.writeString('password', this.password);
+        writer.writeString('endpoint', this.endpoint);
+    }
+}
+function usernamePasswordCredentialsFactory(classId) {
+    if (classId === 1) {
+        return new UsernamePasswordCredentials();
+    }
+    return null;
+}
+(async () => {
+    try {
+        const client = await Client.newHazelcastClient({
+            clusterName: 'hello-world',
+            serialization: {
+                portableFactories: {
+                    1: usernamePasswordCredentialsFactory
+                }
+            },
+            customCredentials: new UsernamePasswordCredentials('member1', 's3crEt', '192.168.1.101:5701')
+        });
+        console.log(await client.getDistributedObjects());
+    } catch (error) {
+        console.error('Error occurred:', error);
+    }
+})();
+----
+. Run this script in the IDE.
+
+====
+
+When looking at the client terminal, you can see that the member side has authenticated and accepted the client connection.
+Here is an example terminal log for the Python client:
+
 [source,shell]
 ----
-keytool -import -noprompt -alias server -keystore ./keystore/server.truststore -storepass 123456 -file ./keystore/server.crt
+INFO:hazelcast.lifecycle:HazelcastClient 5.1 is STARTING
+INFO:hazelcast.lifecycle:HazelcastClient 5.1 is STARTED
+INFO:hazelcast.connection:Trying to connect to Address(host=127.0.0.1, port=5701)
+INFO:hazelcast.lifecycle:HazelcastClient 5.1 is CONNECTED
+INFO:hazelcast.connection:Authenticated with server Address(host=192.168.1.9, port=5701):63b2a2ce-85f6-413f-8ce9-6058a748e4b9, server version: 5.0, local address: Address(host=127.0.0.1, port=36006)
+INFO:hazelcast.cluster:
+
+Members [1] {
+	Member 192.168.1.101:5701 - 63b2a2ce-85f6-413f-8ce9-6058a748e4b9
+}
+
+INFO:hazelcast.client:Client started
 ----
 
-== Step 2. Start the Members with TLS Enabled
-
-Start an Enterprise member using the following Docker command.
+If you try to connect a client without any credentials or with credentials different than the configured ones on the member side,
+you can see the connection is refused by the member. See the example terminal log for Python client:
 
 [source,shell]
 ----
-docker run --name first-member --network hazelcast-network \
-    --rm \
-    -e HZ_CLUSTERNAME=hello-world \
-    -e HZ_LICENSEKEY=<license key> \
-    -e HZ_NETWORK_SSL_ENABLED=true \
-    -v `pwd`/keystore:/keystore \
-    -e "JAVA_OPTS=-Djavax.net.ssl.keyStore=/keystore/server.keystore -Djavax.net.ssl.keyStorePassword=123456
-    -Djavax.net.ssl.trustStore=/keystore/server.truststore -Djavax.net.ssl.trustStorePassword=123456" \
-    -p 5701:5701 hazelcast/hazelcast-enterprise:5.0
+INFO:hazelcast.lifecycle:HazelcastClient 5.1 is STARTING
+INFO:hazelcast.lifecycle:HazelcastClient 5.1 is STARTED
+INFO:hazelcast.connection:Trying to connect to Address(host=127.0.0.1, port=5701)
+INFO:hazelcast.connection:Connection(id=0, live=False, remote_address=None) closed. Reason: Failed to authenticate connection
+WARNING:hazelcast.connection:Error during initial connection to Address(host=127.0.0.1, port=5701)
 ----
-
-Start the second member.
-
-[source,shell]
-----
-docker run --name second-member --network hazelcast-network \
-    --rm \
-    -e HZ_CLUSTERNAME=hello-world \
-    -e HZ_LICENSEKEY=<license key> \
-    -e HZ_NETWORK_SSL_ENABLED=true \
-    -v `pwd`/keystore:/keystore \
-    -e "JAVA_OPTS=-Djavax.net.ssl.keyStore=/keystore/server.keystore -Djavax.net.ssl.keyStorePassword=123456
-    -Djavax.net.ssl.trustStore=/keystore/server.truststore -Djavax.net.ssl.trustStorePassword=123456" \
-    -p 5702:5701 hazelcast/hazelcast-enterprise:5.0
-----
-
-== Step 3. Configure Security for the Client
-
-???
-
-== Step 4. Connect a Client
-
-???
 
 NOTE: See xref:security:overview.adoc[Securing a Cluster] if you're
 interested in learning more about the topics introduced in this tutorial.
+
 

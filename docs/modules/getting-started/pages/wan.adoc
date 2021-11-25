@@ -8,14 +8,16 @@ WAN Replication can work in two modes:
 
 * Active-Passive: It is useful for failover scenarios where you want to replicate an active cluster to one or more passive clusters,
 for the purpose of maintaining a backup. If the active cluster becomes unavailable, you can redirect the application traffic to the passive cluster.
-* Active-Active: It is useful for geographically distributed clusters. In this mode each cluster replicates to all other clusters.
+* Active-Active: In this mode each cluster replicates to all other clusters.
 
-This tutorial is for the Active-Active mode, and you will:
+See xref:wan:wan.adoc[here] for an overview of the WAN Replication feature.
 
-. Start a Hazelcast Enterprise cluster with WAN Replication configured
-. Start another cluster with WAN Replication configured
-. Create the same map in these clusters with data in it
-. Update some map entries in one cluster and see the updates replicated to the other one
+This tutorial is for the Active-Passive mode, and you will:
+
+. Start an Enterprise cluster as a passive one
+. Start another cluster with WAN Replication configured, this will be the active one
+. Create a map in the active cluster with data in it and see the replication to the passive cluster
+. Modify some map entries in the active cluster and see the modifications in the passive one
 
 == Before You Begin
 
@@ -41,21 +43,237 @@ link:https://docs.docker.com/docker-for-windows/install/[Install Docker for Wind
 
 |===
 
-== Step 1. Start the First Cluster
+== Step 1. Start the Passive Cluster
 
-???
+In this step we start an Enterprise cluster called `london` with a single member. This will be the **passive** cluster
+which means it does not need WAN replication to be configured. Run the following Docker command on a terminal.
 
-== Step 2. Start the Second Cluster
+[source,shell]
+----
+docker run \
+    --network hazelcast-network \
+    -e HZ_LICENSEKEY=<your license key> \
+    -e HZ_CLUSTERNAME=london \
+    -p 5701:5701 hazelcast/hazelcast-enterprise:5.0
+----
 
-???
+Here is our single-member cluster:
 
-== Step 3. Create the Maps
+[source,shell]
+----
+2021-11-23 11:08:15,055 [ INFO] [main] [c.h.i.c.ClusterService]: [172.18.0.3]:5701 [london] [5.0] 
 
-???
+Members {size:1, ver:1} [
+	Member [172.18.0.3]:5701 - bed20746-1505-449b-9f4a-548bcdbe12b8 this
+]
+----
 
-== Step 4. Update Map Entries
+Note the member's IP address and port since we are going to use it while configuring WAN
+replication in the active cluster and connecting Management Center.
 
-???
+== Step 2. Start the Active Cluster
+
+Now we start another Enterprise cluster called `tokyo` with a single member. This will be the **active** cluster
+which means it does not need WAN replication to be configured.
+
+Since the configuration for WAN Replication is a bit more detailed, we are going to use a Hazelcast configuration
+file and pass it to the Docker command, instead of giving all the configuration options in a single command.
+
+. In an existing or new directory, place a hazelcast.yaml (or xml) file with the following content.
++
+[tabs]
+====
+YAML::
++
+--
+
+[source,yaml]
+----
+hazelcast:
+  cluster-name: tokyo
+  license-key: <your license key>
+  wan-replication:
+    london-wan-rep:
+      batch-publisher:
+        londonPublisherId:
+          cluster-name: london
+          target-endpoints: 172.18.0.3:5701
+  map:
+    cities: <1>
+      wan-replication-ref:
+        london-wan-rep: <2>
+          republishing-enabled: false
+  jet:
+    enabled: true <3>
+----
+--
+<1> Name of the map we are going to create.
+<2> Name of the WAN replication configuration (given under the `wan-replication` tag) which provides the details on where the map data will be replicated.
+<3> We need to enable the Jet engine since we are going to use SQL for creating, updating and monitoring the map.
+
+XML::
++
+[source,xml]
+----
+<hazelcast>
+    <cluster-name>tokyo</cluster-name>
+    <license-key>"your license key"</license-key>
+    <wan-replication name="london-wan-rep">
+        <batch-publisher>
+            <cluster-name>london</cluster-name>
+            <publisher-id>londonPublisherId</publisher-id>
+            <target-endpoints>172.18.0.3:5701</target-endpoints>
+    <map name="cities">
+        <wan-replication-ref name="london-wan-rep">
+    </map>
+</hazelcast>
+----
+====
+. Open a new terminal and start the active cluster with the above configuration.
++
+[source,shell]
+----
+docker run \
+     --network hazelcast-network \
+     -e JAVA_OPTS="-Dhazelcast.config=/opt/hazelcast/config_ext/hazelcast.yaml" -v ~/config-tokyo:/opt/hazelcast/config_ext hazelcast/hazelcast-enterprise:5.0
+----
+
+Here is our other single-member cluster:
+
+[source,shell]
+----
+2021-11-23 11:39:14,198 [ INFO] [main] [c.h.i.c.ClusterService]: [172.18.0.4]:5701 [tokyo] [5.0] 
+
+Members {size:1, ver:1} [
+	Member [172.18.0.4]:5701 - 98d9a815-5eb3-4341-bec1-e9816cee44b5 this
+]
+----
+
+Note the member's IP address and port since we are going to use it while connecting Management Center.
+
+See xref:wan:defining-wan-replication.adoc#wanbatchreplication-implementation[Configuring WAN Replication] for
+configuration element descriptions.
+
+== Step 3. Set Up Management Center
+
+. Start Management Center
++
+[source,shell]
+----
+docker run \
+    --network hazelcast-network \
+    -p 8080:8080 hazelcast/management-center:5.0
+----
+. Once you see the `Hazelcast Management Center successfully started at http://localhost:8080/` log in the terminal, open a web browser, go to localhost:8080, and enable Dev Mode.
+. You will see a **Connect** box on the screen; click on it and enter the passive cluster’s name (`london`) and IP address of its member.
++
+image:wan/connect-london-cluster.png[Connect the London cluster]
+Management Center is now connected to the `london` cluster.
+. Click again on the **Connect** box enter the active cluster’s name (`tokyo`) and IP address of its member.
++
+image:wan/cluster-connected.png[Both clusters are connected]
+Management Center is now connected to the `tokyo` cluster.
+. You need to provide your license key; this is needed since you are going to use the WAN Replication feature for the `tokyo` cluster in Management Center.
+Click on **View Cluster** for `tokyo`, go to **Settings** located on the very top right of the user interface and, select **License**.
++
+image:wan/provide-license.png[Enter your license key]
+Type in your license key and click on **Update License**. Close the license screen.
+. Verify that the `tokyo` cluster has WAN Replication enabled. Go to **Cluster > WAN Replication**.
++
+image:wan/verify-wan-replication.png[Verify that Tokyo cluster has WAN Replication feature enabled]
+
+== Step 4. Create a Map
+
+In this step you switch to the SQL shell in a terminal, create a map called `cities` for the `tokyo` cluster, and put data into it.
+
+. In a new terminal, start the SQL shell that will be connected to the `tokyo` cluster.
++
+[source,shell]
+----
+docker run --network hazelcast-network -it --rm hazelcast/hazelcast:5.0 hz-cli --targets tokyo@172.18.0.4:5701 sql
+----
+. Once you see the SQL shell (`sql>`), type the following command and press Enter to create the map.
++
+[source,shell]
+----
+CREATE MAPPING cities (__key INT, country VARCHAR, city VARCHAR)
+TYPE IMap 
+OPTIONS ('keyFormat'='int', 'valueFormat' = 'json-flat');
+----
+. Then, type the following command and press Enter to add data to the map.
++
+[source,shell]
+----
+INSERT INTO cities VALUES
+(1,'Australia','Canberra'),
+(2,'Croatia','Zagreb'),
+(3,'Czech Republic','Prague'),
+(4,'England','London'),
+(5,'Turkey','Ankara'),
+(6,'United States','Washington, DC');
+----
+. See the entries by running the following query.
++
+[source,shell]
+----
+SELECT * FROM cities;
+----
+
+NOTE: See xref:sql:get-started-sql.adoc[Get Started with SQL over Maps] for more querying options using SQL on maps.
+
+You can also see the map and its entries in Management Center; let's use its SQL browser feature:
+
+. Select `tokyo` in the dropdown field left to "Cluster Connections" on top of the user interface.
+. Go to **Storage > Maps**, you will see the `cities` map information.
++
+image:wan/map-tokyo.png[Cities map in Tokyo cluster]
+. Click on **SQL Browser** located on the very top right of the user interface and choose `cities` in the `select a map` field.
+The SQL browser then shows the default query in its editor, `SELECT * FROM cities;`. 
+. Click on **Execute Query**; you will see the data we've put in. 
++
+image:wan/map-entries.png[Management Center's SQL Browser shows the map data]
+. Close the SQL browser.
+
+== Step 5. Verify the Replication
+
+In this step, we will verify that the `cities` map now also exists in the London cluster, i.e., the map and its data have been replicated from the active cluster (Tokyo) to the passive one (London).
+
+. In Management Center, select `london` in the dropdown field left to "Cluster Connections" on top of the user interface.
+. Go to **Storage > Maps** and see that the `cities` map is there.
+
+Additionally, you can query the map entries on the London cluster. Let's again, use the SQL browser in Management Center.
+
+. You first need to create the mapping so that the London cluster can read the map entries.
+Open the SQL browser, type in the same `CREATE MAPPING` command from Step 4 in the editor, and **Execute Query**.
++
+image:wan/create-mapping-london.png[Create mapping on the London cluster]
+. In the `select a map` field, choose `cities`. The editor shows the default `SELECT * FROM cities;` query. Once you execute it, you will see the entries of `cities` map, as in Step 4.
+. Close the SQL browser.
+
+== Step 6. Update a Map Entry on the Active Cluster
+
+Let's update an entry in the `cities` map on the active cluster (Tokyo) and verify the update is replicated to the passive one (London).
+
+. Select `tokyo` in the dropdown field left to "Cluster Connections" on top of the user interface and go to **SQL Browser**.
+. Choose `cities` in the `select a map` field and execute the default `SELECT * FROM "cities"` query.
++
+image:wan/entry-tobe-modified.png[]
+. Now, we are going to modify the data shown above in the red box (the entry having the key `1`). In the SQL editor, delete the default query and type in the following command.
++
+[source,shell]
+----
+SINK INTO cities VALUES
+(1, 'Austria', 'Vienna');
+----
+Execute the query and see the entry has changed.
++
+image:entry-modified.png[Data is modified]
+. Close the SQL browser and now go to the passive cluster (London) by choosing `london` in the dropdown field left to "Cluster Connections" on top of the user interface.
+. Open the SQL browser, choose `cities` in the `select a map` field and execute the default query.
+. You will see the entry having the key `1` is also modified.
+
+In this step, we have seen that a data modification in the active cluster is immediately replicated to the passive one.
+If you do the modification first on the passive cluster, you'd see that the modification is not applied to the active one.
 
 NOTE: See xref:wan:wan.adoc[Synchronizing Data Across Clusters] if you're
 interested in learning more about the topics introduced in this tutorial.

@@ -418,7 +418,23 @@ import java.util.concurrent.TimeUnit;
 
 public class Ordering {
 
-  
+    static StreamStage<ChangeRecord> fix(StreamStage<ChangeRecord> input) {
+        return input
+                .groupingKey(ChangeRecord::key)
+                .mapStateful(
+                        TimeUnit.SECONDS.toMillis(10),
+                        () -> new LongAccumulator(0),
+                        (lastSequence, key, record) -> {
+                            long sequence = record.sequenceValue();
+                            if (lastSequence.get() < sequence) {
+                                lastSequence.set(sequence);
+                                return record;
+                            }
+                            return null;
+                        },
+                        (TriFunction<LongAccumulator, RecordPart, Long, ChangeRecord>) (sequence, recordPart, aLong) -> null);
+    }
+
 }
 ```
 
@@ -430,7 +446,7 @@ your IDE and prints the current content of the cache.
 ```java
 package org.example;
 
-import com.hazelcast.core.Hazelcast;
+import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.core.HazelcastInstance;
 
 public class CacheRead {

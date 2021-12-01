@@ -1,5 +1,6 @@
 = Monitoring
 :description: Options available for monitoring the health and operations of Hazelcast clusters.
+:page-aliases: security:management-center.adoc
 
 [[monitoring-best-practices]]
 == Best Practices
@@ -75,16 +76,20 @@ data structures in detail, update map configurations and take thread dumps from 
 You can run scripts (JavaScript, Groovy, etc.) and commands on your members with its scripting and console modules.
 
 See the xref:{page-latest-supported-mc}@management-center::index.adoc[Management Center documentation]
-for its usage details.
+for more information and find details about its clustered JMX and clustered REST APIs
 
-=== Toggle Scripting Support
+Because Management Center is a client that connects to the cluster, you can control the following aspects of Management Center in the member configuration file:
 
-The support for script execution is disabled by default. The reason is security.
-Script engines allow to access the underlying system on the members (files and other resources).
-Scripts access the system, on which the member runs, with permissions of the running user.
+- <<managing-scripting-support,Scripting support>>
+- <<managing-console-support,Console support>>
+- <<limiting-source-addresses,Source IP addresses>>
 
-Scripting can be allowed or prevented by specifying the `scripting-enabled` attribute of
-the `management-center` element within the Hazelcast member configuration file, as shown below:
+=== Managing Scripting Support
+[[toggle-scripting-support]]
+
+Management Center allows you to execute scripts that can automate interactions with the cluster.
+
+By default, scripting is disabled for security. Scripting engines give code access to the underlying system on the members (files and other resources) and run with the same permissions as the current user. You can enable scripting in the member configuration file:
 
 [tabs] 
 ==== 
@@ -95,7 +100,7 @@ XML::
 ----
 <hazelcast>
     ...
-    <management-center scripting-enabled="false" />
+    <management-center scripting-enabled="true" />
     ...
 </hazelcast>
 ----
@@ -107,31 +112,26 @@ YAML::
 ----
 hazelcast:
   management-center:
-    scripting-enabled: false
+    scripting-enabled: true
 ----
 ====
 
 Note that the https://jcp.org/en/jsr/detail?id=223[JSR 223^] API is used in Hazelcast to support scripting.
 
-=== Toggle Console Support
+=== Managing Console Support
 
-The support for console commands execution is disabled by default. The reason is security.
-The console can access the underlying system on which Hazelcast runs and bypass the configured
-client permissions.
+Management Center allows you to execute commands from a built-in console in the user interface. This console is useful for testing and development purposes. You can enable the console in the member configuration file:
 
-Console commands execution can be allowed or prevented by specifying the `console-enabled` attribute of
-the `management-center` element within the Hazelcast member configuration file, as shown below:
-
-[tabs]
-====
-XML::
-+
---
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
 [source,xml]
 ----
 <hazelcast>
     ...
-    <management-center console-enabled="false" />
+    <management-center console-enabled="true" />
     ...
 </hazelcast>
 ----
@@ -143,18 +143,15 @@ YAML::
 ----
 hazelcast:
   management-center:
-    console-enabled: false
+    console-enabled: true
 ----
 ====
 
+
 === Limiting Source Addresses
 
-It's possible to restrict the source IP addresses from which Management Center operations
-are allowed. By default all source connections are allowed.
-
-Defining these source addresses is possible through the `trusted-interfaces`
-configuration element. The wildcard (`*`) and ranges can be used.
-See the following example:
+By default, any instance of Management Center can connect to a cluster as long as it can be authenticated. To restrict access only to trusted instances of Management Center, you can define the trusted IP addresses in the `trusted-interfaces`
+configuration setting. This settings supports wildcards (`*`) and ranges (`-`).
 
 [tabs] 
 ==== 
@@ -186,13 +183,6 @@ hazelcast:
 ----
 ====
 
-=== Clustered JMX and REST via Management Center
-
-[blue]*Hazelcast Enterprise*
-
-See the xref:{page-latest-supported-mc}@management-center::index.adoc[Management Center documentation]
-for information about Clustered JMX and Clustered REST (via Management Center) features.
-
 == Instance Tracking
 
 Instance tracking is a feature which, when enabled, writes a file on
@@ -217,6 +207,34 @@ and the creation time, making it unique every time the instance is started. The 
 As such, it leaves a trace of instances started on a particular machine. The file creation process
 also is fail-safe meaning that the instance will proceed with starting even though it is
 unable to write the tracking file and the instance will only log a warning.
+
+[NOTE]
+.Auditing the Instance Tracking File
+====
+When you enable the instance tracking feature and its file is created
+on a member startup, the full path of the file with its name is set into
+a system property of the JVM running the Hazelcast member, i.e., `hazelcast.config.instance.tracking.file`.
+
+You can audit that all your running Hazelcast members in your environment have
+the instance tracking file name set correctly. For this, you can use the
+https://docs.oracle.com/en/java/javase/13/docs/specs/man/jcmd.html[jcmd] utility
+As shown below.
+
+[source,shell]
+----
+jcmd <PID> VM.system_properties | grep hazelcast.config.instance.tracking.file
+----
+
+PID here is the process ID of your JVM on which Hazelcast member runs.
+It will give you an output similar to following:
+
+[source,shell]
+----
+hazelcast.config.instance.tracking.file=/tmp/Hazelcast.process
+----
+
+See below for the example content of an instance tracking file.
+====
 
 [[instance-tracking-configuration]]
 === Configuring Instance Tracking
@@ -341,295 +359,6 @@ The possible values for the `mode` placeholder:
 * `server`: This value is used when the instance was started using the `start.sh` or `start.bat` scripts.
 * `client`: This instance is a Hazelcast client instance.
 * `embedded`: This instance is embedded in another Java program.
-
-== Logging
-
-Hazelcast has a flexible logging configuration and does not depend on
-any logging framework except JDK logging. It has built-in adapters
-for a number of logging frameworks and it also supports custom loggers
-by providing logging interfaces.
-
-=== Logging for Member
-
-By default, a Hazelcast member writes logs into the `logs` directory of the
-distribution. The logs are configured to roll over daily. You can change
-the logging configuration by modifying `config/log4j.properties`.
-
-To use the built-in adapters, set the `hazelcast.logging.type` property
-to one of the predefined types below:
-
-* **jdk**: JDK logging (default)
-* **log4j**: Log4j
-* **log4j2**: Log4j2
-* **slf4j**: Slf4j
-* **none**: disable logging
-
-You can set `hazelcast.logging.type` through declarative configuration,
-programmatic configuration or JVM system property.
-
-NOTE: If you choose to use `log4j`, `log4j2`, or `slf4j`, you should include
-the proper dependencies in the classpath.
-
-**Declarative Configuration:**
-
-[tabs] 
-==== 
-XML:: 
-+ 
--- 
-[source,xml]
-----
-<hazelcast>
-    ...
-    <properties>
-        <property name="hazelcast.logging.type">log4j</property>
-    </properties>
-    ...
-</hazelcast>
-----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  properties:
-    hazelcast.logging.type: log4j
-----
-====
-
-**Programmatic Configuration**
-
-[source,java]
-----
-Config config = new Config() ;
-config.setProperty( "hazelcast.logging.type", "log4j" );
-----
-
-**System Property**
-
-* using the `java -Dhazelcast.logging.type=slf4j` JVM parameter
-* using the `System.setProperty( "hazelcast.logging.type", "none" );` system class
-
-=== Logging for Client and Embedded Mode
-
-When using Hazelcast through the client or in embedded mode, Hazelcast doesn't
-automatically add any dependencies to any logging framework and allows
-configuration of which facade the logging should be done through.
-
-To configure the logging facade to use, you need to set a property
-in the configuration file:
-
-[source,yaml]
-----
-hazelcast-client:
-  properties:
-    hazelcast.logging.type: log4j2
-----
-
-Alternatively, you can use the system property
-`-Dhazelcast.logging.type` to configure the logging framework to use.
-
-=== Using a Custom Logger
-
-If the provided logging mechanisms are not satisfactory, you can implement
-your own using the custom logging feature. To use it, implement the
-`com.hazelcast.logging.LoggerFactory` and `com.hazelcast.logging.ILogger`
-interfaces and set the system property `hazelcast.logging.class` as your
-custom `LoggerFactory` class name.
-
-```
--Dhazelcast.logging.class=foo.bar.MyLoggingFactory
-```
-
-=== Listening to Logging Events
-
-You can also listen to logging events generated by Hazelcast runtime
-by registering ``LogListener``s to `LoggingService`.
-
-[source,java]
-----
-LogListener listener = new LogListener() {
-  public void log( LogEvent logEvent ) {
-    // do something
-  }
-};
-HazelcastInstance instance = Hazelcast.newHazelcastInstance();
-LoggingService loggingService = instance.getLoggingService();
-loggingService.addLogListener( Level.INFO, listener );
-----
-
-Through the `LoggingService`, you can get the currently used
-ILogger implementation and log your own messages too.
-
-NOTE: If you are not using command line for configuring logging, you should be careful
-about Hazelcast classes. They may be defaulted to `jdk` logging before newly configured
-logging is read. When logging mechanism is selected, it will not change.
-
-=== Changing Log Levels for JDK Logging
-
-As mentioned in the introduction of this section above, the default
-logging type of Hazelcast is JDK logging. The default logging level
-is `INFO`. To change the level in case you want to use the default logging,
-you can take the following snippet as a reference:
-
-[source,java]
-----
-java.util.logging.Logger rootLogger = LogManager.getLogManager().getLogger("");
-rootLogger.setLevel(Level.FINE);
-for (Handler h : rootLogger.getHandlers()) {
-    h.setLevel(Level.FINE);
-}
-----
-
-=== Dynamically Changing Log Levels
-
-You can change log levels without the need of restarting the cluster members.
-This may be useful while monitoring or diagnosing the events in your cluster.
-
-This feature is supported for the default (JDK/JUL), Log4j, and Log4j2 frameworks.
-The Slf4j framework is not supported since it does not provide any log level changing APIs.
-
-You can use either of the following ways to dynamically change the level of your cluster's logs:
-
-* Using JMX API: The logging service exposes its JMX MBean as `LoggingServiceMBean`.
-You can retrieve, set, and reset the level. See the
-<<monitoring-with-jmx, Monitoring with JMX section>>.
-* Using REST API: You can use the `/hazelcast/rest/log-level` REST endpoint to retrieve (`GET`),
-set (`POST`), and reset (`DELETE`) the level. See the xref:clients:rest.adoc#using-the-rest-endpoint-groups[REST Endpoint Groups section].
-
-=== Example Configuration Files
-
-Below are example configurations for Log4j2 and Log4j. Note that Hazelcast does not
-recommend any specific logging library, these examples are provided only to demonstrate
-how to configure the logging. You can use your custom logging as explained above.
-
-First, specify the logging type as Log4j2 or Log4j and a separate logging
-configuration file as shown below.
-
-Using JVM arguments:
-
-```
--Dhazelcast.logging.type=log4j2 (or log4j)
--Dlog4j.configurationFile=/path/to/properties/log4j2.properties (or log4j)
-```
-
-Using declarative configuration (`hazelcast.xml/yaml`):
-
-[tabs] 
-==== 
-XML:: 
-+ 
--- 
-[source,xml]
-----
-<hazelcast>
-    ...
-    <properties>
-        <property name="hazelcast.logging.type">log4j2</property>
-    </properties>
-    ...
-</hazelcast>
-----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  properties:
-    hazelcast.logging.type: log4j2
-----
-====
-
-NOTE: Specifying a separated configuration file is only possible using the
-JVM argument approach as shown above.
-
-Following is an example `log4j2.properties` file:
-
-[source,shell]
-----
-rootLogger.level=info
-property.filepath=log
-property.filename=hazelcast
-
-appenders = console, file
-
-appender.console.type = Console
-appender.console.name = STDOUT
-appender.console.layout.type = PatternLayout
-appender.console.layout.pattern = %d{yyyy-MM-dd HH:mm:ss} %-5p %c\{1}:%L - %m%n
-appender.file.type=RollingFile
-appender.file.name=RollingFile
-appender.file.fileName=${filepath}/${filename}.log
-appender.file.filePattern=${filepath}/${filename}-%d{yyyy-MM-dd}-%i.log.gz
-appender.file.layout.type=PatternLayout
-appender.file.layout.pattern = %d{yyyy-MM-dd HH:mm:ss} %-5p %c\{1}:%L - %m%n
-appender.file.policies.type=Policies
-appender.file.policies.time.type=TimeBasedTriggeringPolicy
-appender.file.policies.time.interval=1
-appender.file.policies.time.modulate=true
-appender.file.policies.size.type=SizeBasedTriggeringPolicy
-appender.file.policies.size.size=50MB
-appender.file.strategy.type=DefaultRolloverStrategy
-appender.file.strategy.max=100
-
-rootLogger.appenderRefs= STDOUT
-rootLogger.appenderRef.stdout.ref = STDOUT
-rootLogger.appenderRef.file.ref=RollingFile
-
-#Hazelcast specific logs.
-#log4j.logger.com.hazelcast=debug
-
-#log4j.logger.com.hazelcast.cluster=debug
-#log4j.logger.com.hazelcast.partition=debug
-#log4j.logger.com.hazelcast.partition.InternalPartitionService=debug
-#log4j.logger.com.hazelcast.nio=debug
-#log4j.logger.com.hazelcast.hibernate=debug
-----
-
-To enable the debug logs for all Hazelcast operations uncomment the below line
-in the above configuration file:
-
-```
-log4j.logger.com.hazelcast=debug
-```
-
-
-If you do not need detailed logs, the default settings are enough.
-Using the Hazelcast specific lines in the above configuration file,
-you can select to see specific logs (cluster, partition, hibernate, etc.) in desired levels.
-
-You can also use the `hazelcast.logging.details.enabled` property to
-specify whether the name, IP address and version of the cluster are included
-in the logs. When there are lots of log lines, it may be hard to follow.
-When set to `false`, those information will not appear.
-
-
-And, the following is an example `log4j.properties` file:
-
-[source,shell]
-----
-log4j.rootLogger=INFO,file
-
-log4j.appender.file=org.apache.log4j.RollingFileAppender
-log4j.appender.file.File=/path/to/log/files/hazelcast.log
-log4j.appender.file.layout=org.apache.log4j.PatternLayout
-log4j.appender.file.layout.ConversionPattern=%d{yyyy-MM-dd HH:mm:ss} %p [%c\{1}] - %m%n
-log4j.appender.file.maxFileSize=50MB
-log4j.appender.file.maxBackupIndex=100
-log4j.appender.file.threshold=DEBUG
-
-#log4j.logger.com.hazelcast=debug
-
-#log4j.logger.com.hazelcast.cluster=debug
-#log4j.logger.com.hazelcast.partition=debug
-#log4j.logger.com.hazelcast.partition.InternalPartitionService=debug
-#log4j.logger.com.hazelcast.nio=debug
-#log4j.logger.com.hazelcast.hibernate=debug
-----
 
 == Metrics
 

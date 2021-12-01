@@ -25,7 +25,7 @@ xref:interactive-sql-files.adoc[Try the interactive example,window=_blank]
 
 SQL can query data in maps, Kafka topics and the local cluster's file system.
 
-In this step, you create a CSV file that you can use to query.
+In this step, you create a CSV file that you can use to query. 
 
 . Create a file named `likes.csv`.
 
@@ -33,11 +33,12 @@ In this step, you create a CSV file that you can use to query.
 +
 [source,shell]
 ----
-id,name,likes
-1,Jerry,13
-2,Greg,108
-3,Mary,73
-4,Jerry,88
+msg_id,likes,dislikes
+1,20,13
+2,108,25
+3,122,73
+4,9,88
+5,51,42
 ----
 +
 This example file contains a record of the number of likes each person has.
@@ -50,7 +51,7 @@ In the SQL shell, use the xref:sql:create-mapping.adoc[`CREATE MAPPING` statemen
 
 [source,sql]
 ----
-CREATE MAPPING csv_likes (id INT, name VARCHAR, likes INT)
+CREATE MAPPING csv_likes (msg_id INT, likes INT, dislikes INT)
 TYPE File
 OPTIONS ('format'='csv',
     'path'='/absolute/path/to/current/directory', 'glob'='likes.csv');
@@ -73,70 +74,72 @@ You should see the following:
 +
 [source,shell]
 ----
-+------------+--------------------+------------+
-|          id|name                |       likes|
-+------------+--------------------+------------+
-|           1|Jerry               |          13|
-|           2|Greg                |         108|
-|           3|Mary                |          73|
-|           4|Jerry               |          88|
-+------------+--------------------+------------+
++------------+------------+------------+
+|      msg_id|       likes|    dislikes|
++------------+------------+------------+
+|           1|          20|          13|
+|           4|           9|          88|
+|           3|         122|          73|
+|           2|         108|          25|
+|           5|          51|          42|
++------------+------------+------------+
 ----
 
-. Query only the `name` and `likes` columns, by adding them as a comma-separated list after the `SELECT` statement.
+. Query only the `msg_id` and `likes` columns, by adding them as a comma-separated list after the `SELECT` statement.
 +
 [source,sql]
 ----
-SELECT name, likes FROM csv_likes;
+SELECT msg_id, likes FROM csv_likes;
 ----
 +
 ```
-+--------------------+------------+
-|name                |       likes|
-+--------------------+------------+
-|Jerry               |          13|
-|Greg                |         108|
-|Mary                |          73|
-|Jerry               |          88|
-+--------------------+------------+
++------------+------------+
+|      msg_id|       likes|
++------------+------------+
+|           1|          20|
+|           3|         122|
+|           4|           9|
+|           2|         108|
+|           5|          51|
++------------+------------+
 ```
 
-. Use a filter to display only the names of people with more than 20 likes.
+. Use a filter to display only the message numbers with more than 50 likes.
 +
 [source,sql]
 ----
-SELECT name FROM csv_likes WHERE likes > 20;
+SELECT msg_id FROM csv_likes WHERE likes > 50;
 ----
 +
 ```
-+--------------------+
-|name                |
-+--------------------+
-|Greg                |
-|Mary                |
-|Jerry               |
-+--------------------+
++------------+
+|      msg_id|
++------------+
+|           2|
+|           5|
+|           3|
++------------+
 ```
 
-. Give the `name` column an alias for the query results.
+. Give the `msg_id` column an alias for the query results.
 +
 NOTE: This clause does not rename the column in the table.
 +
 [source,sql]
 ----
-SELECT name AS popular_users, likes
+SELECT msg_id AS message_number, likes, dislikes
 FROM csv_likes
 WHERE likes > 20;
 ----
 +
 ```
-+--------------------+------------+
-|popular_users       |       likes|
-+--------------------+------------+
-|Greg                |         108|
-|Mary                |          73|
-|Jerry               |          88|
-+--------------------+------------+
++--------------+------------+------------+
+|message_number|       likes|    dislikes|
++--------------+------------+------------+
+|             2|         108|          25|
+|             3|         122|          73|
+|             5|          51|          42|
++--------------+------------+------------+
 ```
 
 . To filter rows on more than one condition, you can join conditions with the `AND`, `OR`, and `NOT` operators.
@@ -145,22 +148,119 @@ WHERE likes > 20;
 ----
 SELECT *
 FROM csv_likes
-WHERE likes > 20 AND name = 'Mary';
+WHERE likes > 100 OR dislikes < 30;
 ----
 +
 ```
-+------------+--------------------+------------+
-|          id|name                |       likes|
-+------------+--------------------+------------+
-|           3|Mary                |          73|
-+------------+--------------------+------------+
++------------+------------+------------+
+|      msg_id|       likes|    dislikes|
++------------+------------+------------+
+|           1|          20|          13|
+|           2|         108|          25|
+|           3|         122|          73|
++------------+------------+------------+
+```
++
+[source,sql]
+----
+SELECT *
+FROM csv_likes
+WHERE likes > 100 AND dislikes < 30;
+----
++
+```
++------------+------------+------------+
+|      msg_id|       likes|    dislikes|
++------------+------------+------------+
+|           2|         108|          25|
++------------+------------+------------+
+```
+
+If you need more control over how your data is being transformed and aggregated, you may want to xref:pipelines:overview.adoc[build a pipeline with the Jet API].
+
+== Step 4. Run Federated Queries
+
+Federated queries are those that join tables from different datasets.
+
+Normally, SQL queries are executed on one particular database or dataset. However, with Hazelcast, you can pull information from different sources and present a more complete picture of the data.
+
+. Configure the map connector to create a new table called `dislikes`.
++
+[source,sql]
+----
+CREATE MAPPING names
+TYPE IMap OPTIONS ('keyFormat'='int', 'valueFormat'='varchar');
+----
++
+This table is mapped to a distributed map in Hazelcast where the key is an integer and the value is a string. 
+
+. Use `SINK INTO` statements to add some entries to the map.
++
+[source,sql]
+----
+SINK INTO names VALUES
+(1, 'Greg'),
+(2, 'Jerry'),
+(3, 'Mary'),
+(4, 'Jerry'),
+(5, 'Joe');
+----
+
+. Use the xref:sql:select.adoc#join-tables[`JOIN` clause] to merge results from the `messages` and `names` tables so you can see who has the most likes and dislikes.
++
+NOTE: The data source on the right of the join must always be a map.
++
+[source,sql]
+---- 
+SELECT names.this, csv_likes.likes, csv_likes.dislikes
+FROM csv_likes
+JOIN names
+ON csv_likes.msg_id = names.__key;
+----
++
+```
++--------------------+------------+------------+
+|this               |       likes|    dislikes|
++--------------------+------------+------------+
+|Jerry               |         108|          25|
+|Greg                |          20|          13|
+|Jerry               |           9|          88|
+|Joe                 |          51|          42|
+|Mary                |         122|          73|
++--------------------+------------+------------+
+```
+
+. Use the `ORDER BY` clause to order the results by name and use the `LIMIT` clause to limit them so that only the first two are displayed. Change the header of the names column to name.
++
+[source,sql]
+----
+SELECT names.this AS name, csv_likes.likes, csv_likes.dislikes
+FROM csv_likes
+JOIN names
+ON csv_likes.msg_id = names.__key
+ORDER BY names.this
+LIMIT 2;
+----
++
+```
++--------------------+------------+------------+
+|name                |       likes|    dislikes|
++--------------------+------------+------------+
+|Greg                |          20|          13|
+|Jerry               |           9|          88|
++--------------------+------------+------------+
+
 ```
 
 . Use the `SUM()` function to aggregate the total number of likes for each person and group the results by name.
 +
 [source,sql]
 ----
-SELECT name, sum(likes) AS total_likes FROM csv_likes GROUP BY name;
+SELECT names.this AS name, sum(csv_likes.likes) AS total_likes 
+FROM csv_likes 
+JOIN names
+ON csv_likes.msg_id = names.__key
+GROUP BY name;
 ----
 +  
 You should see the following:
@@ -169,10 +269,12 @@ You should see the following:
 +--------------------+--------------------+
 |name                |         total_likes|
 +--------------------+--------------------+
-|Greg                |                 108|
-|Jerry               |                 101|
-|Mary                |                  73|
+|Greg                |                  20|
+|Mary                |                 122|
+|Joe                 |                  51|
+|Jerry               |                 117|
 +--------------------+--------------------+
+
 ```
 +
 The results do not include a row for each Jerry because the `GROUP BY` statement groups the results by name.
@@ -181,9 +283,11 @@ The results do not include a row for each Jerry because the `GROUP BY` statement
 +
 [source,sql]
 ----
-SELECT name AS most_liked
-FROM csv_likes
-GROUP BY name HAVING SUM(likes) > 100;
+SELECT names.this AS most_liked
+FROM csv_likes 
+JOIN names
+ON csv_likes.msg_id = names.__key
+GROUP BY names.this HAVING SUM(likes) > 100;
 ----
 +
 ```
@@ -191,77 +295,13 @@ GROUP BY name HAVING SUM(likes) > 100;
 |most_liked          |
 +--------------------+
 |Jerry               |
-|Greg                |
+|Mary                |
 +--------------------+
 ```
 
 For a list of available aggregations, see xref:sql:expressions.adoc[].
 
-If you need more control over how your data is being transformed and aggregated, you may want to xref:pipelines:overview.adoc[build a pipeline with the Jet API].
 
-== Step 4. Run Federated Queries
-
-Federated queries are those that join tables from different datasets.
-
-Normally, querying in SQL is database or dataset-specific. However, Hazelcast, you can pull information from different sources and present a more complete picture of the data.
-
-. Configure the map connector to create a new table called `dislikes`.
-+
-[source,sql]
-----
-CREATE MAPPING dislikes (
-name VARCHAR,
-dislikes INT
-) TYPE IMap OPTIONS ('keyFormat'='int', 'valueFormat'='json-flat');
-----
-+
-This table is mapped to a distributed map in Hazelcast where the key is an integer and the value is an object that's serialized to JSON.
-
-. Use `SINK INTO` statements to add some entries to the map.
-+
-[source,sql]
-----
-SINK INTO dislikes VALUES
-(1, 'Greg', 1),
-(2, 'Jerry', 0),
-(3, 'Mary', 5),
-(4, 'Jerry', 0);
-----
-
-. Use the xref:sql:select.adoc#join-tables[`JOIN` clause] to merge results from the `likes` and `dislikes` tables so you can see who has the most likes and dislikes.
-+
-NOTE: The data source on the right of the join must always be a map.
-+
-[source,sql]
----- 
-SELECT csv_likes.name, csv_likes.likes, dislikes.dislikes
-FROM csv_likes
-JOIN dislikes
-ON csv_likes.id = dislikes.__key;
-----
-+
-```
-+--------------------+------------+------------+
-|name                |       likes|    dislikes|
-+--------------------+------------+------------+
-|Jerry               |          13|           0|
-|Greg                |         108|           5|
-|Mary                |          73|           5|
-|Jerry               |          88|          20|
-+--------------------+------------+------------+
-```
-
-. Use the `ORDER BY` clause to order the results by name and use the `LIMIT` clause to limit them so that only the first two are displayed.
-
-[source,sql]
-----
-SELECT csv_likes.name, csv_likes.likes, dislikes.dislikes
-FROM csv_likes
-JOIN dislikes
-ON csv_likes.id = dislikes.__key
-ORDER BY csv_likes.name
-LIMIT 2;
-----
 
 == Step 5. Ingest Query Results into a Hazelcast Map
 
@@ -272,6 +312,7 @@ To save your query results as a view, you can cache them in Hazelcast by ingesti
 [source,sql]
 ----
 CREATE MAPPING likes_and_dislikes (
+__key INT,
 name VARCHAR,
 likes INT,
 dislikes INT
@@ -284,28 +325,30 @@ This table is mapped to a distributed map in Hazelcast where the key is an integ
 +
 [source,sql]
 ---- 
-INSERT INTO likes_and_dislikes SELECT dislikes.__key, csv_likes.name, csv_likes.likes, dislikes.dislikes
+INSERT INTO likes_and_dislikes SELECT csv_likes.msg_id, names.this, csv_likes.likes, csv_likes.dislikes
 FROM csv_likes
-JOIN dislikes
-ON csv_likes.id = dislikes.__key;
+JOIN names
+ON csv_likes.msg_id = names.__key;
 ----
 
 . Make sure that the query results were added to the map.
 +
 [source,sql]
 ----
-SELECT * FROM likes_and_dislikes;
+SELECT * FROM likes_and_dislikes
+ORDER BY __key;
 ----
 +
 ```
-+------------+----------+------------+------------+
-|       __key|name      |       likes|    dislikes|
-+------------+----------+------------+------------+
-|           2|Greg      |         108|           0|
-|           1|Jerry     |          13|           1|
-|           4|Jerry     |          88|           0|
-|           3|Mary      |          73|           5|
-+------------+----------+------------+------------+
++------------+--------------------+------------+------------+
+|       __key|name                |       likes|    dislikes|
++------------+--------------------+------------+------------+
+|           1|Greg                |          20|          13|
+|           2|Jerry               |         108|          25|
+|           3|Mary                |         122|          73|
+|           4|Jerry               |           9|          88|
+|           5|Joe                 |          51|          42|
++------------+--------------------+------------+------------+
 ```
 
 == Next Steps

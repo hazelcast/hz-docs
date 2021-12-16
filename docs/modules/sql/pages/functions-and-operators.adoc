@@ -1,22 +1,29 @@
-= SQL Functions and Operators
-:description: Hazelcast supports logical and `IS` predicates, comparison and mathematical operators, and aggregate, mathematical, trigonometric, string, table-valued, and special functions.
+= SQL Expressions, Functions and Operators
+:description: Hazelcast supports a subset of standard SQL expressions, functions, and operators as well as non-standard functions for special cases such as windowed aggregation.
 :page-aliases: sql:expressions.adoc
 :page-toclevel: 3
 
 {description}
 
+For information about input and return data types, see xref:data-types.adoc[Data Types].
+
 == Operators
 
-Operators are used to evaluate and/or compare one or more operands. For example, in the expression (a + b), the + operator evaluates the addition of the a and b operands.
+Operators are used to evaluate and/or compare one or more operands. For example, in the expression (X + Y), the `+` operator evaluates the addition of the `X` and `Y` operands.
 
-=== AND/OR
+Hazelcast supports the following SQL operators.
 
+=== Logical Operators
+
+Hazelcast supports the `AND`, `OR`, and `NOT` logical operators. Logical operators allow only `BOOL` or `NULL` data types as input. The result can be `TRUE`, `FALSE`, or `NULL`:
+
+.Truth table for `AND`/`OR` operators
 [cols="1,1,1,1", options="header"]
 |===
-| `a`
-| `b`
-| `a AND b`
-| `a OR b`
+| X
+| Y
+| X AND Y
+| X OR Y
 
 |`TRUE`
 |`TRUE`
@@ -49,12 +56,11 @@ Operators are used to evaluate and/or compare one or more operands. For example,
 |`NULL`
 |===
 
-=== NOT
-
+.Truth table for the `NOT` operator
 [cols="1m,1m", options="header"]
 |===
-| a
-| NOT a
+| X
+| NOT Y
 
 |TRUE
 |FALSE
@@ -66,95 +72,139 @@ Operators are used to evaluate and/or compare one or more operands. For example,
 |NULL
 |===
 
-=== IS
+=== Comparison Operators
 
-[cols="1m,2a,1m"]
+Comparison operators compare two or more operands, and always return a `BOOL`. Comparisons generally require operands to be of the same type.
+
+.Descriptions of comparison operators
+[cols="20%a,20%m,60%a"]
 |===
-| Predicate| Description| Syntax
+|Operator name|	Syntax|	Description
 
-|IS TRUE
-|Evaluates to `TRUE` if the boolean argument is `TRUE`.
-|WHERE expression IS TRUE
+|Less Than
+|X < Y	
+|Returns `TRUE` if `X` is less than `Y`.
 
-|IS NOT TRUE
-|Evaluates to `TRUE` if the boolean argument is `FALSE` or `NULL`.
-|WHERE expression IS NOT TRUE
+|Less Than or Equal To
+|X <= Y
+|Returns `TRUE` if `X` is less than or equal to `Y`.
 
-|IS FALSE
-|Evaluates to `TRUE` if the boolean argument is `FALSE`.
-|WHERE expression IS FALSE
+|Greater Than
+|X > Y
+|Returns `TRUE` if `X` is greater than `Y`.
 
-|IS NOT FALSE
-|Evaluates to `TRUE` if the boolean argument is `TRUE` or `NULL`.
-|WHERE expression IS NOT FALSE
+|Greater Than or Equal To
+|X >= Y
+|Returns `TRUE` if `X` is greater than or equal to `Y`.
 
-|IS NULL
-|Evaluates to `TRUE` if the argument is `NULL`.
-|WHERE expression IS NULL
+|Equal
+|X = Y
+|Returns `TRUE` if `X` is equal to `Y`.
 
-|IS NOT NULL
-|Evaluates to `TRUE` if the argument is not `NULL`.
-|WHERE expression IS NOT NULL
+|Not Equal
+|X != Y
+|Returns `TRUE` if `X` is not equal to `Y`.
+
+m|[[between]]BETWEEN
+|X [NOT] BETWEEN [SYMMETRIC] Y AND Z	
+|Returns `TRUE` if `X` is within the given range of `Y` and `Z`. The `SYMMETRIC` keyword allows `Y` and `Z` to be in any order, rather than `Y` being the lowerbound and `Z` being the upperbound.
+
+m|LIKE
+|X [NOT] LIKE Y [ESCAPE Z]
+|Returns `TRUE` if the string in the `X` operand matches the pattern specified by the `Y` operand. Expressions can contain the following special characters:
+
+- A percent sign (`%`): Matches any number of characters.
+- An underscore (`_`): Matches a single character.
+
+To escape a special character, use the `ESCAPE` keyword followed by the escape character to use. For example `'text' LIKE '!_ext' ESCAPE '!'` returns `FALSE` because the `_` character is escaped by the exclamation mark (`!`).
+
+m|IN
+|
+|See <<in-operator, `IN` Operator>>
+
 |===
 
-=== IN
+=== IS Operator
 
-The `IN` operator allows you to specify multiple values in a WHERE clause.
+The `IS` operator returns `TRUE` or `FALSE` for a given condition. This operator never returns `NULL`.
 
-NOTE: At the moment, the SQL service does not support subqueries in `IN` clauses. For example, you cannot do `SELECT column_names FROM table_name
+The `NOT` keyword inverts the result.
+
+.Descriptions of the `IS` operator syntax
+[cols="20%m,80%a"]
+|===
+|Syntax| Description
+
+|X IS [NOT] NULL
+|Returns `TRUE` if the `X` operand evaluates to `NULL`, and returns `FALSE` otherwise.
+
+|X IS [NOT] TRUE
+|Returns `TRUE` if the `X` operand evaluates to `TRUE`. Returns `FALSE` otherwise.
+
+|X IS [NOT] FALSE
+|Returns `TRUE` if the `X` operand evaluates to `FALSE`. Returns `FALSE` otherwise.
+
+|===
+
+=== IN Operator
+
+The `IN` operator allows you to check for a certain value in a given set of values, and returns `TRUE` if an equal value is found.
+
+The `NOT` keyword inverts the result.
+
+NOTE: At the moment, Hazelcast does not support subqueries in `IN` clauses. For example, you cannot do `SELECT column_names FROM table_name
 WHERE column_name IN (SELECT STATEMENT);`
 
-[cols="1,2,1", options="header"]
+*Syntax*
+
+The `IN` operator supports the following syntax:
+
+```sql
+search_value [NOT] IN value_set
+```
+
+=== Mathematical Operators
+
+Mathematical functions perform operations on numbers.
+
+.Descriptions of mathematical operators
+[cols="1a,1m", options="header"]
 |===
-| Predicate
-| Description
+| Operator Name
 | Syntax
 
-|`IN`
-|Evaluates to `TRUE` if the value on the left of the operator *is* in the list of values on the right.
-|`SELECT column_names FROM table_name WHERE column_name IN (value1, value2);`
+|Addition
+|`X + Y`
 
-|`NOT IN`
-|Evaluates to `TRUE` if the value on the left of the operator *is not* in the list of values on the right.
-|`SELECT column_names FROM table_name WHERE column_name NOT IN (value1, value2);
+
+|Subtraction
+|`X - Y`
+
+
+|Multiplication
+|`X * Y`
+
+
+|Division
+|`X / Y`
+
+
 |===
 
-=== BETWEEN
+== Conditional Expressions
 
-[cols="1,2,1", options="header"]
-|===
-| Predicate
-| Description
-| Syntax
-
-|`BETWEEN`
-|Evaluates to `TRUE` if the value on the left of the operator *is* in a given range between the first value on the right and the second value on the right. (a >= b AND a \<= c)
-|`SELECT column_names FROM table_name WHERE column_name BETWEEN value1 AND value2;`
-
-|`BETWEEN SYMMETRIC`
-|Evaluates to `TRUE` if the value on the left of the operator *is* in a given range between the first value on the right and the second value on the right or the second value on the right and the first value on the right. (a >= b AND a \<= c) OR (a >= c AND a \<= b).
-|`SELECT column_names FROM table_name WHERE column_name BETWEEN SYMMETRIC value1 AND value2;`
-
-|`NOT BETWEEN`
-|Evaluates to `TRUE` if the value on the left of the operator *is not* in a given range between the first value on the right and the second value on the right.
-|`SELECT column_names FROM table_name WHERE column_name NOT BETWEEN value1 AND value2;`
-
-|`NOT BETWEEN SYMMETRIC`
-|Evaluates to `TRUE` if the value on the left of the operator *is not* in a given range between the first value on the right and the second value on the right or the second value on the right and the first value on the right..
-|`SELECT column_names FROM table_name WHERE column_name NOT BETWEEN SYMMETRIC value1 AND value2;`
-|===
+Conditional expressions allow you to evaluate only certain output values, depending on given conditions.
 
 === CASE
 
-[cols="1,2,1", options="header"]
-|===
-| Predicate
-| Description
-| Syntax
+The `CASE` expression evaluates the condition of each `WHEN` clause and returns the first result where the condition is `TRUE`. If all conditions are `FALSE` or `NULL`, the result of the `ELSE` clause is returned.
 
-|`CASE`
-|Returns a value when the first condition is met (like an if-then-else statement).
-m|CASE
+Each `condition` must be a boolean expression.
+
+*Syntax*
+
+```sql
+CASE
 
   WHEN condition1 THEN result1
   WHEN condition2 THEN result2
@@ -163,80 +213,34 @@ m|CASE
   ELSE result
 
 END;
-|===
+```
 
-=== Comparison Operators
+=== NULLIF
 
-[cols="1,2,1", options="header"]
-|===
-| Operator
-| Description
-| Example
+The `NULLIF` expression returns `NULL` if the `X` and `Y` expressions are equal. The data type of the returned `NULL` value is the same as the `X` expression.
 
-|`=`
-|Equal to
-|`age = 30`
+*Syntax*
 
-|`!=` or `<>`
-|Not equal to
-|`age != 30` or `age <> 30`
+```sql
+NULLIF(X, Y);
+```
 
-|`<`
-|Less than
-|`age < 30`
+=== COALESCE
 
-|`>`
-|Greater than
-|`age > 30`
+The `COALESCE` expression evaluates each expression at a time, starting from the first. If the value of any expression is not `NULL`, its value is returned. If all the expressions are `NULL`, `NULL` is returned. Arguments to the right of the first non-null argument are not evaluated.
 
-|`\<=`
-|Less than or equal to
-|`age \<= 30`
+*Syntax*
 
-|`>=`
-|Greater than or equal to
-|`age >= 30`
-|===
+```sql
+COALESCE(X, Y, Z);
+```
 
-=== Mathematical Operators
 
-[cols="1m,2a,1", options="header"]
-|===
-| Operator
-| Description
-| Example
-
-|`+`
-|Addition
-|`5 + 2`
-
-|`-`
-|Subtraction
-|`5 - 2`
-
-|`*`
-|Multiplication
-|`5 * 2`
-
-|`/`
-|Division
-|`5 / 2`
-|===
-
-== Functions
-
-Functions can either take operands as arguments and perform calculations on them or they can take no arguments and simply perform an independant calculation. For example, the function `ABS(number)` takes a number and returns its absolute value.
-
-=== Aggregate Functions
+== Aggregate Functions
 
 Aggregate functions perform calculations such as returning the mean of all data in a particular row.
 
-include::partial$warnings.adoc[tag=aggregation-restrictions]
-
-For examples of how to use aggregate functions, see the xref:select.adoc[`SELECT` statement documentation].
-
-For information about the input and return data types, see xref:data-types.adoc[Data Types].
-
+.Descriptions of aggregate function
 [cols="1m,1a"]
 |===
 |Function :: Returns	|Description
@@ -273,18 +277,37 @@ For information about the input and return data types, see xref:data-types.adoc[
 
 |===
 
+For examples of how to use aggregate functions, see the xref:select.adoc[`SELECT` statement documentation].
 
-=== Date and Time Functions
+== Conversion Functions
 
-[cols="1,2,1,1", options="header"]
+Conversion functions allow you to convert the result type of one expression to another explicit type.
+
+.Descriptions of conversion functions
+[cols="1m,2,1,1"]
 |===
-| Function
-| Description
-| Example
-| Result
+| Function| Description| Example| Result
+
+|CAST(expression AS data_type)
+|Converts the result type of `expression` to `data_type`.
+|
+
+`SELECT CAST("2020-06-02 17:00:53.110+00:00" AS TIMESTAMP)``
+
+|
+
+`2020-06-03T00:00:53.11Z`
+|===
+
+== Date and Time Functions
+
+.Descriptions of date functions
+[cols="20%a,40%a,20%a,20%a"]
+|===
+| Function| Description| Example| Result
 
 |`EXTRACT(element, date)`
-|Extracts `element` from `date`.
+|Returns the `element` date part from the `date` expression.
 
 Supported elements: `MILLENIUM`, `CENTURY`, `DECADE`, `YEAR`, `ISOYEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `DOW`, `ISODOW`, `DOY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND`, `MICROSECOND`, `EPOCH`
 
@@ -293,7 +316,7 @@ Supported date types: `DATE`, `TIME`, `TIMESTAMP`, `TIMESTAMP WITH TIME ZONE`
 |24
 
 |`TO_TIMESTAMP_TZ(BIGINT)`
-|Converts `BIGINT` values as seconds to `TIMESTAMP_WITH_TIMEZONE`.
+|Converts a `BIGINT` value in seconds to `TIMESTAMP_WITH_TIMEZONE`.
 
 
 |`SELECT TO_TIMESTAMP_TZ(v) FROM TABLE (generate_series(1,3))`
@@ -314,37 +337,37 @@ Supported date types: `DATE`, `TIME`, `TIMESTAMP`, `TIMESTAMP WITH TIME ZONE`
 3000
 |===
 
-=== File Table Functions
+== File Table Functions
 
-To execute an ad-hoc query against data in files you can use one of the
-predefined table functions:
+To execute an ad-hoc query against data in files you can use one of the following table functions:
 
 * `csv_file`
 * `json_flat_file`
 * `avro_file`
 * `parquet_file`
 
-Table functions will create a temporary mapping, valid for the duration
+File table functions create a temporary mapping to a file, which is valid for the duration
 of the statement. These functions accept the same options as those available for the xref:mapping-to-a-file-system.adoc[file connector].
 
-You can use positional arguments:
+To configure the temporary mapping, you can use either positional arguments or named arguments:
 
+.Positional arguments in a file table function
 ```sql
 SELECT * FROM TABLE(
   CSV_FILE('/path/to/directory', '*.csv', MAP['key', 'value'])
-)
+);
 ```
 
-Or named arguments:
-
+.Named arguments in a file table function
 ```sql
 SELECT * FROM TABLE(
   CSV_FILE(path => '/path/to/directory', options => MAP['key', 'value'])
-)
+);
 ```
 
-=== Mathematical Functions
+== Mathematical Functions
 
+.Descriptions of mathematical functions
 [cols="1,2,1,1", options="header"]
 |===
 | Function
@@ -454,8 +477,9 @@ SELECT * FROM TABLE(
 
 |===
 
-=== Trigonometric Functions
+== Trigonometric Functions
 
+.Descriptions of trigonometric functions
 [cols="1,1", options="header"]
 |===
 | Function
@@ -486,8 +510,9 @@ SELECT * FROM TABLE(
 |Tangent
 |===
 
-=== String Functions
+== String Functions
 
+.Descriptions of string functions
 [cols="1,2,1,1", options="header"]
 |===
 | Function
@@ -525,30 +550,15 @@ SELECT * FROM TABLE(
 |`LENGTH('John Doe')`
 |`8`
 
-|`LIKE`
-|Returns `TRUE` if the value string follows the pattern
-|`'John Doe' LIKE '%Doe'`
-|`TRUE`
-
-|`NOT LIKE`
-|Returns `TRUE` if the value string does not follow the pattern
-|`'John Doe' NOT LIKE '%Doe'`
-|`FALSE`
-
-|`LIKE ... ESCAPE`
-|Returns `TRUE` if the value string follows the pattern, escaping a special character in the pattern
-|`'text' LIKE '!_ext' ESCAPE '!'`
-|`FALSE`
-
 |`LOWER(string)`
 |Converts the string to lower case
 |`LOWER('John Doe')`
 |`john doe`
 
 |`LTRIM(string)`
-|Equivalent to `TRIM(LEADING ' ' FROM string)`
-|
-|
+|Removes the empty spaces from the left-hand side of `string`. This function is equivalent to `TRIM(LEADING ' ' FROM string)`
+|`RTRIM( John Doe')`
+|`John Doe`
 
 |`POSITION(substring IN string [FROM position])`
 |Returns the position of the first occurrence of `substring` in `string`
@@ -561,9 +571,9 @@ SELECT * FROM TABLE(
 |`Jane Doe`
 
 |`RTRIM(string)`
-|Equivalent to `TRIM(TRAILING ' ' FROM string)`
-|
-|
+|Removes the empty spaces from the right-hand side of `string`. This function is equivalent to `TRIM(TRAILING ' ' FROM string)`
+|`RTRIM(John Doe ')`
+|`John Doe`
 
 |`SUBSTRING(string FROM integer)`
 |Extracts a substring starting with the given position
@@ -596,10 +606,11 @@ SELECT * FROM TABLE(
 |`JOHN DOE`
 |===
 
-=== Table-Valued Functions
+== Table-Valued Functions
 
 Table-valued functions return tables of batch or streaming sources that you can use in SQL statements.
 
+.Descriptions of table-valued functions
 [cols="1,2", options="header"]
 |===
 | Function
@@ -610,25 +621,4 @@ Table-valued functions return tables of batch or streaming sources that you can 
 
 |`TABLE(generate_stream(numbers_per_second))`
 |Returns a table that contains a stream of numbers, starting from 0 at a rate of `numbers_per_second` every second
-|===
-
-=== Special Functions
-
-[cols="1,2,1", options="header"]
-|===
-| Function
-| Description
-| Example
-
-|[[casting]]`CAST(value AS type)`
-|Converts the value to the given type.
-|`CAST(age AS VARCHAR)`
-
-|`NULLIF(expression1, expression2)`
-|Returns `NULL` if the expressions are equal. The data type of the `NULL` value returned is the same as the first expression.
-|`NULLIF(age, 18)`
-
-|`COALESCE( expression1 [, expression2 [, expression3 ] ...] )`
-|Evaluates each expression at a time, starting from the first. If the value of any expression is not `NULL`, its value is returned. If all the expressions are `NULL`, `NULL` is returned. Arguments to the right of the first non-null argument are not evaluated.
-|`COALESCE(NULL, NULL, NULL, 'Hazelcast', NULL, NULL)`
 |===

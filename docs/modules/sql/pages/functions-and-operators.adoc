@@ -222,7 +222,7 @@ The `NULLIF` expression returns `NULL` if the `X` and `Y` expressions are equal.
 *Syntax*
 
 ```sql
-NULLIF(X, Y);
+NULLIF(X, Y)
 ```
 
 === COALESCE
@@ -232,7 +232,7 @@ The `COALESCE` expression evaluates each expression at a time, starting from the
 *Syntax*
 
 ```sql
-COALESCE(X, Y, Z);
+COALESCE(X, Y, Z)
 ```
 
 
@@ -364,6 +364,114 @@ SELECT * FROM TABLE(
   CSV_FILE(path => '/path/to/directory', options => MAP['key', 'value'])
 );
 ```
+
+== JSON Functions
+
+Hazelcast supports the following functions, which can retrieve JSON data.
+
+.Descriptions of JSON functions
+[cols="[cols="1,2,1,1"]
+|===
+| Function :: Returns| Description|Example|Result
+
+|<<json_query,JSON_QUERY(jsonArg, jsonPath)>> :: JSON
+|Extracts a JSON value, such as an array or object, from the `jsonArg` that matches the `jsonPath`.
+
+- `jsonArg`: JSON or a JSON-formatted string
+- `jsonPath`: A <<jsonpath, JSONPath>>. This path identifies the data that you want to get from the input.
+
+|
+```sql
+SELECT
+  JSON_QUERY('{"company" : {"employees" : [{"id" : "1"}]}}', '$.company.employees[0]');
+```
+|
+```json
+{"id":"1","name":"jake"}
+```
+
+|<<json_value, JSON_VALUE(jsonArg, jsonPath [RETURNING dataType])>> :: VARCHAR
+|Extracts a primitive value, such as a string, number, or boolean, from the `jsonArg` when it matches the `jsonPath`. Returns `NULL` if a non-primitive value is selected.
+
+- `jsonArg`: JSON or a JSON-formatted string
+- `jsonPath`: A <<jsonpath, JSONPath>>. This path identifies the data that you want to get from the input.
+- `RETURNING`: Returns the value only if it matches the `dataType` or if the value can be cast to the `dataType`, otherwise returns `NULL`.
+
+|
+```sql
+SELECT
+  JSON_VALUE('{"company" : {"employees" : [{"id" : "1","name":"jake"}]}}', '$.company.employees[0].id');
+```
+|
+```json
+1
+```
+
+|===
+
+
+=== JSONPath
+
+Some JSON functions require a `json_path` parameter. This path identifies the values that you want to get from the `jsonArg` parameter, which is JSON or a JSON-formatted string.
+
+The JSON-formatted string must be a JSON string that is formatted like this:
+
+.Example jsonArg
+```json
+'{"company" : {"employees" : [{"id" : "1","name":"jordan"}]}}'
+```
+
+The `json_path` parameter must be in the JSONPath format, which starts with a dollar (`$`) symbol that refers to the root level of the JSON-formatted string.
+
+.JSONPath
+```
+'$'
+```
+
+.Result
+```json
+{"company" : {"employees" : [{"id" : "1","name":"jordan"}]}}
+```
+
+To reach child values, you can use dot notation.
+
+.JSONPath
+```
+'$.company.employees'
+```
+
+.Result
+```json
+[{"id" : "1","name":"jordan"}]
+```
+
+If the JSON object is an array, you can use brackets to specify the array index.
+
+.JSONPath
+```
+'$.company.employees[0]'
+```
+
+.Result
+```json
+{"id" : "1","name":"jordan"}
+```
+
+If a key contains a dollar symbol ($), dots, or brackets, wrap it in double quotes.
+
+.JSON with a dollar symbol as the key
+```json
+{"amount": [{"$": "300"}]}
+```
+
+.JSONPath to access the key
+```
+'$.amount."$"'
+```
+
+If the JSONPath does not match a value in JSON-formatted string, `NULL` is returned.
+
+If the JSONPath is invalid, the following exception is thrown: `com.hazelcast.com.jayway.jsonpath.InvalidPathException`.
 
 == Mathematical Functions
 

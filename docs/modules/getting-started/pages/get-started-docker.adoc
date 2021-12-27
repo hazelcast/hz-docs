@@ -302,7 +302,7 @@ if __name__ == "__main__":
 Go::
 +
 --
-. Install the Python client library.
+. Install the Go client library.
 +
 [source,shell]
 ----
@@ -313,28 +313,69 @@ go get github.com/hazelcast/hazelcast-go-client
 +
 [source,go]
 ----
-import "github.com/hazelcast/hazelcast-go-client"
+package main
 
-func mapSampleRun() {
-  cb := hazelcast.NewConfigBuilder()
+import (
+	"context"
+	"fmt"
+	"log"
 
-  cb.Cluster().SetName("hello-world") <1>
+	"github.com/hazelcast/hazelcast-go-client"
+)
 
-  client, err := hazelcast.StartNewClientWithConfig(cb) <2>
+func main() {
+	ShutdownProperly := func(ctx context.Context, hz *hazelcast.Client, err error) {
+		errSd := hz.Shutdown(ctx)
+		switch {
+		case err != nil && errSd == nil:
+			log.Fatal(fmt.Errorf("%v", err))
+		case err != nil && errSd != nil:
+			log.Fatal(fmt.Errorf("%v; %v", err, errSd))
+		}
+	}
 
-	mp, _ := client.GetMap("my-distributed-map") <3>
+	cb := hazelcast.NewConfig()
+	cb.ClientName = "hello-world" <1>
+
+	ctx := context.TODO()
+
+	hz, err := hazelcast.StartNewClientWithConfig(ctx, cb) <2>
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	mp, err := hz.GetMap(ctx, "my-distributed-map") <3>
+	if err != nil {
+		ShutdownProperly(ctx, hz, err)
+	}
 
   <4>
-	mp.Put("1", "John")
-	mp.Put("2", "Mary")
-	mp.Put("3", "Jane")
+	_, err = mp.Put(ctx, "1", "John")
+	if err != nil {
+		ShutdownProperly(ctx, hz, err)
+	}
+	_, err = mp.Put(ctx, "2", "Mary")
+	if err != nil {
+		ShutdownProperly(ctx, hz, err)
+	}
+	_, err = mp.Put(ctx, "3", "Jane")
+	if err != nil {
+		ShutdownProperly(ctx, hz, err)
+	}
 
-} 
+  <5>
+	err = hz.Shutdown(ctx)
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
+
 ----
 <1> The name of the cluster that you want to connect to.
 <2> Create a client instance, using your configuration.
 <3> Create a map called `my-distributed-map`.
 <4> Write some keys and values to the map.
+<5> Disconnect from the member.
 --
 ====
 
@@ -545,32 +586,59 @@ Go::
 
 [source,go]
 ----
-import "github.com/hazelcast/hazelcast-go-client"
+package main
 
-func mapSampleRun() {
-  cb := hazelcast.NewConfigBuilder()
+import (
+	"context"
+	"fmt"
+	"log"
 
-  cb.Cluster().SetName("hello-world")
+	"github.com/hazelcast/hazelcast-go-client"
+)
 
-  client, err := hazelcast.StartNewClientWithConfig(cb) 
+func main() {
+	ShutdownProperly := func(ctx context.Context, hz *hazelcast.Client, err error) {
+		errSd := hz.Shutdown(ctx)
+		switch {
+		case err != nil && errSd == nil:
+			log.Fatal(fmt.Errorf("%v", err))
+		case err != nil && errSd != nil:
+			log.Fatal(fmt.Errorf("%v; %v", err, errSd))
+		}
+	}
+
+	cb := hazelcast.NewConfig()
+	cb.ClientName = "hello-world"
+
+	ctx := context.TODO()
+
+	hz, err := hazelcast.StartNewClientWithConfig(ctx, cb)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
   <1>
-  ctx := context.TODO()
-  myMap, err := client.GetMap(ctx, "my-distributed-map")
-  if err != nil {
-    // handle the error
-  }
-  entries, err := myMap.GetEntrySet(ctx)
-  if err != nil {
-    // handle the error
-  }
-  for key, value := range entries {
-    fmt.Println(key, value)
-  }
+	mp, err := hz.GetMap(ctx, "my-distributed-map")
+	if err != nil {
+		ShutdownProperly(ctx, hz, err)
+	}
 
-  hz.Shutdown() <2>
+	entries, err := mp.GetEntrySet(ctx)
+	if err != nil {
+		ShutdownProperly(ctx, hz, err)
+	}
 
-} 
+	for key, value := range entries {
+		fmt.Println(key, value)
+	}
+
+  <2>
+	err = hz.Shutdown(ctx)
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
+
 ----
 <1> Request all data in the map and print it to the console.
 <2> Disconnect from the member.

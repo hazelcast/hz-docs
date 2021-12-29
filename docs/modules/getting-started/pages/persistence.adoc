@@ -1,17 +1,17 @@
-= Persist Data on Disk
+= Persist Map Entries on Disk
 :description: This tutorial guides you on enabling persistence in your cluster.
 
-{description} Data in Hazelcast is usually stored in-memory (RAM) which
-makes it volatile; means that data is lost when too many members or the
+{description} Map entries in Hazelcast is usually stored in-memory (RAM) which
+makes it volatile, so any data in the map is lost when either too many members fail or the whole
 cluster is shut down. To recover data when the cluster is restarted, you
 can use Hazelcast's Persistence feature to persist data on disk.
 
 In this tutorial, you will:
 
-. Start a Hazelcast Enterprise cluster with three members for which persistence is enabled
-. Create a map with data in it
-. Shut down the cluster
-. Restart the cluster and see the persistence feature in action
+. Start a Hazelcast Enterprise cluster with three members and Persistence enabled.
+. Create a map with data in it.
+. Shut down the whole cluster to simulate a graceful shutdown, such as for maintenance purposes.
+. Restart the cluster and see that the map entries are restored from disk and put back in memory.
 
 == Before You Begin
 
@@ -42,13 +42,13 @@ docker run \
     --name first-member --network hazelcast-network \
     --rm \
     -e HZ_CLUSTERNAME=hello-world \
-    -e HZ_LICENSEKEY=<your license key> \ <1>
-    -e HZ_PERSISTENCE_ENABLED=true \ <2>
-    -e HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true \ <3>
+    -e HZ_LICENSEKEY=<your license key> \<1>
+    -e HZ_PERSISTENCE_ENABLED=true \<2>
+    -e HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true \<3>
     -v ~/persist:/opt/hazelcast/persistence \ <4>
     -p 5701:5701 hazelcast/hazelcast-enterprise:{full-version}
 ----
-<1> Replace with your actual Hazelcast Enterprise license key
+<1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
 <2> The environment variable to enable the persistence feature for the member
 <3> The environment variable to enable the persistence feature for a map
 <4> By default, the persistence feature creates the `/opt/hazelcast/persistence` directory to store the persisted data.
@@ -66,7 +66,8 @@ image:persistence-enabled.png[Startup logs display that the persistence is enabl
 
 == Step 2. Start More Members
 
-Run the following Docker commands on new terminals.
+Run each of the following Docker commands in a separate terminal. Replace the `<your license key>` placeholders with your Hazelcast Enterprise license key.
+
 
 [source,shell,subs="attributes+"]
 ----
@@ -74,13 +75,12 @@ docker run \
     --name second-member --network hazelcast-network \
     --rm \
     -e HZ_CLUSTERNAME=hello-world \
-    -e HZ_LICENSEKEY=<your license key> \ <1>
+    -e HZ_LICENSEKEY=<your license key> \
     -e HZ_PERSISTENCE_ENABLED=true \
     -e HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true \
     -v ~/persist:/opt/hazelcast/persistence \
     -p 5702:5701 hazelcast/hazelcast-enterprise:{full-version}
 ----
-<1> Replace with your actual Hazelcast Enterprise license key
 
 [source,shell,subs="attributes+"]
 ----
@@ -88,13 +88,12 @@ docker run \
     --name third-member --network hazelcast-network \
     --rm \
     -e HZ_CLUSTERNAME=hello-world \
-    -e HZ_LICENSEKEY=<your license key> \ <1>
+    -e HZ_LICENSEKEY=<your license key> \
     -e HZ_PERSISTENCE_ENABLED=true \
     -e HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true \
     -v ~/persist:/opt/hazelcast/persistence \
     -p 5703:5701 hazelcast/hazelcast-enterprise:{full-version}
 ----
-<1> Replace with your actual Hazelcast Enterprise license key
 
 You can now see all three members are started on the terminal forming a cluster:
 
@@ -106,21 +105,21 @@ Note the member IP addresses and ports since you will need them in the following
 
 In this step, you'll create a map called `mydistributedmap` with three entries.
 
-. In a new terminal window, start the SQL shell; you are going to run commands in the SQL shell after this step.
+. In a new terminal window, start the SQL shell. Replace the `<IP address of one of the members>` placeholder with the IP address of one of your Hazelcast members.
 +
 [source,shell]
 ----
-docker run --network hazelcast-network -it --rm hazelcast/hazelcast:5.0 hz-cli --targets hello-world@<IP address of one of the members> sql
+docker run --network hazelcast-network -it --rm hazelcast/hazelcast:{full-version} hz-cli --targets hello-world@<IP address of one of the members> sql
 ----
 . Create the map.
 +
-[source,shell]
+[source,sql]
 ----
 CREATE MAPPING mydistributedmap TYPE IMap OPTIONS ('keyFormat'='varchar','valueFormat'='varchar');
 ----
 . Add data to the map.
 +
-[source,shell]
+[source,sql]
 ----
 SINK INTO mydistributedmap VALUES
 ('1', 'John'),

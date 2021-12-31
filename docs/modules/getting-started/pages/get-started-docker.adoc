@@ -317,56 +317,47 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	"github.com/hazelcast/hazelcast-go-client"
 )
 
 func main() {
-	ShutdownProperly := func(ctx context.Context, hz *hazelcast.Client, err error) {
-		errSd := hz.Shutdown(ctx)
-		switch {
-		case err != nil && errSd == nil:
-			log.Fatal(fmt.Errorf("%v", err))
-		case err != nil && errSd != nil:
-			log.Fatal(fmt.Errorf("%v; %v", err, errSd))
-		}
-	}
+	ctx := context.TODO()
 
 	cb := hazelcast.NewConfig()
 	cb.ClientName = "hello-world" <1>
 
-	ctx := context.TODO()
-
 	hz, err := hazelcast.StartNewClientWithConfig(ctx, cb) <2>
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalf("Client could not connect to the cluster, %v", err)
 	}
+
+	defer func(ctx context.Context) { <5>
+		if err := hz.Shutdown(ctx); err != nil {
+			log.Fatalf("Could not shutdown gracefully, %v", err)
+		}
+	}(ctx)
 
 	mp, err := hz.GetMap(ctx, "my-distributed-map") <3>
 	if err != nil {
-		ShutdownProperly(ctx, hz, err)
+		log.Fatalf("Could not create a map, %v", err)
 	}
 
   <4>
 	_, err = mp.Put(ctx, "1", "John")
 	if err != nil {
-		ShutdownProperly(ctx, hz, err)
-	}
-	_, err = mp.Put(ctx, "2", "Mary")
-	if err != nil {
-		ShutdownProperly(ctx, hz, err)
-	}
-	_, err = mp.Put(ctx, "3", "Jane")
-	if err != nil {
-		ShutdownProperly(ctx, hz, err)
+		log.Fatalf("Might not be put to the map, %v", err)
 	}
 
-  <5>
-	err = hz.Shutdown(ctx)
+	_, err = mp.Put(ctx, "2", "Mary")
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalf("Might not be put to the map, %v", err)
+	}
+
+	_, err = mp.Put(ctx, "3", "Jane")
+	if err != nil {
+		log.Fatalf("Might not be put to the map, %v", err)
 	}
 }
 
@@ -375,7 +366,7 @@ func main() {
 <2> Create a client instance, using your configuration.
 <3> Create a map called `my-distributed-map`.
 <4> Write some keys and values to the map.
-<5> Disconnect from the member.
+<5> Disconnect from the cluster.
 --
 ====
 

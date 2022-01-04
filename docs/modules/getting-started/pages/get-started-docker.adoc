@@ -334,52 +334,33 @@ func main() {
 		log.Fatal(err)
 	}
 
-    <5>
-	defer hz.Shutdown(ctx)
-
 	mp, err := hz.GetMap(ctx, "my-distributed-map") <3>
 	if err != nil {
 		log.Fatal(err)
 	}
 
-    <4>
+  <4>
 	_, err = mp.Put(ctx, "1", "John")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    _, err = mp.Put(ctx, "2", "Mary")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    _, err = mp.Put(ctx, "3", "Jane")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    entries, err := mp.GetEntrySet(ctx)
-    if err != nil {
-        log.Fatal(err)
-    }
-
-	entries, err := mp.GetEntrySet(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, entry := range entries {
-		fmt.Printf("key: %s, value: %s\n", entry.Key, entry.Value)
+	_, err = mp.Put(ctx, "2", "Mary")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = mp.Put(ctx, "3", "Jane")
+	if err != nil {
+		log.Fatal(err)
 	}
 }
-
 
 ----
 <1> The name of the cluster that you want to connect to.
 <2> Create a client instance, using your configuration.
 <3> Create a map called `my-distributed-map`.
 <4> Write some keys and values to the map.
-<5> Disconnect from the cluster.
 --
 ====
 
@@ -601,47 +582,35 @@ import (
 )
 
 func main() {
-	ShutdownProperly := func(ctx context.Context, hz *hazelcast.Client, err error) {
-		errSd := hz.Shutdown(ctx)
-		switch {
-		case err != nil && errSd == nil:
-			log.Fatal(fmt.Errorf("%v", err))
-		case err != nil && errSd != nil:
-			log.Fatal(fmt.Errorf("%v; %v", err, errSd))
-		}
-	}
+	ctx := context.TODO()
 
 	cb := hazelcast.NewConfig()
 	cb.ClientName = "hello-world"
 
-	ctx := context.TODO()
-
 	hz, err := hazelcast.StartNewClientWithConfig(ctx, cb)
 	if err != nil {
-		log.Fatalln(err)
-	}
-
-  <1>
-	mp, err := hz.GetMap(ctx, "my-distributed-map")
-	if err != nil {
-		ShutdownProperly(ctx, hz, err)
-	}
-
-	entries, err := mp.GetEntrySet(ctx)
-	if err != nil {
-		ShutdownProperly(ctx, hz, err)
-	}
-
-	for key, value := range entries {
-		fmt.Println(key, value)
+		log.Fatal(err)
 	}
 
   <2>
-	err = hz.Shutdown(ctx)
+	defer hz.Shutdown(ctx)
+
+  <1>
+	mp, err := hz.GetMap(ctx, "my-distributed-map") <1>
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal(err)
+	}
+
+	entries, err := mp.GetEntrySet(ctx) 
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, entry := range entries {
+		fmt.Printf("key: %s, value: %s\n", entry.Key, entry.Value)
 	}
 }
+
 
 ----
 <1> Request all data in the map and print it to the console.

@@ -317,6 +317,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/hazelcast/hazelcast-go-client"
@@ -330,36 +331,48 @@ func main() {
 
 	hz, err := hazelcast.StartNewClientWithConfig(ctx, cb) <2>
 	if err != nil {
-		log.Fatalf("Client could not connect to the cluster, %v", err)
+		log.Fatal(err)
 	}
 
-	defer func(ctx context.Context) { <5>
-		if err := hz.Shutdown(ctx); err != nil {
-			log.Fatalf("Could not shutdown gracefully, %v", err)
-		}
-	}(ctx)
+    <5>
+	defer hz.Shutdown(ctx)
 
 	mp, err := hz.GetMap(ctx, "my-distributed-map") <3>
 	if err != nil {
-		log.Fatalf("Could not create a map, %v", err)
+		log.Fatal(err)
 	}
 
-  <4>
+    <4>
 	_, err = mp.Put(ctx, "1", "John")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    _, err = mp.Put(ctx, "2", "Mary")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    _, err = mp.Put(ctx, "3", "Jane")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    entries, err := mp.GetEntrySet(ctx)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+	entries, err := mp.GetEntrySet(ctx)
 	if err != nil {
-		log.Fatalf("Might not be put to the map, %v", err)
+		log.Fatal(err)
 	}
 
-	_, err = mp.Put(ctx, "2", "Mary")
-	if err != nil {
-		log.Fatalf("Might not be put to the map, %v", err)
-	}
-
-	_, err = mp.Put(ctx, "3", "Jane")
-	if err != nil {
-		log.Fatalf("Might not be put to the map, %v", err)
+	for _, entry := range entries {
+		fmt.Printf("key: %s, value: %s\n", entry.Key, entry.Value)
 	}
 }
+
 
 ----
 <1> The name of the cluster that you want to connect to.

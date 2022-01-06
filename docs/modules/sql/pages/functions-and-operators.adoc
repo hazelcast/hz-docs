@@ -124,7 +124,21 @@ m|IN
 
 |===
 
-=== IS Operator
+=== `EXISTS` Operator
+
+The `EXISTS` operator returns `TRUE` if a given subquery returns one or more records.
+
+The `NOT` keyword inverts the result.
+
+*Syntax*
+
+The `EXISTS` operator supports the following syntax:
+
+```sql
+WHERE EXISTS [NOT] subquery
+```
+
+=== `IS` Operator
 
 The `IS` operator returns `TRUE` or `FALSE` for a given condition. This operator never returns `NULL`.
 
@@ -146,7 +160,7 @@ The `NOT` keyword inverts the result.
 
 |===
 
-=== IN Operator
+=== `IN` Operator
 
 The `IN` operator allows you to check for a certain value in a given set of values, and returns `TRUE` if an equal value is found.
 
@@ -234,7 +248,6 @@ The `COALESCE` expression evaluates each expression at a time, starting from the
 ```sql
 COALESCE(X, Y, Z)
 ```
-
 
 == Aggregate Functions
 
@@ -374,11 +387,11 @@ Hazelcast supports the following functions, which can retrieve JSON data.
 |===
 | Function :: Returns| Description|Example|Result
 
-|<<json_query,JSON_QUERY(jsonArg, jsonPath)>> :: JSON
+|`JSON_QUERY(jsonArg, jsonPath)` :: `JSON`
 |Extracts a JSON value, such as an array or object, from the `jsonArg` that matches the `jsonPath`.
 
 - `jsonArg`: JSON or a JSON-formatted string
-- `jsonPath`: A <<jsonpath, JSONPath>>. This path identifies the data that you want to get from the input.
+- `jsonPath`: A xref:working-with-json.adoc#jsonpath[JSONPath]. This path identifies the data that you want to get from the input.
 
 |
 ```sql
@@ -390,11 +403,11 @@ SELECT
 {"id":"1","name":"jake"}
 ```
 
-|<<json_value, JSON_VALUE(jsonArg, jsonPath [RETURNING dataType])>> :: VARCHAR
+|`JSON_VALUE(jsonArg, jsonPath [RETURNING dataType])` :: `VARCHAR`
 |Extracts a primitive value, such as a string, number, or boolean, from the `jsonArg` when it matches the `jsonPath`. Returns `NULL` if a non-primitive value is selected.
 
 - `jsonArg`: JSON or a JSON-formatted string
-- `jsonPath`: A <<jsonpath, JSONPath>>. This path identifies the data that you want to get from the input.
+- `jsonPath`: A xref:working-with-json.adoc#jsonpath[JSONPath]. This path identifies the data that you want to get from the input.
 - `RETURNING`: Returns the value only if it matches the `dataType` or if the value can be cast to the `dataType`, otherwise returns `NULL`.
 
 |
@@ -408,70 +421,6 @@ SELECT
 ```
 
 |===
-
-
-=== JSONPath
-
-Some JSON functions require a `json_path` parameter. This path identifies the values that you want to get from the `jsonArg` parameter, which is JSON or a JSON-formatted string.
-
-The JSON-formatted string must be a JSON string that is formatted like this:
-
-.Example jsonArg
-```json
-'{"company" : {"employees" : [{"id" : "1","name":"jordan"}]}}'
-```
-
-The `json_path` parameter must be in the JSONPath format, which starts with a dollar (`$`) symbol that refers to the root level of the JSON-formatted string.
-
-.JSONPath
-```
-'$'
-```
-
-.Result
-```json
-{"company" : {"employees" : [{"id" : "1","name":"jordan"}]}}
-```
-
-To reach child values, you can use dot notation.
-
-.JSONPath
-```
-'$.company.employees'
-```
-
-.Result
-```json
-[{"id" : "1","name":"jordan"}]
-```
-
-If the JSON object is an array, you can use brackets to specify the array index.
-
-.JSONPath
-```
-'$.company.employees[0]'
-```
-
-.Result
-```json
-{"id" : "1","name":"jordan"}
-```
-
-If a key contains a dollar symbol ($), dots, or brackets, wrap it in double quotes.
-
-.JSON with a dollar symbol as the key
-```json
-{"amount": [{"$": "300"}]}
-```
-
-.JSONPath to access the key
-```
-'$.amount."$"'
-```
-
-If the JSONPath does not match a value in JSON-formatted string, `NULL` is returned.
-
-If the JSONPath is invalid, the following exception is thrown: `com.hazelcast.com.jayway.jsonpath.InvalidPathException`.
 
 == Mathematical Functions
 
@@ -583,39 +532,6 @@ If the JSONPath is invalid, the following exception is thrown: `com.hazelcast.co
 |`TRUNC(34.5678, 2)`
 |`34.56`
 
-|===
-
-== Trigonometric Functions
-
-.Descriptions of trigonometric functions
-[cols="1,1", options="header"]
-|===
-| Function
-| Description
-
-|`ACOS(double)`
-|Inverse cosine
-
-|`ASIN(double)`
-|Inverse sine
-
-|`ATAN(double)`
-|Inverse tangent
-
-|`ATAN2(x:number, y:number)`
-|Arc tangent
-
-|`COS(double)`
-|Cosine
-
-|`COT(double)`
-|Cotangent
-
-|`SIN(double)`
-|Sine
-
-|`TAN(double)`
-|Tangent
 |===
 
 == String Functions
@@ -730,3 +646,70 @@ Table-valued functions return tables of batch or streaming sources that you can 
 |`TABLE(generate_stream(numbers_per_second))`
 |Returns a table that contains a stream of numbers, starting from 0 at a rate of `numbers_per_second` every second
 |===
+
+== Trigonometric Functions
+
+.Descriptions of trigonometric functions
+[cols="1,1", options="header"]
+|===
+| Function
+| Description
+
+|`ACOS(double)`
+|Inverse cosine
+
+|`ASIN(double)`
+|Inverse sine
+
+|`ATAN(double)`
+|Inverse tangent
+
+|`ATAN2(x:number, y:number)`
+|Arc tangent
+
+|`COS(double)`
+|Cosine
+
+|`COT(double)`
+|Cotangent
+
+|`SIN(double)`
+|Sine
+
+|`TAN(double)`
+|Tangent
+|===
+
+== Windowing Table-Valued Functions
+
+Windowing table-valued functions split infinite streams into bounded chunks that you can apply stateful computations to.
+
+NOTE: All windowing table-valued functions should be used with a `GROUP BY` clause.
+
+For a guide about windowed aggregations in SQL, see xref:windowed-aggregations.adoc[].
+
+=== TUMBLE
+
+The `TUMBLE()` function takes a table as input and adds a window to the output. The return value is always the original timestamped column, the window start time, and the window end time.
+
+`TUMBLE(TABLE(IMPOSE_ORDER(data, DESCRIPTOR(timecol), lag)), DESCRIPTOR(timecol), size)`
+
+This function takes the following required parameters:
+
+[cols="1m,2a"]
+|===
+|Parameter|Description
+
+|data
+|A table parameter that must contain a timestamped column.
+|timecol
+|The column that contains the timestamp.
+|lag
+|A watermark that defines which late events are dropped.
+|size
+|The duration of the tumbling window.
+
+|===
+
+
+

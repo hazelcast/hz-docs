@@ -1,0 +1,131 @@
+= Working with Windowed Aggregations in SQL
+:description: Windowed aggregations allow you to group and then aggregate data in streaming events, using a windowing table-valued function. To create a windowed aggregation, you need a GROUP BY clause that contains the `window_start` and `window_end` columns of a windowing table-valued function. At the moment, the only supported streaming source for SQl is Kafka.
+:page-beta: true
+
+Windowed aggregations allow you to group and aggregate data in streaming events, using a windowing table-valued function. For example, you could read an unbounded stream of trades and continuously compute the number of trades that happened in the past minute.
+
+Currently, Hazelcast offers a windowing table-valued function only for tumbling windows: `TUMBLE()`.
+
+To create a windowed aggregation, you need the following:
+
+- A `SELECT` statement that uses an xref:functions-and-operators.adoc#aggregate-functions[aggregate function].
+- A windowing table-valued function that groups records by timestamp.
+- A `GROUP BY` clause that contains the `window_start` and `window_end` columns of a windowing table-valued function.
+
+This guide explains how to use windowed aggregations, using a ficticious `trades` table as an example. This table contains the following event data:
+
+- `trade_amount`
+- `trade_time`
+- `ticker`
+- `price` 
+
+[%collapsible]
+.Example Kafka mapping
+====
+If you want to follow along, here is an example of what the Kafka mapping could look like:
+
+```sql
+CREATE OR REPLACE MAPPING trades (
+  trade_amount BIGINT,
+  trade_ticker VARCHAR,
+  price DECIMAL,
+  trade_time TIMESTAMP)
+TYPE Kafka
+OPTIONS (
+  'valueFormat' = 'json-flat',
+  'bootstrap.servers' = 'kafka:9092'
+);
+```
+====
+
+== Before you Begin
+
+You need a mapping to a Kafka broker that emits events with a timestamp. See xref:create-mapping.adoc[].
+
+NOTE: At the moment, the only supported streaming source for SQl is Kafka.
+
+You should also be familiar with windowing functions. For a conceptual introduction, see xref:pipelines:event-time.adoc[].
+
+== Defining the Aggregate Query
+
+The first step is to define what you want to aggregate, using a `SELECT` statement with an aggregate function. For example, this query gets the total number of trades:
+
+```sql
+SELECT window_start, window_end, COUNT(*) AS total_trades
+```
+
+The `window_start` and `window_end` columns are returned by the windowing table-valued function. To aggregate events in the window, you need to group the results by these columns. But first, you need to tell Hazelcast how long to wait between each window by defining a watermark.
+
+== Defining a Watermark
+
+Hazelcast can't emit the result of a windowed aggregation until it has received all the events belonging to the
+window. But streams are infinite, so Hazelcast would be waiting forever for all the events. To tell Hazelcast how long to wait, you must define a watermark.
+
+Watermarks tell Hazelcast how long to wait by defining how much time is allowed between each event. This time is called the _maximum event lag_. Any event that is later than the maximum event lag is dropped.
+
+NOTE: Time is measured by the timestamps in the events, rather than the current time on a system clock.
+
+To define a watermark, use the `IMPOSE_ORDER()` table-valued function:
+
+```sql
+SELECT *
+FROM TABLE(IMPOSE_ORDER(
+  TABLE(trades), <1>
+  DESCRIPTOR(trade_time), <2>
+  INTERVAL '0.5' SECONDS) <3>
+);
+```
+
+<1> The table that contains the event payload, including the timestamp.
+<2> A pointer to the column that contains the timestamp for the watermark.
+<3> The maximum event lag. Any events that are later than this lag are dropped. For example, an event with a timestamp of `yyyy-mm-dd 23:59:59.5` is added to the window. If another event is processed with a timestamp that's 0.5 seconds or more older, such as ``yyyy-mm-dd 23:59:58.9`, that event is dropped because it is too old.
+
+== Creating a Windowing Table-Valued Function
+
+The final step is to add a windowing table-valued function to add a window to the output.
+
+For better readability, it's useful to create a view for the watermark like so:
+
+```sql
+CREATE VIEW trades_ordered AS
+  SELECT *
+  FROM TABLE(IMPOSE_ORDER(
+    TABLE(trades),
+    DESCRIPTOR(trade_time),
+    INTERVAL '0.5' SECONDS)
+  );
+```
+
+Then you can reference this view in the `TUMBLE()` function:
+
+```sql
+SELECT window_start, window_end, COUNT(*) AS total_trades <1>
+FROM TABLE(TUMBLE(
+  TABLE(trades_ordered), <2>
+  DESCRIPTOR(trade_time), <3>
+  INTERVAL '1' MINUTE)) <4>
+GROUP BY 1,2; <5>
+```
+
+When you execute this query, Hazelcast creates a job to run it continuously in the background:
+
+```
++-------------------+-------------------+--------------------+
+|window_start       |window_end         |        total_trades|
++-------------------+-------------------+--------------------+
+```
+
+When new results are available for each one-minute window, they are returned:
+
+```
++-------------------+-------------------+--------------------+
+|window_start       |window_end         |        total_trades|
++-------------------+-------------------+--------------------+
+|2022-01-04T00:00   |2022-01-04T00:01   |                  45|
+```
+
+If an event is later than the define maximum event lag, that event is dropped and an entry like the following is added to the log:
+
+```
+ Late event dropped. currentWatermark=Watermark{ts=23:03:00.000}
+```

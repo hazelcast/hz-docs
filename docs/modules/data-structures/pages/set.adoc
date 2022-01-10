@@ -1,7 +1,7 @@
 = Set
 [[set]]
 
-Hazelcast Set (`ISet`) is a distributed and concurrent implementation of `java.util.Set`.
+Hazelcast Set is a distributed and concurrent implementation of `java.util.Set`.
 It has the following features:
 
 * Hazelcast Set does not allow duplicate elements.
@@ -19,27 +19,316 @@ so that data is not lost in the event of a primary member failure.
 * The equals method implemented in Hazelcast Set uses a serialized byte version of
 objects, as opposed to `java.util.HashSet`.
 
+== Creating a Set on the Member Side
+
+The following code creates a Set called `set` on the member side.
+
+[source,java]
+----
+import com.hazelcast.collection.ISet;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+
+public class ExampleSet {
+
+    public static void main(String[] args) {
+        HazelcastInstance hz = Hazelcast.newHazelcastInstance();
+        ISet<String> set = hz.getSet("set");
+        set.add("Tokyo");
+        set.add("Paris");
+        set.add("London");
+        set.add("New York");
+        System.out.println("Putting finished!");
+    }
+}
+----
+
+
 [[getting-a-set-and-putting-items]]
 == Getting a Set and Putting Items
 
 Use the ``HazelcastInstance``s `getSet` method to get the Set, then use the `add` method to put items into it.
 
+[tabs] 
+==== 
+Java:: 
++
+--
+
+. xref:getting-started:install-hazelcast.adoc#using-java[Install the Java client library]
+
+. Add the following to your file:
++
 [source,java]
 ----
-include::ROOT:example$/dds/set/ExampleSet.java[tag=set]
+import com.hazelcast.collection.ISet;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+
+public class ExampleSet {
+
+    public static void main(String[] args) {
+        HazelcastInstance hz = Hazelcast.newHazelcastInstance();
+        ISet<String> set = hz.getSet("set"); <1>
+        <2>
+        set.add("Tokyo");
+        set.add("Paris");
+        set.add("London");
+        set.add("New York");
+        System.out.println("Putting finished!");
+    }
+}
+----
+<1> Get the Set called `set` from the cluster.
+<2> Add items to `set`.
+--
+
+C++::
++
+--
+
+. link:https://github.com/hazelcast/hazelcast-cpp-client/blob/v5.0.0/Reference_Manual.md#11-installing[Install the latest C++ client library^]
+
+. Add the following to your file:
++
+[source,cpp]
+----
+#include <hazelcast/client/hazelcast_client.h>
+
+int main() {
+    auto hz = hazelcast::new_client().get();
+
+    auto set = hz.get_set("set").get(); <1>
+
+    <2>
+    set->add("Tokyo").get();
+    set->add("Paris").get();
+    set->add("London").get();
+    set->add("New York").get();
+
+    std::cout << "Putting finished!" << std::endl;
+
+    std::cout << "Finished" << std::endl;
+
+    return 0;
+}
+----
+<1> Get the Set called `set` from the cluster.
+<2> Add items to `set`.
+--
+
+C Sharp::
++
+--
+
+. link:http://hazelcast.github.io/hazelcast-csharp-client/latest/doc/download-install.html[Install the latest C Sharp client library^]
+
+. Add the following to your file:
++
+[source,cs]
+----
+using System;
+using System.Threading.Tasks;
+
+namespace Hazelcast.Examples.DistributedObjects
+{
+    public class SetExample
+    {
+        public static async Task Main(string[] args)
+        {
+            var options = new HazelcastOptionsBuilder()
+                .With(args)
+                .WithConsoleLogger()
+                .Build();
+
+            await using var client = await HazelcastClientFactory.StartNewClientAsync(options);
+
+            await using var set = await client.GetSetAsync<string>("set-example"); <1>
+
+            <2>
+            await set.AddAsync("item1");
+            await set.AddAsync("item2");
+            await set.AddAsync("item3");
+            await set.AddAsync("item3");
+
+            Console.WriteLine("All: " + string.Join(", ", await set.GetAllAsync()));
+
+            Console.WriteLine("Contains: " + await set.ContainsAsync("item2"));
+
+            Console.WriteLine("Count: " + await set.GetSizeAsync());
+
+            // destroy the set
+            await client.DestroyAsync(set);
+        }
+    }
+}
+----
+<1> Get the Set called `set` from the cluster.
+<2> Add items to `set`.
+--
+
+Node.js::
++
+--
+
+. Install the Node.js client library.
++
+[source,shell]
+----
+npm install hazelcast-client
 ----
 
-Hazelcast Set uses `ItemListener` to listen to events that occur when items are
-added to and removed from the Set. See the xref:events:object-events.adoc#listening-for-item-events[Listening for Item Events section]
+. Add the following to your file:
++
+[source,javascript]
+----
+'use strict';
+
+const { Client } = require('hazelcast-client');
+
+(async () => {
+    try {
+        const client = await Client.newHazelcastClient();
+        const set = await client.getSet('my-distributed-set'); <1>
+
+        <2>
+        await set.add('key');
+        await set.add('key');
+        await set.add('key');
+
+        console.log('Item \'key\' is added to the set.');
+        const contains = await set.contains('key');
+        console.log('Set contains item \'key\':', contains);
+        const size = await set.size();
+        console.log('Set size:', size);
+
+        await client.shutdown();
+    } catch (err) {
+        console.error('Error occurred:', err);
+        process.exit(1);
+    }
+})();
+----
+<1> Get the Set called `set` from the cluster.
+<2> Add items to `set`.
+--
+
+Python::
++
+--
+. Install the Python client library.
++
+[source,shell]
+----
+pip install hazelcast-python-client
+----
+
+. Add the following to your file:
++
+[source,python]
+----
+import hazelcast
+
+client = hazelcast.HazelcastClient()
+
+my_set = client.get_set("set") <1>
+
+<2>
+my_set.add("Item1")
+my_set.add("Item1")
+my_set.add("Item2")
+
+found = my_set.contains("Item2").result()
+print("Set contains Item2:", found)
+
+items = my_set.get_all().result()
+print("Size of set:", len(items))
+
+print("\nAll Items:")
+for item in items:
+    print(item)
+
+client.shutdown()
+----
+<1> Get the Set called `set` from the cluster.
+<2> Add items to `set`.
+--
+
+Go::
++
+--
+. Install the Go client library.
++
+[source,shell]
+----
+go get github.com/hazelcast/hazelcast-go-client
+----
+
+. Add the following to your file:
++
+[source,go]
+----
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"math/rand"
+	"time"
+
+	"github.com/hazelcast/hazelcast-go-client"
+)
+
+func main() {
+	setItems := 10
+
+	ctx := context.TODO()
+	client, err := hazelcast.StartNewClient(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	rand.Seed(time.Now().Unix())
+	setName := fmt.Sprintf("sample-%d", rand.Int())
+	set, err := client.GetSet(ctx, setName) <1>
+	if err != nil {
+		log.Fatal(err)
+	}
+
+         <2>
+	for i := 0; i < setItems; i++ {
+		_, err = set.Add(ctx, fmt.Sprintf("Item %d", i))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	// Print contents of the set
+	items, err := set.GetAll(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, val := range items {
+		fmt.Println(val)
+	}
+	// Shutdown client
+	client.Shutdown(ctx)
+}
+----
+<1> Get the Set called `set` from the cluster.
+<2> Add items to `set`.
+--
+
+====
+
+Hazelcast Set uses item listeners to listen to events that occur when items are
+added to and removed from Set. See the xref:events:object-events.adoc#listening-for-item-events[Listening for Item Events section]
 for information about how to create an item listener class and register it.
 
 [[configuring-set]]
 == Configuring Set
 
 The following are the example Hazelcast Set configurations.
-
-
-**Declarative Configuration:**
 
 [tabs] 
 ==== 
@@ -80,14 +369,14 @@ hazelcast:
         - class-name: com.hazelcast.examples.ItemListener
       split-brain-protection-ref: splitbrainprotection-name
 ----
-====
 
-**Programmatic Configuration:**
-
+Java::
++
 [source,java]
 ----
 include::ROOT:example$/dds/set/SetConfiguration.java[tag=sc]
 ----
+====
 
 Hazelcast Set configuration has the following elements:
 

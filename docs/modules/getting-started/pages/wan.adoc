@@ -1,5 +1,5 @@
-= Replicate over WAN
-:description: In this tutorial, you'll synchronize a map across two Hazelcast clusters, using WAN Replication.
+= Replicate a Map over Clusters in a WAN
+:description: This tutorial introduces you to WAN Replication. At the end of this tutorial, you'll know how to synchronize a map from one cluster to another, using active-passive mode.
 
 {description}
 
@@ -9,14 +9,13 @@ WAN Replication can work in two modes:
 for the purpose of maintaining a backup. If the active cluster becomes unavailable, you can redirect the application traffic to the passive cluster.
 * Active-Active: Each cluster replicates maps and/or caches to all other clusters.
 
-See xref:wan:wan.adoc[here] for an overview of the WAN Replication feature.
 
-This tutorial is for the Active-Passive mode, and you will:
+In this tutorial, you will complete the following steps:
 
-. Start an Enterprise cluster as a passive one
-. Start another cluster with WAN Replication configured, this will be the active one
-. Create a map in the active cluster with data in it and see the replication to the passive cluster
-. Modify some map entries in the active cluster and see the modifications in the passive one
+. Start a passive Enterprise cluster, without WAN Replication, which will receive updates from the active cluster.
+. Start an active cluster, with WAN Replication configured, which will send updates to the passive cluster.
+. Create a map in the active cluster and see that the entries are replicated on the passive cluster.
+. Modify some map entries in the active cluster and see the modifications appear in the passive one.
 
 == Before You Begin
 
@@ -40,7 +39,7 @@ To complete this tutorial, you need the following:
 == Step 1. Start the Passive Cluster
 
 In this step you'll start an Enterprise cluster called `london` with a single member. This will be the **passive** cluster
-which means it does not need WAN Replication to be configured. Run the following Docker command on a terminal.
+which means it does not need WAN Replication to be configured. Run the following Docker command in a terminal.
 
 [source,shell,subs="attributes+"]
 ----
@@ -50,7 +49,7 @@ docker run \
     -e HZ_CLUSTERNAME=london \
     -p 5701:5701 hazelcast/hazelcast-enterprise:{full-version}
 ----
-<1> Replace with your actual Hazelcast Enterprise license key
+<1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
 
 The member is up and running now.
 
@@ -63,13 +62,13 @@ Members {size:1, ver:1} [
 ]
 ----
 
-Note the member's IP address and port since you are going to use it while configuring WAN
-replication in the active cluster and connecting Management Center.
+Note the member's IP address and port since you are going to use it to configure WAN
+Replication for the active cluster and to connect to Management Center.
 
 == Step 2. Start the Active Cluster
 
 Now you'll start another Enterprise cluster called `tokyo` with a single member. This will be the **active** cluster
-which means it does not need WAN Replication to be configured.
+which means it needs WAN Replication to be configured.
 
 Since the configuration for WAN Replication is a bit more detailed, you are going to use a Hazelcast configuration
 file and pass it to the Docker command, instead of giving all the configuration options in a single command.
@@ -161,7 +160,7 @@ docker run \
 +
 image:wan/connect-london-cluster.png[Connect the London cluster]
 Management Center is now connected to the `london` cluster.
-. Click again on the **Connect** box enter the active cluster’s name (`tokyo`) and IP address of its member.
+. Click **Connect** again and enter the active cluster’s name (`tokyo`) and the IP address of its member.
 +
 image:wan/cluster-connected.png[Both clusters are connected]
 Management Center is now connected to the `tokyo` cluster.
@@ -184,7 +183,7 @@ In this step you switch to the SQL shell in a terminal, create a map called `cit
 ----
 docker run --network hazelcast-network -it --rm hazelcast/hazelcast:{full-version} hz-cli --targets tokyo@172.18.0.4:5701 sql
 ----
-. Once you see the SQL shell (`sql>`), type the following command and press Enter to create the map.
+. Once you see the SQL shell (`sql>`), type the following command and press kbd:[Enter] to create the map.
 +
 [source,shell]
 ----
@@ -192,7 +191,7 @@ CREATE MAPPING cities (__key INT, country VARCHAR, city VARCHAR)
 TYPE IMap 
 OPTIONS ('keyFormat'='int', 'valueFormat' = 'json-flat');
 ----
-. Then, type the following command and press **Enter** to add data to the map.
+. Then, type the following command and press kbd:[Enter] to add data to the map.
 +
 [source,shell]
 ----
@@ -213,7 +212,7 @@ SELECT * FROM cities;
 
 NOTE: See xref:sql:get-started-sql.adoc[Get Started with SQL over Maps] for more querying options using SQL on maps.
 
-You can also see the map and its entries in Management Center using SQL browser:
+You can also see the map and its entries in Management Center, using the SQL browser:
 
 . Select *tokyo* in the dropdown field left to *Cluster Connections* on top of the user interface.
 . Go to **Storage** > **Maps**, you will see the `cities` map information.
@@ -278,5 +277,5 @@ move to the other tutorials. To shutdown, close the terminals in which the membe
 See xref:wan:wan.adoc[Synchronizing Data Across Clusters] if you're
 interested in learning more about the topics introduced in this tutorial.
 
-Now that you've completed this tutorial, you can continue with xref:getting-started:blue-green.adoc[Deploy Blue-Green Clusters].
+Continue learning by configuring clients with a failover cluster in xref:getting-started:blue-green.adoc[Deploy Blue-Green Clusters].
 

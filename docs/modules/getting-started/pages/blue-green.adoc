@@ -1,19 +1,18 @@
 = Deploy Blue-Green Clusters
-:description: This tutorial guides you on how you can use Hazelcast's blue-green deployment feature for your client to operate continuously when its connected cluster is down.
+:description: This tutorial introduces you to blue-green cluster deployments. At the end of this tutorial, you'll know how to set up a client to operate continuously even when its connected cluster fails.
 
-{description} The feature provides a client failover mechanism for rerouting the client connections to a different cluster without requiring a
-client network configuration update or client restart. You can use it to manually redirect client traffic in order to perform maintenance or software updates,
+{description} When clients are connected to a single cluster, that cluster becomes a single point of failure: If the cluster fails for any reason, the client cannot connect to it and the application may break. To make clients more robust, you can set up a blue-green cluster deployment, which provides a client failover mechanism for rerouting the client connections to a different cluster without requiring a
+client network configuration update or client restart. You can use a blue-green deployment to manually redirect client traffic while you perform maintenance or software updates,
 as well as automatically redirect client traffic to a different cluster during a disaster recovery scenario.
 
-This tutorial focuses on the disaster recovery scenario, and you will:
+This tutorial focuses on the disaster recovery scenario, where you will complete the following steps:
 
-. Start an Enterprise cluster (blue)
-. Start another Enterprise cluster (green)
-. Configure a Java client to have the Blue-Green deployment's failover feature
-. Connect this client to the first cluster
-. Kill the first cluster and see that the client connects to the second one
+. Start two Enterprise clusters: One for the blue deployment, one for the green deployment.
+. Configure a Java client to use the blue-green deployment as a failover.
+. Connect the Java client to the blue cluster.
+. Shut down the blue cluster and see that the client connects to the green one.
 
-NOTE: Blue-Green deployment is currently supported by Hazelcast's Java, Node.js and Go clients.
+NOTE: Blue-Green deployment is currently supported by Hazelcast's Java, Node.js, and Go clients.
 
 == Before You Begin
 
@@ -34,7 +33,7 @@ To complete this tutorial, you need the following:
 
 |===
 
-== Step 1. Start an Enterprise Cluster (Blue)
+== Step 1. Start the Blue Enterprise Cluster
 
 In this step, you use the Hazelcast Enterprise Docker image to start a local single-member cluster called `blue`.
 This step also installs your Enterprise license key.
@@ -50,22 +49,22 @@ docker run \
     -e HZ_LICENSEKEY=<your license key> \ <1>
     -p 5701:5701 hazelcast/hazelcast-enterprise:{full-version}
 ----
-<1> Replace with your actual Hazelcast Enterprise license key
+<1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
 
-You should see your cluster name in the console along with the IP address of the Docker container running the Hazelcast member.
+You should see your cluster name in the console along with the IP address of the Docker container that's running the Hazelcast member.
 
-[source,shell]
+[source,shell,subs="attributes+"]
 ----
-2021-12-01 18:26:42,369 [ INFO] [main] [c.h.i.c.ClusterService]: [172.18.0.2]:5701 [blue] [5.0] 
+2021-12-01 18:26:42,369 [ INFO] [main] [c.h.i.c.ClusterService]: [172.18.0.2]:5701 [blue] [{full-version}] 
 
 Members {size:1, ver:1} [
 	Member [172.18.0.2]:5701 - c00213e1-da50-4b5f-a53b-ccfe4a1ebeea this
 ]
 
-2021-12-01 18:26:42,384 [ INFO] [main] [c.h.c.LifecycleService]: [172.18.0.2]:5701 [blue] [5.0] [172.18.0.2]:5701 is STARTED
+2021-12-01 18:26:42,384 [ INFO] [main] [c.h.c.LifecycleService]: [172.18.0.2]:5701 [blue] [{full-version}] [172.18.0.2]:5701 is STARTED
 ----
 
-== Step 2. Start another Enterprise Cluster (Green)
+== Step 2. Start the Green Enterprise Cluster
 
 Start another local single-member cluster called `green`.
 
@@ -200,9 +199,9 @@ In this failover configuration file, you are directing the client to connect to 
 see xref:clients:java#ordering-of-clusters-when-clients-try-to-connect[Ordering of Clusters]. So, when you start the client
 (see Step 4 below), it will initially connect to the blue cluster. Here is what may happen:
 
-* When the blue cluster is gone, the client attempts to reconnect to it four times.
-* If not successful, it will try to connect to the green cluster, again, four times.
-* If these eight attempts are not successful, the client is shutdown.
+* When the `blue` cluster fails, the client attempts to reconnect to it four times.
+* If the connection is unsuccessful, the client will try to connect to the `green` cluster four times.
+* If these eight connection attempts are unsuccessful, the client shuts down.
 
 == Step 4. Connect the Client to Blue Cluster
 
@@ -215,47 +214,46 @@ HazelcastInstance client = HazelcastClient.newHazelcastFailoverClient();
 
 Assuming that the blue cluster is alive, you should see a log similar to the following on the blue cluster’s terminal, showing that the client is connected.
 
-[source,shell]
+[source,shell,subs="attributes+"]
 ----
-2021-12-01 18:11:33,928 [ INFO] [hz.wizardly_taussig.priority-generic-operation.thread-0] [c.h.c.i.p.t.AuthenticationMessageTask]: [172.18.0.2]:5701 [blue] [5.0] Received auth from Connection[id=5, /172.18.0.2:5701->/172.18.0.1:61254, qualifier=null, endpoint=[172.18.0.1]:61254, alive=true, connectionType=JVM, planeIndex=-1], successfully authenticated, clientUuid: bf2ba9e2-d6f5-4a63-af43-e8d5ed8174b4, client name: hz.client_1, client version: 5.0
+2021-12-01 18:11:33,928 [ INFO] [hz.wizardly_taussig.priority-generic-operation.thread-0] [c.h.c.i.p.t.AuthenticationMessageTask]: [172.18.0.2]:5701 [blue] [{full-version}] Received auth from Connection[id=5, /172.18.0.2:5701->/172.18.0.1:61254, qualifier=null, endpoint=[172.18.0.1]:61254, alive=true, connectionType=JVM, planeIndex=-1], successfully authenticated, clientUuid: bf2ba9e2-d6f5-4a63-af43-e8d5ed8174b4, client name: hz.client_1, client version: {full-version}
 ----
 
 You can also verify the client is connected on the client side's terminal.
 
-[source,shell]
+[source,shell,subs="attributes+"]
 ----
-INFO: hz.client_1 [blue] [5.0] Trying to connect to [172.18.0.2]:5701
+INFO: hz.client_1 [blue] [{full-version}] Trying to connect to [172.18.0.2]:5701
 Dec 01, 2021 8:11:33 PM com.hazelcast.core.LifecycleService
-INFO: hz.client_1 [blue] [5.0] HazelcastClient 5.0 (20210922 - dbaeffe) is CLIENT_CONNECTED
+INFO: hz.client_1 [blue] [{full-version}] HazelcastClient {full-version} (20210922 - dbaeffe) is CLIENT_CONNECTED
 ----
 
 == Step 5. Kill the Blue Cluster
 
-Now, you'll kill the blue cluster and see the client is automatically connected to the green one.
+Now, you'll kill the `blue` cluster and see the client is automatically connected to the `green` failover cluster.
 
-. Shutdown the `blue` cluster on its terminal simply by pressing **Ctrl+C**.
+. Shut down the `blue` cluster on its terminal simply by pressing kbd:[Ctrl+C].
 . Verify that the client is connected to the green cluster on the cluster's and client's terminal.
 +
-[source,shell]
+[source,shell,subs="attributes+"]
 ----
-2021-12-01 18:11:33,928 [ INFO] [hz.wizardly_taussig.priority-generic-operation.thread-0] [c.h.c.i.p.t.AuthenticationMessageTask]: [172.18.0.3]:5701 [green] [5.0] Received auth from Connection[id=5, /172.18.0.3:5701->/172.18.0.2:62432, qualifier=null, endpoint=[172.18.0.2]:62432, alive=true, connectionType=JVM, planeIndex=-1], successfully authenticated, clientUuid: bf2ba9e2-d6f5-4a63-af43-e8d5ed8174b4, client name: hz.client_1, client version: 5.0
+2021-12-01 18:11:33,928 [ INFO] [hz.wizardly_taussig.priority-generic-operation.thread-0] [c.h.c.i.p.t.AuthenticationMessageTask]: [172.18.0.3]:5701 [green] [{full-version}] Received auth from Connection[id=5, /172.18.0.3:5701->/172.18.0.2:62432, qualifier=null, endpoint=[172.18.0.2]:62432, alive=true, connectionType=JVM, planeIndex=-1], successfully authenticated, clientUuid: bf2ba9e2-d6f5-4a63-af43-e8d5ed8174b4, client name: hz.client_1, client version: {full-version}
 ----
 +
-[source,shell]
+[source,shell,subs="attributes+"]
 ----
-INFO: hz.client_1 [green] [5.0] Trying to connect to [172.18.0.3]:5701
+INFO: hz.client_1 [green] [{full-version}] Trying to connect to [172.18.0.3]:5701
 Dec 01, 2021 8:16:45 PM com.hazelcast.core.LifecycleService
-INFO: hz.client_1 [green] [5.0] HazelcastClient 5.0 (20210922 - dbaeffe) is CLIENT_CONNECTED
+INFO: hz.client_1 [green] [{full-version}] HazelcastClient {full-version} (20210922 - dbaeffe) is CLIENT_CONNECTED
 ----
 
 == Step 6. Shut Down the Cluster
 
 Shut down the cluster you've created in this tutorial so that you can start a fresh one when you
-move to the other tutorials. To shutdown, close the terminals in which the members are running or press kbd:[Ctrl+C] in each terminal.
+move to the other tutorials. To shut down the cluster, close the terminals in which the members are running or press kbd:[Ctrl+C] in each terminal.
 
 == Next Steps
 
-See xref:clients:java#blue-green-deployment-and-disaster-recovery[Blue-Green Deployment] if you're
-interested in learning more about the topics introduced in this tutorial.
+If you're interested in learning more about the topics introduced in this tutorial, see xref:clients:java#blue-green-deployment-and-disaster-recovery[Blue-Green Deployment].
 
-You've completed the series of tutorials that showcases some of the most useful Hazelcast Enterprise features. To learn more, you can use the links xref:getting-started:get-started-enterprise.adoc#next-steps[here].
+This is the last tutorial in this Hazelcast Enterprise series. To learn more, see these xref:getting-started:get-started-enterprise.adoc#next-steps[links].

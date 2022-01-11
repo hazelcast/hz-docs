@@ -1,15 +1,13 @@
 = Authenticate Client Connections
-:description: This tutorial guides you on securing the communication between a cluster member and client using the security feature's identity configuration.
+:description: This tutorial introduces you to member security by setting up authentication for client connections. At the end of this tutorial, you'll know how to configure member and client security settings to allow only authorized clients to connect to a cluster.
 
-{description} This way the member will accept and authorize connections from the clients which have the matching identity configurations.
-We recommend you to secure your deployments; without security, unauthorized members or clients may access
-the cluster and use the cluster resources.
+{description} By default, members allow connections from any Hazelcast client. So, any client with access to a member can connect to the cluster and use its resources. To allow only authorized clients to connect to a member, you can configure authentication credentials on the members and clients, using the security configuration.
 
-In this tutorial, you will:
+In this tutorial, you will complete the following steps:
 
-. Start a Hazelcast Enterprise member with security enabled and configured
-. Connect a client which is configured to be authorized
-. Try to connect another client which does not respect to the security requirements
+. Enable and configure authentication credentials for a Hazelcast Enterprise member.
+. Configure a client with the correct credentials and connect it to the member.
+. Try to connect an unauthorized client to the member, and see that it is denied a connection.
 
 == Before You Begin
 
@@ -29,8 +27,7 @@ To complete this tutorial, you need the following:
 
 == Step 1. Configure the Enterprise Member
 
-Since the configuration for security is more detailed, you'll use a Hazelcast configuration file
-and pass it to the Docker command, instead of giving all the configuration options in a single Docker command.
+Before a member can authenticate a client, the member must be configured with security enabled and some credentials to ask the client for.
 
 In an existing or new directory, place a `hazelcast.yaml` (or `xml`) file with the following content.
 
@@ -46,17 +43,16 @@ hazelcast:
   cluster-name: hello-world
   license-key: <your license key> <1>
   security:
-    enabled: true
+    enabled: true <2>
     realms:
-      - name: passwordRealm
+      - name: passwordRealm <3>
         identity:
-          username-password:
+          username-password: <4>
             username: member1
             password: s3crEt
   member-authentication:
-    realm: passwordRealm
+    realm: passwordRealm <5>
 ----
-<1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
 --
 
 XML::
@@ -66,15 +62,15 @@ XML::
 <hazelcast>
     <cluster-name>hello-world</cluster-name>
     <license-key>your license key</license-key> <1>
-    <security enabled="true">
+    <security enabled="true"> <2>
         <realms>
-            <realm name="passwordRealm">
+            <realm name="passwordRealm"> <3>
                 <identity>
-                    <username-password username="member1" password="s3crEt" />
+                    <username-password username="member1" password="s3crEt" /> <4>
                 </identity>
             </realm>
         </realms>
-        <member-authentication realm="passwordRealm" />
+        <member-authentication realm="passwordRealm" /> <5>
     </security>
 </hazelcast>
 ----
@@ -82,7 +78,7 @@ XML::
 ====
 
 With this configuration, you tell the member to accept connections only from the clients
-having the credentials `member1` and `s3crEt`.
+with a username of `member1` and a password of `s3crEt`.
 
 == Step 2. Start the Member
 
@@ -110,7 +106,7 @@ Members {size:1, ver:1} [
 
 == Step 3. Connect a Client
 
-You'll now connect a client in your preferred language to the cluster, having the security credentials configured on the member side.
+You'll now use your preferred language to configure a client with the credentials to allow the member to authenticate it.
 
 [tabs]
 ====
@@ -293,14 +289,14 @@ function usernamePasswordCredentialsFactory(classId) {
 
 ====
 
-When looking at the client terminal, you can see that the member side has authenticated and accepted the client connection.
+In the client terminal, you should see that the member has authenticated and accepted the client connection.
 
-[source,shell]
+[source,shell, subs="attributes+"]
 ----
-INFO:hazelcast.lifecycle:HazelcastClient 5.1 is STARTING
-INFO:hazelcast.lifecycle:HazelcastClient 5.1 is STARTED
+INFO:hazelcast.lifecycle:HazelcastClient {full-version} is STARTING
+INFO:hazelcast.lifecycle:HazelcastClient {full-version} is STARTED
 INFO:hazelcast.connection:Trying to connect to Address(host=127.0.0.1, port=5701)
-INFO:hazelcast.lifecycle:HazelcastClient 5.1 is CONNECTED
+INFO:hazelcast.lifecycle:HazelcastClient {full-version} is CONNECTED
 INFO:hazelcast.connection:Authenticated with server Address(host=192.168.1.9, port=5701):63b2a2ce-85f6-413f-8ce9-6058a748e4b9, server version: 5.0, local address: Address(host=127.0.0.1, port=36006)
 INFO:hazelcast.cluster:
 
@@ -311,27 +307,26 @@ Members [1] {
 INFO:hazelcast.client:Client started
 ----
 
-If you try to connect a client without any credentials or with credentials different than the configured ones on the member side,
-you can see the connection is refused by the member.
+If you try to connect a client without any credentials or with incorrect credentials,
+the connection is refused by the member.
 
-[source,shell]
+[source,shell, subs="attributes+"]
 ----
-INFO:hazelcast.lifecycle:HazelcastClient 5.1 is STARTING
-INFO:hazelcast.lifecycle:HazelcastClient 5.1 is STARTED
+INFO:hazelcast.lifecycle:HazelcastClient {full-version} is STARTING
+INFO:hazelcast.lifecycle:HazelcastClient {full-version} is STARTED
 INFO:hazelcast.connection:Trying to connect to Address(host=127.0.0.1, port=5701)
 INFO:hazelcast.connection:Connection(id=0, live=False, remote_address=None) closed. Reason: Failed to authenticate connection
 WARNING:hazelcast.connection:Error during initial connection to Address(host=127.0.0.1, port=5701)
 ----
 
-== Step 3. Shut Down the Cluster
+== Step 4. Shut Down the Cluster
 
 Shut down the cluster you've created in this tutorial so that you can start a fresh one when you
-move to the other tutorials. To shutdown, close the terminals in which the members are running or press kbd:[Ctrl+C] in each terminal.
+move to the other tutorials. To shut down the cluster, close the terminals in which the members are running or press kbd:[Ctrl+C] in each terminal.
 
 == Next Steps
 
-See xref:security:overview.adoc[Securing a Cluster] if you're
-interested in learning more about the topics introduced in this tutorial.
+If you're interested in learning more about the topics introduced in this tutorial, see xref:security:overview.adoc[] 
 
-Now that you've completed this tutorial, you can continue with xref:getting-started:wan.adoc[Replicate over WAN].
+To continue learning about Enterprise features, see xref:getting-started:wan.adoc[Replicate over WAN], which shows you how to replicate map entries across different clusters.
 

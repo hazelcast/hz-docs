@@ -2,7 +2,7 @@
 :description: You can query streams, using standard SQL as well as some non-standard SQL for features such as windowed aggregations. 
 :page-beta: true
 
-Stream processing is a programming paradigm for computing over events as they arrive. These events are never-ending, which is why they often described as _unbounded_. 
+Stream processing is a programming paradigm for performing computations over events as they arrive. These events are never-ending, which is why they often described as _unbounded_. 
 
 {description}
 
@@ -50,7 +50,7 @@ For details about creating a mapping to Kafka, see xref:mapping-to-kafka.adoc[].
 
 == Basic Continuous Queries on a Stream
 
-You can query streams like you would for any other batch source. The main difference is that when you query a streaming source, Hazelcast creates a job in that background, which continues to run until you cancel it or the client disconnects.
+You can query streams like you would for any batch source. The main difference between streaming and batch queries is that when you query a streaming source, Hazelcast creates a job in that background, which continues to run until you cancel it or the client disconnects.
 
 For example, you can monitor the whole `trades` stream:
 
@@ -68,8 +68,6 @@ The output contains all trades since the query was first executed. If no trades 
 +------------+------------+-----+----------+
 ```
 
-If the client stops receiving results, but doesn't disconnect, Hazelcast keep a batch of records in memory, using backpressure. See xref:architecture:distributed-computing.adoc#backpressure[Backpressure].
-
 You can also use other clauses such as the `WHERE` clause to filter the output of the stream:
 
 ```sql
@@ -79,15 +77,17 @@ WHERE price > 10;
 
 == Managing Streaming Queries
 
-Hazelcast converts streaming queries into jobs, which are executed by the Jet engine.
+Hazelcast converts streaming queries into jobs, which are executed by the Jet engine. Streaming queries continue to run until the client disconnects or you explicitly cancel the job.
 
-You can manage any streaming queries that are currently running, using SQL statements. For example, you may want to show all running queries, cancel a query, or alter a query. See xref:pipelines:job-management.adoc[].
+If the client stops receiving results, but doesn't disconnect, Hazelcast keeps a batch of those results in memory, using backpressure. See xref:architecture:distributed-computing.adoc#backpressure[Backpressure].
+
+You can manage streaming queries, using SQL statements. For example, you may want to show all running queries, cancel a query, or alter a query. See xref:pipelines:job-management.adoc[].
 
 == Windowed Aggregations on Streams
 
-An aggregate function computes over a set of values and returns a single value. For example, the `COUNT()` function returns the number of rows in a table. However, streams are unbounded, making it impossible to count all the rows because they are continuously being appended.
+An aggregate function performs computations over a set of values and returns a single value. For example, the `COUNT()` function returns the number of rows in a table. However, streams are unbounded, making it impossible to count all the rows because they are continuously being appended.
 
-To use aggregate functions over a stream, you need a way to order related values and group them into _windows_. A common way to order streams is in relation to time, since one event happens after another. However, in theory, streams can be ordered by any value. For example, you might want to compute over all trades that happened in the past minute.
+To use aggregate functions over a stream, you need a way to order related values and group them into _windows_. A common way to order streams is in relation to time, since one event happens after another. However, in theory, streams can be ordered by any value. For example, you might want to perform some computations over all trades that happened in the past minute.
 
 ```sql
 SELECT window_start, window_end, COUNT(*) AS total_trades <1>

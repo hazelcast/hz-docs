@@ -1,4 +1,4 @@
-= Persisting Dynamic Configuration Changes in REST
+= Adding Dynamic Configuration in REST
 :description: You can use the REST API to upload new configuration to a running cluster or edit and reload an existing configuration file on a running cluster.
 :page-beta: true
 
@@ -8,7 +8,7 @@
 
 The REST API and the `CLUSTER_WRITE` endpoint group must be enabled on your cluster. See xref:maintain-cluster:rest-api.adoc[].
 
-Persistence for dynamic configuration must be enabled and configured. See xref:dynamic-config-options.adoc[].
+Dynamic configuration changes are not persisted by default. To enable persistence, see xref:dynamic-config-options.adoc[].
 
 You can add new configuration only for some features. See xref:dynamic-data-structure-configuration.adoc#supported-configuration[Supported Configuration]
 
@@ -101,7 +101,7 @@ curl -X POST -H "Content-Type: text/plain" --data-urlencode "<cluster-name>" --d
 curl -X POST -H "Content-Type: text/plain" --data-urlencode "<cluster-name>" --data-urlencode "" http://localhost:5701/hazelcast/rest/config/reload
 ----
 
-When the member receives the request, it will check if the configuration already exists and propagate any new configuration across the rest of the cluster.
+When the member receives the request, it will check if the configuration already exists and propagate any new configuration across the rest of the cluster as well as those that may join the cluster later.
 
 You should see the new configuration in the response's `addedConfigs` field:
 
@@ -117,7 +117,7 @@ If you send the same request again, the member will ignore the configuration cha
 
 == Uploading New Configurations
 
-You can use the `/upload` endpoint to upload dynamic configuration to a cluster and persist those changes to a configuration file.
+You can use the `/update` endpoint to upload dynamic configuration to a cluster.
 
 NOTE: The configuration must be URL encoded.
 
@@ -145,15 +145,7 @@ hazelcast:
 " http://localhost:5701/hazelcast/rest/config/update
 ----
 
-== Handling Partial Propagation
-
-When you submit dynamic configurations to a member, it is propagated across all cluster members as well as those that may join the cluster later.
-
-Because dynamic configurations are propagated across all cluster
-members, failures may occur due to conditions such as timeout and network partition.
-The configuration propagation mechanism internally retries adding the configuration
-whenever a membership change is detected. However if an exception is thrown, the configuration may have been partially propagated to some
-cluster members, so you must try adding the configuration again.
+include::partial$dyn-config-partial-propagation.adoc[leveloffset=+1]
 
 [[handling-configuration-conflicts]]
 == Handling Configuration Conflicts

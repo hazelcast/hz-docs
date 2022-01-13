@@ -1,36 +1,96 @@
 = Tiered Storage
-:description: Hazelcast’s Tiered Storage feature offers an extension to Hazelcast Map which allows you to store map data both in the memory and on the disk.
+:description: Hazelcast’s Tiered Storage feature offers an extension to Hazelcast Map which allows you to store a larger data set than available memory.
 :page-beta: true
 :page-enterprise: true
 
-NOTE: The Tiered Storage feature is in BETA state; it is not recommended to use in production environments.
-
-NOTE: The Tiered Storage feature is available to our customers who already have a Hazelcast Enterprise license.
-
 {description}
 
-You can use Tiered Storage as a persistent key-value store with additional guarantees
-including lesser Hazelcast members for large maps (cost efficiency) or size-comfortable SQL operations.
-For example, when you do table joins in SQL, the intermediate result may become too large to fit in the memory;
-with Tiered Storage this is not an issue. As another example, if you have a map having 1 TB of data, you may
-be needing around 10 Hazelcast members if all data is kept in the memory; with Tiered Storage, you would need
-one or two members depending on your cluster’s availability needs.
+NOTE: The Tiered Storage feature is in BETA state; it is not recommended to use in production environments.
 
-Tiered Storage uses
+NOTE: Currently, the Tiered Storage feature is available to our customers who already have a Hazelcast Enterprise license.
+Starting with Hazelcast 5.2, this feature will become a separately licensed feature, i.e., you will need a new license.
 
-* an in-memory index to allow faster access to map entries
-* a special memory manager, i.e., HybridLog, to decide which entries to store in the memory tier or disk tier -
-if a map entry is not accessed for some time, it gets flushed to the disk; if it is a frequently accessed data, it stays in the memory.
-Note that an entry cannot be available in both tiers.
+== What Can You Do with Tiered Storage?
 
-For now, Tiered Storage supports the local machine’s disk as the storage device. It will also support
-additional systems such as Amazon S3 and Google Blobstore in the future releases, so that
-when the local disk is filled up, you will be able to flush data to, for example, Amazon S3.
+* Have fewer Hazelcast members for large maps - if you have a map having 1 TB of data, you may be needing
+around 10 Hazelcast members if all data is kept in the memory; with Tiered Storage, you would need one
+or two members depending on your cluster’s availability needs.
+* Size-comfortable SQL operations - when you do table joins in SQL, the intermediate result may become
+too large to fit in the memory; with Tiered Storage this is not an issue. 
 
 == Configuring Tiered Storage
 
 Configuration for Tiered Storage includes setting the device (local disk) parameters for the Hazelcast member
-and providing Tiered Storage details for the map.
+and providing Tiered Storage details for the map. The following shows the minimal configuration to start
+using Tiered Storage.
+
+[tabs] 
+==== 
+YAML:: 
++ 
+-- 
+[source,yaml]
+----
+hazelcast:
+  local-device:
+    my-disk: <1>
+      base-dir: "tiered-store" <2>
+  map:
+    my-map:
+      in-memory-format: NATIVE <3>
+      tiered-store:
+        enabled: true <4>
+        memory-tier:
+          capacity: "256 MB" <5>
+        disk-tier:
+          enabled: true <6>
+          device-name: "my-disk" <7>
+----
+<1> Name of the disk; `my-disk` in this example
+<2> Name of the directory where the data on disk is stored
+<3> The in-memory format for the map having Tiered Storage enabled MUST be `NATIVE`
+<4> Tiered Storage is disabled by default; set this parameter `true` to enable it
+<5> Capacity of the memory in which the frequently accessed data will be stored; cannot be set to `0`
+<6> Whether to use the device (disk) as storage
+<7> Name of the device (disk) that you set under the `local-device` configuration
+--
+
+XML::
++
+[source,xml]
+----
+<hazelcast>
+    <local-device name="my-disk"> <1>
+        <base-dir>tiered-store</base-dir> <2>
+    </local-device>
+    <map name="my-map">
+        <in-memory-format>NATIVE</in-memory-format> <3>
+        <tiered-store enabled="true"> <4>
+            <memory-tier>
+                <capacity>256 MB</capacity> <5>
+            </memory-tier>
+            <disk-tier enabled="true" device-name="my-disk"/> <6> <7>
+        </tiered-store>
+    </map>
+</hazelcast>
+----
+<1> Name of the disk; `my-disk` in this example
+<2> Name of the directory where the data on disk is stored
+<3> The in-memory format for the map having Tiered Storage enabled MUST be `NATIVE`
+<4> Tiered Storage is disabled by default; set this parameter `true` to enable it
+<5> Capacity of the memory in which the frequently accessed data will be stored; cannot be set to `0`
+<6> Whether to use the device (disk) as storage
+<7> Name of the device (disk) that you set under the `local-device` configuration
+====
+
+NOTE: For now, Tiered Storage supports the local machine's disk as the storage device. It will also support
+additional systems such as Amazon S3 and Google Blobstore in the future releases, so that
+when the local disk is filled up, you will be able to flush data to, for example, Amazon S3.
+
+== Fine-Tuning
+
+Tiered Storage works fine for most use cases with the default settings provided in <<configuring-tiered-storage, Configuring Tiered Storage>>.
+However, there may be specific use cases where you might want to change the behavior related to the device to be used.
 
 [tabs] 
 ==== 
@@ -43,20 +103,18 @@ hazelcast:
   local-device:
     my-disk:
       base-dir: "tiered-store"
-      block-size: 4096
+      block-size: 4096 <1>
+      <2> 
       read-io-thread-count: 16
       write-io-thread-count: 4
   map:
     my-map:
-      in-memory-format: NATIVE
-      tiered-store:
-        enabled: true
-        memory-tier:
-          capacity: "256 MB"
-        disk-tier:
-          enabled: true
-          device-name: "my-disk"
+      ...
 ----
+<1> Allocated size of the device’s IO (read/write), in bytes; refers to the minimum size to request IO.
+If it is 4096 Bytes, then even if you read or write 100 Bytes, it will still read 4096 Bytes from disk.
+<2> Number of threads for read/write operations from/to disk. For hard disk drives, having write thread IO count of 1 or 2 is optimal;
+whereas for solid state drives (SSDs) this would lead to under-utilization, so higher writer thread count would be better.
 --
 
 XML::
@@ -66,37 +124,32 @@ XML::
 <hazelcast>
     <local-device name="my-disk">
         <base-dir>tiered-store</base-dir>
-        <block-size>4096</block-size>
-        <read-io-thread-count>16</read-io-thread-count>
+        <block-size>4096</block-size> <1>
+        <2>
+        <read-io-thread-count>16</read-io-thread-count> 
         <write-io-thread-count>4</write-io-thread-count>
     </local-device>
     <map name="my-map">
-        <in-memory-format>NATIVE</in-memory-format>
-        <tiered-store enabled="true">
-            <memory-tier>
-                <capacity>256 MB</capacity>
-            </memory-tier>
-            <disk-tier enabled="true" device-name="my-disk"/>
-        </tiered-store>
-    </map>
+       ...
 </hazelcast>
 ----
+<1> Allocated size of the device’s IO (read/write), in bytes; refers to the minimum size to request IO.
+If it is 4096 Bytes, then even if you read or write 100 Bytes, it will still read 4096 Bytes from disk.
+<2> Number of threads for read/write operations from/to disk. For hard disk drives, having write thread IO count of 1 or 2 is optimal;
+whereas for solid state drives (SSDs) this would lead to under-utilization, so higher writer thread count would be better.
 ====
 
+== How Does Tiered Storage Work?
 
-Parameters of the device (disk) are set under the `local-device` parent configuration element:
+Tiered Storage uses
 
-* `my-disk`: Name of the disk; “my-disk” in this example.
-* `base-dir`: Name of the directory where the data on disk is stored.
-* `block-size`: Allocated size of the device’s IO (read/write), in bytes; refers to the minimum size to request IO.
-* `read/write-io-thread-count`: Number of threads for read/write operations from/to disk.
+* an in-memory index to allow faster access to map entries
+* a special memory manager, i.e., HybridLog, to decide which entries to store in the memory tier or disk tier -
+if a map entry is not accessed for some time, it gets flushed to the disk; if it is a frequently accessed data, it stays in the memory.
+Note that an entry cannot be available in both tiers.
 
-Parameters of the Tiered Storage for a map are set in `tiered-store` under the `map` parent configuration element:
+== Not Yet Supported
 
-* Tiered Storage is disabled by default; set the `enabled` parameter of `tiered-store` to `true` to start using it.
-* You can set the capacity of the memory in which the frequently accessed data will be stored using
-the `memory-tier` -> `capacity` parameter. This parameter cannot be set to `0`.
-* Under `disk-tier`, you decide whether to use the device (disk) as storage using the `enabled` parameter,
-and provide the device name of the disk that you set under the `local-device` configuration.
+When a Hazelcast member with Tiered Storage enabled fails or shut down, you are not able to use the local device files of Tiered Storage for data recovery.
+This will be supported in the future releases.
 
-NOTE: The in-memory format for the map having Tiered Storage enabled should be `NATIVE`. 

@@ -1,0 +1,169 @@
+= Persisting Dynamic Configuration Changes in REST
+:description: You can use the REST API to upload new configuration to a running cluster or edit and reload an existing configuration file on a running cluster.
+:page-beta: true
+
+{description}
+
+== Before you Begin
+
+The REST API and the `CLUSTER_WRITE` endpoint group must be enabled on your cluster. See xref:maintain-cluster:rest-api.adoc[].
+
+Persistence for dynamic configuration must be enabled and configured. See xref:dynamic-config-options.adoc[].
+
+You can add new configuration only for some features. See xref:dynamic-data-structure-configuration.adoc#supported-configuration[Supported Configuration]
+
+You need an Enterprise license.
+
+NOTE: You can only add new configuration. You cannot use dynamic configuration to override existing configuration at runtime.
+
+Dynamic changes to configurations files require only the `hazelcast` root followed by the new configuration. For example, to add configuration for a map called `new-map`:
+
+.Example of a new configuration
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast> <1>
+    <map name="new-map"> <2>
+      <backup-count>
+        2
+      </backup-count>
+    </map>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  map:
+    new-map:
+      backup-count: 2
+----
+====
+
+<1> The `hazelcast` root.
+<2> The configuration for `new-map`.
+
+== Editing and Reloading an Existing Configuration File
+
+You can add dynamic configuration by editing an existing configuration file that a running cluster has already loaded. Then, to tell the cluster to apply the configuration changes during runtime, use the `/reload` endpoint.
+
+. Open a member's configuration file and add some new configuration. For example, you may want to configure a new map with a backup count.
++
+.Example of a new configuration
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <map name="new-map">
+      <backup-count>
+        2
+      </backup-count>
+    </map>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  map:
+    new-map:
+      backup-count: 2
+----
+====
+
+. Send a `POST` request to the `/reload` endpoint of a cluster member.
++
+- If your cluster has security enabled, send the cluster password in the request.
++
+[source,shell]
+----
+curl -X POST -H "Content-Type: text/plain" --data-urlencode "<cluster-name>" --data-urlencode "<cluster-password>" http://localhost:5701/hazelcast/rest/config/reload
+----
+
+- If your cluster does not have security enabled, send the password as an empty string.
++
+[source,shell]
+----
+curl -X POST -H "Content-Type: text/plain" --data-urlencode "<cluster-name>" --data-urlencode "" http://localhost:5701/hazelcast/rest/config/reload
+----
+
+When the member receives the request, it will check if the configuration already exists and propagate any new configuration across the rest of the cluster.
+
+You should see the new configuration in the response's `addedConfigs` field:
+
+```json
+{"status":"success","message":"Configuration Update successfully finished.","result":{"addedConfigs":[{"sectionName":"map","configName":"new-map"}],"ignoredConfigs":[]}}
+```
+
+If you send the same request again, the member will ignore the configuration changes and return them in the response. See <<handling-configuration-conflicts,  Handling Configuration Conflicts>> 
+
+```json
+{"status":"success","message":"Configuration Update successfully finished.","result":{"addedConfigs":[],"ignoredConfigs":[{"sectionName":"map","configName":"new-map"}]}}
+```
+
+== Uploading New Configurations
+
+You can use the `/upload` endpoint to upload dynamic configuration to a cluster and persist those changes to a configuration file.
+
+NOTE: The configuration must be URL encoded.
+
+If your cluster has security enabled, send the cluster password in the request.
+
+[source,shell]
+----
+curl -X POST -H "Content-Type: text/plain" --data-urlencode "<cluster-name>" --data-urlencode "<cluster-password>" --data-urlencode "
+hazelcast:
+  map:
+    new-map:
+      backup-count: 2
+" http://localhost:5701/hazelcast/rest/config/update
+----
+
+If your cluster does not have security enabled, send the password as an empty string.
+
+[source,shell]
+----
+curl -X POST -H "Content-Type: text/plain" --data-urlencode "<cluster-name>" --data-urlencode "" --data-urlencode "
+hazelcast:
+  map:
+    new-map:
+      backup-count: 2
+" http://localhost:5701/hazelcast/rest/config/update
+----
+
+== Handling Partial Propagation
+
+When you submit dynamic configurations to a member, it is propagated across all cluster members as well as those that may join the cluster later.
+
+Because dynamic configurations are propagated across all cluster
+members, failures may occur due to conditions such as timeout and network partition.
+The configuration propagation mechanism internally retries adding the configuration
+whenever a membership change is detected. However if an exception is thrown, the configuration may have been partially propagated to some
+cluster members, so you must try adding the configuration again.
+
+[[handling-configuration-conflicts]]
+== Handling Configuration Conflicts
+
+You can add only new dynamic configuration. You cannot use dynamic configuration to override existing configuration at runtime.
+
+The REST API endpoints are idempotent. If you add a dynamic configuration for an element that already exists, the member will ignore the request and return the change you requested in the `ignoredConfigs` field.
+
+.Example conflict response
+[source,json]
+----
+{"status":"success","message":"Configuration Update successfully finished.","result":{"addedConfigs":[],"ignoredConfigs":[{"sectionName":"map","configName":"(%)"}]}}
+----

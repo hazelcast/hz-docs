@@ -1,0 +1,143 @@
+= Adding Dynamic Configuration in Java
+:description: You can use the Java API to add dynamic configuration to some supported features at runtime.
+
+{description}
+
+== Before you Begin
+
+You can add new configuration only for some features. See xref:dynamic-data-structure-configuration.adoc#supported-configuration[Supported Configuration]
+
+You need an Enterprise license.
+
+NOTE: You can only add new configuration. You cannot use dynamic configuration to override existing configuration at runtime.
+
+== Adding Dynamic Configuration
+
+To add dynamic configuration at runtime, you have the following options:
+
+- *In-memory:* Changes are temporary because they are stored in volatile memory and are lost when a cluster restarts.
+
+- *Persisted:* Changes are written to a YAML or XML configuration file so that you can reapply those changes if a cluster restarts.
+
+To make changes to configuration at runtime, use the `add*Config()` method of a supported object.
+
+[tabs] 
+==== 
+In-Memory:: 
++ 
+--
+
+By default, dynamic configuration changes are made in-memory.
+
+.Member API
+[source,java]
+----
+include::ROOT:example$/DynamicConfiguration.java[tag=dynconf]
+----
+
+.Java Client
+[source,java]
+----
+HazelcastInstance client = HazelcastClient.newHazelcastClient();
+MapConfig noBackupsMap = new MapConfig("dont-backup");
+noBackupsMap.setBackupCount(0);
+client.getConfig().addMapConfig(noBackupsMap);
+----
+--
+Persisted::
++
+--
+To persist dynamic configuration changes, you must do the following:
+
+- Configure the member, using a configuration file. Changes must be saved to the configuration file that is used to start the member. See xref:configuring-programmatically.adoc#loading-configuration-files-into-the-configuration-object[Loading Configuration Files into the Configuration Object]
+
+- Enable and configure persistence in the `dynamic-configuration` setting. See xref:dynamic-config-options.adoc[].
+
+
+.Member API
+[source,java]
+----
+Config config = Config.loadFromFile(/path/to/config/file);
+HazelcastInstance instance = Hazelcast.newHazelcastInstance(config);
+MapConfig noBackupsMap = new MapConfig("dont-backup").setBackupCount(0);
+instance.getConfig().addMapConfig(noBackupsMap);
+----
+
+.Java Client
+[source,java]
+----
+HazelcastInstance client = HazelcastClient.newHazelcastClient();
+MapConfig noBackupsMap = new MapConfig("dont-backup");
+noBackupsMap.setBackupCount(0);
+client.getConfig().addMapConfig(noBackupsMap);
+----
+
+--
+====
+
+When the member receives the request, it will check if the configuration already exists and propagate any new configuration across the rest of the cluster.
+
+== Handling Partial Propagation
+
+When you submit dynamic configurations to a member, it is propagated across all cluster members as well as those that may join the cluster later.
+
+Because dynamic configurations are propagated across all cluster
+members, failures may occur due to conditions such as timeout and network partition.
+The configuration propagation mechanism internally retries adding the configuration
+whenever a membership change is detected. However if an exception is thrown, the configuration may have been partially propagated to some
+cluster members, so you must try adding the configuration again.
+
+[[handling-configuration-conflicts]]
+== Handling Configuration Conflicts
+
+You can add only new dynamic configuration. You cannot use dynamic configuration to override existing configuration at runtime.
+
+Attempting to add a dynamic configuration, when a configuration for
+the same element already exists, throws `InvalidConfigurationException`.
+
+For example,
+assuming you start a member with the following fragment in `hazelcast.xml` configuration:
+
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="sessions">
+        ...
+    </map>
+    ...
+</hazelcast>
+----
+
+Then, adding a dynamic configuration for a map with the name `sessions` throws `InvalidConfigurationException`:
+
+[source,java]
+----
+HazelcastInstance instance = Hazelcast.newHazelcastInstance();
+
+MapConfig sessionsMapConfig = new MapConfig("sessions");
+
+// this will throw ConfigurationException:
+instance.getConfig().addMapConfig(sessionsMapConfig);
+----
+
+When attempting to add dynamic configuration for an element for which dynamic
+configuration has already been added, then if a configuration conflict is detected `InvalidConfigurationException` is thrown:
+
+[source,java]
+----
+HazelcastInstance instance = Hazelcast.newHazelcastInstance();
+
+MapConfig sessionsMapConfig = new MapConfig("sessions").setBackupCount(0);
+instance.getConfig().addMapConfig(sessionsMapConfig);
+
+MapConfig sessionsWithBackup = new MapConfig("sessions").setBackupCount(1);
+// throws ConfigurationException because the new MapConfig conflicts with existing one
+instance.getConfig().addMapConfig(sessionsWithBackup);
+
+MapConfig sessionsWithoutBackup = new MapConfig("sessions").setBackupCount(0);
+// does not throw exception: new dynamic config is equal to existing dynamic config of same name
+instance.getConfig().addMapConfig(sessionsWithoutBackup);
+----
+
+To ignore conflicts between dynamic configurations, set the xref:ROOT:system-properties.adoc#ignore-dynamic-conf-conflicts[`hazelcast.dynamicconfig.ignore.conflicts`] system property to `true`.

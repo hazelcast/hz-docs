@@ -1,22 +1,25 @@
 = Adding Dynamic Configuration in REST
-:description: You can use the REST API to upload new configuration to a running cluster or edit and reload an existing configuration file on a running cluster.
+:description: You can use the REST API to add dynamic configuration to some supported features at runtime.
 :page-beta: true
 
 {description}
+
+You have two options for add dynamic configuration:
+
+- <<edit-reload, Edit the configuration file>> that a member has already loaded and tell the member to reload that file, using the `/reload` endpoint.
+- <<update, Send a member new configuration blocks>> to apply to the cluster, using the `/update` endpoint.
 
 == Before you Begin
 
 The REST API and the `CLUSTER_WRITE` endpoint group must be enabled on your cluster. See xref:maintain-cluster:rest-api.adoc[].
 
-Dynamic configuration changes are not persisted by default. To enable persistence, see xref:dynamic-config-options.adoc[].
-
-You can add new configuration only for some features. See xref:dynamic-data-structure-configuration.adoc#supported-configuration[Supported Configuration]
-
 You need an Enterprise license.
 
-NOTE: You can only add new configuration. You cannot use dynamic configuration to override existing configuration at runtime.
+include::partial$prereqs-dynamic-config.adoc[]
 
-Dynamic changes to configurations files require only the `hazelcast` root followed by the new configuration. For example, to add configuration for a map called `new-map`:
+== What to Change
+
+Dynamic changes to configurations files require only the `hazelcast` root followed by the new configuration block. For example, to add configuration for a map called `new-map`:
 
 .Example of a new configuration
 [tabs] 
@@ -48,11 +51,10 @@ hazelcast:
 ====
 
 <1> The `hazelcast` root.
-<2> The configuration for `new-map`.
+<2> The configuration block for `new-map`.
 
-== Editing and Reloading an Existing Configuration File
-
-You can add dynamic configuration by editing an existing configuration file that a running cluster has already loaded. Then, to tell the cluster to apply the configuration changes during runtime, use the `/reload` endpoint.
+[[edit-reload]]
+== Editing and Reloading a Configuration File
 
 . Open a member's configuration file and add some new configuration. For example, you may want to configure a new map with a backup count.
 +
@@ -115,9 +117,8 @@ If you send the same request again, the member will ignore the configuration cha
 {"status":"success","message":"Configuration Update successfully finished.","result":{"addedConfigs":[],"ignoredConfigs":[{"sectionName":"map","configName":"new-map"}]}}
 ```
 
-== Uploading New Configurations
-
-You can use the `/update` endpoint to upload dynamic configuration to a cluster.
+[[update]]
+== Updating Configuration in a Request 
 
 NOTE: The configuration must be URL encoded.
 
@@ -150,9 +151,7 @@ include::partial$dyn-config-partial-propagation.adoc[leveloffset=+1]
 [[handling-configuration-conflicts]]
 == Handling Configuration Conflicts
 
-You can add only new dynamic configuration. You cannot use dynamic configuration to override existing configuration at runtime.
-
-The REST API endpoints are idempotent. If you add a dynamic configuration for an element that already exists, the member will ignore the request and return the change you requested in the `ignoredConfigs` field.
+The REST API endpoints are idempotent. If you add a dynamic configuration for an block that already exists, the member will ignore the request and return the change you requested in the `ignoredConfigs` field.
 
 .Example conflict response
 [source,json]

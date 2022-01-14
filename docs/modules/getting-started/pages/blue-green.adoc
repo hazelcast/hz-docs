@@ -77,9 +77,9 @@ docker run \
     -e HZ_LICENSEKEY=<your license key> \ <1>
     -p 5701:5701 hazelcast/hazelcast-enterprise:{full-version}
 ----
-<1> Replace with your actual Hazelcast Enterprise license key
+<1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
 
-See the green cluster is formed:
+See the `green` cluster is formed:
 
 [source,shell]
 ----
@@ -174,11 +174,12 @@ YAML::
 [source,shell]
 ----
 hazelcast-client-failover:
-  try-count: 4
+  try-count: 4 <1>
   clients:
     - client-blue.yaml
     - client-green.yaml
 ----
+<1> Count of the client's reconnection attempts to the cluster.
 --
 
 XML::
@@ -186,18 +187,19 @@ XML::
 [source,shell]
 ----
 <hazelcast-client-failover>
-    <try-count>4</try-count>
+    <try-count>4</try-count> <1>
     <clients>
         <client>client-blue.xml</client>
         <client>client-green.xml</client>
     </clients>
 </hazelcast-client-failover>
 ----
+<1> Count of the client's reconnection attempts to the cluster.
 ====
 +
 In this failover configuration file, you are directing the client to connect to the clusters in the given order from top to bottom;
 see xref:clients:java#ordering-of-clusters-when-clients-try-to-connect[Ordering of Clusters]. So, when you start the client
-(see Step 4 below), it will initially connect to the blue cluster. Here is what may happen:
+(see Step 4 below), it will initially connect to the `blue` cluster. Here is what may happen:
 
 * When the `blue` cluster fails, the client attempts to reconnect to it four times.
 * If the connection is unsuccessful, the client will try to connect to the `green` cluster four times.
@@ -207,12 +209,43 @@ see xref:clients:java#ordering-of-clusters-when-clients-try-to-connect[Ordering 
 
 In this step, you'll start the client.
 
+[tabs] 
+==== 
+Java:: 
++ 
+-- 
 [source,java]
 ----
-HazelcastInstance client = HazelcastClient.newHazelcastFailoverClient();
+HazelcastInstance client = HazelcastClient.newHazelcastFailoverClient(); <1>
 ----
+<1> This code picks up `hazelcast-client-failover.yml` (or XML) created in Step 3 as the configuration file.
+--
 
-Assuming that the blue cluster is alive, you should see a log similar to the following on the blue cluster’s terminal, showing that the client is connected.
+Node.js::
++
+[source,javascript]
+----
+const client = await Client.newHazelcastFailoverClient({
+    tryCount: 4,
+    clientConfigs: [
+        {
+            clusterName: 'blue',
+            network: {
+                clusterMembers: ['172.18.0.2']
+            }
+        },
+        {
+            clusterName: 'green',
+            network: {
+                clusterMembers: ['172.18.0.3']
+            }
+        }
+    ]
+});
+----
+====
+
+Assuming that the `blue` cluster is alive, you should see a log similar to the following on the `blue` cluster’s terminal, showing that the client is connected.
 
 [source,shell,subs="attributes+"]
 ----
@@ -233,7 +266,7 @@ INFO: hz.client_1 [blue] [{full-version}] HazelcastClient {full-version} (202109
 Now, you'll kill the `blue` cluster and see the client is automatically connected to the `green` failover cluster.
 
 . Shut down the `blue` cluster on its terminal simply by pressing kbd:[Ctrl+C].
-. Verify that the client is connected to the green cluster on the cluster's and client's terminal.
+. Verify that the client is connected to the `green` cluster on the cluster's and client's terminal.
 +
 [source,shell,subs="attributes+"]
 ----

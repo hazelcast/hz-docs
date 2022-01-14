@@ -73,7 +73,7 @@ which means it needs WAN Replication to be configured.
 Since the configuration for WAN Replication is a bit more detailed, you are going to use a Hazelcast configuration
 file and pass it to the Docker command, instead of giving all the configuration options in a single command.
 
-. In an existing or new directory, place a hazelcast.yaml (or xml) file with the following content.
+. Create a `hazelcast.yaml` (or XML) configuration file with the following content and place it in `~/config-tokyo` directory.
 +
 [tabs]
 ====
@@ -142,9 +142,6 @@ Members {size:1, ver:1} [
 
 Note the member's IP address and port since you are going to use it while connecting Management Center.
 
-See xref:wan:defining-wan-replication.adoc#wanbatchreplication-implementation[Configuring WAN Replication] for
-configuration element descriptions.
-
 == Step 3. Set Up Management Center
 
 . Start Management Center
@@ -210,8 +207,6 @@ INSERT INTO cities VALUES
 SELECT * FROM cities;
 ----
 
-NOTE: See xref:sql:get-started-sql.adoc[Get Started with SQL over Maps] for more querying options using SQL on maps.
-
 You can also see the map and its entries in Management Center, using the SQL browser:
 
 . Select *tokyo* in the dropdown field left to *Cluster Connections* on top of the user interface.
@@ -227,16 +222,24 @@ image:wan/map-entries.png[Management Center's SQL Browser shows the map data]
 
 == Step 5. Verify the Replication
 
-With WAN Replication enabled, your `cities` map and its data should have been replicated from the active cluster (Tokyo)
-to the passive one (London). In this step, you'll verify that the `cities` map now also exists in the London cluster.
+With WAN Replication enabled, your `cities` map and its data should have been replicated from the active cluster (`tokyo`)
+to the passive one (`london`). In this step, you'll verify that the `cities` map now also exists in the `london` cluster.
 
-. In Management Center, select `london` in the dropdown field left to "Cluster Connections" on top of the user interface.
-. Go to **Storage > Maps** and see that the `cities` map is there.
+. In Management Center, select *london* in the dropdown field left to *Cluster Connections* on top of the user interface.
+. Go to *Storage* > *Maps* and see that the *cities* map is there.
 
-Additionally, you can query the map entries on the London cluster using the SQL browser in Management Center.
+Additionally, you can query the map entries on the `london` cluster using the SQL browser in Management Center.
 
-. You first need to create the mapping so that the London cluster can read the map entries.
-Open the SQL browser, type in the same `CREATE MAPPING` command from Step 4 in the editor, and **Execute Query**.
+. You first need to create the mapping so that the `london` cluster can read the map entries.
+Open the SQL browser, type in the following query.
++
+[source,shell]
+----
+CREATE MAPPING cities (__key INT, country VARCHAR, city VARCHAR)
+TYPE IMap 
+OPTIONS ('keyFormat'='int', 'valueFormat' = 'json-flat');
+----
+. Click **Execute Query**.
 +
 image:wan/create-mapping-london.png[Create mapping on the London cluster]
 . In the `select a map` field, choose `cities`. The editor shows the default `SELECT * FROM cities;` query. Once you execute it, you will see the entries of `cities` map, as in Step 4.
@@ -244,10 +247,10 @@ image:wan/create-mapping-london.png[Create mapping on the London cluster]
 
 == Step 6. Update a Map Entry on the Active Cluster
 
-In this step, you'll update an entry in the `cities` map on the active cluster (Tokyo) and verify the update is replicated to the passive one (London).
+In this step, you'll update an entry in the `cities` map on the active cluster (`tokyo`) and verify the update is replicated to the passive one (`london`).
 
-. Select `tokyo` in the dropdown field left to "Cluster Connections" on top of the user interface and go to **SQL Browser**.
-. Choose `cities` in the `select a map` field and execute the default `SELECT * FROM "cities"` query.
+. Select *tokyo* in the dropdown field left to *Cluster Connections* on top of the user interface and go to **SQL Browser**.
+. Choose *cities* in the *select a map* field and execute the default `SELECT * FROM "cities"` query.
 +
 image:wan/entry-tobe-modified.png[]
 . Now, you are going to modify the data shown above in the red box (the entry having the key `1`). In the SQL editor, delete the default query and type in the following command.
@@ -259,9 +262,9 @@ SINK INTO cities VALUES
 ----
 Execute the query and see the entry has changed.
 +
-image:entry-modified.png[Data is modified]
-. Close the SQL browser and now go to the passive cluster (London) by choosing `london` in the dropdown field left to "Cluster Connections" on top of the user interface.
-. Open the SQL browser, choose `cities` in the `select a map` field and execute the default query.
+image:wan/entry-modified.png[Data is modified]
+. Close the SQL browser and now go to the passive cluster (`london`) by choosing *london* in the dropdown field left to *Cluster Connections* on top of the user interface.
+. Open the SQL browser, choose *cities* in the *select a map* field and execute the default query.
 . You will see the entry having the key `1` is also modified.
 
 In this step, you have seen that a data modification in the active cluster is immediately replicated to the passive one.
@@ -270,7 +273,7 @@ If you do the modification first on the passive cluster, you'd see that the modi
 == Step 7. Shut Down the Cluster
 
 Shut down the cluster you've created in this tutorial so that you can start a fresh one when you
-move to the other tutorials. To shutdown, close the terminals in which the members are running or press kbd:[Ctrl+C] in each terminal.
+move to the other tutorials. To shut down, close the terminals in which the members are running or press kbd:[Ctrl+C] in each terminal.
 
 == Next Steps
 

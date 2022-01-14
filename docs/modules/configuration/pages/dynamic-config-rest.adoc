@@ -69,58 +69,19 @@ curl -X POST -H "Content-Type: text/plain" --data-urlencode "<cluster-name>" --d
 curl -X POST -H "Content-Type: text/plain" --data-urlencode "<cluster-name>" --data-urlencode "" http://localhost:5701/hazelcast/rest/config/reload
 ----
 
-When the member receives the request, it will check if the configuration already exists and propagate any new configuration across the rest of the cluster as well as those that may join the cluster later.
-
-You should see the new configuration in the response's `addedConfigs` field:
-
-```json
-{"status":"success","message":"Configuration Update successfully finished.","result":{"addedConfigs":[{"sectionName":"map","configName":"new-map"}],"ignoredConfigs":[]}}
-```
-
-If you send the same request again, the member will ignore the configuration changes and return them in the response. See <<handling-configuration-conflicts,  Handling Configuration Conflicts>> 
-
-```json
-{"status":"success","message":"Configuration Update successfully finished.","result":{"addedConfigs":[],"ignoredConfigs":[{"sectionName":"map","configName":"new-map"}]}}
-```
-
 [[update]]
 == Updating Configuration in a Request 
 
 To update a member's configuration, without editing the configuration file, use the `/update` endpoint.
 
-This endpoint takes a URL encoded string of either YAML or XML. You only need to pass this endpoint the `hazelcast` root followed by the new configuration block that you want to add. All existing configuration settings remain unchanged. For example, to add configuration for a map called `new-map`:
+This endpoint takes a URL encoded string of either YAML or XML. You only need to pass this endpoint the `hazelcast` root followed by the new configuration block that you want to add. All existing configuration settings remain unchanged. However, you can include existing configuration blocks as well. The member will just ignore them. 
 
-.Example of a new configuration
-[tabs] 
-==== 
-XML:: 
-+ 
--- 
-[source,xml]
-----
-<hazelcast> <1>
-    <map name="new-map"> <2>
-      <backup-count>
-        2
-      </backup-count>
-    </map>
-</hazelcast>
-----
---
+For example, when a member has configuration for `map-1` and `map-2` in its configuration file, you can pass in a new configuration block for `map-3` in the following ways: 
 
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  map:
-    new-map:
-      backup-count: 2
-----
-====
 
-<1> The `hazelcast` root.
-<2> The configuration block for `new-map`.
+- The `hazelcast` root and the new `map-3` configuration block.
+- The `hazelcast` root, `map-1` and the new `map-3` configuration block.
+- The `hazelcast` root, `map-1`, `map-2` and the new `map-3` configuration block.
 
 NOTE: The configuration must be URL encoded.
 
@@ -131,7 +92,7 @@ If your cluster has security enabled, send the cluster password in the request.
 curl -X POST -H "Content-Type: text/plain" --data-urlencode "<cluster-name>" --data-urlencode "<cluster-password>" --data-urlencode "
 hazelcast:
   map:
-    new-map:
+    map-3:
       backup-count: 2
 " http://localhost:5701/hazelcast/rest/config/update
 ----
@@ -143,7 +104,7 @@ If your cluster does not have security enabled, send the password as an empty st
 curl -X POST -H "Content-Type: text/plain" --data-urlencode "<cluster-name>" --data-urlencode "" --data-urlencode "
 hazelcast:
   map:
-    new-map:
+    map-3:
       backup-count: 2
 " http://localhost:5701/hazelcast/rest/config/update
 ----
@@ -153,10 +114,18 @@ include::partial$dyn-config-partial-propagation.adoc[leveloffset=+1]
 [[handling-configuration-conflicts]]
 == Handling Configuration Conflicts
 
+When the member receives a dynamic configuration request, it will check if the configuration already exists and propagate any new configuration across the rest of the cluster as well as members that may join the cluster later.
+
+You should see the new configuration in the response's `addedConfigs` field:
+
+```json
+{"status":"success","message":"Configuration Update successfully finished.","result":{"addedConfigs":[{"sectionName":"map","configName":"new-map"}],"ignoredConfigs":[]}}
+```
+
 The REST API endpoints are idempotent. If you add a dynamic configuration for an block that already exists, the member will ignore the request and return the change you requested in the `ignoredConfigs` field.
 
 .Example conflict response
 [source,json]
 ----
-{"status":"success","message":"Configuration Update successfully finished.","result":{"addedConfigs":[],"ignoredConfigs":[{"sectionName":"map","configName":"(%)"}]}}
+{"status":"success","message":"Configuration Update successfully finished.","result":{"addedConfigs":[],"ignoredConfigs":[{"sectionName":"map","configName":"new-map"}]}}
 ----

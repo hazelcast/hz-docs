@@ -1,53 +1,57 @@
-= Programmatic Configuration
-[[configuring-programmatically]]
+= Configuration Object
+:description: You can use a configuration object (config object) to configure members and clients with any Hazelcast client or the Java member API. To create new instances of members or clients, pass the config object to those instances.
 
-Besides declarative configuration, you can configure your cluster programmatically.
-For this you can create a `Config` object, set/change its properties and attributes
-and use this `Config` object to create a new Hazelcast member. Following is an example
-code which configures some network and Hazelcast Map properties.
+{description}
+
+For example, in Java, you can create a `Config` object, set/change its properties and attributes
+and use it to create new instances of members and clients. The following example configures some network and map properties for a member.
 
 [source,java]
 ----
 include::ROOT:example$/ProgrammaticConfSample.java[tag=pcs]
 ----
 
-To create a Hazelcast member with the above example configuration, pass the
-configuration object as shown below:
+To create a Hazelcast member with the configuration object, pass it to a new `HazelcastInstance` object:
 
 ```
 HazelcastInstance hazelcast = Hazelcast.newHazelcastInstance( config );
 ```
 
-NOTE: The `Config` must not be modified after the Hazelcast instance is started.
-In other words, all configuration must be completed before creating the `HazelcastInstance`.
-Certain additional configuration elements can be added at runtime as described in the
-xref:dynamic-data-structure-configuration.adoc[Dynamically Adding Data Structure Configuration on a Cluster section].
+NOTE: All configuration must be completed before creating the `HazelcastInstance` object. The `Config` object cannot be modified after the instance is started.
 
-You can also create a named Hazelcast member. In this case, you should set `instanceName`
-of `Config` object as shown below:
 
-[source,java]
-----
-Config config = new Config();
-config.setInstanceName( "my-instance" );
-Hazelcast.newHazelcastInstance( config );
-----
+== Loading Configuration Files into the Configuration Object
 
-To retrieve an existing Hazelcast member by its name, use the following:
+Configuration files allow you to store member or client configuration settings in YAML or XML format. You should consider using configuration files if you want to persist changes that you make to <<dynamic-configuration, dynamic configuration>>.
 
-```
-Hazelcast.getHazelcastInstanceByName( "my-instance" );
-```
+Hazelcast supports
+the following methods of loading the contents of a configuration file into the configuration object.
 
-To retrieve all existing Hazelcast members, use the following:
+All configuration loaders take an optional `properties` parameter.
+The default behavior uses the `System.getProperties()` method to resolve the configuration file.
 
-```
-Hazelcast.getAllHazelcastInstances();
-```
+.Configuration Loaders
+[cols="3,7"]
+|===
+|Method|Description
 
-If you want to specify your own configuration file to create `Config`, Hazelcast supports
-several ways including filesystem,
-classpath, InputStream and URL.
+|`loadFromFile`
+|Creates a configuration object (`Config`) based on a Hazelcast configuration file (XML or YAML).
+
+|`loadDefault`
+|Loads `Config` using the default lookup mechanism to locate the configuration file. Loads the nested
+Hazelcast configuration also by using its default lookup mechanism.
+
+|`loadFromClasspath`
+|Creates `Config` which is loaded from a classpath resource.
+
+|`loadFromString`
+|Creates `Config` from the provided XML or YAML string content.
+
+|`loadFromStream`
+|Creates `Config` from the provided XML or YAML stream content.
+
+|===
 
 Building `Config` from the XML declarative configuration:
 
@@ -67,41 +71,10 @@ Building `Config` from the YAML declarative configuration:
 * `Config cfg = new UrlYamlConfig(url);`
 * `Config cfg = new InMemoryYamlConfig(yaml);`
 
-== Configuration Loaders
-
-Alternatively, you can configure Hazelcast to load its configuration from the
-classpath or working directory. By default, it will search for
+By default, Hazelcast searches for
 `hazelcast.yaml/xml` files in the classpath and
 working directory, but you can control the name of the files using the
-relevant system properties, i.e., `hazelcast.config`.
-
-All configuration loaders take an optional `properties` parameter.
-In case of its absence `System.getProperties()` is used to resolve
-configuration file (XML or YAML).
-
-Hazelcast configuration loaders are listed below:
-
-[cols="3,7"]
-|===
-|Function|Description
-
-|`loadFromFile`
-|Creates a configuration object (`Config`) based on a Hazelcast configuration file (XML or YAML).
-
-|`loadDefault`
-|Loads `Config` using the default lookup mechanism to locate the configuration file. Loads the nested
-Hazelcast configuration also by using its default lookup mechanism.
-
-|`loadFromClasspath`
-|Creates `Config` which is loaded from a classpath resource.
-
-|`loadFromString`
-|Creates `Config` from the provided XML or YAML string content.
-
-|`loadFromStream`
-|Creates `Config` from the provided XML or YAML stream content.
-
-|===
+relevant system properties such as `hazelcast.config`.
 
 Here is the sample code for creating a new Jet engine configuration using
 the configuration loader:
@@ -138,3 +111,7 @@ properties.setProperty("scale-up-delay-millis", "5000");
 Config config = Config.loadFromString(yaml, properties);
 HazelcastInstance hz = Hazelcast.newHazelcastInstance(config);
 ----
+
+== Updating Member Configuration at Runtime
+
+You can add configuration for some supported features at runtime. See xref:dynamic-data-structure-configuration.adoc[].

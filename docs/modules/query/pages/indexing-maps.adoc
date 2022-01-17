@@ -1,49 +1,19 @@
 = Indexing Maps
 :page-aliases: how-distributed-query-works.adoc
-:description: When members run queries, they iterate through all their owned entries and find the ones that match the query. Indexes allow members to find matching entries faster by reducing the number of entries to check.
+:description: Indexes improve the performance of queries on map entries by reducing the number of entries that members need to iterate through.
 
 {description}
 
-If you often query a map, make sure to add indexes to its most frequently
-queried fields. For example, if you do `active AND age < 30` query,
-make sure you add an index for the `active` and
-`age` fields. The following example code does that by getting the map
-from the Hazelcast instance and adding indexes to the map with the `map.addIndex()` method.
+When members run queries, they iterate through all their owned entries and find the ones that match the query. Depending on the number of entries in the map, it may take a long time for a member to find the entry that matches the query. Indexes allow members to find entries faster and avoid searching through unnecessary entries. For example, if you do `active AND age < 30` query, you can add an index for the `active` and
+`age` fields.
 
-[source,java]
-----
-IMap map = hazelcastInstance.getMap( "employees" );
-// ordered, since we have ranged queries for this field
-map.addIndex(new IndexConfig(IndexType.SORTED, "age"));
-// not ordered, because boolean field cannot have range
-map.addIndex(new IndexConfig(IndexType.HASH, "active"));
-----
+You can create an index, using a configuration file, the embedded Java API, or SQL.
 
-NOTE: When you add new entries to maps that use indexes, it takes longer because the index must be added along with the entry.
+To create an index, you need to specify the following:
 
-You only need to create an index once. Although it is safe to call the `map.addIndex()` method more than once, doing so has a negative affect on performance due to the redundant index creation.
-
-For example, when you call the `map.addIndex(new IndexConfig(IndexType.SORTED, "fieldName"))` method, each
-partition iterates over its records and adds each entry to the index.
-The previously created index entry will be recreated and replaced with the new entry.
-The performance penalty will be proportional to the number of entries. If you
-have maps with a large number of entries, then synchronizing index addition process
-is recommended.
-
-Other than using the `map. addIndex()` method, you can define your index
-declaratively or programmatically as described in the <<configuring-imap-indexes, Configuring IMap Indexes section>>.
-
-== Indexing Ranged Queries
-
-The `map.addIndex(IndexConfig)` method is used for adding index. For
-each indexed field, if you have ranged queries such as `age > 30`,
-`age BETWEEN 40 AND 60`, then use a `IndexType.SORTED` index
-Otherwise, use a `IndexType.HASH` index.
-
-== Configuring Map Indexes
-
-You can define map indexes in configuration. An example is
-shown below.
+- The name of the map that the index should be created for.
+- The type of index.
+- One or more fields in the map entry that should be indexed.
 
 [tabs] 
 ==== 
@@ -54,7 +24,7 @@ XML::
 ----
 <hazelcast>
     ...
-    <map name="default">
+    <map name="employees">
         <indexes>
             <index type="HASH">
                 <attributes>
@@ -80,7 +50,7 @@ YAML::
 ----
 hazelcast:
   map:
-    default:
+    employees:
       indexes:
         - type: HASH
             attributes:
@@ -90,11 +60,35 @@ hazelcast:
 ----
 --
 
+SQL::
++
+--
+[source,sql]
+----
+CREATE INDEX IF NOT EXISTS name 
+ON employees (name)
+TYPE HASH;
+
+CREATE INDEX IF NOT EXISTS age 
+ON employees (age);
+----
+--
+
+Java::
++
+--
+[source,java]
+----
+mapConfig.addIndexConfig(new IndexConfig(IndexType.HASH, "name"));
+mapConfig.addIndexConfig(new IndexConfig(IndexType.SORTED, "age"));
+----
+--
+
 Spring::
 +
 [source,xml]
 ----
-<hz:map name="default">
+<hz:map name="employees">
     <hz:indexes>
         <hz:index type="HASH">
             <hz:attributes>
@@ -111,48 +105,70 @@ Spring::
 ----
 ====
 
-You can also define map indexes using programmatic configuration,
-as in the example below.
+You only need to create an index once. Creating the same index more than once has a negative affect on performance due to the redundant index creation. The performance penalty is proportional to the number of entries.
 
+NOTE: It takes longer to add new entries to maps that use indexes because the index must be added along with the entry.
+
+== Index Types
+
+Maps can have three types of index:
+
+* `SORTED` (default): For ranged queries such as listing all employees that are between 40 and 60.
+* `HASH`: For unordered queries such as getting the IDs of employees that are named John.
+* `BITMAP`: For querying fields that contain few distinct values such as boolean fields. See <<bitmap-indexes, Bitmap Indexes>>.
+
+== Attributes
+
+To create an index for a map, you must specify the name of the fields that you want to index.
+
+NOTE: If the values of the fields are non-primitive types, they must implement the `Comparable` interface.
+
+=== Using the `this`` Keyword as an Attribute
+
+The `this` keyword acts on the value of a map entry to access properties on it. For example, if a value contains an `employee` object with the `name` field, you can access that field, using `this.name`. Typically,
+you do not need to specify the `this` keyword because its presence is assumed if the special attribute `__key` is not specified. As a result, `this.name` and `name` are equivalent.
+
+You can use the keyword `this` as an attribute name while adding an
+index.
+
+[tabs] 
+==== 
+SQL::
++
+--
+[source,sql]
+----
+CREATE INDEX IF NOT EXISTS name 
+ON employees (this.name)
+TYPE HASH;
+
+CREATE INDEX IF NOT EXISTS name 
+ON employees (name)
+TYPE HASH;
+----
+--
+
+Java::
++
+--
 [source,java]
 ----
-mapConfig.addIndexConfig(new IndexConfig(IndexType.HASH, "name"));
-mapConfig.addIndexConfig(new IndexConfig(IndexType.SORTED, "age"));
+map.addIndex(new IndexConfig(IndexType.HASH, "this.name"));
+map.addIndex(new IndexConfig(IndexType.HASH, "name"));
 ----
+--
+====
 
-NOTE: Non-primitive types to be indexed should implement `Comparable`.
+=== Custom Attributes
 
-If you configure the data structure to use
-xref:storage:high-density-memory.adoc#configuring-high-density-memory-store[High-Density Memory Store] **and**
-indexes, the indexes are automatically stored in the High-Density Memory Store
-as well. This prevents from running into full garbage collections when doing
-a lot of updates to index.
-
-== Global and Partitioned Indexes
-
-The on-heap indexes are always **global**, where one index covers all map entries stored on the partitions owned by a cluster member. Such indexes are beneficial for lookup and range queries because only one lookup
-operation is needed to execute a query. A drawback of global indexes is a potentially high contention on the
-index concurrent data structure that might cause performance degradation.
-
-xref:storage:high-density-memory.adoc#configuring-high-density-memory-store[High-Density Memory Store] supports **partitioned** indexes. Each partition
-owned by a cluster member has its own index. All operations on the partitioned index are performed on the
-partitioned thread, thus eliminating the contention issue of the global indexes. However, lookup and range
-queries have to perform lookup operations on every partition and combine the results. Normally, these partition and
-combine executions yield poorer performance results compared to the global indexes.
-
-Global concurrent indexes (based on our own off-heap B+ Tree implementation)
-bring all the benefits of global indexes to `IMap` backed by High-Density Memory Store.
-
-The global High-Density Memory Store indexes are enabled by default and controlled
-by the `hazelcast.hd.global.index.enabled` property. You can disable these indexes by setting
-this property to `false.`
+Custom attributes can be defined by implementing a
+`ValueExtractor`. See xref:custom-attributes.adoc[Custom Attributes] for details.
 
 == Composite Indexes
 
-Composite indexes, also known as compound indexes, are special kind of
-indexes that are built on top of the multiple map entry attributes and
-therefore may be used to significantly speed up the queries involving
-those attributes simultaneously.
+A composite index, also known as a compound index, is a special kind of
+index that is built on top of multiple map entry attributes and
+therefore may be used to significantly speed up queries that use those attributes simultaneously.
 
 There are two distinct composite index types used for two different
 purposes: unordered composite indexes and ordered ones.
@@ -181,7 +197,7 @@ XML::
 ----
 <hazelcast>
     ...
-    <map name="persons">
+    <map name="employees">
         <indexes>
             <index type="HASH">
                 <attributes>
@@ -198,16 +214,29 @@ XML::
 
 YAML::
 +
+--
 [source,yaml]
 ----
 hazelcast:
   map:
-    default:
+    employees:
       - type: HASH
           attributes:
             - "name"
             - "age"
 ----
+--
+
+SQL::
++
+--
+[source,sql]
+----
+CREATE INDEX IF NOT EXISTS nameAndAge 
+ON employees (name, age)
+TYPE HASH;
+----
+--
 ====
 
 The attributes indexed by the _unordered_ composite indexes can't be
@@ -237,13 +266,13 @@ XML::
 ----
 <hazelcast>
     ...
-    <map name="persons">
+    <map name="employees">
         <indexes>
             <index>
                 <attributes>
                     <attribute>name</attribute>
                     <attribute>age</attribute>
-                    <attribute>balance</attribute>
+                    <attribute>id</attribute>
                 </attributes>
             </index>
         </indexes>
@@ -255,17 +284,29 @@ XML::
 
 YAML::
 +
+--
 [source,yaml]
 ----
 hazelcast:
   map:
-    persons:
+    employees:
       indexes:
         - attributes:
           - "name"
           - "age"
-          - "balance"
+          - "id"
 ----
+--
+
+SQL::
++
+--
+[source,sql]
+----
+CREATE INDEX IF NOT EXISTS nameAgeId
+ON employees (name, age, id);
+----
+--
 ====
 
 Unlike the _unordered_ composite indexes, partial attribute prefixes may be
@@ -297,7 +338,7 @@ partially matched by the `name, age` composite index, the `name = 'Alice'
 and age = 33` predicates are served by the matched index, while the
 `balance > 0.0` predicate is processed by other means.
 
-== Bitmap Indexes
+=== Bitmap Indexes
 
 Bitmap indexes provide capabilities similar to unordered/hash indexes.
 The same set of predicates is supported:
@@ -327,6 +368,8 @@ on the data layout and total number of indexes.
 NOTE: Currently, bitmap indexes are not supported by off-heap High-Density
 Memory Stores (HD).
 
+NOTE: Although you can create bitmap indexes with SQL, SQL queries do not currently leverage those indexes to improve query performance.
+
 === Configuring Bitmap Indexes
 
 In the simplest form, bitmap index for an `IMap` entry attribute can be
@@ -341,7 +384,7 @@ XML::
 ----
 <hazelcast>
     ...
-    <map name="persons">
+    <map name="employees">
         <indexes>
             <index type="BITMAP">
                 <attributes>
@@ -357,16 +400,28 @@ XML::
 
 YAML::
 +
+--
 [source,yaml]
 ----
 hazelcast:
   map:
-    persons:
+    employees:
       indexes:
         - type: BITMAP
           attributes:
             - "age"
 ----
+--
+SQL::
++
+--
+[source,sql]
+----
+CREATE INDEX IF NOT EXISTS age
+ON employees (age)
+TYPE BITMAP;
+----
+--
 ====
 
 Internally, a unique non-negative `long` ID is assigned to every
@@ -402,16 +457,33 @@ XML::
 
 YAML::
 +
+--
 [source,yaml]
 ----
-      indexes:
-        - type: BITMAP
-          attributes:
-            - "age"
-          bitmap-index-options:
-            unique-key: uniqueId
-            unique-key-transformation: RAW
+indexes:
+  - type: BITMAP
+    attributes:
+      - "age"
+    bitmap-index-options:
+      unique-key: uniqueId
+      unique-key-transformation: RAW
 ----
+
+--
+SQL::
++
+--
+[source,sql]
+----
+CREATE INDEX IF NOT EXISTS age
+ON employees (age)
+TYPE BITMAP
+OPTIONS (
+  'unique-key' = 'uniqueId',
+  'unique-key-transformation' = 'RAW'
+);
+----
+--
 ====
 
 The index definition above instructs Hazelcast to create a bitmap index
@@ -447,16 +519,32 @@ XML::
 
 YAML::
 +
+--
 [source,yaml]
 ----
-      indexes:
-        - type: BITMAP
-          attributes:
-            - "age"
-          bitmap-index-options:
-            unique-key: uniqueId
-            unique-key-transformation: LONG
+indexes:
+  - type: BITMAP
+    attributes:
+      - "age"
+    bitmap-index-options:
+      unique-key: uniqueId
+      unique-key-transformation: LONG
 ----
+--
+SQL::
++
+--
+[source,sql]
+----
+CREATE INDEX IF NOT EXISTS age
+ON employees (age)
+TYPE BITMAP
+OPTIONS (
+  'unique-key' = 'uniqueId',
+  'unique-key-transformation' = 'LONG'
+);
+----
+--
 ====
 
 The index definition above instructs the bitmap index to extract the unique
@@ -486,13 +574,25 @@ XML::
 
 YAML::
 +
+--
 [source,yaml]
 ----
-      indexes:
-        - type: BITMAP
-          attributes:
-            - "age"
+indexes:
+  - type: BITMAP
+    attributes:
+      - "age"
 ----
+--
+SQL::
++
+--
+[source,sql]
+----
+CREATE INDEX IF NOT EXISTS age
+ON employees (age)
+TYPE BITMAP
+----
+--
 ====
 
 is equivalent to the following full-form definition:
@@ -518,16 +618,32 @@ XML::
 
 YAML::
 +
+--
 [source,yaml]
 ----
-      indexes:
-        - type: BITMAP
-          attributes:
-            - "age"
-          bitmap-index-options:
-            unique-key: __key
-            unique-key-transformation: OBJECT
+indexes:
+  - type: BITMAP
+    attributes:
+      - "age"
+    bitmap-index-options:
+      unique-key: __key
+      unique-key-transformation: OBJECT
 ----
+--
+SQL::
++
+--
+[source,sql]
+----
+CREATE INDEX IF NOT EXISTS age
+ON employees (age)
+TYPE BITMAP
+OPTIONS (
+  'unique-key' = '__key',
+  'unique-key-transformation' = 'OBJECT'
+);
+----
+--
 ====
 
 Which indexes `age` attribute, uses `IMap` entry keys (`__key`) interpreted
@@ -556,16 +672,32 @@ XML::
 
 YAML::
 +
+--
 [source,yaml]
 ----
       indexes:
         - type: BITMAP
           attributes:
-            - <attribute>
+            - <attr>
           bitmap-index-options:
             unique-key: <key>
             unique-key-transformation: <transformation>
 ----
+--
+SQL::
++
+--
+[source,sql]
+----
+CREATE INDEX IF NOT EXISTS age
+ON employees (<attr>)
+TYPE BITMAP
+OPTIONS (
+  'unique-key' = '<key>',
+  'unique-key-transformation' = '<transformation>'
+);
+----
+--
 ====
 
 The following are the parameter descriptions:
@@ -631,23 +763,49 @@ XML::
 
 YAML::
 +
+--
 [source,yaml]
 ----
-      indexes:
-        - type: BITMAP
-          attributes:
-            - name.first
-        - type: BITMAP
-          attributes:
-            - name.first
-          bitmap-index-options:
-            unique-key: __key.id
-        - type: BITMAP
-          attributes:
-            - name.first
-          bitmap-index-options:
-            unique-key: id.external
+indexes:
+  - type: BITMAP
+    attributes:
+      - name.first
+  - type: BITMAP
+    attributes:
+      - name.first
+    bitmap-index-options:
+      unique-key: __key.id
+  - type: BITMAP
+    attributes:
+      - name.first
+    bitmap-index-options:
+      unique-key: id.external
 ----
+--
+SQL::
++
+--
+[source,sql]
+----
+CREATE INDEX IF NOT EXISTS name
+ON employees (name.first)
+TYPE BITMAP;
+
+CREATE INDEX IF NOT EXISTS name
+ON employees (name.first)
+TYPE BITMAP
+OPTIONS (
+  'unique-key' = '__key.id'
+);
+
+CREATE INDEX IF NOT EXISTS name
+ON employees (name.first)
+TYPE BITMAP
+OPTIONS (
+  'unique-key' = 'id.external'
+);
+----
+--
 ====
 
 Collection and array indexing is also possible using the regular syntax:
@@ -674,6 +832,7 @@ XML::
 
 YAML::
 +
+--
 [source,yaml]
 ----
       indexes:
@@ -684,6 +843,12 @@ YAML::
           attributes:
             - habits[0]
 ----
+--
+SQL::
++
+--
+SQL does not currently support arrays.
+--
 ====
 
 See xref:querying-collections-and-arrays.adoc#indexing-in-collections-and-arrays[Indexing in Collections and Arrays section]
@@ -696,7 +861,30 @@ automatically. No special treatment is required. The querying can be
 performed using the regular `IMap` querying methods:
 `IMap.values(Predicate)`, `IMap.entrySet(Predicate)`, etc.
 
-=== Copying Indexes
+== Global and Partitioned Indexes
+
+Indexes can be either global or partitioned, depending on where the map entries are stored. On-heap indexes are always global, whereas indexes in the xref:storage:high-density-memory.adoc#configuring-high-density-memory-store[High-Density Memory Store] are partitioned.
+
+NOTE: If you configure a map to use
+xref:storage:high-density-memory.adoc#configuring-high-density-memory-store[High-Density Memory Store] **and**
+indexes, the indexes are automatically stored in the High-Density Memory Store
+as well. This prevents running into full garbage collections when doing
+a lot of updates to an index.
+
+Global indexes cover all map entries stored on the partitions that are owned by a cluster member. These indexes are beneficial for lookup and range queries because only one lookup
+operation is needed to execute a query. A drawback of global indexes is a potentially high contention on the
+index concurrent data structure that might cause performance degradation.
+
+Partitioned indexes cover only the map entries that are stored on a particular partition. These indexes are performed on the
+partition thread, thus eliminating the contention issue of the global indexes. However, lookup and range
+queries have to perform lookup operations on every partition and combine the results. Normally, these partition-and-combine executions yield poorer performance results compared to the global indexes. However, global concurrent indexes (based on our own off-heap B+ Tree implementation)
+bring all the benefits of global indexes to maps that are backed by High-Density Memory Store.
+
+The global High-Density Memory Store indexes are enabled by default and controlled
+by the `hazelcast.hd.global.index.enabled` property. You can disable these indexes by setting
+this property to `false.`
+
+== Copying Indexes
 
 The underlying data structures used by the indexes need to copy the
 query results to make sure that the results are correct. This copying
@@ -773,33 +961,3 @@ NOTE: Usage of this system property is supported for BINARY and OBJECT
 in-memory formats. Only in Hazelcast 3.8.7, it is also supported for
 NATIVE in-memory format.
 
-=== Indexing Attributes with ValueExtractor
-
-You can also define custom attributes that may be referenced in predicates,
-queries and indexes. Custom attributes can be defined by implementing a
-`ValueExtractor`. See the xref:custom-attributes.adoc[Custom Attributes section]
-for details.
-
-=== Using "this" as an Attribute
-
-You can use the keyword `this` as an attribute name while adding an
-index or creating a predicate. A basic usage is shown below.
-
-[source,java]
-----
-map.addIndex(new IndexConfig(IndexType.SORTED, "this"));
-Predicate<Integer, Integer> lessEqual = Predicates.between("this", 12, 20);
-----
-
-Another basic example using `SQL` predicate is shown below.
-
-[source,java]
-----
-Predicates.sql("this = 'jones'")
-Predicates.sql("this.age > 33")
-----
-
-The special attribute `this` acts on the value of a map entry. Typically,
-you do not need to specify it while accessing a property of an entry's
-value, since its presence is implicitly assumed if the special attribute
-<<querying-entry-keys-with-predicates, __key>> is not specified.

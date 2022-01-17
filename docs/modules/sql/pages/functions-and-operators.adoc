@@ -1,0 +1,713 @@
+= Expressions, Functions and Operators
+:description: Hazelcast supports a subset of standard SQL expressions, functions, and operators as well as non-standard functions for special cases such as windowed aggregation.
+:page-aliases: sql:expressions.adoc
+:page-toclevel: 3
+
+{description}
+
+For information about input and return data types, see xref:data-types.adoc[Data Types].
+
+== Operators
+
+Operators are used to evaluate and/or compare one or more operands. For example, in the expression (X + Y), the `+` operator evaluates the addition of the `X` and `Y` operands.
+
+Hazelcast supports the following SQL operators.
+
+=== Logical Operators
+
+Hazelcast supports the `AND`, `OR`, and `NOT` logical operators. Logical operators allow only `BOOL` or `NULL` data types as input. The result can be `TRUE`, `FALSE`, or `NULL`:
+
+.Truth table for `AND`/`OR` operators
+[cols="1,1,1,1", options="header"]
+|===
+| X
+| Y
+| X AND Y
+| X OR Y
+
+|`TRUE`
+|`TRUE`
+|`TRUE`
+|`TRUE`
+
+|`TRUE`
+|`FALSE`
+|`FALSE`
+|`TRUE`
+
+|`TRUE`
+|`NULL`
+|`NULL`
+|`TRUE`
+
+|`FALSE`
+|`FALSE`
+|`FALSE`
+|`FALSE`
+
+|`FALSE`
+|`NULL`
+|`FALSE`
+|`NULL`
+
+|`NULL`
+|`NULL`
+|`NULL`
+|`NULL`
+|===
+
+.Truth table for the `NOT` operator
+[cols="1m,1m", options="header"]
+|===
+| X
+| NOT Y
+
+|TRUE
+|FALSE
+
+|FALSE
+|TRUE
+
+|NULL
+|NULL
+|===
+
+=== Comparison Operators
+
+Comparison operators compare two or more operands, and always return a `BOOL`. Comparisons generally require operands to be of the same type.
+
+.Descriptions of comparison operators
+[cols="20%a,20%m,60%a"]
+|===
+|Operator name|	Syntax|	Description
+
+|Less Than
+|X < Y	
+|Returns `TRUE` if `X` is less than `Y`.
+
+|Less Than or Equal To
+|X <= Y
+|Returns `TRUE` if `X` is less than or equal to `Y`.
+
+|Greater Than
+|X > Y
+|Returns `TRUE` if `X` is greater than `Y`.
+
+|Greater Than or Equal To
+|X >= Y
+|Returns `TRUE` if `X` is greater than or equal to `Y`.
+
+|Equal
+|X = Y
+|Returns `TRUE` if `X` is equal to `Y`.
+
+|Not Equal
+|X != Y
+|Returns `TRUE` if `X` is not equal to `Y`.
+
+m|[[between]]BETWEEN
+|X [NOT] BETWEEN [SYMMETRIC] Y AND Z	
+|Returns `TRUE` if `X` is within the given range of `Y` and `Z`. The `SYMMETRIC` keyword allows `Y` and `Z` to be in any order, rather than `Y` being the lowerbound and `Z` being the upperbound.
+
+m|LIKE
+|X [NOT] LIKE Y [ESCAPE Z]
+|Returns `TRUE` if the string in the `X` operand matches the pattern specified by the `Y` operand. Expressions can contain the following special characters:
+
+- A percent sign (`%`): Matches any number of characters.
+- An underscore (`_`): Matches a single character.
+
+To escape a special character, use the `ESCAPE` keyword followed by the escape character to use. For example `'text' LIKE '!_ext' ESCAPE '!'` returns `FALSE` because the `_` character is escaped by the exclamation mark (`!`).
+
+m|IN
+|
+|See <<in-operator, `IN` Operator>>
+
+|===
+
+=== `EXISTS` Operator
+
+The `EXISTS` operator returns `TRUE` if a given subquery returns one or more records.
+
+The `NOT` keyword inverts the result.
+
+*Syntax*
+
+The `EXISTS` operator supports the following syntax:
+
+```sql
+WHERE EXISTS [NOT] subquery
+```
+
+=== `IS` Operator
+
+The `IS` operator returns `TRUE` or `FALSE` for a given condition. This operator never returns `NULL`.
+
+The `NOT` keyword inverts the result.
+
+.Descriptions of the `IS` operator syntax
+[cols="20%m,80%a"]
+|===
+|Syntax| Description
+
+|X IS [NOT] NULL
+|Returns `TRUE` if the `X` operand evaluates to `NULL`, and returns `FALSE` otherwise.
+
+|X IS [NOT] TRUE
+|Returns `TRUE` if the `X` operand evaluates to `TRUE`. Returns `FALSE` otherwise.
+
+|X IS [NOT] FALSE
+|Returns `TRUE` if the `X` operand evaluates to `FALSE`. Returns `FALSE` otherwise.
+
+|===
+
+=== `IN` Operator
+
+The `IN` operator allows you to check for a certain value in a given set of values, and returns `TRUE` if an equal value is found.
+
+The `NOT` keyword inverts the result.
+
+NOTE: At the moment, Hazelcast does not support subqueries in `IN` clauses. For example, you cannot do `SELECT column_names FROM table_name
+WHERE column_name IN (SELECT STATEMENT);`
+
+*Syntax*
+
+The `IN` operator supports the following syntax:
+
+```sql
+search_value [NOT] IN value_set
+```
+
+=== Mathematical Operators
+
+Mathematical functions perform operations on numbers.
+
+.Descriptions of mathematical operators
+[cols="1a,1m", options="header"]
+|===
+| Operator Name
+| Syntax
+
+|Addition
+|`X + Y`
+
+
+|Subtraction
+|`X - Y`
+
+
+|Multiplication
+|`X * Y`
+
+
+|Division
+|`X / Y`
+
+
+|===
+
+== Conditional Expressions
+
+Conditional expressions allow you to evaluate only certain output values, depending on given conditions.
+
+=== CASE
+
+The `CASE` expression evaluates the condition of each `WHEN` clause and returns the first result where the condition is `TRUE`. If all conditions are `FALSE` or `NULL`, the result of the `ELSE` clause is returned.
+
+Each `condition` must be a boolean expression.
+
+*Syntax*
+
+```sql
+CASE
+
+  WHEN condition1 THEN result1
+  WHEN condition2 THEN result2
+  WHEN conditionN THEN resultN
+
+  ELSE result
+
+END;
+```
+
+=== NULLIF
+
+The `NULLIF` expression returns `NULL` if the `X` and `Y` expressions are equal. The data type of the returned `NULL` value is the same as the `X` expression.
+
+*Syntax*
+
+```sql
+NULLIF(X, Y)
+```
+
+=== COALESCE
+
+The `COALESCE` expression evaluates each expression at a time, starting from the first. If the value of any expression is not `NULL`, its value is returned. If all the expressions are `NULL`, `NULL` is returned. Arguments to the right of the first non-null argument are not evaluated.
+
+*Syntax*
+
+```sql
+COALESCE(X, Y, Z)
+```
+
+== Aggregate Functions
+
+Aggregate functions perform calculations such as returning the mean of all data in a particular row.
+
+.Descriptions of aggregate function
+[cols="1m,1a"]
+|===
+|Function :: Returns	|Description
+
+|COUNT(*) :: BIGINT
+|Calculates the number of input rows.
+
+|COUNT(any) :: BIGINT
+|Calculates the number of input rows in which the input value is not null.
+
+|COUNT(DISTINCT *) :: BIGINT
+|Calculates the number of input rows in which the input value is unique.
+
+|COUNT(DISTINCT any) :: BIGINT
+|Calculates the number of input rows in which the input value is unique and not null.
+
+|`SUM(TINYINT \| SMALLINT \| INT) :: BIGINT`, `SUM(BIGINT \| DECIMAL) :: DECIMAL`, `SUM(REAL) :: REAL`, `SUM(DOUBLE) :: DOUBLE`
+|Calculates the sum of the non-null input values.
+
+|`SUM(DISTINCT TINYINT \| SMALLINT \| INT) :: BIGINT`, `SUM(DISTINCT BIGINT \| DECIMAL) :: DECIMAL`, `SUM(DISTINCT REAL) :: REAL`, `SUM(DISTINCT DOUBLE) :: DOUBLE`
+|Calculates the sum of the unique, non-null input values.
+
+|`AVG(DECIMAL) :: DECIMAL`, `AVG(DOUBLE) :: DOUBLE`
+|Calculates the mean of all the non-null input values.
+
+|`AVG(DISTINCT DECIMAL) :: DECIMAL`, `AVG(DISTINCT DOUBLE) :: DOUBLE`
+|Calculates the mean of all the unique, non-null input values.
+
+|MIN(any) :: same type as the input
+|Calculates the minimum of the non-null input values. Applicable also to `OBJECT` type, if the underlying value is `java.lang.Comparable`.
+
+|MAX(any) :: same type as the input
+|Calculates the maximum of the non-null input values. Applicable also to `OBJECT` type, if the underlying value is `java.lang.Comparable`.
+
+|===
+
+For examples of how to use aggregate functions, see the xref:select.adoc[`SELECT` statement documentation].
+
+== Conversion Functions
+
+Conversion functions allow you to convert the result type of one expression to another explicit type.
+
+.Descriptions of conversion functions
+[cols="1m,2,1,1"]
+|===
+| Function| Description| Example| Result
+
+|CAST(expression AS data_type)
+|Converts the result type of `expression` to `data_type`.
+|
+
+`SELECT CAST("2020-06-02 17:00:53.110+00:00" AS TIMESTAMP)``
+
+|
+
+`2020-06-03T00:00:53.11Z`
+|===
+
+== Date and Time Functions
+
+.Descriptions of date functions
+[cols="20%a,40%a,20%a,20%a"]
+|===
+| Function| Description| Example| Result
+
+|`EXTRACT(element, date)`
+|Returns the `element` date part from the `date` expression.
+
+Supported elements: `MILLENIUM`, `CENTURY`, `DECADE`, `YEAR`, `ISOYEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `DOW`, `ISODOW`, `DOY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND`, `MICROSECOND`, `EPOCH`
+
+Supported date types: `DATE`, `TIME`, `TIMESTAMP`, `TIMESTAMP WITH TIME ZONE`
+|`EXTRACT(WEEK FROM "2017-06-15")`
+|24
+
+|`TO_TIMESTAMP_TZ(BIGINT)`
+|Converts a `BIGINT` value in seconds to `TIMESTAMP_WITH_TIMEZONE`.
+
+
+|`SELECT TO_TIMESTAMP_TZ(v) FROM TABLE (generate_series(1,3))`
+|
+1970-01-01T03:00:00.001+03:00
+
+1970-01-01T03:00:00.002+03:00
+
+1970-01-01T03:00:00.003+03:00
+
+|`TO_EPOCH_MILLIS(TIMESTAMP_WITH_TIMEZONE)`
+|Converts `TIMESTAMP_WITH_TIMEZONE` values to an `EPOCH` value in milliseconds.
+|`SELECT TO_EPOCH_MILLIS(TO_TIMESTAMP_TZ(v)) FROM TABLE (generate_series(1,3))`
+|1000
+
+2000
+
+3000
+|===
+
+== File Table Functions
+
+To execute an ad-hoc query against data in files you can use one of the following table functions:
+
+* `csv_file`
+* `json_flat_file`
+* `avro_file`
+* `parquet_file`
+
+File table functions create a temporary mapping to a file, which is valid for the duration
+of the statement. These functions accept the same options as those available for the xref:mapping-to-a-file-system.adoc[file connector].
+
+To configure the temporary mapping, you can use either positional arguments or named arguments:
+
+.Positional arguments in a file table function
+```sql
+SELECT * FROM TABLE(
+  CSV_FILE('/path/to/directory', '*.csv', MAP['key', 'value'])
+);
+```
+
+.Named arguments in a file table function
+```sql
+SELECT * FROM TABLE(
+  CSV_FILE(path => '/path/to/directory', options => MAP['key', 'value'])
+);
+```
+
+== JSON Functions
+
+Hazelcast supports the following functions, which can retrieve JSON data.
+
+.Descriptions of JSON functions
+[cols="[cols="1,2,1,1"]
+|===
+| Function :: Returns| Description|Example|Result
+
+|`JSON_QUERY(jsonArg, jsonPath)` :: `JSON`
+|Extracts a JSON value, such as an array or object, from the `jsonArg` that matches the `jsonPath`.
+
+- `jsonArg`: JSON or a JSON-formatted string
+- `jsonPath`: A xref:working-with-json.adoc#jsonpath[JSONPath]. This path identifies the data that you want to get from the input.
+
+|
+```sql
+SELECT
+  JSON_QUERY('{"company" : {"employees" : [{"id" : "1"}]}}', '$.company.employees[0]');
+```
+|
+```json
+{"id":"1","name":"jake"}
+```
+
+|`JSON_VALUE(jsonArg, jsonPath [RETURNING dataType])` :: `VARCHAR`
+|Extracts a primitive value, such as a string, number, or boolean, from the `jsonArg` when it matches the `jsonPath`. Returns `NULL` if a non-primitive value is selected.
+
+- `jsonArg`: JSON or a JSON-formatted string
+- `jsonPath`: A xref:working-with-json.adoc#jsonpath[JSONPath]. This path identifies the data that you want to get from the input.
+- `RETURNING`: Returns the value only if it matches the `dataType` or if the value can be cast to the `dataType`, otherwise returns `NULL`.
+
+|
+```sql
+SELECT
+  JSON_VALUE('{"company" : {"employees" : [{"id" : "1","name":"jake"}]}}', '$.company.employees[0].id');
+```
+|
+```json
+1
+```
+
+|===
+
+== Mathematical Functions
+
+.Descriptions of mathematical functions
+[cols="1,2,1,1", options="header"]
+|===
+| Function
+| Description
+| Example
+| Result
+
+|`ABS(number)`
+|Absolute value of the argument
+|`ABS(-5)`
+|`5`
+
+|`CBRT(number)`
+|Returns the cube root of the input
+|`CBRT(343)`
+|`7`
+
+|`CEIL(number)`
+|Returns the nearest integer greater than or equal to argument
+|`CEIL(25.3)`
+|`26`
+
+|`DEGREES(DOUBLE)`
+|Converts radians to degrees
+|`DEGREES(0.67)`
+|`38.38817227376516`
+
+|`EXP(number)`
+|Exponential
+|`EXP(2.5)`
+|`12.182493960703473`
+
+|`FLOOR(number)`
+|Returns the nearest integer less than or equal to argument
+|`FLOOR(25.3)`
+|`25`
+
+|`LN(number)`
+|Natural logarithm
+|`LN(2.5)`
+|`0.9162907318741551`
+
+|`LOG10(number)`
+|Base 10 logarithm
+|`LOG(2.5)`
+|`0.3979400086720376`
+
+|`MOD(x:number, y:number)`
+|Returns the remainder of x / y
+|`MOD(20,3)`
+|`2`
+
+|`POWER(x:number, y:number)`
+|Returns x to the power of y
+|`POWER(20,3)`
+|`8000`
+
+|`RADIANS(DOUBLE)`
+|Converts degrees to radians
+|`RADIANS(38.39)`
+|`0.6700318998406232`
+
+|`RAND`
+|Random value in the range [0.0; 1.0)
+|`RAND()`
+|`0.6324099982812553`
+
+|`RAND(number)`
+|Random value in the range [0.0; 1.0) using the given seed
+|`RAND(10)`
+|`0.7304302967434272`
+
+|`ROUND(number)`
+|Rounds to an integer
+|`ROUND(34.5678)`
+|`35`
+
+|`ROUND(number, s:integer)`
+|Rounds to `s` decimal places
+|`ROUND(34.5678, 2)`
+|`34.57`
+
+|`SIGN(number)`
+|Returns -1, 0 or 1 for negative, zero or positive argument, respectively
+|`SIGN(-25)`
+|`-1`
+
+|`SQUARE(number)`
+|Squares the input
+|`SQUARE(2)`
+|`4`
+
+|`SQRT(number)`
+|Returns the square root of the input
+|`SQRT(4)`
+|`2`
+
+|`TRUNCATE(number)`
+|Truncates to an integer
+|`TRUNC(34.5678)`
+|`34`
+
+|`TRUNCATE(number, s:integer)`
+|Truncates to `s` decimal places
+|`TRUNC(34.5678, 2)`
+|`34.56`
+
+|===
+
+== String Functions
+
+.Descriptions of string functions
+[cols="1,2,1,1", options="header"]
+|===
+| Function
+| Description
+| Example
+| Result
+
+|`string \|\| string`
+|Concatenates two strings
+|`'John' \|\| ' ' \|\| 'Doe'`
+|`John Doe`
+
+|`ASCII(string)`
+|Returns the ASCII code of the first character of the argument
+|`ASCII('a')`
+|`97`
+
+|`BTRIM(string)`
+|Equivalent to `TRIM(BOTH ' ' FROM string)`
+|
+|
+
+|`CONCAT_WS(separator_string, string1, string2)`
+|Returns a string that consists of the arguments `string1` `separator_string` `string2`
+|`CONCAT_WS('-', 'John', 'Doe')`
+|John-Doe
+
+|`INITCAP(string)`
+|Converts the first letter of each word to upper case, and the rest to lower case
+|`INITCAP('john DOE')`
+|`John Doe`
+
+|`LENGTH(string)`
+|Length of the string
+|`LENGTH('John Doe')`
+|`8`
+
+|`LOWER(string)`
+|Converts the string to lower case
+|`LOWER('John Doe')`
+|`john doe`
+
+|`LTRIM(string)`
+|Removes the empty spaces from the left-hand side of `string`. This function is equivalent to `TRIM(LEADING ' ' FROM string)`
+|`RTRIM( John Doe')`
+|`John Doe`
+
+|`POSITION(substring IN string [FROM position])`
+|Returns the position of the first occurrence of `substring` in `string`
+|`POSITION('Doe' IN 'John Doe')`
+|`5`
+
+|`REPLACE(substring, old_string, new_string)`
+|Replaces all occurrences of `substring` in `old_string` with `new_string`
+|`REPLACE('John', 'John Doe', 'Jane')`
+|`Jane Doe`
+
+|`RTRIM(string)`
+|Removes the empty spaces from the right-hand side of `string`. This function is equivalent to `TRIM(TRAILING ' ' FROM string)`
+|`RTRIM(John Doe ')`
+|`John Doe`
+
+|`SUBSTRING(string FROM integer)`
+|Extracts a substring starting with the given position
+|`SUBSTRING('John Doe' FROM 6)`
+|`Doe`
+
+|`SUBSTRING(string FROM integer FOR integer)`
+|Extracts a substring starting with the given position for the given length
+|`SUBSTRING('John Doe' FROM 1 FOR 4)`
+|`John`
+
+|`TRIM([LEADING\|TRAILING\|BOTH] [characters FROM] string)`
+|Removes `characters` (a space by default) from the start/end/both ends of the string
+|`TRIM(BOTH '[]' FROM '[John Doe]')`
+|`John Doe`
+
+|`TRIM(characters FROM string)`
+|Equivalent to `TRIM(BOTH characters FROM string)`
+|`TRIM('[]' FROM '[John Doe]')`
+|`John Doe`
+
+|`TRIM(string)`
+|Equivalent to `TRIM(BOTH ' ' FROM string)`
+|`TRIM(' John Doe ')`
+|`John Doe`
+
+|`UPPER(string)`
+|Converts a string to upper case
+|`UPPER('John Doe')`
+|`JOHN DOE`
+|===
+
+== Table-Valued Functions
+
+Table-valued functions return tables of batch or streaming sources that you can use in SQL statements.
+
+.Descriptions of table-valued functions
+[cols="1,2", options="header"]
+|===
+| Function
+| Description
+
+|`TABLE(generate_series(start_number, stop_number))`
+|Returns a table that contains a series of numbers, starting from the `start_number` argument and ending with the `stop_number` arguments.
+
+|`TABLE(generate_stream(numbers_per_second))`
+|Returns a table that contains a stream of numbers, starting from 0 at a rate of `numbers_per_second` every second
+|===
+
+== Trigonometric Functions
+
+.Descriptions of trigonometric functions
+[cols="1,1", options="header"]
+|===
+| Function
+| Description
+
+|`ACOS(double)`
+|Inverse cosine
+
+|`ASIN(double)`
+|Inverse sine
+
+|`ATAN(double)`
+|Inverse tangent
+
+|`ATAN2(x:number, y:number)`
+|Arc tangent
+
+|`COS(double)`
+|Cosine
+
+|`COT(double)`
+|Cotangent
+
+|`SIN(double)`
+|Sine
+
+|`TAN(double)`
+|Tangent
+|===
+
+== Windowing Table-Valued Functions
+
+Windowing table-valued functions split infinite streams into bounded chunks that you can apply stateful computations to.
+
+NOTE: All windowing table-valued functions should be used with a `GROUP BY` clause.
+
+For a guide about streaming windowed aggregations in SQL, see xref:querying-streams.adoc[].
+
+=== TUMBLE
+
+The `TUMBLE()` function takes a table as input and adds a window to the output. The return value is always the original timestamped column, the window start time, and the window end time.
+
+`TUMBLE(TABLE(data), DESCRIPTOR(timecol), size)`
+
+This function takes the following required parameters:
+
+[cols="1m,2a"]
+|===
+|Parameter|Description
+
+|data
+|A table parameter that must contain a timestamped column.
+|timecol
+|The column that contains the timestamp.
+|size
+|The duration of the tumbling window.
+
+|===
+
+
+

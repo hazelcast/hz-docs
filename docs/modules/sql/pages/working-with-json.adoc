@@ -1,0 +1,176 @@
+= Working with JSON Data in SQL
+:description: In Hazelcast, the SQL service supports two data types for JSON data: JSON-FLAT, which does not allow you to query nested keys/values and JSON, which supports nested queries and JSON functions.
+:page-beta: true
+
+JSON is a semi-structured data type used for holding JSON (JavaScript Object Notation) data. In Hazelcast, the SQL service supports the following data types for JSON data:
+
+- `JSON`: Allows you to map JSON data to a single column and use xref:functions-and-operators.adoc#jsonpath[JSONPath] syntax to query any keys/values, including nested levels.
+- `JSON-FLAT`: Allows you to map JSON data to columns and query only top-level keys/values.
+
+== JSON
+
+The `JSON` data type comes with full support for querying JSON in maps, Kafka topics, and files.
+
+To query JSON data, you can use the following built-in functions that allow you read JSON values from a column:
+
+- xref:functions-and-operators.adoc#json-functions[JSON_QUERY]
+- xref:functions-and-operators.adoc#json-functions[JSON_VALUE]
+
+With the `JSON` data type, you can map JSON data to a single column, using the xref:create-mapping.adoc[`CREATE MAPPING` statement].
+
+For example, consider the following JSON data:
+
+```json
+"countries": {
+  "country":"United Kingdom",
+  "cities": [{"city": "London"}]
+}
+```
+
+To map the JSON data type to a value in a map:
+
+```sql
+CREATE MAPPING countries
+type IMap OPTIONS('keyFormat'='int', 'valueFormat'='json');
+```
+
+This statement creates a mapping to a map with two columns where the key is an `INTEGER` and the value is `JSON`:
+
+- `__key`: A key as an integer
+- `this`: JSON data
+
+To insert entries into the map, you can use the xref:sink-into.adoc[`INSERT INTO` or `SINK INTO` statements]. The JSON data must be formatted as a string.
+
+```SQL
+INSERT INTO countries
+  VALUES (1, '{"countries": {
+  "country":"United Kingdom",
+  "cities": [{"city": "London"}]
+  }}');
+```
+
+To query the JSON value, use the <<jsonpath, JSONPath>> syntax in the built-in JSON functions.
+
+This example gets the `cities` object from the `countries` map where the primitive value for the `country` key is `United Kingdom`.
+
+```sql
+SELECT
+  JSON_QUERY(this, '$.countries.cities') <1>
+  FROM countries
+  WHERE JSON_VALUE(this, '$.countries.country') = 'United Kingdom'; <2>
+```
+
+<1> Get the `cities` object from the `countries` map.
+<2> Check the primitive value in the `country` key for `United Kingdom`.
+
+=== JSONPath
+
+Some JSON functions require a `json_path` parameter. This path identifies the values that you want to get from the `jsonArg` parameter, which is JSON or a JSON-formatted string.
+
+The JSON-formatted string must be a JSON string that is formatted like this:
+
+.Example jsonArg
+```json
+'{"company" : {"employees" : [{"id" : "1","name":"jordan"}]}}'
+```
+
+The `json_path` parameter must be in the JSONPath format, which starts with a dollar (`$`) symbol that refers to the root level of the JSON-formatted string.
+
+.JSONPath
+```
+'$'
+```
+
+.Result
+```json
+{"company" : {"employees" : [{"id" : "1","name":"jordan"}]}}
+```
+
+To reach child values, you can use dot notation.
+
+.JSONPath
+```
+'$.company.employees'
+```
+
+.Result
+```json
+[{"id" : "1","name":"jordan"}]
+```
+
+If the JSON object is an array, you can use brackets to specify the array index.
+
+.JSONPath
+```
+'$.company.employees[0]'
+```
+
+.Result
+```json
+{"id" : "1","name":"jordan"}
+```
+
+If a key contains a dollar symbol ($), dots, or brackets, wrap it in double quotes.
+
+.JSON with a dollar symbol as the key
+```json
+{"amount": [{"$": "300"}]}
+```
+
+.JSONPath to access the key
+```
+'$.amount."$"'
+```
+
+If the JSONPath does not match a value in JSON-formatted string, `NULL` is returned.
+
+If the JSONPath is invalid, the following exception is thrown: `com.hazelcast.com.jayway.jsonpath.InvalidPathException`.
+
+== JSON-FLAT
+
+The `JSON-FLAT` data type comes with partial support for querying JSON.
+
+This data type allows you to map JSON data to columns and only query top-level keys/values.
+
+For example, consider the following JSON data:
+
+```json
+"countries": "United Kingdom",
+"cities": "London"
+```
+
+To map the JSON data to a value in a map:
+
+```sql
+CREATE MAPPING cities (
+__key INT,
+countries VARCHAR,
+cities VARCHAR)
+type IMap OPTIONS('keyFormat'='int', 'valueFormat'='json-flat');
+```
+
+This statement creates a mapping to a map that expects three columns:
+
+- `__key`: A key as an integer
+- `countries`: A string
+- `cities`: A string
+
+```SQL
+INSERT INTO cities VALUES
+(1, 'United Kingdom','London');
+```
+
+To query the JSON value, select the column names.
+
+```sql
+SELECT cities AS City, countries AS Country
+FROM cities;
+```
+
+```
++--------------------+--------------------+
+|City                |Country             |
++--------------------+--------------------+
+|London              |United Kingdom      |
++--------------------+--------------------+
+```

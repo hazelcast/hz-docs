@@ -4,61 +4,420 @@
 Hazelcast distributed queue enables all cluster members and clients to interact with it;
 you can add an item in one cluster member and remove it from another member or a client.
 
-[[getting-a-queue-and-putting-items]]
-== Getting a Queue and Putting Items
-
-Use the Hazelcast instance's `getQueue` method to get the queue, then use the queue's
-`put` method to put items into the queue.
-
-[source,java]
-----
-include::ROOT:example$/dds/queue/ExampleQueue.java[tag=samplequeue]
-----
-
 FIFO ordering applies to all queue operations across the cluster. The user objects
-(such as `MyTask` in the example above) that are enqueued or dequeued have to be `Serializable`.
+that are enqueued or dequeued have to be `Serializable`.
 
 Hazelcast distributed queue performs no batching while iterating over the queue.
 All items are copied locally and iteration occurs locally.
 
-Hazelcast distributed queue uses `ItemListener` to listen to the events that occur
-when items are added to and removed from the queue. See the xref:events:object-events.adoc#listening-for-item-events[Listening for Item Events section] for information about how to create an item listener
-class and register it.
-
 [[creating-an-example-queue]]
-== Creating an Example Queue
+== Creating a Queue
 
-The following example code illustrates a distributed queue that connects a producer and consumer.
+When you start a Hazelcast member with default configuration, it will have an empty Queue named `default`.
+See xref:getting-started:get-started-docker.adoc[Start a Local Cluster in Docker] for a quick cluster startup.
+
+You can either use this `default` Queue or create your own using the Queue's getter methods as shown in the below
+examples. If you pass a name other than `default` as the Queue name in these methods, it creates a new Queue with
+the given name; otherwise, it will use this existing Queue.
+
+The following examples illustrate a distributed queue that connects a producer and consumer.
 
 [[putting-items-on-the-queue]]
 === Putting Items on the Queue
 
-Let's `put` one integer on the queue every second, 100 integers total.
+The following creates a queue producer which adds one integer on the queue every second, 100 integers total.
 
+[tabs] 
+==== 
+Java:: 
++
+--
+
+. xref:getting-started:install-hazelcast.adoc#using-java[Install the Java client library]
+
+. Add the following to your file:
++
 [source,java]
 ----
 include::ROOT:example$/dds/queue/ProducerMember.java[tag=producer]
 ----
+<1> Create or access the Queue called `queue`.
+<2> Add items to `queue`.
+--
+
+C++::
++
+--
+
+. link:https://github.com/hazelcast/hazelcast-cpp-client/blob/v5.0.0/Reference_Manual.md#11-installing[Install the latest C++ client library^]
+
+. Add the following to your file:
++
+[source,cpp]
+----
+#include <hazelcast/client/hazelcast_client.h>
+
+int main() {
+    auto hz = hazelcast::new_client().get();
+
+    auto queue = hz.get_queue("queue").get(); <1>
+
+    <2>
+    for (int k = 1; k < 100; k++) {
+        queue->put(k).get();
+        std::cout << "Producing: " << k << std::endl;
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    queue->put(-1).get();
+    std::cout << "Producer Finished!" << std::endl;
+
+    std::cout << "Finished" << std::endl;
+
+    return 0;
+}
+----
+<1> Create or access the Queue called `queue`.
+<2> Add items to `queue`.
+--
+
+C Sharp::
++
+--
+
+. link:http://hazelcast.github.io/hazelcast-csharp-client/latest/doc/download-install.html[Install the latest C Sharp client library^]
+
+. Add the following to your file:
++
+[source,cs]
+----
+using System;
+using System.Threading.Tasks;
+
+namespace Hazelcast.Examples.DistributedObjects
+{
+    public class QueueExample
+    {
+        public static async Task Main(string[] args)
+        {
+            var options = new HazelcastOptionsBuilder()
+                .With(args)
+                .WithConsoleLogger()
+                .Build();
+
+            await using var client = await HazelcastClientFactory.StartNewClientAsync(options);
+
+            await using var queue = await client.GetQueueAsync<string>("queue"); <1>
+
+            <2>
+            var producer = Task.Run(async () =>
+            {
+                for (var i = 0; i < 100; i++)
+                {
+                    await queue.OfferAsync("value " + i);
+                }
+                Console.WriteLine("produced");
+            });
+
+        }
+    }
+}
+----
+<1> Create or access the Queue called `queue`.
+<2> Add items to `queue`.
+--
+
+Node.js::
++
+--
+
+. Install the Node.js client library.
++
+[source,shell]
+----
+npm install hazelcast-client
+----
+
+. Add the following to your file:
++
+[source,javascript]
+----
+
+----
+--
+
+Python::
++
+--
+. Install the Python client library.
++
+[source,shell]
+----
+pip install hazelcast-python-client
+----
+
+. Add the following to your file:
++
+[source,python]
+----
+import hazelcast
+import threading
+
+client = hazelcast.HazelcastClient()
+
+queue = client.get_queue("queue") <1>
+
+<2>
+def produce():
+    for i in range(100):
+        queue.offer("value-" + str(i))
 
 
-`Producer` puts a **-1** on the queue to show that the ``put``s are finished.
+producer_thread = threading.Thread(target=produce)
+
+producer_thread.start()
+
+producer_thread.join()
+
+client.shutdown()
+----
+<1> Create or access the Queue called `queue`.
+<2> Add items to `queue`.
+--
+
+Go::
++
+--
+. Install the Go client library.
++
+[source,shell]
+----
+go get github.com/hazelcast/hazelcast-go-client
+----
+
+. Add the following to your file:
++
+[source,go]
+----
+
+----
+
+--
+
+====
+
+
+This producer puts a **-1** on the queue to show that adding items operation is finished.
 
 [[taking-items-off-the-queue]]
 === Taking Items off the Queue
 
-Now, let's create a `Consumer` class to `take` a message from this queue, as shown below.
+The following creates a queue consumer to take messages from this queue.
 
+[tabs] 
+==== 
+Java:: 
++
+--
+
+. xref:getting-started:install-hazelcast.adoc#using-java[Install the Java client library]
+
+. Add the following to your file:
++
 [source,java]
 ----
 include::ROOT:example$/dds/queue/ConsumerMember.java[tag=consumer]
 ----
+<1> Access the queue.
+<2> Start taking queue messages.
+<3> Wait for 5 seconds until the next message is taken.
+--
 
-As seen in the above example code, `Consumer` waits five seconds before it consumes
-the next message. It stops once it receives **-1**. Also note that `Consumer`
+C++::
++
+--
+
+. link:https://github.com/hazelcast/hazelcast-cpp-client/blob/v5.0.0/Reference_Manual.md#11-installing[Install the latest C++ client library^]
+
+. Add the following to your file:
++
+[source,cpp]
+----
+#include <hazelcast/client/hazelcast_client.h>
+
+int main() {
+    auto hz = hazelcast::new_client().get();
+
+    auto queue = hz.get_queue("queue").get(); <1>
+
+    while (true) {
+        auto item = queue->take<int32_t>().get(); <2>
+        if (item) {
+            std::cout << "Consumed: " << item.value() << std::endl;
+
+            if (item.value() == -1) {
+                queue->put(-1).get();
+                break;
+            }
+        } else {
+            std::cout << "Retrieved item is null." << std::endl;
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(5)); <3>
+    }
+    std::cout << "Consumer Finished!" << std::endl;
+
+    std::cout << "Finished" << std::endl;
+
+    return 0;
+}
+----
+<1> Access the queue.
+<2> Start taking queue messages.
+<3> Wait for 5 seconds until the next message is taken.
+--
+
+C Sharp::
++
+--
+
+. link:http://hazelcast.github.io/hazelcast-csharp-client/latest/doc/download-install.html[Install the latest C Sharp client library^]
+
+. Add the following to your file:
++
+[source,cs]
+----
+using System;
+using System.Threading.Tasks;
+
+namespace Hazelcast.Examples.DistributedObjects
+{
+    public class QueueExample
+    {
+        public static async Task Main(string[] args)
+        {
+            var options = new HazelcastOptionsBuilder()
+                .With(args)
+                .WithConsoleLogger()
+                .Build();
+
+            await using var client = await HazelcastClientFactory.StartNewClientAsync(options);
+
+            await using var queue = await client.GetQueueAsync<string>("queue"); <1>
+
+            var consumer = Task.Run(async () =>
+            {
+                var nConsumed = 0;
+                string e;
+                while (nConsumed++ < 100 && (e = await queue.PollAsync()) != null) <2>
+                {
+                    Console.WriteLine("Consuming " + e);
+                }
+                Console.WriteLine("consumed");
+            });
+
+            await Task.WhenAll(producer, consumer);
+
+            await client.DestroyAsync(queue);
+        }
+    }
+}
+----
+<1> Access the queue.
+<2> Start taking queue messages.
+--
+
+Node.js::
++
+--
+
+. Install the Node.js client library.
++
+[source,shell]
+----
+npm install hazelcast-client
+----
+
+. Add the following to your file:
++
+[source,javascript]
+----
+
+----
+--
+
+Python::
++
+--
+. Install the Python client library.
++
+[source,shell]
+----
+pip install hazelcast-python-client
+----
+
+. Add the following to your file:
++
+[source,python]
+----
+import hazelcast
+import threading
+
+client = hazelcast.HazelcastClient()
+
+queue = client.get_queue("queue") <1>
+
+
+def consume():
+    consumed_count = 0
+    while consumed_count < 100: <2>
+        head = queue.take().result()
+        print("Consuming {}".format(head))
+        consumed_count += 1
+
+
+consumer_thread = threading.Thread(target=consume)
+
+consumer_thread.start()
+
+consumer_thread.join()
+
+client.shutdown()
+----
+<1> Access the queue.
+<2> Start taking queue messages.
+--
+
+Go::
++
+--
+. Install the Go client library.
++
+[source,shell]
+----
+go get github.com/hazelcast/hazelcast-go-client
+----
+
+. Add the following to your file:
++
+[source,go]
+----
+
+----
+
+--
+
+====
+
+As seen in the above example, the consumer waits five seconds before it takes
+the next message. It stops once it receives **-1**. Also note that the consumer
 puts **-1** back on the queue before the loop is ended.
 
-When you first start `Producer` and then start `Consumer`, items produced on the
+When you first start the producer and then start the consumer, items produced on the
 queue will be consumed from the same queue.
+
+Hazelcast distributed queue uses item listeners to listen to the events that occur
+when items are added to and removed from the queue. See the
+xref:events:object-events.adoc#listening-for-item-events[Listening for Item Events section]
+for information about how to create an item listener class and register it.
 
 [[balancing-the-queue-operations]]
 === Balancing the Queue Operations
@@ -128,7 +487,7 @@ Once the queue size reaches this value, `put` operations are blocked until the
 queue size goes below `max-size`, which happens when a consumer removes items from the queue.
 
 Let's set **10** as the maximum size of our example queue in <<creating-an-example-queue,
-Creating an Example Queue>>.
+Creating a Queue>>.
 
 [tabs] 
 ==== 

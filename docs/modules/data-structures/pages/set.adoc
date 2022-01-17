@@ -1,53 +1,29 @@
 = Set
 [[set]]
 
-Hazelcast Set is a distributed and concurrent implementation of `java.util.Set`.
-It has the following features:
+Hazelcast Set is a distributed collection that contains no duplicate elements
+and does not preserve the order of elements.
 
-* Hazelcast Set does not allow duplicate elements.
-* Hazelcast Set does not preserve the order of elements.
-* Hazelcast Set is a non-partitioned data structure: all the data that belongs to
-a set lives on one single partition in that member.
-* Hazelcast Set cannot be scaled beyond the capacity of a single machine.
-Since the whole set lives on a single partition, storing a large amount of
-data on a single set may cause memory pressure. Therefore, you should use multiple
-sets to store a large amount of data. This way, all the sets are spread across the
+Hazelcast Set is a non-partitioned data structure; all the data that belongs to
+a Set lives on one single partition in that member.
+
+Hazelcast Set cannot be scaled beyond the capacity of a single machine.
+Since the whole Set lives on a single partition, storing a large amount of
+data on a single Set may cause memory pressure. Therefore, you should use multiple
+Sets to store a large amount of data. This way, all the Sets are spread across the
 cluster, sharing the load.
-* A backup of Hazelcast Set is stored on a partition of another member in the cluster
-so that data is not lost in the event of a primary member failure.
-* All items are copied to the local member and iteration occurs locally.
-* The equals method implemented in Hazelcast Set uses a serialized byte version of
-objects, as opposed to `java.util.HashSet`.
 
-== Creating a Set on the Member Side
+A backup of Set is stored on a partition of another member in the cluster
+so that data is not lost in the event of a primary member failure. All Set items are
+copied to the local member and iteration occurs locally.
 
-The following code creates a Set called `set` on the member side.
-
-[source,java]
-----
-import com.hazelcast.collection.ISet;
-import com.hazelcast.core.Hazelcast;
-import com.hazelcast.core.HazelcastInstance;
-
-public class ExampleSet {
-
-    public static void main(String[] args) {
-        HazelcastInstance hz = Hazelcast.newHazelcastInstance();
-        ISet<String> set = hz.getSet("set");
-        set.add("Tokyo");
-        set.add("Paris");
-        set.add("London");
-        set.add("New York");
-        System.out.println("Putting finished!");
-    }
-}
-----
-
-
+== Creating a Set
 [[getting-a-set-and-putting-items]]
-== Getting a Set and Putting Items
 
-Use the ``HazelcastInstance``s `getSet` method to get the Set, then use the `add` method to put items into it.
+To create a Set, use the `getSet()` methods and pass it the name that you want to call your Set.
+If a Set with this name already exists, Hazelcast returns that Set. Otherwise, Hazelcast creates a new Set with the given name.
+
+In this example, we create a Set called `set`, add items to it, and print the items.
 
 [tabs] 
 ==== 
@@ -61,15 +37,19 @@ Java::
 +
 [source,java]
 ----
-import com.hazelcast.collection.ISet;
-import com.hazelcast.core.Hazelcast;
+import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.collection.ISet;
 
-public class ExampleSet {
+import java.util.Collection;
 
-    public static void main(String[] args) {
-        HazelcastInstance hz = Hazelcast.newHazelcastInstance();
-        ISet<String> set = hz.getSet("set"); <1>
+public class Client {
+
+    public static void main(String[] args) throws Exception {
+
+        HazelcastInstance client = HazelcastClient.newHazelcastClient();
+
+        ISet<String> set = client.getSet("set"); <1>
         <2>
         set.add("Tokyo");
         set.add("Paris");
@@ -79,7 +59,7 @@ public class ExampleSet {
     }
 }
 ----
-<1> Get the Set called `set` from the cluster.
+<1> Create or access the Set called `set`.
 <2> Add items to `set`.
 --
 
@@ -113,7 +93,7 @@ int main() {
     return 0;
 }
 ----
-<1> Get the Set called `set` from the cluster.
+<1> Create or access the Set called `set`.
 <2> Add items to `set`.
 --
 
@@ -163,7 +143,7 @@ namespace Hazelcast.Examples.DistributedObjects
     }
 }
 ----
-<1> Get the Set called `set` from the cluster.
+<1> Create or access the Set called `set`.
 <2> Add items to `set`.
 --
 
@@ -209,7 +189,7 @@ const { Client } = require('hazelcast-client');
     }
 })();
 ----
-<1> Get the Set called `set` from the cluster.
+<1> Create or access the Set called `set`.
 <2> Add items to `set`.
 --
 
@@ -250,7 +230,7 @@ for item in items:
 
 client.shutdown()
 ----
-<1> Get the Set called `set` from the cluster.
+<1> Create or access the Set called `set`.
 <2> Add items to `set`.
 --
 
@@ -315,7 +295,7 @@ func main() {
 	client.Shutdown(ctx)
 }
 ----
-<1> Get the Set called `set` from the cluster.
+<1> Create or access the Set called `set`.
 <2> Add items to `set`.
 --
 
@@ -328,7 +308,7 @@ for information about how to create an item listener class and register it.
 [[configuring-set]]
 == Configuring Set
 
-The following are the example Hazelcast Set configurations.
+The following is an example Set configuration.
 
 [tabs] 
 ==== 
@@ -378,15 +358,15 @@ include::ROOT:example$/dds/set/SetConfiguration.java[tag=sc]
 ----
 ====
 
-Hazelcast Set configuration has the following elements:
+The following are the configuration elements and their descriptions:
 
-* `statistics-enabled`: True (default) if statistics gathering is
-enabled on the Set, false otherwise.
 * `backup-count`: Count of synchronous backups. Set is a non-partitioned
-data structure, so all entries of a Set reside in one partition. When this
-parameter is '1', it means there will be one backup of that Set in another
-member in the cluster. When it is '2', two members will have the backup.
-* `async-backup-count`: Count of asynchronous backups.
+data structure, so all entries of a Set reside in one partition. For example, if this parameter is `1`,
+there is one backup of the Set in one other member. If it is `2`, two members will have the backup.
+* `async-backup-count`: Count of asynchronous backups. See xref:data-structures:backing-up-maps.adoc#in-memory-backup-types[Backup Types]
+to learn more about synchronous and asynchronous backups.
+* `statistics-enabled`: Specifies whether the statistics gathering is enabled for your Set.
+If set to `false`, you cannot collect statistics in your implementation. Its default value is `true`.
 * `max-size`: The maximum number of entries for this Set. It can be any number
 between 0 and Integer.MAX_VALUE. Its default value is 0, meaning there is no capacity constraint.
 * `item-listeners`: Lets you add listeners (listener classes) for the list items.

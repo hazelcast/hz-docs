@@ -1,47 +1,326 @@
 = List
 [[list]]
 
-Hazelcast List (`IList`) is similar to Hazelcast Set, but it also
-allows duplicate elements.
+Hazelcast List is similar to Hazelcast Set - it is a distributed collection, but it
+allows duplicate elements and preserves the order of elements.
 
-* Besides allowing duplicate elements, Hazelcast List preserves the order of elements.
-* Hazelcast List is a non-partitioned data structure where values and each
+Hazelcast List is a non-partitioned data structure where values and each
 backup are represented by their own single partition.
-* Hazelcast List cannot be scaled beyond the capacity of a single machine.
-* All items are copied to local and iteration occurs locally.
 
+Hazelcast List cannot be scaled beyond the capacity of a single machine.
+All items are copied to local and iteration occurs locally.
 
-'''
-NOTE: While IMap and ICache are the recommended data structures to be used by
-https://jet.hazelcast.org/[Hazelcast Jet^], IList can also be used by it for unit
-testing or similar non-production situations. See https://jet-start.sh/docs/api/sources-sinks#ilist[here^]
-in the Hazelcast Jet Reference Manual to learn how Jet can use IList, e.g., how it can fill
-IList with data, consume it in a Jet job and drain the results to another IList.
-See also the https://hazelcast.org/use-cases/fast-batch-processing/[Fast Batch Processing^]
-and https://hazelcast.org/use-cases/real-time-stream-processing/[Real-Time Stream Processing^]
-use cases for Hazelcast Jet.
+You can also use List as a source or sink for batch processing when building your data pipelines.
+You can fill a List with data, consume it in a Hazelcast job and send the results to another List.
+See the xref:integrate:list-connector.adoc[List Connector guide]. 
+
 
 [[getting-a-list-and-putting-items]]
-== Getting a List and Putting Items
+== Creating a List
 
-Use the ``HazelcastInstance``s `getList` method to get the List,
-then use the `add` method to put items into it.
+To create a List, use the `getList()` methods and pass it the name that you want to call your List.
+If a List with this name already exists, Hazelcast returns that List. Otherwise, Hazelcast creates a new List with the given name.
 
+In this example, we create a List called `list`, add items to it, and print the items.
+
+[tabs] 
+==== 
+Java:: 
++
+--
+
+. xref:getting-started:install-hazelcast.adoc#using-java[Install the Java client library]
+
+. Add the following to your file:
++
 [source,java]
 ----
-include::ROOT:example$/dds/list/ExampleList.java[tag=list]
+import com.hazelcast.client.HazelcastClient;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.collection.ISet;
+
+import java.util.Collection;
+
+public class Client {
+
+    public static void main(String[] args) throws Exception {
+
+        HazelcastInstance client = HazelcastClient.newHazelcastClient();
+
+        IList<String> list = client.getList("list"); <1>
+        
+        <2>
+        list.add("Tokyo");
+        list.add("Paris");
+        list.add("London");
+        list.add("New York");
+        System.out.println("Putting finished!");
+    }
+}
+----
+<1> Create or access the List called `list`.
+<2> Add items to `list`.
+--
+
+C++::
++
+--
+
+. link:https://github.com/hazelcast/hazelcast-cpp-client/blob/v5.0.0/Reference_Manual.md#11-installing[Install the latest C++ client library^]
+
+. Add the following to your file:
++
+[source,cpp]
+----
+#include <hazelcast/client/hazelcast_client.h>
+
+int main() {
+    auto hz = hazelcast::new_client().get();
+
+    auto list = hz.get_list("list").get(); <1>
+
+    <2>
+    list->add("Tokyo").then(boost::launch::deferred, [=] (boost::future<bool> f) {
+       if (f.get()) {
+           std::cout << "First addition is successfull!!!" << '\n';
+           list->add("Paris").get();
+           list->add("London").get();
+           list->add("New York").get();
+       }
+    });
+
+    std::cout << "Putting finished!" << std::endl;
+
+    std::cout << "Finished" << std::endl;
+
+    return 0;
+}
+----
+<1> Create or access the List called `list`.
+<2> Add items to `list`.
+--
+
+C Sharp::
++
+--
+
+. link:http://hazelcast.github.io/hazelcast-csharp-client/latest/doc/download-install.html[Install the latest C Sharp client library^]
+
+. Add the following to your file:
++
+[source,cs]
+----
+using System;
+using System.Threading.Tasks;
+
+namespace Hazelcast.Examples.DistributedObjects
+{
+    public class ListExample
+    {
+        public static async Task Main(string[] args)
+        {
+            var options = new HazelcastOptionsBuilder()
+                .With(args)
+                .WithConsoleLogger()
+                .Build();
+
+            await using var client = await HazelcastClientFactory.StartNewClientAsync(options);
+
+            await using var list = await client.GetListAsync<string>("list"); <1>
+
+            <2>
+            await list.AddAsync("Tokyo");
+            await list.AddAsync("Paris");
+            await list.AddAsync("London");
+            await list.AddAsync("New York");
+
+            Console.WriteLine("Get: " + await list.GetAsync(0));
+
+            Console.WriteLine("All: " + string.Join(", ", await list.GetAllAsync()));
+
+            Console.WriteLine("Contains: " + await list.ContainsAsync("item2"));
+
+            Console.WriteLine("Count: " + await list.GetSizeAsync());
+
+            Console.WriteLine("Sublist: " + string.Join(", ", await list.GetSublistAsync(0, 2)));
+
+            // destroy the list
+            await client.DestroyAsync(list);
+        }
+    }
+}
+----
+<1> Create or access the List called `list`.
+<2> Add items to `list`.
+--
+
+Node.js::
++
+--
+
+. Install the Node.js client library.
++
+[source,shell]
+----
+npm install hazelcast-client
 ----
 
-Hazelcast List uses `ItemListener` to listen to events that occur when
+. Add the following to your file:
++
+[source,javascript]
+----
+'use strict';
+
+const { Client } = require('hazelcast-client');
+
+(async () => {
+    try {
+        const client = await Client.newHazelcastClient();
+
+        const list = await client.getList('list'); <1>
+        
+        <2>
+        await list.add('Tokyo');
+        console.log('Added Tokyo');
+        await list.add('Paris', 1);
+        console.log('Added Paris to index 1');
+        await list.add('London');
+        console.log('Added London');
+  
+        <3>
+        await list.remove('Paris');
+        console.log('Removed Paris');
+        const removedItem = await list.removeAt(1);
+        console.log('Removed', removedItem);
+
+        await client.shutdown();
+    } catch (err) {
+        console.error('Error occurred:', err);
+        process.exit(1);
+    }
+})();
+----
+<1> Create or access the List called `list`.
+<2> Add items to `list`.
+<3> Remove items from `list`.
+--
+
+Python::
++
+--
+. Install the Python client library.
++
+[source,shell]
+----
+pip install hazelcast-python-client
+----
+
+. Add the following to your file:
++
+[source,python]
+----
+import hazelcast
+
+client = hazelcast.HazelcastClient()
+
+my_list = client.get_list("cities-list") <1>
+
+<2>
+my_list.add("Tokyo")
+my_list.add("Paris")
+my_list.add("London")
+my_list.add("New York")
+my_list.add("Istanbul")
+
+print("List size: {}".format(my_list.size().result()))
+print("First element: {}".format(my_list.get(0).result()))
+print("Contains London: {}".format(my_list.contains("London").result()))
+print("Sublist: {}".format(my_list.sub_list(3, 4).result()))
+
+<3>
+my_list.remove("Tokyo")
+print("Final size: {}".format(my_list.size().result()))
+
+client.shutdown()
+----
+<1> Create or access the List called `list`.
+<2> Add items to `list`.
+<3> Remove items from `list`.
+--
+
+Go::
++
+--
+. Install the Go client library.
++
+[source,shell]
+----
+go get github.com/hazelcast/hazelcast-go-client
+----
+
+. Add the following to your file:
++
+[source,go]
+----
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"math/rand"
+	"time"
+
+	"github.com/hazelcast/hazelcast-go-client"
+)
+
+func main() {
+	ctx := context.TODO()
+	client, err := hazelcast.StartNewClient(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	rand.Seed(time.Now().Unix())
+	listName := fmt.Sprintf("sample-%d", rand.Int())
+	list, err := client.GetList(ctx, listName) <1>
+	if err != nil {
+		log.Fatal(err)
+	}
+	size, err := list.Size(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(size)
+
+         <2>
+	list.Add(ctx, "Tokyo")
+	list.Add(ctx, "Paris")
+	list.Add(ctx, "London")
+	list.Add(ctx, "New York")
+
+	size, err = list.Size(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(size)
+	// Shutdown client
+	client.Shutdown(ctx)
+}
+----
+<1> Create or access the List called `list`.
+<2> Add items to `list`.
+--
+====
+
+
+Hazelcast List uses item listeners to listen to events that occur when
 items are added to and removed from the List. See the xref:events:object-events.adoc#listening-for-item-events[Listening for Item Events section] for information about how to create an item listener
 class and register it.
 
 [[configuring-list]]
 == Configuring List
 
-The following are the example Hazelcast List configurations.
-
-**Declarative Configuration:**
+The following is an example List configuration.
 
 [tabs] 
 ==== 
@@ -84,24 +363,24 @@ hazelcast:
         - class-name: com.hazelcast.examples.ItemListener
       split-brain-protection-ref: splitbrainprotection-name
 ----
-====
 
-**Programmatic Configuration:**
-
+Java::
++
 [source,java]
 ----
 include::ROOT:example$/dds/list/ListConfiguration.java[tag=lc]
 ----
+====
 
-Hazelcast List configuration has the following elements:
+The following are the configuration elements and their descriptions:
 
-* `statistics-enabled`: True (default) if statistics gathering is
-enabled on the list, false otherwise.
-* `backup-count`: Number of synchronous backups. List is a non-partitioned
-data structure, so all entries of a List reside in one partition. When this
-parameter is '1', there will be one backup of that List in another member in
-the cluster. When it is '2', two members will have the backup.
-* `async-backup-count`: Number of asynchronous backups.
+* `backup-count`: Count of synchronous backups. List is a non-partitioned
+data structure, so all entries of a List reside in one partition. For example, if this parameter is `1`,
+there is one backup of the List in one other member. If it is `2`, two members will have the backup.
+* `async-backup-count`: Count of asynchronous backups. See xref:data-structures:backing-up-maps.adoc#in-memory-backup-types[Backup Types]
+to learn more about synchronous and asynchronous backups.
+* `statistics-enabled`: Specifies whether the statistics gathering is enabled for your List.
+If set to `false`, you cannot collect statistics in your implementation. Its default value is `true`.
 * `max-size`: The maximum number of entries for this List.
 * `item-listeners`: Lets you add listeners (listener classes) for the list items.
 You can also set the attribute `include-value` to `true` if you want the item event

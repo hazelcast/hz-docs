@@ -383,7 +383,7 @@ SELECT * FROM TABLE(
 Hazelcast supports the following functions, which can retrieve JSON data.
 
 .Descriptions of JSON functions
-[cols="[cols="1,2,1,1"]
+[cols="1a,2a,1a,1a"]
 |===
 | Function :: Returns| Description|Example|Result
 
@@ -391,6 +391,7 @@ Hazelcast supports the following functions, which can retrieve JSON data.
 |Extracts a JSON value, such as an array or object, from the `jsonArg` that matches the `jsonPath`.
 
 - `jsonArg`: JSON or a JSON-formatted string
+
 - `jsonPath`: A xref:working-with-json.adoc#jsonpath[JSONPath]. This path identifies the data that you want to get from the input.
 
 |
@@ -400,15 +401,16 @@ SELECT
 ```
 |
 ```json
-{"id":"1","name":"jake"}
+{"id":"1"}
 ```
 
-|`JSON_VALUE(jsonArg, jsonPath [RETURNING dataType])` :: `VARCHAR`
-|Extracts a primitive value, such as a string, number, or boolean, from the `jsonArg` when it matches the `jsonPath`. Returns `NULL` if a non-primitive value is selected.
+|`JSON_VALUE(jsonArg, jsonPath [RETURNING dataType] [[DEFAULT]returnValue ON [ERROR \| NULL]]` :: `VARCHAR`
+|Extracts a primitive value, such as a string, number, or boolean, from the `jsonArg` when it matches the `jsonPath`. Returns `NULL` if a non-primitive value is selected, unless `returnValue` is given.
 
 - `jsonArg`: JSON or a JSON-formatted string
 - `jsonPath`: A xref:working-with-json.adoc#jsonpath[JSONPath]. This path identifies the data that you want to get from the input.
 - `RETURNING`: Returns the value only if it matches the `dataType` or if the value can be cast to the `dataType`, otherwise returns `NULL`.
+- `returnValue`: A value to return in case of an error or a `NULL` return value.
 
 |
 ```sql
@@ -418,6 +420,45 @@ SELECT
 |
 ```json
 1
+```
+
+|`JSON_ARRAY(arrayInput [nullClause])` :: `JSON`
+|Returns a JSON array from a list of input data.
+
+- `arrayInput`: A comma-separated list of array elements.
+- `nullClause`: What to do with null values:
+
+** `ABSENT ON NULL` (default): Do not include `NULL` values in the array.
+** `NULL ON NULL`: Include `NULL` values in the array.
+
+|
+```sql
+SELECT
+  JSON_ARRAY(1, null, 3);
+```
+|
+```json
+[1,3]
+```
+
+|`JSON_OBJECT(nameValue [nullClause])` :: `JSON`
+|Returns a JSON object from name value pairs.
+
+- `nameValue`: A comma-separated list of key/value pairs.
+
+- `nullClause`: What to do with null values:
+
+** `ABSENT ON NULL`: Do not include `NULL` values in the array.
+
+** `NULL ON NULL` (default): Include `NULL` values in the array.
+
+|
+```sql
+SELECT JSON_OBJECT(KEY 'id' VALUE 1, 'name' VALUE null ABSENT ON NULL)
+```
+|
+```json
+{"id": 1}
 ```
 
 |===

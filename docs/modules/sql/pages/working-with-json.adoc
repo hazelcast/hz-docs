@@ -15,6 +15,8 @@ To query JSON data, you can use the following built-in functions that allow you 
 
 - xref:functions-and-operators.adoc#json-functions[JSON_QUERY]
 - xref:functions-and-operators.adoc#json-functions[JSON_VALUE]
+- xref:functions-and-operators.adoc#json-functions[JSON_ARRAY]
+- xref:functions-and-operators.adoc#json-functions[JSON_OBJECT]
 
 With the `JSON` data type, you can map JSON data to a single column, using the xref:create-mapping.adoc[`CREATE MAPPING` statement].
 
@@ -65,13 +67,23 @@ SELECT
 
 === JSONPath
 
-Some JSON functions require a `json_path` parameter. This path identifies the values that you want to get from the `jsonArg` parameter, which is JSON or a JSON-formatted string.
+JSONPath is a query language for JSON.
 
-The JSON-formatted string must be a JSON string that is formatted like this:
+Some JSON functions require JSONPath as a `json_path` parameter. This path identifies the values that you want to get from the `jsonArg` parameter, which can be a JSON parameter or a JSON-formatted string.
 
-.Example jsonArg
+.Example JSON-formatted string
 ```json
 '{"company" : {"employees" : [{"id" : "1","name":"jordan"}]}}'
+```
+
+.Example JSON
+```sql
+INSERT INTO employees VALUES (1, JSON_ARRAY(1,2,3))
+```
+
+.Example HazelcastJsonValue
+```java
+hzInstance.getSql().execute("INSERT INTO countries VALUES (?, ?)", 1L, new HazelcastJsonValue(countriesString));
 ```
 
 The `json_path` parameter must be in the JSONPath format, which starts with a dollar (`$`) symbol that refers to the root level of the JSON-formatted string.
@@ -125,6 +137,61 @@ If a key contains a dollar symbol ($), dots, or brackets, wrap it in double quot
 If the JSONPath does not match a value in JSON-formatted string, `NULL` is returned.
 
 If the JSONPath is invalid, the following exception is thrown: `com.hazelcast.com.jayway.jsonpath.InvalidPathException`.
+
+=== JSONPath Syntax Summary
+
+These are some of the syntax rules from the JSONPath standard.
+
+[cols="20%a,80%a"]
+|===
+|Component|Example
+
+|Variables
+|`$`: Root level
+
+`@`: Value of the current item in a filter.
+
+|Parentheses
+|`(a + b)*c`
+
+|Accessors
+|Member accessor: `$.phone`
+
+Wildcard member accessor: `$.*``
+
+Element accessor: $[1, 2, 4 to 7] 
+
+Wildcard element accessor: `$[*]`
+
+|Filter
+|`$?( @.salary > 100000 )`
+
+|Boolean
+|`&&` `\|\|` `!`
+
+|Comparison
+|`==` `!=` `<>` `<` `<=` `>` `>=`
+
+|Arithmetic
+|`+` `-` `*` `/` `%`
+
+|Item functions
+|`$.type()`
+
+`$.size()`
+
+`$.double()`
+
+`$.ceiling()`
+
+`$.floor()`
+
+`$.abs()`
+
+`$.datetime()`
+
+`$.keyvalue()`
+|===
 
 == JSON-FLAT
 

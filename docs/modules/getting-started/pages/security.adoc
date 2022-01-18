@@ -1,7 +1,9 @@
 = Authenticate Client Connections
 :description: This tutorial introduces you to member security by setting up authentication for client connections. At the end of this tutorial, you'll know how to configure member and client security settings to allow only authorized clients to connect to a cluster.
 
-{description} By default, members allow connections from any Hazelcast client. So, any client with access to a member can connect to the cluster and use its resources. To allow only authorized clients to connect to a member, you can configure authentication credentials on the members and clients, using the security configuration.
+{description}
+
+By default, members allow connections from any Hazelcast client. So, any client with access to a member can connect to the cluster and use its resources. To allow only authorized clients to connect to a member, you can configure authentication credentials on the members and clients, using the security configuration.
 
 In this tutorial, you will complete the following steps:
 
@@ -50,8 +52,8 @@ hazelcast:
           username-password: <4>
             username: member1
             password: s3crEt
-  member-authentication:
-    realm: passwordRealm <5>
+    member-authentication:
+      realm: passwordRealm <5>
 ----
 <1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
 <2> Set to `true` to enable security so that the clients can be authenticated by the member.
@@ -86,7 +88,9 @@ XML::
 <5> Name of the security realm to be used by the member for client authentication.
 ====
 
-With this configuration, you tell the member to accept connections only from the clients
+<1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
+
+With this configuration, the member accepts connections only from clients
 with a username of `member1` and a password of `s3crEt`.
 
 == Step 2. Start the Member
@@ -96,24 +100,24 @@ Run the following command.
 [source,shell,subs="attributes+"]
 ----
 docker run \
-    --net=host \
+    -p=5701:5701 \
     -e JAVA_OPTS="-Dhazelcast.config=/opt/hazelcast/config_ext/hazelcast.yaml" -v ~/config:/opt/hazelcast/config_ext hazelcast/hazelcast-enterprise:{full-version}
 ----
 
-This command starts the member with the configuration provided in Step 1 above. 
-Here, `~/config` is the path to the directory in which the configuration file resides.
-You should replace it with the directory path you've created.
+This command starts the member and configures it, using your configuration file.
+Here, `~/config` is the path to the directory in which you saved the configuration file.
+If you saved the configuration file somewhere else, you should replace this path.
 
-The member is up and running now:
+When you see the following in the terminal, the member is up and running:
 
 [source,shell]
 ----
 Members {size:1, ver:1} [
-	Member [192.168.1.101]:5701 - cfc75512-a9c5-4798-bcca-450b7bf3c105 this
+	Member [172.18.0.2]:5701 - cfc75512-a9c5-4798-bcca-450b7bf3c105 this
 ]
 ----
 
-== Step 3. Connect a Client
+== Step 3. Connect an Authenticated Client to the Member
 
 You'll now use your preferred language to configure a client with the credentials to allow the member to authenticate it.
 
@@ -130,9 +134,12 @@ Python::
 [source,python]
 ----
 import hazelcast
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 client = hazelcast.HazelcastClient(
-    cluster_members=["192.168.1.101:5701"],
+    cluster_members=["127.0.0.1:5701"],
     cluster_name="hello-world",
     creds_username="member1",
     creds_password="s3crEt"
@@ -165,7 +172,7 @@ func main() {
 	ctx := context.TODO()
 	config := hazelcast.Config{}
 	cc := &config.Cluster
-	cc.Network.SetAddresses("192.168.1.101:5701")
+	cc.Network.SetAddresses("127.0.0.1:5701")
 	cc.Name = "hello-world"
 	creds := &cc.Security.Credentials
 	creds.Username = "member1"
@@ -306,7 +313,7 @@ INFO:hazelcast.lifecycle:HazelcastClient {full-version} is STARTING
 INFO:hazelcast.lifecycle:HazelcastClient {full-version} is STARTED
 INFO:hazelcast.connection:Trying to connect to Address(host=127.0.0.1, port=5701)
 INFO:hazelcast.lifecycle:HazelcastClient {full-version} is CONNECTED
-INFO:hazelcast.connection:Authenticated with server Address(host=192.168.1.9, port=5701):63b2a2ce-85f6-413f-8ce9-6058a748e4b9, server version: 5.0, local address: Address(host=127.0.0.1, port=36006)
+INFO:hazelcast.connection:Authenticated with server Address(host=172.18.0.2, port=5701):63b2a2ce-85f6-413f-8ce9-6058a748e4b9, server version: {full-version}, local address: Address(host=127.0.0.1, port=36006)
 INFO:hazelcast.cluster:
 
 Members [1] {

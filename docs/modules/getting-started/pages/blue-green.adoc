@@ -1,15 +1,17 @@
 = Deploy Blue-Green Clusters
 :description: This tutorial introduces you to blue-green cluster deployments. At the end of this tutorial, you'll know how to set up a client to operate continuously even when its connected cluster fails.
 
-{description} When clients are connected to a single cluster, that cluster becomes a single point of failure: If the cluster fails for any reason, the client cannot connect to it and the application may break. To make clients more robust, you can set up a blue-green cluster deployment, which provides a client failover mechanism for rerouting the client connections to a different cluster without requiring a
+{description}
+
+When clients are connected to a single cluster, that cluster becomes a single point of failure: If the cluster fails for any reason, the client cannot connect to it and the application may break. To make clients more robust, you can set up a blue-green cluster deployment, which provides a client failover mechanism for rerouting the client connections to a different cluster without requiring a
 client network configuration update or client restart. You can use a blue-green deployment to manually redirect client traffic while you perform maintenance or software updates,
 as well as automatically redirect client traffic to a different cluster during a disaster recovery scenario.
 
 This tutorial focuses on the disaster recovery scenario, where you will complete the following steps:
 
 . Start two Enterprise clusters: One for the blue deployment, one for the green deployment.
-. Configure a Java client to use the blue-green deployment as a failover.
-. Connect the Java client to the blue cluster.
+. Configure a client to use the blue-green deployment as a failover.
+. Connect the client to the blue cluster.
 . Shut down the blue cluster and see that the client connects to the green one.
 
 NOTE: Blue-Green deployment is currently supported by Hazelcast's Java, Node.js, and Go clients.
@@ -75,7 +77,7 @@ docker run \
     --rm \
     -e HZ_CLUSTERNAME=green \
     -e HZ_LICENSEKEY=<your license key> \ <1>
-    -p 5701:5701 hazelcast/hazelcast-enterprise:{full-version}
+    -p 5702:5701 hazelcast/hazelcast-enterprise:{full-version}
 ----
 <1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
 
@@ -108,7 +110,8 @@ For this, you need to create two client configurations for the same client, and 
 YAML:: 
 + 
 -- 
-[source,shell]
+.client-blue.yaml
+[source,yaml]
 ----
 hazelcast-client:
   cluster-name: blue
@@ -120,13 +123,14 @@ hazelcast-client:
 
 XML::
 +
-[source,shell]
+.client-blue.xml
+[source,xml]
 ----
 <hazelcast-client>
     <cluster-name>blue</cluster-name>
     <network>
         <cluster-members>
-            <address>172.18.0.2</address>
+            <address>127.0.0.1:5701</address>
         </cluster-members>
     </network>
 </hazelcast-client>
@@ -139,39 +143,42 @@ XML::
 YAML:: 
 + 
 -- 
-[source,shell]
+.client-green.yaml
+[source,yaml]
 ----
 hazelcast-client:
   cluster-name: green
   network:
     cluster-members:
-      - 172.18.0.3
+      - 127.0.0.1:5702
 ----
 --
 
 XML::
 +
-[source,shell]
+.client-green.xml
+[source,xml]
 ----
 <hazelcast-client>
     <cluster-name>green</cluster-name>
     <network>
         <cluster-members>
-            <address>172.18.0.3</address>
+            <address>127.0.0.1:5702</address>
         </cluster-members>
     </network>
 </hazelcast-client>
 ----
 ====
-. Create the client failover configuration by passing the above two client configurations.
-Name of this configuration file must be `hazelcast-client-failover.yaml` (or `hazelcast-client-failover.xml`).
+. Create a client failover configuration file and reference the `client-blue` and `client-green` client configurations.
+The name of the client failover configuration file must be `hazelcast-client-failover` (`hazelcast-client-failover.yaml` or `hazelcast-client-failover.xml`).
 +
 [tabs] 
 ==== 
 YAML:: 
 + 
 -- 
-[source,shell]
+.hazelcast-client-failover.yaml
+[source,yaml]
 ----
 hazelcast-client-failover:
   try-count: 4 <1>
@@ -184,7 +191,8 @@ hazelcast-client-failover:
 
 XML::
 +
-[source,shell]
+.hazelcast-client-failover.xml
+[source,xml]
 ----
 <hazelcast-client-failover>
     <try-count>4</try-count> <1>
@@ -218,7 +226,7 @@ Java::
 ----
 HazelcastInstance client = HazelcastClient.newHazelcastFailoverClient(); <1>
 ----
-<1> This code picks up `hazelcast-client-failover.yml` (or XML) created in Step 3 as the configuration file.
+<1> This constructor automatically finds the `hazelcast-client-failover` file.
 --
 
 Node.js::
@@ -261,7 +269,7 @@ Dec 01, 2021 8:11:33 PM com.hazelcast.core.LifecycleService
 INFO: hz.client_1 [blue] [{full-version}] HazelcastClient {full-version} (20210922 - dbaeffe) is CLIENT_CONNECTED
 ----
 
-== Step 5. Kill the Blue Cluster
+== Step 5. Simulate a Failure on the Blue Cluster
 
 Now, you'll kill the `blue` cluster and see the client is automatically connected to the `green` failover cluster.
 

@@ -1,38 +1,28 @@
 = 5.1 Release Notes
 
-Hazelcast Platform is a major release which unifies
-the former Hazelcast IMDG and Jet products in a
-single solution.
-
-For information about upgrading from previous IMDG and Jet
-releases, see the xref:migrate:upgrade.adoc[Upgrading to Hazelcast Platform section].
-
-To learn about the changes in previous IMDG and Jet releases, see https://docs.hazelcast.org/docs/rn/[IMDG release notes] and
-https://jet-start.sh/blog/[Jet release notes].
-
 == New Features
 
 * **Tiered Storage (BETA)**: Introduced the Tiered Storage feature which is an extension to Hazelcast Map
-allowing you to store map data both in the memory and on the disk. It is an Hazelcast Enterprise feature
-and in BETA state. See the xref:tiered-storage.adoc[Tiered Storage section].
-* **Persistence for Dynamic Configuration:** You can now reload the updates made in the dynamic configuration
-after a cluster restart. See the xref:persist-dynamic-conf.adoc[Persisting Changes in Dynamic Configuration section].
+assigning data to various types of storage media based on access patterns. It is an Hazelcast Enterprise feature
+and in BETA state. See the xref:tiered-storage:tiered-storage.adoc[Tiered Storage documentation].
+* **Persistence for Dynamic Configuration:** You can now reload the updates made in configuration dynamically (at runtime)
+after a cluster restart. See the xref:persist-dynamic-conf.adoc[documentation] on persisting changes in dynamic configuration.
 
 == Enhancements
 
 === SQL Engine
 
 * Added support of the following statements, operators, and functions:
-** `CREATE VIEW`
-** `DROP VIEW`
-** `EXPLAIN`
-** `CREATE INDEX`
-** `IMPOSE_ORDER` to enhance the given input table with watermarks
+** xref:sql:create-view.adoc[`CREATE VIEW`]
+** xref:sql:drop-view.adoc[`DROP VIEW`]
+** xref:sql:explain.adoc[`EXPLAIN`]
+** xref:sql:create-index.adoc[`CREATE INDEX`]
+** xref:sql:querying-streams.adoc#aggregation[`TUMBLE(TABLE table, DESCRIPTOR(column), window_size)`] for creating tumbling windows in streaming queries.
+*** xref:sql:querying-streams.adoc#watermarks[`IMPOSE_ORDER`] to enhance the given input table with watermarks.
 ** `UNION`
 ** `UNION ALL`
 ** `EXISTS`
 ** `NOT EXISTS`
-** `TUMBLE(TABLE table, DESCRIPTOR(column), window_size)` to enhance the input relation with the `window_start` and `window_end` columns
 ** `RIGHT JOIN`
 ** Sub-queries and `VALUES()` execution in JOIN arguments
 ** `JSON_ARRAY`, `JSON_OBJECT`
@@ -50,6 +40,14 @@ https://github.com/hazelcast/hazelcast/pull/19589[#19589]
 * Added `JSON` as a supported type for the SQL engine with functions like `JSON_QUERY` and `JSON_VALUE`;
 they return a JSON object/array and a primitive value, respectively.
 https://github.com/hazelcast/hazelcast/pull/19303[#19303]
++
+For an overview of JSON in SQL, see xref:sql:working-with-json.adoc[].
+
+=== Distribution
+
+* Hazelcast command line interface is now available within the Hazelcast distribution package; previously
+it needed to be installed separately.
+https://github.com/hazelcast/hazelcast/pull/20262[#20062]
 
 === Cloud Discovery Plugins
 
@@ -87,16 +85,16 @@ to the regular access restrictions; it can read from/write to any data structure
 to access those via client permissions.
 https://github.com/hazelcast/hazelcast/pull/19718[#19718]
 
-=== Tiered Storage
-
-* Introduced the hybrid log allocator;  hybrid log is used for allocating slots for the
-records stored in the log and for moving these slots between multiple devices,
-such as the main memory, disks, Optane, remote devices, etc. #4430
-
 === Other Enhancements
 
-* Updated log4j2 dependency version to 2.16.0 in Hazelcast's root `pom.xml`.
+* Updated log4j2 dependency version to 2.17.1 in Hazelcast's root `pom.xml`.
 https://github.com/hazelcast/hazelcast/pull/20184[#20184]
+* With the introduction of Tiered Storage feature, we've improved the partition migration system to support chunked partition migrations.
+By this way, the data is sent as a stream of chunks while the partitions are migrated upon member failures or new member additions.
+Previously, at most 250 MB was recommended as the maximum size for a partition; however, if a partition is backed by Tiered Storage,
+this size may go beyond this limit and may cause out of memory errors during the migrations of partitions having large data. Chunked
+partition migrations eliminate these errors.
+https://github.com/hazelcast/hazelcast/pull/20005[#20005]
 * The `hz-start` script now accepts absolute paths when providing the Hazelcast configuration file's location.
 https://github.com/hazelcast/hazelcast/pull/19908[#19908]
 * JSON strings can now work with paging predicate queries.
@@ -112,6 +110,10 @@ https://github.com/hazelcast/hazelcast/pull/19653[#19653]
 * Since the name of Hot Restart Persistence feature changed to Persistence, the prefix for its
 metrics also has been changed from "hot-restart" to "persistence".
 https://github.com/hazelcast/hazelcast/pull/19543[#19543]
+* Aligned the Near Cache and query cache behaviors when the in-memory format is `OBJECT`:
+** Improved query cache methods to eliminate extra deserialization
+** Added `serializeKeys` flag to query cache configuration to align the behavior with Near Cache.
+https://github.com/hazelcast/hazelcast/issues/19487[#19487]
 * Improved the speed of connection by a member when it joins the cluster, by removing the unnecessary
 sleep statements in the code.
 https://github.com/hazelcast/hazelcast/pull/18932[#18932]
@@ -152,8 +154,8 @@ https://github.com/hazelcast/hazelcast/pull/20001[#20001]
 * Fixed an issue where querying a map with `SELECT` (SQL) was failing when the data has compact serialization
 and the cluster has more than one member (with the  class not being on the classpath).
 https://github.com/hazelcast/hazelcast/issues/19952[#19952]
-* Hazelcast was executing cluster wide operations when you query the state of a member using the health
-check endpoint - it was causing to kill all the members in a cluster; this issue has been fixed.
+* In Kubernetes environment, when the health check endpoint was taking too long to respond, the
+Hazelcast members were considered to be unresponsive and terminated; this issue has been fixed.
 https://github.com/hazelcast/hazelcast/pull/19829[#19829]
 * Fixed an issue where the command `hz-stop --help` was not displaying the help but executing
 the `hz-stop` command.

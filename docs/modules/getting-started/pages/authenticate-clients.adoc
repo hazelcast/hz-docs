@@ -55,11 +55,6 @@ hazelcast:
     member-authentication:
       realm: passwordRealm <5>
 ----
-<1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
-<2> Set to `true` to enable security so that the clients can be authenticated by the member.
-<3> Name of the security realm to be passed to the authentication configuration; it is set to `passwordRealm` in this example for convenience.
-<4> Identity configuration element to set the credentials (username and password) to be used by the member for client authentication.
-<5> Name of the security realm to be used by the member for client authentication.
 --
 
 XML::
@@ -81,14 +76,12 @@ XML::
     </security>
 </hazelcast>
 ----
+====
 <1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
 <2> Set to `true` to enable security so that the clients can be authenticated by the member.
 <3> Name of the security realm to be passed to the authentication configuration; it is set to `passwordRealm` in this example for convenience.
 <4> Identity configuration element to set the credentials (username and password) to be used by the member for client authentication.
 <5> Name of the security realm to be used by the member for client authentication.
-====
-
-<1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
 
 With this configuration, the member accepts connections only from clients
 with a username of `member1` and a password of `s3crEt`.
@@ -258,48 +251,15 @@ Node.js::
 +
 [source,javascript]
 ----
-const { Client } = require('hazelcast-client');
-class UsernamePasswordCredentials {
-    constructor(username, password, endpoint) {
-        this.username = username;
-        this.password = password;
-        this.endpoint = endpoint;
-        this.factoryId = 1;
-        this.classId = 1;
+const config = {
+    security: {
+        usernamePassword: {
+            username: 'admin',
+            password: 'some-strong-password'
+        }
     }
-    readPortable(reader) {
-        this.username = reader.readString('username');
-        this.endpoint = reader.readString('password');
-        this.password = reader.readString('endpoint');
-    }
-    writePortable(writer) {
-        writer.writeString('username', this.username);
-        writer.writeString('password', this.password);
-        writer.writeString('endpoint', this.endpoint);
-    }
-}
-function usernamePasswordCredentialsFactory(classId) {
-    if (classId === 1) {
-        return new UsernamePasswordCredentials();
-    }
-    return null;
-}
-(async () => {
-    try {
-        const client = await Client.newHazelcastClient({
-            clusterName: 'hello-world',
-            serialization: {
-                portableFactories: {
-                    1: usernamePasswordCredentialsFactory
-                }
-            },
-            customCredentials: new UsernamePasswordCredentials('member1', 's3crEt', '192.168.1.101:5701')
-        });
-        console.log(await client.getDistributedObjects());
-    } catch (error) {
-        console.error('Error occurred:', error);
-    }
-})();
+};
+const client = await Client.newHazelcastClient(cfg);
 ----
 . Run this script in the IDE.
 

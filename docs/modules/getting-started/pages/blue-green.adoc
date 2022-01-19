@@ -1,0 +1,381 @@
+= Deploy Blue-Green Clusters
+:description: This tutorial introduces you to blue-green cluster deployments. At the end of this tutorial, you'll know how to set up a client to operate continuously even when its connected cluster fails.
+
+{description}
+
+When clients are connected to a single cluster, that cluster becomes a single point of failure: If the cluster fails for any reason, the client cannot connect to it and the application may break. To make clients more robust, you can set up a blue-green cluster deployment, which provides a client failover mechanism for rerouting the client connections to a different cluster without requiring a
+client network configuration update or client restart. You can use a blue-green deployment to manually redirect client traffic while you perform maintenance or software updates,
+as well as automatically redirect client traffic to a different cluster during a disaster recovery scenario.
+
+This tutorial focuses on the disaster recovery scenario, where you will complete the following steps:
+
+. Start two Enterprise clusters: One for the blue deployment, one for the green deployment.
+. Configure a client to use the blue-green deployment as a failover.
+. Connect the client to the blue cluster.
+. Shut down the blue cluster and see that the client connects to the green one.
+
+NOTE: Blue-Green deployment is currently supported by Hazelcast's Java, Node.js, and Go clients.
+This tutorial gives instructions for Java and Node.js clients.
+
+== Before You Begin
+
+To complete this tutorial, you need the following:
+
+[cols="1a,1a"]
+|===
+|Prerequisites|Useful resources
+
+|Trial license
+|https://trialrequest.hazelcast.com/[Hazelcast website]
+
+|Docker image for the full Hazelcast distribution
+|xref:get-started-enterprise.adoc[Install Hazelcast Enterprise]
+
+|Docker network with the name `hazelcast-network`
+|Use the `docker network create hazelcast-network` command 
+
+|===
+
+== Step 1. Start the Blue Enterprise Cluster
+
+In this step, you use the Hazelcast Enterprise Docker image to start a local single-member cluster called `blue`.
+This step also installs your Enterprise license key.
+
+Run the following command on the terminal:
+
+[source,shell,subs="attributes+"]
+----
+docker run \
+    --network hazelcast-network \
+    --rm \
+    -e HZ_CLUSTERNAME=blue \
+    -e HZ_LICENSEKEY=<your license key> \ <1>
+    -p 5701:5701 hazelcast/hazelcast-enterprise:{full-version}
+----
+<1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
+
+You should see your cluster name in the console along with the IP address of the Docker container that's running the Hazelcast member.
+
+[source,shell,subs="attributes+"]
+----
+2021-12-01 18:26:42,369 [ INFO] [main] [c.h.i.c.ClusterService]: [172.18.0.2]:5701 [blue] [{full-version}] 
+
+Members {size:1, ver:1} [
+	Member [172.18.0.2]:5701 - c00213e1-da50-4b5f-a53b-ccfe4a1ebeea this
+]
+
+2021-12-01 18:26:42,384 [ INFO] [main] [c.h.c.LifecycleService]: [172.18.0.2]:5701 [blue] [{full-version}] [172.18.0.2]:5701 is STARTED
+----
+
+== Step 2. Start the Green Enterprise Cluster
+
+Start another local single-member cluster called `green`.
+
+[source,shell,subs="attributes+"]
+----
+docker run \
+    --network hazelcast-network \
+    --rm \
+    -e HZ_CLUSTERNAME=green \
+    -e HZ_LICENSEKEY=<your license key> \ <1>
+    -p 5702:5701 hazelcast/hazelcast-enterprise:{full-version}
+----
+<1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
+
+See the `green` cluster is formed:
+
+[source,shell,subs="attributes+"]
+----
+2021-12-01 18:28:46,299 [ INFO] [main] [c.h.i.c.ClusterService]: [172.18.0.3]:5701 [green] [{full-version}] 
+
+Members {size:1, ver:1} [
+	Member [172.18.0.3]:5701 - 72f5520c-8c27-4501-9199-a8da6b58c0b4 this
+]
+
+2021-12-01 18:28:46,321 [ INFO] [main] [c.h.c.LifecycleService]: [172.18.0.3]:5701 [green] [{full-version}] [172.18.0.3]:5701 is STARTED
+----
+
+Now, you have two separate Hazelcast Enterprise clusters running on your local.
+
+== Step 3. Configure the Client
+
+NOTE: This configuration step is for the Java client. For the Node.js client, see <<step-4-connect-the-client-to-blue-cluster, Step 4>>
+which provides the combined sample code for configuration and startup.
+
+In this step, you'll configure a client, so that it initially connects to the `blue` cluster, and when
+the `blue` cluster is down, it automatically connects to the `green` cluster.
+
+For this, you need to create two client configurations for the same client, and pass these to a failover configuration.
+
+. Create the following structure in a project directory of your choice.
++
+----
+📄 pom.xml
+📂 src
+  📂 main
+    📂 java
+      📄 MyClient.java
+    📂 resources
+----
+. Create the client configuration file for the `blue` cluster, called `client-blue.yaml` (or `client-blue.xml`)
+and place it in the `resources` directory:
++
+[tabs] 
+==== 
+YAML:: 
++ 
+-- 
+.client-blue.yaml
+[source,yaml]
+----
+hazelcast-client:
+  cluster-name: blue
+  network:
+    cluster-members:
+      - 127.0.0.1:5701
+  connection-strategy:
+    connection-retry:
+      cluster-connect-timeout-millis: 1000 <1>
+----
+--
+
+XML::
++
+.client-blue.xml
+[source,xml]
+----
+<hazelcast-client>
+    <cluster-name>blue</cluster-name>
+    <network>
+        <cluster-members>
+            <address>127.0.0.1:5701</address>
+        </cluster-members>
+    </network>
+    <connection-strategy>
+        <connection-retry>
+            <cluster-connect-timeout-millis>1000</cluster-connect-timeout-millis> <1>
+        </connection-retry>
+    </connection-strategy>
+</hazelcast-client>
+----
+====
+<1> Timeout value in milliseconds for the client to give up to connect to the current cluster.
+For testing/development purposes, set to 1000 milliseconds to see the client connecting to the failover cluster faster than in a production scenario.
+. Create the client configuration for the `green` cluster, called `client-green.yaml` (or `client-green.xml`)
+and place it in the `resources` directory:
++
+[tabs] 
+==== 
+YAML:: 
++ 
+-- 
+.client-green.yaml
+[source,yaml]
+----
+hazelcast-client:
+  cluster-name: green
+  network:
+    cluster-members:
+      - 127.0.0.1:5702
+  connection-strategy:
+    connection-retry:
+      cluster-connect-timeout-millis: 1000 <1>
+----
+--
+
+XML::
++
+.client-green.xml
+[source,xml]
+----
+<hazelcast-client>
+    <cluster-name>green</cluster-name>
+    <network>
+        <cluster-members>
+            <address>127.0.0.1:5702</address>
+        </cluster-members>
+    </network>
+    <connection-strategy>
+        <connection-retry>
+            <cluster-connect-timeout-millis>1000</cluster-connect-timeout-millis> <1>
+        </connection-retry>
+    </connection-strategy>
+</hazelcast-client>
+----
+====
+<1> Timeout value in milliseconds for the client to give up to connect to the current cluster.
+For testing/development purposes, set to 1000 milliseconds to see the client connecting to the failover cluster faster than in a production scenario.
+. Create a client failover configuration file and reference the `client-blue` and `client-green` client configurations.
+The name of the client failover configuration file must be `hazelcast-client-failover` (`hazelcast-client-failover.yaml` or `hazelcast-client-failover.xml`).
+Place this failover configuration file in the `resources` directory.
++
+[tabs] 
+==== 
+YAML:: 
++ 
+-- 
+.hazelcast-client-failover.yaml
+[source,yaml]
+----
+hazelcast-client-failover:
+  try-count: 4 <1>
+  clients:
+    - client-blue.yaml
+    - client-green.yaml
+----
+--
+
+XML::
++
+.hazelcast-client-failover.xml
+[source,xml]
+----
+<hazelcast-client-failover>
+    <try-count>4</try-count> <1>
+    <clients>
+        <client>client-blue.xml</client>
+        <client>client-green.xml</client>
+    </clients>
+</hazelcast-client-failover>
+----
+====
+<1> Number of times that the client will try to reconnect to each cluster before shutting down.
++
+In this failover configuration file, you are directing the client to connect to the clusters in the given order from top to bottom;
+see xref:clients:java#ordering-of-clusters-when-clients-try-to-connect[Ordering of Clusters]. So, when you start the client
+(see Step 4 below), it will initially connect to the `blue` cluster. Here is what may happen:
+
+* When the `blue` cluster fails, the client attempts to reconnect to it four times.
+* If the connection is unsuccessful, the client will try to connect to the `green` cluster four times.
+* If these eight connection attempts are unsuccessful, the client shuts down.
+
+== Step 4. Connect the Client to Blue Cluster
+
+In this step, you'll start the client.
+
+[tabs] 
+==== 
+Java:: 
++
+
+. Install the xref:getting-started:install-hazelcast.adoc#use-java[Java client library].
+. Add the following to the `MyClient.java` file.
++
+-- 
+[source,java,subs="attributes+"]
+----
+import com.hazelcast.client.HazelcastClient;
+import com.hazelcast.client.config.ClientFailoverConfig;
+import com.hazelcast.core.HazelcastInstance;
+
+HazelcastInstance client = HazelcastClient.newHazelcastFailoverClient(); <1>
+
+/* This example assumes that you have the following directory structure
+// showing the locations of this Java client code and client/failover configurations.
+//
+//📄 pom.xml
+//📂 src
+//  📂 main
+//    📂 java
+//      📄 MyClient.java
+//    📂 resources
+//      📄 client-blue.yaml
+//      📄 client-green.yaml
+//      📄 hazelcast-client-failover.yaml
+*/
+----
+<1> This constructor automatically finds the `hazelcast-client-failover` file.
+--
+
+Node.js::
++
+
+. Install the Node.js client library: `npm install hazelcast-client`
+. In your preferred Node.js IDE, create a new project to include the following script.
++
+[source,javascript]
+----
+const { Client } = require('hazelcast-client');
+
+(async () => {
+    try {
+      const client = await Client.newHazelcastFailoverClient({
+        tryCount: 4,
+        clientConfigs: [
+            {
+                clusterName: 'green',
+                network: {
+                    clusterMembers: ['127.0.0.1:5702']
+                },
+                connectionStrategy: {
+                  connectionRetry: {
+                    clusterConnectTimeoutMillis: 1000
+                  }
+                }
+            },
+            {
+                clusterName: 'blue',
+                network: {
+                    clusterMembers: ['127.0.0.1:5701']
+                },
+                connectionStrategy: {
+                  connectionRetry: {
+                    clusterConnectTimeoutMillis: 1000
+                  }
+                }
+            }
+        ]
+      });
+        
+    } catch (err) {
+        console.error('Error occurred:', err);
+    }
+})();
+----
+====
+
+Assuming that the `blue` cluster is alive, you should see a log similar to the following on the `blue` cluster’s terminal, showing that the client is connected.
+
+[source,shell,subs="attributes+"]
+----
+2021-12-01 18:11:33,928 [ INFO] [hz.wizardly_taussig.priority-generic-operation.thread-0] [c.h.c.i.p.t.AuthenticationMessageTask]: [172.18.0.2]:5701 [blue] [{full-version}] Received auth from Connection[id=5, /172.18.0.2:5701->/172.18.0.1:61254, qualifier=null, endpoint=[172.18.0.1]:61254, alive=true, connectionType=JVM, planeIndex=-1], successfully authenticated, clientUuid: bf2ba9e2-d6f5-4a63-af43-e8d5ed8174b4, client name: hz.client_1, client version: {full-version}
+----
+
+You can also verify the client is connected on the client side's terminal.
+
+[source,shell,subs="attributes+"]
+----
+INFO: hz.client_1 [blue] [{full-version}] Trying to connect to [172.18.0.2]:5701
+Dec 01, 2021 8:11:33 PM com.hazelcast.core.LifecycleService
+INFO: hz.client_1 [blue] [{full-version}] HazelcastClient {full-version} (20210922 - dbaeffe) is CLIENT_CONNECTED
+----
+
+== Step 5. Simulate a Failure on the Blue Cluster
+
+Now, you'll kill the `blue` cluster and see the client is automatically connected to the `green` failover cluster.
+
+. Shut down the `blue` cluster on its terminal simply by pressing kbd:[Ctrl+C].
+. Verify that the client is connected to the `green` cluster on the cluster's and client's terminal.
++
+[source,shell,subs="attributes+"]
+----
+2021-12-01 18:11:33,928 [ INFO] [hz.wizardly_taussig.priority-generic-operation.thread-0] [c.h.c.i.p.t.AuthenticationMessageTask]: [172.18.0.3]:5701 [green] [{full-version}] Received auth from Connection[id=5, /172.18.0.3:5701->/172.18.0.2:62432, qualifier=null, endpoint=[172.18.0.2]:62432, alive=true, connectionType=JVM, planeIndex=-1], successfully authenticated, clientUuid: bf2ba9e2-d6f5-4a63-af43-e8d5ed8174b4, client name: hz.client_1, client version: {full-version}
+----
++
+[source,shell,subs="attributes+"]
+----
+INFO: hz.client_1 [green] [{full-version}] Trying to connect to [172.18.0.3]:5701
+Dec 01, 2021 8:16:45 PM com.hazelcast.core.LifecycleService
+INFO: hz.client_1 [green] [{full-version}] HazelcastClient {full-version} (20210922 - dbaeffe) is CLIENT_CONNECTED
+----
+
+== Step 6. Shut Down the Cluster
+
+Shut down the cluster you've created in this tutorial so that you can start a fresh one when you
+move to the other tutorials. To shut down the cluster, close the terminals in which the members are running or press kbd:[Ctrl+C] in each terminal.
+
+== Next Steps
+
+If you're interested in learning more about the topics introduced in this tutorial, see xref:clients:java#blue-green-deployment-and-disaster-recovery[Blue-Green Deployment].
+
+This is the last tutorial in this Hazelcast Enterprise series. To learn more, see these xref:getting-started:get-started-enterprise.adoc#next-steps[links].

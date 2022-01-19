@@ -382,86 +382,164 @@ SELECT * FROM TABLE(
 
 Hazelcast supports the following functions, which can retrieve JSON data.
 
-.Descriptions of JSON functions
-[cols="1a,2a,1a,1a"]
-|===
-| Function :: Returns| Description|Example|Result
+=== JSON_QUERY
 
-|`JSON_QUERY(jsonArg, jsonPath)` :: `JSON`
-|Extracts a JSON value, such as an array or object, from the `jsonArg` that matches the `jsonPath`.
+The `JSON_QUERY()` function extracts a JSON value from a JSON parameter or a JSON-formatted string that matches a given JsonPath expression.
 
-- `jsonArg`: JSON or a JSON-formatted string
+*Syntax*
+```
+JSON_QUERY(jsonArg:{VARCHAR | JSON}, jsonPath:VARCHAR [<wrapperBehavior>] [<onClauseArg> ON ERROR] [<onClauseArg> ON EMPTY])` ::= JSON
+```
 
-- `jsonPath`: A xref:working-with-json.adoc#jsonpath[JSONPath]. This path identifies the data that you want to get from the input.
+- `jsonArg`: JSON or a JSON-formatted string.
 
-|
+- `jsonPath`: A xref:working-with-json.adoc#jsonpath[JsonPath] expression that identifies the data that you want to get from the `jsonArg` parameter.
+
+- `wrapperBehavior`: What to do with return results.
+
+** `WITHOUT [ARRAY] WRAPPER` (default): Remove square brackets from the returned JSON value. The return value must be a single value.
+** `WITH [CONDITIONAL] [ARRAY] WRAPPER`: Wrap array return values into a JSON array.
+** `WITH UNCONDITIONAL [ARRAY] WRAPPER`: Wrap all return values into a JSON array.
+
+- `onClauseArg`: A value to return in case of the given `ON` condition:
+
+** `EMPTY ARRAY`
+** `EMPTY OBJECT`
+** `ERROR`
+** `NULL`
+
+
+*Examples*
+
+.JSON-formatted string
 ```sql
 SELECT
   JSON_QUERY('{"company" : {"employees" : [{"id" : "1"}]}}', '$.company.employees[0]');
-```
-|
-```json
-{"id":"1"}
+
+-- Result
+-- {"id":"1"}
 ```
 
-|`JSON_VALUE(jsonArg, jsonPath [RETURNING dataType] [[DEFAULT]returnValue ON [ERROR \| NULL]]` :: `VARCHAR`
-|Extracts a primitive value, such as a string, number, or boolean, from the `jsonArg` when it matches the `jsonPath`. Returns `NULL` if a non-primitive value is selected, unless `returnValue` is given.
+.WITH CONDITIONAL WRAPPER
+```sql
+SELECT
+  JSON_QUERY('[1,2,3]', '$[*]?(@ > 1)' WITH CONDITIONAL ARRAY WRAPPER);
+
+-- Result
+-- [2,3]
+```
+
+.WITHOUT WRAPPER
+```sql
+SELECT
+  JSON_QUERY('[1,2,3]', '$[*]?(@ > 1)' WITHOUT ARRAY WRAPPER);
+
+-- Result
+-- This example throws an error because you cannot return multiple values without the array wrapper.
+```
+
+.WITH UNCONDITIONAL WRAPPER
+```sql
+SELECT
+  JSON_QUERY('[1,"rainbow",3]', '$[1]' WITH UNCONDITIONAL ARRAY WRAPPER);
+
+-- Result
+-- ["rainbow"]
+```
+
+=== JSON_VALUE
+
+The `JSON_VALUE()` function extracts a primitive value, such as a string, number, or boolean that matches a given JsonPath expression. This function returns `NULL` if a non-primitive value is selected, unless the `RETURNING` parameter is given.
+
+*Syntax*
+```
+JSON_VALUE(jsonArg:{VARCHAR \| JSON}, jsonPath:VARCHAR [RETURNING dataType] [<onClauseArg> ON ERROR] [<onClauseArg> ON EMPTY])` ::= VARCHAR
+```
 
 - `jsonArg`: JSON or a JSON-formatted string
-- `jsonPath`: A xref:working-with-json.adoc#jsonpath[JSONPath]. This path identifies the data that you want to get from the input.
+- `jsonPath`: A xref:working-with-json.adoc#jsonpath[JsonPath] expression that identifies the data that you want to get from the `jsonArg` parameter.
 - `RETURNING`: Returns the value only if it matches the `dataType` or if the value can be cast to the `dataType`, otherwise returns `NULL`.
-- `returnValue`: A value to return in case of an error or a `NULL` return value.
+- `onClauseArg`: What to return in case of the `ON` condition:
 
-|
+** `DEFAULT <literal | column | parameter>`
+** `ERROR`
+** `NULL`
+
+*Examples*
+
+.JSON-formatted string
 ```sql
 SELECT
   JSON_VALUE('{"company" : {"employees" : [{"id" : "1","name":"jake"}]}}', '$.company.employees[0].id');
-```
-|
-```json
-1
+
+-- Returns
+-- 1
 ```
 
-|`JSON_ARRAY(arrayInput [nullClause])` :: `JSON`
-|Returns a JSON array from a list of input data.
+=== JSON_ARRAY
 
-- `arrayInput`: A comma-separated list of array elements.
-- `nullClause`: What to do with null values:
+The `JSON_ARRAY()` function returns a JSON array from a list of input data.
+
+*Syntax*
+```
+JSON_ARRAY([columnOrParameterOrLiteral:ANY], [...more columns/parameters/literals:ANY] [{ABSENT|NULL} ON NULL]) ::= JSON
+```
+
+- `columnOrParameterOrLiteral`: A list of input data.
+- `ON NULL`: What to do with null values:
 
 ** `ABSENT ON NULL` (default): Do not include `NULL` values in the array.
 ** `NULL ON NULL`: Include `NULL` values in the array.
 
-|
+*Examples*
+
 ```sql
 SELECT
   JSON_ARRAY(1, null, 3);
+
+-- Result
+-- [1,3]
 ```
-|
-```json
-[1,3]
+
+=== JSON_OBJECT
+
+The `JSON_OBJECT()` function returns a JSON object from the given key/value pairs.
+
+*Syntax*
+```
+JSON_OBJECT([key:VARCHAR : value:ANY], [more key-value pairs] [{ABSENT|NULL} ON NULL]) ::= JSON
+```
+Or
+
+```
+JSON_OBJECT([KEY key:VARCHAR VALUE value:ANY] [{ABSENT|NULL} ON NULL]) ::= JSON
 ```
 
-|`JSON_OBJECT(nameValue [nullClause])` :: `JSON`
-|Returns a JSON object from name value pairs.
+- `key`: A name for the key.
 
-- `nameValue`: A comma-separated list of key/value pairs.
+- `value`: Any value such as a literal or a column.
 
-- `nullClause`: What to do with null values:
+- `ON NULL`: What to do with `NULL` values.
+
+** `NULL ON NULL (default): Include `NULL` values in the array.
 
 ** `ABSENT ON NULL`: Do not include `NULL` values in the array.
 
-** `NULL ON NULL` (default): Include `NULL` values in the array.
+*Examples*
 
-|
 ```sql
 SELECT JSON_OBJECT(KEY 'id' VALUE 1, 'name' VALUE null ABSENT ON NULL)
-```
-|
-```json
-{"id": 1}
+
+-- Result
+-- {"id": 1}
 ```
 
-|===
+```sql
+SELECT JSON_OBJECT('id': 1, 'name': null ABSENT ON NULL)
+
+-- Result
+-- {"id": 1}
+```
 
 == Mathematical Functions
 

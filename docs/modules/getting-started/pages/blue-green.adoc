@@ -15,6 +15,7 @@ This tutorial focuses on the disaster recovery scenario, where you will complete
 . Shut down the blue cluster and see that the client connects to the green one.
 
 NOTE: Blue-Green deployment is currently supported by Hazelcast's Java, Node.js, and Go clients.
+This tutorial gives instructions for Java and Node.js clients.
 
 == Before You Begin
 
@@ -98,12 +99,26 @@ Now, you have two separate Hazelcast Enterprise clusters running on your local.
 
 == Step 3. Configure the Client
 
+NOTE: This configuration step is for the Java client. For the Node.js client, see <<step-4-connect-the-client-to-blue-cluster, Step 4>>
+which provides the combined sample code for configuration and startup.
+
 In this step, you'll configure a client, so that it initially connects to the `blue` cluster, and when
 the `blue` cluster is down, it automatically connects to the `green` cluster.
 
 For this, you need to create two client configurations for the same client, and pass these to a failover configuration.
 
-. Create the client configuration file for the `blue` cluster, called `client-blue.yaml` (or `client-blue.xml`).
+. Create the following structure in a project directory of your choice.
++
+----
+📄 pom.xml
+📂 src
+  📂 main
+    📂 java
+      📄 MyClient.java
+    📂 resources
+----
+. Create the client configuration file for the `blue` cluster, called `client-blue.yaml` (or `client-blue.xml`)
+and place it in the `resources` directory:
 +
 [tabs] 
 ==== 
@@ -117,7 +132,10 @@ hazelcast-client:
   cluster-name: blue
   network:
     cluster-members:
-      - 172.18.0.2
+      - 127.0.0.1:5701
+  connection-strategy:
+    connection-retry:
+      cluster-connect-timeout-millis: 1000 <1>
 ----
 --
 
@@ -133,10 +151,18 @@ XML::
             <address>127.0.0.1:5701</address>
         </cluster-members>
     </network>
+    <connection-strategy>
+        <connection-retry>
+            <cluster-connect-timeout-millis>1000</cluster-connect-timeout-millis> <1>
+        </connection-retry>
+    </connection-strategy>
 </hazelcast-client>
 ----
 ====
-. Create the client configuration for the `green` cluster, called `client-green.yaml` (or `client-green.xml`).
+<1> Timeout value in milliseconds for the client to give up to connect to the current cluster.
+For testing/development purposes, set to 1000 milliseconds to see the client connecting to the failover cluster faster than in a production scenario.
+. Create the client configuration for the `green` cluster, called `client-green.yaml` (or `client-green.xml`)
+and place it in the `resources` directory:
 +
 [tabs] 
 ==== 
@@ -151,6 +177,9 @@ hazelcast-client:
   network:
     cluster-members:
       - 127.0.0.1:5702
+  connection-strategy:
+    connection-retry:
+      cluster-connect-timeout-millis: 1000 <1>
 ----
 --
 
@@ -166,11 +195,19 @@ XML::
             <address>127.0.0.1:5702</address>
         </cluster-members>
     </network>
+    <connection-strategy>
+        <connection-retry>
+            <cluster-connect-timeout-millis>1000</cluster-connect-timeout-millis> <1>
+        </connection-retry>
+    </connection-strategy>
 </hazelcast-client>
 ----
 ====
+<1> Timeout value in milliseconds for the client to give up to connect to the current cluster.
+For testing/development purposes, set to 1000 milliseconds to see the client connecting to the failover cluster faster than in a production scenario.
 . Create a client failover configuration file and reference the `client-blue` and `client-green` client configurations.
 The name of the client failover configuration file must be `hazelcast-client-failover` (`hazelcast-client-failover.yaml` or `hazelcast-client-failover.xml`).
+Place this failover configuration file in the `resources` directory.
 +
 [tabs] 
 ==== 
@@ -186,7 +223,6 @@ hazelcast-client-failover:
     - client-blue.yaml
     - client-green.yaml
 ----
-<1> Count of the client's reconnection attempts to the cluster.
 --
 
 XML::
@@ -202,8 +238,8 @@ XML::
     </clients>
 </hazelcast-client-failover>
 ----
-<1> Count of the client's reconnection attempts to the cluster.
 ====
+<1> Number of times that the client will try to reconnect to each cluster before shutting down.
 +
 In this failover configuration file, you are directing the client to connect to the clusters in the given order from top to bottom;
 see xref:clients:java#ordering-of-clusters-when-clients-try-to-connect[Ordering of Clusters]. So, when you start the client
@@ -220,36 +256,85 @@ In this step, you'll start the client.
 [tabs] 
 ==== 
 Java:: 
-+ 
++
+
+. Install the xref:getting-started:install-hazelcast.adoc#use-java[Java client library].
+. Add the following to the `MyClient.java` file.
++
 -- 
-[source,java]
+[source,java,subs="attributes+"]
 ----
+import com.hazelcast.client.HazelcastClient;
+import com.hazelcast.client.config.ClientFailoverConfig;
+import com.hazelcast.core.HazelcastInstance;
+
 HazelcastInstance client = HazelcastClient.newHazelcastFailoverClient(); <1>
+
+// Following is the example directory structure
+// showing the locations of this Java client code and client/failover configurations.
+//
+//📄 pom.xml
+//📂 src
+//  📂 main
+//    📂 java
+//      📄 MyClient.java
+//    📂 resources
+//      📄 client-blue.yaml
+//      📄 client-green.yaml
+//      📄 hazelcast-client-failover.yaml
+//
+
+
+//Java client will log similar to the following line at INFO level by default:
+//INFO: hz.client [blue] [{full-version}] HazelcastClient {full-version} (20190205 - 3af10e3) is CLIENT_CHANGED_CLUSTER
 ----
 <1> This constructor automatically finds the `hazelcast-client-failover` file.
 --
 
 Node.js::
 +
+
+. Install the Node.js client library: `npm install hazelcast-client`
+. In your preferred Node.js IDE, create a new project to include the following script.
++
 [source,javascript]
 ----
-const client = await Client.newHazelcastFailoverClient({
-    tryCount: 4,
-    clientConfigs: [
-        {
-            clusterName: 'blue',
-            network: {
-                clusterMembers: ['172.18.0.2']
+const { Client } = require('hazelcast-client');
+
+(async () => {
+    try {
+      const client = await Client.newHazelcastFailoverClient({
+        tryCount: 4,
+        clientConfigs: [
+            {
+                clusterName: 'green',
+                network: {
+                    clusterMembers: ['127.0.0.1:5702']
+                },
+                connectionStrategy: {
+                  connectionRetry: {
+                    clusterConnectTimeoutMillis: 1000
+                  }
+                }
+            },
+            {
+                clusterName: 'blue',
+                network: {
+                    clusterMembers: ['127.0.0.1:5701']
+                },
+                connectionStrategy: {
+                  connectionRetry: {
+                    clusterConnectTimeoutMillis: 1000
+                  }
+                }
             }
-        },
-        {
-            clusterName: 'green',
-            network: {
-                clusterMembers: ['172.18.0.3']
-            }
-        }
-    ]
-});
+        ]
+      });
+        
+    } catch (err) {
+        console.error('Error occurred:', err);
+    }
+})();
 ----
 ====
 

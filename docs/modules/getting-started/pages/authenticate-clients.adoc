@@ -1,0 +1,308 @@
+= Authenticate Client Connections
+:description: This tutorial introduces you to member security by setting up authentication for client connections. At the end of this tutorial, you'll know how to configure member and client security settings to allow only authorized clients to connect to a cluster.
+
+{description}
+
+By default, members allow connections from any Hazelcast client. So, any client with access to a member can connect to the cluster and use its resources. To allow only authorized clients to connect to a member, you can configure authentication credentials on the members and clients, using the security configuration.
+
+In this tutorial, you will complete the following steps:
+
+. Enable and configure authentication credentials for a Hazelcast Enterprise member.
+. Configure a client with the correct credentials and connect it to the member.
+. Try to connect an unauthorized client to the member, and see that it is denied a connection.
+
+== Before You Begin
+
+To complete this tutorial, you need the following:
+
+[cols="1a,1a"]
+|===
+|Prerequisites|Useful resources
+
+|Trial license
+|https://trialrequest.hazelcast.com/[Hazelcast website]
+
+|Docker image for the full Hazelcast distribution
+|xref:get-started-enterprise.adoc[Install Hazelcast Enterprise]
+
+|===
+
+== Step 1. Configure the Enterprise Member
+
+Before a member can authenticate a client, the member must be configured with security enabled and some credentials to ask the client for.
+
+Create a `hazelcast.yaml` (or `xml`) configuration file with the following content and place it in the `~/config` directory on your local machine.
+
+[tabs]
+====
+YAML::
++
+--
+
+[source,yaml]
+----
+hazelcast:
+  cluster-name: hello-world
+  license-key: <your license key> <1>
+  security:
+    enabled: true <2>
+    realms:
+      - name: passwordRealm <3>
+        identity:
+          username-password: <4>
+            username: member1
+            password: s3crEt
+    member-authentication:
+      realm: passwordRealm <5>
+----
+--
+
+XML::
++
+[source,xml]
+----
+<hazelcast>
+    <cluster-name>hello-world</cluster-name>
+    <license-key>your license key</license-key> <1>
+    <security enabled="true"> <2>
+        <realms>
+            <realm name="passwordRealm"> <3>
+                <identity>
+                    <username-password username="member1" password="s3crEt" /> <4>
+                </identity>
+            </realm>
+        </realms>
+        <member-authentication realm="passwordRealm" /> <5>
+    </security>
+</hazelcast>
+----
+====
+<1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
+<2> Set to `true` to enable security so that the clients can be authenticated by the member.
+<3> Name of the security realm to be passed to the authentication configuration; it is set to `passwordRealm` in this example for convenience.
+<4> Identity configuration element to set the credentials (username and password) to be used by the member for client authentication.
+<5> Name of the security realm to be used by the member for client authentication.
+
+With this configuration, the member accepts connections only from clients
+with a username of `member1` and a password of `s3crEt`.
+
+== Step 2. Start the Member
+
+Run the following command.
+
+[source,shell,subs="attributes+"]
+----
+docker run \
+    -p 5701:5701 \
+    -e JAVA_OPTS="-Dhazelcast.config=/opt/hazelcast/config_ext/hazelcast.yaml" -v ~/config:/opt/hazelcast/config_ext hazelcast/hazelcast-enterprise:{full-version}
+----
+
+This command starts the member and configures it, using your configuration file.
+Here, `~/config` is the path to the directory in which you saved the configuration file.
+If you saved the configuration file somewhere else, you should replace this path.
+
+When you see the following in the terminal, the member is up and running:
+
+[source,shell]
+----
+Members {size:1, ver:1} [
+	Member [172.18.0.2]:5701 - cfc75512-a9c5-4798-bcca-450b7bf3c105 this
+]
+----
+
+== Step 3. Connect an Authenticated Client to the Member
+
+You'll now use your preferred language to configure a client with the credentials to allow the member to authenticate it.
+
+[tabs]
+====
+Python::
++
+--
+
+. Create a new project in your preferred Python IDE
+. Run `pip install hazelcast-python-client` in the IDE's terminal
+. Create a Python file, e.g., `myPyClient.py` containing the following code.
++
+[source,python]
+----
+import hazelcast
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+client = hazelcast.HazelcastClient(
+    cluster_members=["127.0.0.1:5701"],
+    cluster_name="hello-world",
+    creds_username="member1",
+    creds_password="s3crEt"
+)
+
+client.shutdown()
+----
+. Run `python myPyClient.py` in the IDE.
+--
+
+Go::
++
+
+. In a terminal, create a new directory and go into it.
+. Run `go mod init <name of the directory>`.
+. Run `go get github.com/hazelcast/hazelcast-go-client`.
+. While in this directory, create a `go` file (for example `main.go`) containing the following code.
++
+[source,go]
+----
+package main
+
+import (
+	"context"
+
+	"github.com/hazelcast/hazelcast-go-client"
+)
+
+func main() {
+	ctx := context.TODO()
+	config := hazelcast.Config{}
+	cc := &config.Cluster
+	cc.Network.SetAddresses("127.0.0.1:5701")
+	cc.Name = "hello-world"
+	creds := &cc.Security.Credentials
+	creds.Username = "member1"
+	creds.Password = "s3crEt"
+	client, err := hazelcast.StartNewClientWithConfig(ctx, config)
+	if err != nil {
+		panic(err)
+	}
+	client.Shutdown(ctx)
+}
+----
+. Run `go run main.go` in the terminal.
+
+Java::
++
+
+. Install the xref:getting-started:install-hazelcast.adoc#use-java[Java client library].
+. In your preferred Java IDE, create a new project to include a class containing the following code.
++
+[source,java]
+----
+import com.hazelcast.client.HazelcastClient;
+import com.hazelcast.client.config.ClientConfig;
+
+public class SecuredClient {
+  public static void main(String[] args) {
+
+ClientConfig clientConfig = new ClientConfig();
+        clientConfig.setClusterName("hello-world");
+        clientConfig.getSecurityConfig().setUsernamePasswordIdentityConfig("member1","s3crEt");
+        HazelcastClient.newHazelcastClient(clientConfig);
+
+  }
+}
+----
+. Run the `SecuredClient` class in the IDE.
+
+C Sharp::
++
+
+. Install the latest http://hazelcast.github.io/hazelcast-csharp-client/4.0.1/doc/obtaining.html[C Sharp client library]
+. In your preferred C# IDE, create a new project to include a class containing the following code.
++
+[source,cs]
+----
+var username = "member1";
+var password = "s3crEt";
+
+var options = new HazelcastOptionsBuilder();
+    .With(o => {
+        o.Authentication.ConfigureUsernamePasswordCredentials(username, password);
+    })
+    .Build();
+
+var client = await HazelcastClientFactory.StartNewClientAsync(options);
+----
+. Run this class in the IDE.
+
+C++::
++
+
+. Install the latest https://github.com/hazelcast/hazelcast-cpp-client/blob/v4.1.0/Reference_Manual.md#11-installing[C++ client library]
+. In your preferred C++ IDE, create a new project to include a class containing the following code.
++
+[source,cpp]
+----
+    hazelcast::client::client_config clientConfig;
+
+    clientConfig.set_credentials(
+            std::make_shared<hazelcast::client::security::username_password_credentials>("member1", "s3crEt"));
+
+    clientConfig.set_cluster_name("hello-world");
+    
+    auto hz = hazelcast::new_client(std::move(clientConfig)).get();
+----
+. Run this class in the IDE.
+
+Node.js::
++
+
+. Install the Node.js client library: `npm install hazelcast-client`
+. In your preferred Node.js IDE, create a new project to include the following script.
++
+[source,javascript]
+----
+const config = {
+    security: {
+        usernamePassword: {
+            username: 'admin',
+            password: 'some-strong-password'
+        }
+    }
+};
+const client = await Client.newHazelcastClient(cfg);
+----
+. Run this script in the IDE.
+
+====
+
+In the client terminal, you should see that the member has authenticated and accepted the client connection.
+
+[source,shell, subs="attributes+"]
+----
+INFO:hazelcast.lifecycle:HazelcastClient {full-version} is STARTING
+INFO:hazelcast.lifecycle:HazelcastClient {full-version} is STARTED
+INFO:hazelcast.connection:Trying to connect to Address(host=127.0.0.1, port=5701)
+INFO:hazelcast.lifecycle:HazelcastClient {full-version} is CONNECTED
+INFO:hazelcast.connection:Authenticated with server Address(host=172.18.0.2, port=5701):63b2a2ce-85f6-413f-8ce9-6058a748e4b9, server version: {full-version}, local address: Address(host=127.0.0.1, port=36006)
+INFO:hazelcast.cluster:
+
+Members [1] {
+	Member 172.18.0.2:5701 - 63b2a2ce-85f6-413f-8ce9-6058a748e4b9
+}
+
+INFO:hazelcast.client:Client started
+----
+
+If you try to connect a client without any credentials or with incorrect credentials,
+the connection is refused by the member.
+
+[source,shell, subs="attributes+"]
+----
+INFO:hazelcast.lifecycle:HazelcastClient {full-version} is STARTING
+INFO:hazelcast.lifecycle:HazelcastClient {full-version} is STARTED
+INFO:hazelcast.connection:Trying to connect to Address(host=127.0.0.1, port=5701)
+INFO:hazelcast.connection:Connection(id=0, live=False, remote_address=None) closed. Reason: Failed to authenticate connection
+WARNING:hazelcast.connection:Error during initial connection to Address(host=127.0.0.1, port=5701)
+----
+
+== Step 4. Shut Down the Cluster
+
+Shut down the cluster you've created in this tutorial so that you can start a fresh one when you
+move to the other tutorials. To shut down the cluster, close the terminals in which the members are running or press kbd:[Ctrl+C] in each terminal.
+
+== Next Steps
+
+If you're interested in learning more about the topics introduced in this tutorial, see xref:security:overview.adoc[] 
+
+To continue learning about Enterprise features, see xref:getting-started:wan.adoc[Replicate over WAN], which shows you how to replicate map entries across different clusters.
+

@@ -4,7 +4,7 @@
 
 JSON is a semi-structured data type used for holding JSON (JavaScript Object Notation) data. In Hazelcast, the SQL service supports the following data types for JSON data:
 
-- `JSON`: Allows you to map JSON data to a single column and use xref:functions-and-operators.adoc#jsonpath[JsonPath] syntax to query any keys/values, including nested levels.
+- `JSON`: Allows you to map JSON data to a single column and use xref:functions-and-operators.adoc#jsonpath[JsonPath] syntax to query and filter it, including nested levels.
 - `JSON-FLAT`: Allows you to map JSON data to columns and query only top-level keys/values.
 
 == JSON
@@ -19,6 +19,8 @@ To query JSON data, you can use the following built-in functions that allow you 
 - xref:functions-and-operators.adoc#json-functions[JSON_OBJECT]
 
 With the `JSON` data type, you can map JSON data to a single column, using the xref:create-mapping.adoc[`CREATE MAPPING` statement].
+
+=== Context
 
 For example, consider the following JSON data:
 
@@ -51,40 +53,14 @@ This statement creates a mapping to a map with two columns where the key is an `
 - `__key`: A key as an integer
 - `this`: JSON data
 
-To insert entries into the map, you can use the xref:sink-into.adoc[`INSERT INTO` or `SINK INTO` statements].
-
-```SQL
-INSERT INTO countries
-  VALUES (1, '{"countries": [
-  {
-  "country":"United Kingdom",
-  "cities": [{"city": "London"}]
-  },
-  {
-  "country":"France",
-  "cities": [{"city": "Lyon"}]
-  },
-  {
-  "country":"Turkey",
-  "cities": [{"city": "Istanbul"}]
-  }
-]}');
-```
-
-To query and/or filter JSON, use the <<jsonpath, JsonPath>> syntax in the built-in JSON functions.
-
-=== JsonPath
-
-JsonPath is a query language for JSON.
-
-Some JSON functions require JsonPath as a `json_path` parameter. This path identifies the values that you want to get from the `jsonArg` parameter, which can be a JSON parameter or a JSON-formatted string.
+The JSON data be a JSON parameter, a JSON-formatted string, or a HazelcastJsonValue object.
 
 .Example JSON-formatted string
 ```json
 '{"company" : {"employees" : [{"id" : "1","name":"jordan"}]}}'
 ```
 
-.Example JSON
+.Example JSON parameter
 ```sql
 INSERT INTO employees VALUES (1, JSON_ARRAY(1,2,3))
 ```
@@ -94,77 +70,97 @@ INSERT INTO employees VALUES (1, JSON_ARRAY(1,2,3))
 hzInstance.getSql().execute("INSERT INTO countries VALUES (?, ?)", 1L, new HazelcastJsonValue(countriesString));
 ```
 
-The `json_path` parameter must be in the JsonPath format, which starts with a dollar (`$`) operator that refers to the root level of the JSON-formatted string.
+To query and/or filter JSON, use the <<jsonpath, JsonPath>> syntax in the built-in JSON functions.
+
+=== JsonPath
+
+JsonPath is a query language for JSON.
+
+Some JSON functions require JsonPath as a  parameter, which identifies the values that you want to query.
+
+The JsonPath format starts with a dollar (`$`) operator that refers to the root level of the JSON. From there, you can add other operators to traverse the data and filter the results.
 
 [cols="20%m,80%a"]
 |===
 |JsonPath|Result
 
 |
-```sql
+[source,sql]
+----
 SELECT
    JSON_QUERY(this, '$')
    FROM countries;
-```
+----
 |
-```json
+[source,json]
+----
 {"countries":[{"country":"United Kingdom","cities":[{"city":"London"}]},{"country":"France","cities":[{"city":"Lyon"}]},{"country":"Turkey","cities":[{"city":"Istanbul"}]}]}
-```
+----
 
 |
-```sql
+[source,sql]
+----
 SELECT
    JSON_QUERY(this, '$..cities' WITH WRAPPER)
    FROM countries;
-```
+----
 |
-```json
+[source,json]
+----
 [{"city": "London"},{"city": "Lyon"},{"city": "Istanbul"}]
-```
+----
 
 |
-```sql
+[source,sql]
+----
 SELECT
    JSON_QUERY(this, '$.countries.*' WITH WRAPPER)
    FROM countries;
-```
+----
 |
-```json
+[source,json]
+----
 ["United Kingdom",{"city": "London"},"France",{"city": "Lyon"},"Turkey",{"city": "Istanbul"}]
-```
+----
 
 |
-```sql
+[source,sql]
+----
 SELECT
    JSON_QUERY(this, '$.countries..cities' WITH WRAPPER)
    FROM countries;
-```
+----
 |
-```json
+[source,json]
+----
 ["London","Lyon","Istanbul"]
-```
+----
 
 |
-```sql
+[source,sql]
+----
 SELECT
    JSON_QUERY(this, '$.countries[2]')
    FROM countries;
-```
+----
 |
-```json
+[source,json]
+----
 {"country":"Turkey","cities":[{"city":"Istanbul"}]}
-```
+----
 
 |
-```sql
+[source,sql]
+----
 SELECT
    JSON_QUERY(this, '$.countries[0,1]')
    FROM countries;
-```
+----
 |
-```json
+[source,json]
+----
 [{"country":"United Kingdom","cities":[{"city":"London"}]},{"country":"France","cities":[{"city":"Lyon"}]}]
-```
+----
 
 |===
 

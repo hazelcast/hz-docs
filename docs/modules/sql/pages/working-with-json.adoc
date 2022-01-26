@@ -9,18 +9,68 @@ JSON is a semi-structured data type used for holding JSON (JavaScript Object Not
 
 == JSON
 
-The `JSON` data type comes with full support for querying JSON in maps, Kafka topics, and files.
+The `JSON` data type comes with full support for querying JSON in maps and Kafka topics.
 
-To query JSON data, you can use the following built-in functions that allow you read JSON values from a column:
+NOTE: The JSON data type is not supported for xref:mapping-to-files.adoc[file mappings]. Files support the <<json-flat, `JSON-FLAT` data type>>.
 
-- xref:functions-and-operators.adoc#json-functions[JSON_QUERY]
-- xref:functions-and-operators.adoc#json-functions[JSON_VALUE]
+=== Mapping to the `JSON` Type
+
+You can map JSON data to a single column, by creating a mapping to one of the following data sources:
+
+- xref:mapping-to-maps.adoc[Map]
+- xref:mapping-to-kafka.adoc[Kafka]
+
+For example, to map the JSON data type to a value in a map:
+
+```sql
+CREATE MAPPING countries
+type IMap OPTIONS('keyFormat'='int', 'valueFormat'='json');
+```
+
+This statement creates a mapping to a map with two columns where the key is an `INTEGER` and the value is `JSON`:
+
+- `__key`: A key as an integer
+- `this`: JSON data
+
+=== Adding JSON to a Table
+
+You can add new JSON data to a table, using a JSON-formatted string, a `HazelcastJsonValue` object, or one of the following JSON functions:
+
 - xref:functions-and-operators.adoc#json-functions[JSON_ARRAY]
 - xref:functions-and-operators.adoc#json-functions[JSON_OBJECT]
 
-With the `JSON` data type, you can map JSON data to a single column, using the xref:create-mapping.adoc[`CREATE MAPPING` statement].
+.Example JSON-formatted string
+[%collapsible]
+====
+```json
+'{"country": "United Kingdom", "cities": [{"city": "London"}]}'
+```
+====
 
-=== Context
+.Example HazelcastJsonValue
+[%collapsible]
+====
+```java
+hzInstance.getSql().execute("INSERT INTO countries VALUES (?, ?)", 1L, new HazelcastJsonValue(someJsonStringWithCountries));
+```
+====
+
+.Example JSON function
+[%collapsible]
+====
+```sql
+INSERT INTO countries VALUES (1, JSON_OBJECT('country':'United Kingdom', 'cities': JSON_ARRAY(JSON_OBJECT('city':'London'))))
+```
+====
+
+=== Querying JSON
+
+To query and/or filter JSON, use the <<jsonpath, JsonPath>> syntax in the following JSON functions:
+
+- xref:functions-and-operators.adoc#json-functions[JSON_QUERY]
+- xref:functions-and-operators.adoc#json-functions[JSON_VALUE]
+
+JsonPath is a query language for JSON. The JsonPath format starts with a dollar (`$`) operator that refers to the root level of the JSON. From there, you can add other operators to traverse the data and filter the results.
 
 For example, consider the following JSON data:
 
@@ -41,44 +91,7 @@ For example, consider the following JSON data:
 ]
 ```
 
-To map the JSON data type to a value in a map:
-
-```sql
-CREATE MAPPING countries
-type IMap OPTIONS('keyFormat'='int', 'valueFormat'='json');
-```
-
-This statement creates a mapping to a map with two columns where the key is an `INTEGER` and the value is `JSON`:
-
-- `__key`: A key as an integer
-- `this`: JSON data
-
-The JSON data can be a JSON parameter, a JSON-formatted string, or a `HazelcastJsonValue` object.
-
-.Example JSON-formatted string
-```json
-'{"country": "United Kingdom", "cities": [{"city": "London"}]}'
-```
-
-.Example JSON parameter
-```sql
-INSERT INTO countries VALUES (1, JSON_OBJECT('country':'United Kingdom', 'cities': JSON_ARRAY(JSON_OBJECT('city':'London'))))
-```
-
-.Example HazelcastJsonValue
-```java
-hzInstance.getSql().execute("INSERT INTO countries VALUES (?, ?)", 1L, new HazelcastJsonValue(someJsonStringWithCountries));
-```
-
-To query and/or filter JSON, use the <<jsonpath, JsonPath>> syntax in the built-in JSON functions.
-
-=== JsonPath
-
-JsonPath is a query language for JSON.
-
-Some JSON functions require JsonPath as a  parameter, which identifies the values that you want to query.
-
-The JsonPath format starts with a dollar (`$`) operator that refers to the root level of the JSON. From there, you can add other operators to traverse the data and filter the results.
+The following examples show you how to use JsonPath to query this dataset.
 
 [cols="20%a,80%a"]
 |===
@@ -162,12 +175,24 @@ SELECT
 [{"country":"United Kingdom","cities":[{"city":"London"}]},{"country":"France","cities":[{"city":"Lyon"}]}]
 ----
 
+|
+[source,sql]
+----
+SELECT
+   JSON_QUERY(this, '$.countries[*]?(@..city=="United Kingdom"')
+   FROM countries;
+----
+|
+[source,json]
+----
+[{"country":"United Kingdom","cities":[{"city":"London"}]}]
+----
+
 |===
 
 If the JsonPath does not match a value, `NULL` is returned.
 
-If the JsonPath is invalid, the following exception is thrown: `com.hazelcast.com.jayway.jsonpath.InvalidPathException`.
-
+[[jsonpath-synax]]
 === Supported JsonPath Operators
 
 These are the supported operators from the JsonPath standard.
@@ -203,9 +228,15 @@ These are the supported operators from the JsonPath standard.
 
 == JSON-FLAT
 
-The `JSON-FLAT` data type comes with partial support for querying JSON.
+The `JSON-FLAT` data type comes with partial support for querying JSON in maps, Kafka topics, and files.
 
-This data type allows you to map JSON data to columns and only query top-level keys/values.
+=== Mapping to the `JSON-FLAT` Type
+
+You can map JSON data to a multiple columns, by creating a mapping to one of the following data sources:
+
+- xref:mapping-to-maps.adoc[Map]
+- xref:mapping-to-kafka.adoc[Kafka]
+- xref:mapping-to-files.adoc[File]
 
 For example, consider the following JSON data:
 
@@ -214,7 +245,7 @@ For example, consider the following JSON data:
 "cities": "London"
 ```
 
-To map the JSON data to a value in a map:
+To map the `JSON-FLAT` data to a value in a map, you need to provide the JSON keys as column names:
 
 ```sql
 CREATE MAPPING cities (
@@ -235,7 +266,9 @@ INSERT INTO cities VALUES
 (1, 'United Kingdom','London');
 ```
 
-To query the JSON value, select the column names.
+=== Querying `JSON-FLAT`
+
+To query the JSON values, select the column names.
 
 ```sql
 SELECT cities AS City, countries AS Country
@@ -249,3 +282,49 @@ FROM cities;
 |London              |United Kingdom      |
 +--------------------+--------------------+
 ```
+
+== JSON Type Conversion
+
+SQL integer and floating-point types are converted into JSON
+numbers. The `DECIMAL` type and all temporal types are converted
+into JSON strings.
+
+[cols="m,m"]
+|===
+| JSON type | SQL Type
+
+|BOOLEAN
+|BOOLEAN
+
+|NUMBER
+|DOUBLE
+
+INTEGER
+
+REAL
+
+BIGINT
+
+SMALLINT
+
+TINYINT
+
+|STRING
+|VARCHAR
+
+DECIMAL
+
+DATE
+
+TIME
+
+TIMESTAMP
+
+TIMESTAMP WITH TIME ZONE
+
+
+
+a|All other types
+| OBJECT
+
+|===

@@ -1,10 +1,10 @@
 = Creating a Mapping to a File System
-:description: Before you can query data in files, you need to create a mapping with the unified file connector so that the SQL service knows how to access the data in the most efficient way.
+:description: To query data in files, you need to create a mapping with the unified file connector so that the SQL service knows how to access the data in the most efficient way.
 :page-aliases: sql:file-connector.adoc
 
 {description}
 
-NOTE: You can only read from file sources. You cannot yet use files as a sink in SQL.
+NOTE: You can only read from file mappings. You cannot add data to files.
 
 == What is the Unified File Connector
 
@@ -19,7 +19,7 @@ To access Hadoop or any of the cloud-based file systems, you may need to add one
 
 Depending on the <<supported-file-formats, format of your files>>, you may also need to add other modules to the classpath.
 
-== File Security
+== Permissions
 
 If you use Hazelcast Enterprise, you can set up permissions to restrict clients' access to your files. For details, see xref:pipelines:job-security.adoc[].
 
@@ -98,7 +98,7 @@ Valid values are:
 
 - <<avro, avro>>
 - <<csv, csv>>
-- <<json, json>>
+- <<json, json-flat>>
 - <<parquet, parquet>>
 
 |
@@ -365,11 +365,9 @@ All columns are stored in the `VARCHAR` type.
 
 === JSON
 
-JSON files must be in the link:https://jsonlines.org/[JSON Lines] format.
-
-JSON files are expected to contain one valid JSON document per
+JSON files must be in the link:https://jsonlines.org/[JSON Lines] format, where files are expected to contain one valid JSON document per
 line and be `UTF-8` encoded. If you omit any mapping columns from the
-declaration, Hazelcast infers names and types based on a sample.
+declaration, Hazelcast infers names and types based on a sample file.
 
 ```sql
 CREATE MAPPING my_files
@@ -380,29 +378,11 @@ OPTIONS (
 )
 ```
 
-[cols="m,m"]
-|===
-| JSON type | SQL Type
-
-|BOOLEAN
-|BOOLEAN
-
-|NUMBER
-|DOUBLE
-
-|STRING
-|VARCHAR
-
-a|All other types
-| OBJECT
-
-|===
-
 === Parquet
 
 Apache Parquet is a columnar storage format. It describes how the data
 is stored on disk. It doesn't specify how the data is supposed to be
-deserialized, and it uses other libraries to achieve that. Namely we use
+deserialized, instead it uses other libraries to achieve that. Hazelcast uses
 Apache Avro for deserialization.
 
 Parquet has a dependency on Hadoop, so it can be used only with one of
@@ -440,8 +420,7 @@ OPTIONS (
 
 For details which data types can be converted to others, see xref:data-types.adoc[].
 
-
-== Configuring Authentication for Remote File Systems
+== Authentication for Remote File Systems
 
 To access data on remote file systems (files that aren't on Hazelcast members), you must also configure the authentication credentials in <<options, `options`>>.
 

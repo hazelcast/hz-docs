@@ -1,5 +1,5 @@
 = Mapping to Kafka
-:description: Before you can query streams in Kafka topics, you need to create a mapping with the Kafka connector so that the SQL service knows how to access messages in the most efficient way.
+:description: To query streams in Kafka topics, you need to create a mapping with the Kafka connector so that the SQL service knows how to access messages in the most efficient way.
 :page-aliases: sql:kafka-connector.adoc
 
 {description}
@@ -17,7 +17,7 @@ If you're using the slim distribution, you must add the link:https://mvnreposito
 The Kafka connector is compatible with Kafka version equal to
 or greater than 1.0.0.
 
-== Kafka Security
+== Permissions
 
 If you use Hazelcast Enterprise, your clients may need permissions to use this connector. For details, see xref:pipelines:job-security.adoc[].
 
@@ -160,11 +160,21 @@ All Avro types are a union of the `NULL` type and the actual type.
 
 === JSON Messages
 
-If values are in the JSON format, configure the `valueFormat` field as the `json-flat` type, and <<mapping-column-names, map column names>> to the JSON keys.
+If values are in the JSON format, configure the `valueFormat` field as the xref:working-with-json.adoc[`JSON` or `JSON-FLAT` type].
 
+.JSON
+```sql
+CREATE MAPPING my_topic
+TYPE Kafka
+OPTIONS (
+    'keyFormat' = 'bigint',
+    'valueFormat' = 'json',
+    'bootstrap.servers' = '127.0.0.1:9092');
+```
+
+.JSON-FLAT
 ```sql
 CREATE MAPPING my_topic(
-    <1>
     __key BIGINT,
     ticker VARCHAR,
     amount INT)
@@ -174,21 +184,6 @@ OPTIONS (
     'valueFormat' = 'json-flat',
     'bootstrap.servers' = '127.0.0.1:9092');
 ```
-
-<1> Column list
-
-There are no additional options for this format.
-
-JSON's type system doesn't match SQL's exactly. For example, JSON
-numbers have unlimited precision, but such numbers are typically not
-portable. We convert SQL integer and floating-point types into JSON
-numbers. We convert the `DECIMAL` type, as well as all temporal types,
-to JSON strings.
-
-We don't support the `JSON` type from the SQL standard yet. That means
-you can't use functions like `JSON_VALUE` or `JSON_QUERY`. If your JSON
-documents don't all have the same fields or if they contain nested
-objects, the usability is limited.
 
 === Java Messages
 
@@ -227,7 +222,7 @@ has a non-primitive type, it will be mapped under the SQL `OBJECT` type.
 
 === Mapping Column Names
 
-For JSON and Avro formats, you must specify the columns names in the mapping.
+For `json-flat` and `Avro` formats, you must specify the columns names in the mapping.
 
 For keys, the format of the column name must be either `__key.<name>`
 for a field in the key or `this.<name>` for a field in the value.

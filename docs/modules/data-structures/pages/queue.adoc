@@ -41,8 +41,6 @@ Java::
 ----
 include::ROOT:example$/dds/queue/ProducerMember.java[tag=producer]
 ----
-<1> Create or access the Queue called `queue`.
-<2> Add items to `queue`.
 --
 
 C++::
@@ -76,8 +74,6 @@ int main() {
     return 0;
 }
 ----
-<1> Create or access the Queue called `queue`.
-<2> Add items to `queue`.
 --
 
 C Sharp::
@@ -122,8 +118,6 @@ namespace Hazelcast.Examples.DistributedObjects
     }
 }
 ----
-<1> Create or access the Queue called `queue`.
-<2> Add items to `queue`.
 --
 
 Node.js::
@@ -141,7 +135,17 @@ npm install hazelcast-client
 +
 [source,javascript]
 ----
+const client = await Client.newHazelcastClient();
+const queue = await client.getQueue('queue');
 
+for (let k = 0; k < 100; k++) {
+    await queue.put(k);
+    console.log('Producing: ' + k);
+    await new Promise((resolve) => {
+        setTimeout(resolve, 1000);
+    });
+}
+await queue.put(-1);
 ----
 --
 
@@ -180,8 +184,6 @@ producer_thread.join()
 
 client.shutdown()
 ----
-<1> Create or access the Queue called `queue`.
-<2> Add items to `queue`.
 --
 
 Go::
@@ -198,12 +200,47 @@ go get github.com/hazelcast/hazelcast-go-client
 +
 [source,go]
 ----
+package main
 
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/hazelcast/hazelcast-go-client"
+)
+
+func main() {
+	ctx := context.Background()
+	hz, err := hazelcast.StartNewClient(ctx)
+	if err != nil {
+		panic(fmt.Errorf("starting hazelcast client %w", err))
+	}
+	queue, err := hz.GetQueue(ctx, "queue") <1>
+	if err != nil {
+		panic(fmt.Errorf("getting queue instance %w", err))
+	}
+
+         <2>
+	for i := 1; i < 100; i++ {
+		err := queue.Put(ctx, int64(i))
+		fmt.Println("Producing: ", int64(i))
+		if err != nil {
+			panic(fmt.Errorf("putting item to queue %w", err))
+		}
+		time.Sleep(time.Second)
+	}
+	err = queue.Put(ctx, int64(-1))
+	if err != nil {
+		panic(fmt.Errorf("putting item to queue %w", err))
+	}
+	fmt.Println("Producer Finished!")
+}
 ----
-
 --
-
 ====
+<1> Create the Queue called `queue`.
+<2> Add items to `queue`.
 
 
 This producer puts a **-1** on the queue to show that adding items operation is finished.
@@ -340,7 +377,20 @@ npm install hazelcast-client
 +
 [source,javascript]
 ----
+const client = await Client.newHazelcastClient();
+const queue = await client.getQueue('queue');
 
+while (true) {
+    const item = await queue.take();
+    console.log('Consumed item: ' + item);
+    if (item === -1) {
+        await queue.put(-1);
+        break;
+    }
+    await new Promise((resolve) => {
+        setTimeout(resolve, 5000);
+    });
+}
 ----
 --
 
@@ -400,11 +450,50 @@ go get github.com/hazelcast/hazelcast-go-client
 +
 [source,go]
 ----
+package main
 
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/hazelcast/hazelcast-go-client"
+)
+
+func main() {
+	ctx := context.Background()
+	hz, err := hazelcast.StartNewClient(ctx)
+	if err != nil {
+		panic(fmt.Errorf("starting hazelcast client %w", err))
+	}
+	queue, err := hz.GetQueue(ctx, "queue") <1>
+	if err != nil {
+		panic(fmt.Errorf("getting queue %w", err))
+	}
+
+         <2>
+	for {
+		item, err := queue.Take(ctx)
+		if err != nil {
+			panic(fmt.Errorf("taking item from the queue %w", err))
+		}
+		fmt.Println("Consuming: ", item.(int64))
+		// notice that converting item to int64 is required due to serialization
+		if item == int64(-1) {
+			err := queue.Put(ctx, -1)
+			if err != nil {
+				panic(fmt.Errorf("putting item to queue %w", err))
+			}
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+	fmt.Println("Consumer Finished!")
+}
 ----
-
+<1> Access the queue.
+<2> Start taking queue messages.
 --
-
 ====
 
 As seen in the above example, the consumer waits five seconds before it takes
@@ -424,10 +513,10 @@ for information about how to create an item listener class and register it.
 
 From the above example code, you can see that an item is produced every second and
 consumed every five seconds. Therefore, the consumer keeps growing. To balance the
-produce/consume operation, let's start another consumer. This way, consumption is
-distributed to these two consumers, as seen in the example outputs below.
+produce/consume operation, you can start another consumer by re-running the <<taking-items-off-the-queue, consumer code>> in a new file.
+This way, consumption is distributed to these two consumers, as seen in the example outputs below.
 
-The second consumer is started. After a while, here is the first consumer output:
+Once the second consumer is started, here is the first consumer output:
 
 ```
 ...
@@ -486,8 +575,7 @@ as shown below. The `max-size` element specifies the maximum size of the queue.
 Once the queue size reaches this value, `put` operations are blocked until the
 queue size goes below `max-size`, which happens when a consumer removes items from the queue.
 
-Let's set **10** as the maximum size of our example queue in <<creating-an-example-queue,
-Creating a Queue>>.
+The following is an example configuration where **10** is the maximum size of the queue:
 
 [tabs] 
 ==== 
@@ -523,7 +611,7 @@ items from the queue. This means that the producer can `put` more items into the
 queue until there are ten items in the queue again, at which point the `put` operation
 again becomes blocked.
 
-In this example code, the producer is five times faster than the consumer.
+In the above producer and consumer example codes, the producer is five times faster than the consumer.
 It will effectively always be waiting for the consumer to remove items before
 it can put more on the queue. For this example code, if maximum throughput is the goal,
 it would be a good option to start multiple consumers to prevent the queue from filling up.

@@ -1,9 +1,13 @@
-= Backing Up Persisted Data
-:description: You can take snapshots of your persistence store (persisted files) to be able to copy the data onto other clusters without having to shut down your cluster. This process is called a hot backup.
+= Backing Up the Persistence Store
+:description: You can trigger backups of your persistence store, using the Java API, REST API, or Management Center. Backing up the persistence store is useful if you want to copy the data onto other clusters without having to shut down your cluster. Backups are sometimes referred to as hot backups.
 
 {description}
 
-== How Members Create Hot Backups
+== Before you Begin
+
+To back up data in the persistence store, the cluster must be configured with a directory in the `persistence.backup-dir` configuration. See xref:configuring-persistence.adoc[].
+
+=== How Members Create Backups
 
 When a member receives a backup
 request, it becomes the _coordinating member_ and sends a new backup sequence ID to all members.
@@ -25,53 +29,7 @@ NOTE: For members to use hard links,
 your xref:deploy:supported-jvms.adoc[JDK] must satisfy all requirements of the
 link:https://docs.oracle.com/javase/8/docs/api/java/nio/file/Files.html#createLink-java.nio.file.Path-java.nio.file.Path-[Files.createLink() method^].
 
-== Configuring a Backup Directory
-
-To back up persisted data, you must first configure the backup directory in the `backup-dir` option:
-
-[tabs] 
-==== 
-XML:: 
-+ 
--- 
-[source,xml]
-----
-<hazelcast>
-    ...
-    <persistence enabled="true">
-        <backup-dir>/mnt/hot-backup</backup-dir>
-	...
-    </persistence>
-    ...
-</hazelcast>
-----
---
-
-YAML::
-+
---
-[source,yaml]
-----
-hazelcast:
-  persistence:
-    enabled: true
-    backup-dir: /mnt/hot-backup
-----
---
-Java::
-+
---
-[source,java]
-----
-PersistenceConfig PersistenceConfig = new PersistenceConfig();
-PersistenceConfig.setBackupDir(new File("/mnt/hot-backup"));
-...
-config.setPersistenceConfig(PersistenceConfig);
-----
---
-====
-
-== Triggering a Backup Request
+== Triggering a Backup
 
 To trigger a new backup, you can use one of the following options: 
 
@@ -80,7 +38,7 @@ To trigger a new backup, you can use one of the following options:
 - xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#hot-restart[Management Center]
 
 [[java-example]]
-=== Triggering a Backup Request in Java
+=== Triggering a Backup in Java
 
 . xref:management:cluster-utilities.adoc#cluster-member-states[Put the cluster
 in a `PASSIVE` state].
@@ -194,7 +152,7 @@ service.interruptLocalBackupTask();
 The backup task stops as soon as possible and it does not remove the
 disk contents of the backup directory meaning that you must remove it manually.
 
-== Copying Hot Backup Data onto a Cluster
+== Restoring from a Backup
 
 The backup process creates sequenced subdirectories
 named `backup-<backupSeq>` in the configured <<configuring-hot-backup, hot backup directory>>

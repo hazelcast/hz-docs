@@ -1,11 +1,33 @@
-= Persistence Configuration Options
-:description: Explore the options for configuring persistence on your members.
+= Configuring Persistence
+:description: You can configure clusters to persist data structures and job snapshots on disk as well as fine-tune many other options such as enabling backups, encryption, and auto-recovery.
+:page-aliases: encryption-at-rest.adoc, enabling-persistence.adoc, recover-single-member.adoc
 
 {description}
 
-== Global Persistence Configuration
+== Glossary
 
-Use the following options to configure the `persistence` object on your members.
+[cols="1e,1a"]
+|===
+|Term|Definition
+
+|master member
+|The oldest member in a cluster.
+
+|partition table
+|Table that stores members' partition replica assignments and the partition table version.
+
+|persistence store
+|The files that contain persisted data.
+
+|===
+
+== Quickstart Configuration
+
+Use this quickstart to test Persistence in development.
+
+NOTE: Before going into production, make sure to read the <<production-checklist, Production Checklist>> section.
+
+By default, Persistence is disabled on all clusters. To start persisting data on disk, you must first enable Persistence on the member.
 
 [tabs] 
 ==== 
@@ -16,7 +38,7 @@ XML::
 ----
 <hazelcast>
   <persistence enabled="true">
-    <!-- insert global configuration options here -->
+    <!-- configuration options here -->
   </persistence>
 </hazelcast>
 ----
@@ -29,14 +51,13 @@ YAML::
 hazelcast:
   persistence:
     enabled: true
-    # insert global configuration options here
+    # configuration options here
+
 ----
 --
 Java:: 
 + 
 --
-Add global configuration options to the link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/config/PersistenceConfig.html[`PersistenceConfig` object].
-
 [source,java]
 ----
 Config config = new Config();
@@ -49,10 +70,196 @@ config.setPersistenceConfig(PersistenceConfig);
 --
 ====
 
+Even after enabling Persistence, your members won't start persisting any data until you configure <<data-structures, data structures>>, or <<job, job snapshots>> to be persisted.
+
+This example configures a member to persist entries on disk for a map called `test-map`.
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <persistence enabled="true">
+  </persistence>
+  <map name="test-map">
+    <data-persistence enabled="true">
+    <!-- configuration options here -->
+    </data-persistence>
+  </map>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  persistence:
+    enabled: true
+  map:
+  test-map:
+    data-persistence:
+      enabled: true
+      # configuration options here
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+PersistenceConfig PersistenceConfig = new PersistenceConfig()
+.setEnabled(true);
+
+config.setPersistenceConfig(PersistenceConfig);
+
+MapConfig mapConfig = config.getMapConfig("test-map");
+mapConfig.getDataPersistenceConfig().setEnabled(true);
+config.addMapConfig(mapConfig);
+----
+--
+====
+
+== Production Checklist
+
+Before you start configuring members, consider the following checklist:
+
+- [ ] Does your cluster have enough available disk space, especially if you want to <<backup, back up the persistence store>>?
+- [ ] How do you want your cluster to <<single-member, behave when a single member leaves>>?
+- [ ] How do you want your cluster to <<cluster-restart, recover from failed restarts>>?
+- [ ] Are you <<encrypt, persisting sensitive data>>?
+
+NOTE: Running clusters must be restarted before any configuration changes take effect.
+
+[[single-member]]
+== Defining What Happens When a Single Member Leaves the Cluster
+
+By default, if a cluster detects that a missing member is restarting and attempting to rejoin, the cluster’s master member will ask the rejoining member to send its partition table for validation.
+
+The rejoining member loads its persisted data from disk and rejoins the cluster only if the following conditions are met:
+
+- The master member receives the partition table within 120 seconds (the <<persistence-validation-timeout-seconds, validation timeout>>).
+- The master member validates that the partition table was correct at the time that the rejoining member left the cluster.
+- The rejoining member loads its persisted data from disk within 900 seconds (the <<persistence-data-load-timeout-seconds, data load timeout>>).
+
+If these conditions are not met, the rejoining member deletes its persistence store, generates a new UUID, and rejoins the cluster. The rest of the cluster then tries to recover the missing member’s data from backups and repartitions it.
+
+image:single-member-failure.svg[Flowchart that shows the process a cluster follows when a single member fails and leaves the cluster]
+
+If you do not want rejoining members to automatically delete their persistence stores when their partition tables are invalid, set the <<persistence-auto-remove-stale-data, `auto-remove-stale-data`>> option to `false`.
+
+NOTE: Only in exceptional circumstances will the master member consider a rejoining member's data stale. Instead, the member will reload its data from disk and then synchronize it with other cluster members as needed. 
+
+If you have lots of persisted data and you are concerned about how long it may take for your cluster to repartition after a member fails to rejoin, you can <<delaying-repartitioning, delay repartitioning>>.
+
+[[cluster-restart]]
+== Defining What Happens When the Whole Cluster Restarts
+
+By default, a restarting cluster waits until the following conditions are met:
+
+- The master member receives *all* members' partition tables within the <<persistence-validation-timeout-seconds, validation timeout>>.
+- The master member validates that *all* members' partition tables are correct.
+- *All* members load their persisted data from disk within the <<persistence-data-load-timeout-seconds, data load timeout>>.
+
+The cluster fails to start if any of these conditions are not met.
+
+image:full-cluster-restart.svg[Flowchart that shows the process a cluster follows when one or more members fail to start after a full cluster restart]
+
+If you have lots of persisted data and you are concerned about how long it may take for your cluster to repartition after a member fails to rejoin, you can <<delaying-repartitioning, delay repartitioning>>.
+
+[[policy]]
+=== Choosing a Cluster Recovery Policy
+
+To decide how a cluster should behave when one or more members cannot rejoin after a cluster-wide restart, you can define a strategy in the <<persistence-cluster-data-recovery-policy, `cluster-data-recovery-policy`>>
+option.
+
+The default `FULL_RECOVERY_ONLY` strategy forces the cluster to wait until all members have restarted after a cluster-wide restart. If one or more members are unable to recover from the failure, the cluster cannot start until all running members have deleted their persistence stores and a generated new UUIDs.
+
+To force members to delete their persistence stores, you must trigger a force-start manually. See xref:triggering-force-start.adoc[].
+
+If you choose a `PARTIAL` strategy, Hazelcast triggers a
+partial-start automatically on the members that have either the most recent or most complete partition table and that loaded their persisted data within the <<persistence-data-load-timeout-seconds, data load timeout>>. To trigger a partial-start manually, see xref:triggering-partial-start.adoc[].
+
+== Delaying Repartitioning
+
+You can make a cluster wait for a period of time before repartitioning after one or more members fail to rejoin. When a cluster stores lots of persisted data, it may take a long time to repartition the data after a member leaves the cluster. But, you may expect members to shut down and restart quickly, in which case the cluster doesn't need to repartition the data as soon as a member leaves. You can delay repartitioning for as long as you expect members to rejoin the cluster.
+
+For example, you may want to delay repartitioning when you're running a cluster on Kubernetes and expect members to be restarted quickly.
+
+NOTE: If you're planning a cluster-wide shutdown, you also can stop members from repartitioning by putting the cluster in a `FROZEN` state. See xref:maintain-cluster:cluster-member-states.adoc[].
+
+To delay repartitioning during a single member failure, configure a _rebalance delay_, using the <<persistence-rebalance-delay-seconds, `rebalance-delay-seconds`>> option.
+
+WARNING: If your cluster also stores in-memory data that is not persisted, do not configure a rebalance delay. Clusters do not repartition in-memory data if a member rejoins within the delay. As a result, any data that is not persisted will be lost if the member restarts within the delay, including backups.
+
+Consider the following scenario:
+
+* A cluster consists of members A, B, and C with Persistence enabled.
+* Member B is killed.
+* Member B restarts.
+
+If member B restarts within the rebalance delay, all its persisted data will be restored from disk, and *the cluster will not repartition its data*. Any in-memory data in member B's partitions will be lost, and member B will still be listed as the owner of those partitions. So, even if the cluster has backups of in-memory data in maps, requests for that data will go to member B (unless the members have xref:data-structures:backing-up-maps.adoc#enabling-in-memory-backup-reads-embedded-mode[backup reads enabled]).
+
+NOTE: If members have backup reads enabled, some in-memory data may appear to have been kept. However, eventually the backups will be xref:consistency-and-replication:replication-algorithm.adoc#best-effort-consistency[synchronized with the primary partition] (member B).
+
+While the member is down, operations on partitions that are owned by that member will be retried until they either time out or the member restarts and executes the requested operation. As a result, this option is best when you prefer a latency spike rather than migrating data over the network.
+
+If member B does not restart within the rebalance delay, the cluster recovers member B's data from backups and
+repartitions the data among the remaining members (members A and C
+in this case). If member B is later restarted, it recovers its persisted data from disk and brings it up-to-date with data from members A and C. If Merkle trees are enabled on available data structures, members use those to request only missing persisted data. For details about how members use Merkle trees, see <<synch-data, Synchronizing Persisted Data Faster>>.
+
+[[sync-data]]
+== Synchronizing Persisted Data Faster
+
+When a failed member rejoins the cluster, it populates its in-memory stores with data from disk that may be stale. If you have lots of persisted data as well as in-memory data that you don't want to lose, you can <<data-structures, configure your data structures to generate a Merkle tree>>. The Merkle tree stores the state of persisted data in a way that other cluster members can quickly read, compare with their own, and check the delta for what is missing. This way, after a restart, the member can send its Merkle tree to the cluster and request only the missing data, reducing the amount of data sent over the network.
+
+[[backup]]
+== Enabling Backups
+
+To allow the cluster to back up the persistence store, set a directory in which to store the backups in the <<persistence-backup-dir,`backup-dir`>> option.
+
+Hazelcast does not trigger regular backups. You must trigger backups manually. See xref:backing-up-persistence.adoc[].
+
+[[persist]]
+== Encrypting Persisted Data at Rest
+
+Persisted data on disk such as map entries may contain sensitive information. To protect your data, you can <<persist, configure members to encrypt all persisted files>> in your persistence store.
+
+To encrypt data on disk, you'll need one of the following stores in which to keep master encryption keys:
+
+- https://docs.oracle.com/javase/8/docs/api/java/security/KeyStore.html[Java KeyStore^]: A Java class for storing cryptographic keys and certificates.
+
+- https://www.vaultproject.io/[HashiCorp Vault^]: A tool for securely accessing secrets.
+
+=== How Encryption at Rest Works
+
+Data in the persistence store is encrypted using symmetric encryption.
+The encryption scheme uses two levels of encryption keys: auto-generated persistence
+store encryption keys (one for each configured parallelism) that are used to encrypt
+the chunk files and a master encryption key that is used to encrypt the store-specific
+encryption keys. The master encryption key is sourced from an external system called the _secure
+store_ and, in contrast to the persistence-store encryption keys, it is not persisted anywhere within the persistence store.
+
+When encryption at rest is first enabled on a member, the member contacts
+the secure store during startup and retrieves the master encryption key. Then, the member generates
+the persistence-store encryption keys, encrypts them with the master key, and stores them in the persistence store's directory. The subsequent writes to any chunk files will be encrypted using this persistence-store encryption key. During Persistence,
+the member gets the master encryption key from the secure store, decrypts the persistence-store
+encryption keys and uses those to decrypt the chunk files.
+
+== Global Persistence Options
+
+Use these configuration options to configure general Persistence options.
+
+.Persistence configuration options
 [cols="1a,1a,1m,2a",options="header"]
 |===
 |Option|Description|Default|Example
-
 
 
 |[[persistence-base-dir]]`base-dir`
@@ -114,7 +321,7 @@ config.setPersistenceConfig(PersistenceConfig);
 a|' ' (empty)
 
 |
-See xref:backing-up-persistence.adoc[].
+Backups must be triggered manually, see xref:backing-up-persistence.adoc[].
 
 |[[persistence-parallelism]]`parallelism`
 |Number of I/O threads that are started concurrently for reading from and writing to files in the persistence store.
@@ -221,8 +428,7 @@ config.setPersistenceConfig(PersistenceConfig);
 --
 ====
 
-[[persistence-data-load-timeout-seconds]]
-|`data-load-timeout-seconds`
+|[[persistence-data-load-timeout-seconds]]`data-load-timeout-seconds`
 |Number of seconds that the cluster allows for members to finish restoring data from their local persistence store.
 |900
 
@@ -278,8 +484,8 @@ Valid values are:
 
 * `FULL_RECOVERY_ONLY`: Starts the cluster only when all expected members
 are present and correct.
-* `PARTIAL_RECOVERY_MOST_RECENT`: Starts the cluster with the members that have most up-to-date partition table and successfully restored their data. All other members leave the cluster and force start themselves. If no members restore their data successfully, the cluster start fails.
-* `PARTIAL_RECOVERY_MOST_COMPLETE`: Starts the cluster with the largest group of members that have the same partition table version and successfully restored their data. All other members leave the cluster and force start themselves. If no members restore their data successfully, the cluster start fails.
+* `PARTIAL_RECOVERY_MOST_RECENT`: Starts the cluster with the members that have most up-to-date partition table and successfully restored their data. All other members leave the cluster and force-start themselves. If no members restore their data successfully, the cluster start fails.
+* `PARTIAL_RECOVERY_MOST_COMPLETE`: Starts the cluster with the largest group of members that have the same partition table version and successfully restored their data. All other members leave the cluster and force-start themselves. If no members restore their data successfully, the cluster start fails.
 |FULL_RECOVERY_ONLY
 
 |
@@ -326,9 +532,8 @@ config.setPersistenceConfig(PersistenceConfig);
 --
 ====
 
-[[persistence-auto-remove-stale-data]]
-|`auto-remove-stale-data`
-|Enables a joining member to automatically remove its persistence store if the cluster's master member considers the persisted data to be stale. See xref:recover-single-member.adoc[].
+|[[persistence-auto-remove-stale-data]]`auto-remove-stale-data`
+|Enables a joining member to automatically remove its persistence store if the cluster's master member considers the persisted data to be stale. This option applies only to <<single-member, single-member failures>>.
 |true
 
 |
@@ -376,19 +581,445 @@ config.setPersistenceConfig(PersistenceConfig);
 ====
 
 
-|[[persistence-encryption-at-rest]]`encryption-at-rest`
+|[[persistence-encryption-at-rest]]<<encrypt, `encryption-at-rest`>>
 |Enables encryption of data in the persistence store.
 |disabled
-|See xref:encryption-at-rest.adoc[].
+|See <<encrypt, Encryption Options>>
 
 |[[persistence-rebalance-delay-seconds]]`rebalance-delay-seconds`
 |Number of seconds a cluster waits before repartitioning after a member leaves by means other than a graceful shutdown.
 |0
-|See xref:recover-single-member.adoc#delaying-migrations[Delaying Migrations].
+|See <<delaying-migrations, Delaying Migrations>>.
 
 |===
 
-== Data Structure Persistence Configuration
+[[encrypt]]
+== Encryption Options
+
+Use the following options to configure encryption for persisted data at rest:
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <persistence enabled="true">
+    <encryption-at-rest>
+      <!-- insert configuration options here -->
+    </encryption-at-rest>
+  </persistence>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  persistence:
+    enabled: true
+      encryption-at-rest:
+        enabled: true
+        # insert configuration options here
+----
+--
+Java:: 
++ 
+--
+Add configuration options to the link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/config/EncryptionAtRestConfig.html[`EncryptionAtRestConfig` object].
+
+[source,java]
+----
+Config config = new Config();
+
+PersistenceConfig PersistenceConfig = new PersistenceConfig()
+.setEnabled(true);
+EncryptionAtRestConfig encryptionAtRestConfig = PersistenceConfig.getEncryptionAtRestConfig();
+encryptionAtRestConfig.setEnabled(true);
+
+config.setPersistenceConfig(PersistenceConfig);
+----
+--
+====
+
+[cols="1a,1a,1m,2a",options="header"]
+|===
+|Option|Description|Default|Example
+
+|[[encryption-at-rest-algorithm]]`algorithm`
+|The symmetric cipher to use for encrypting persisted data.
+
+Valid values are:
+
+- `AES/CBC/PKCS5Padding`
+- `DES/ECB/PKCS5Padding`
+- `Blowfish`
+- `DESede`
+
+|AES/CBC/PKCS5Padding
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <persistence enabled="true">
+    <encryption-at-rest enabled="true">
+      <algorithm>
+        AES/CBC/PKCS5Padding
+      </algorithm>
+    </encryption-at-rest>
+  </persistence>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  persistence:
+    enabled: true
+      encryption-at-rest:
+        enabled: true
+        algorithm: AES/CBC/PKCS5Padding
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+PersistenceConfig PersistenceConfig = new PersistenceConfig()
+.setEnabled(true)
+.setAutoRemoveStaleData(true)
+.setAlgorithm("AES/CBC/PKCS5Padding");
+
+config.setPersistenceConfig(PersistenceConfig);
+----
+--
+====
+
+|`salt`
+|The encryption salt.
+|thesalt
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <persistence enabled="true">
+    <encryption-at-rest enabled="true">
+      <salt>
+        thesalt
+      </salt>
+    </encryption-at-rest>
+  </persistence>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  persistence:
+    enabled: true
+      encryption-at-rest:
+        enabled: true
+        salt: thesalt
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+PersistenceConfig PersistenceConfig = new PersistenceConfig()
+.setEnabled(true)
+.setAutoRemoveStaleData(true)
+.setSalt("thesalt");
+
+config.setPersistenceConfig(PersistenceConfig);
+----
+--
+====
+
+|`key-size`
+|The size (in bits) of the auto-generated persistence store encryption key.
+a|`0`
+
+A value of `0` means that the key size is determined by the <<encryption-at-rest-algorithm, encryption algorithm>>.
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <persistence enabled="true">
+    <encryption-at-rest enabled="true">
+      <key-size>
+        0
+      </key-size>
+    </encryption-at-rest>
+  </persistence>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  persistence:
+    enabled: true
+      encryption-at-rest:
+        enabled: true
+        key-size: 0
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+PersistenceConfig PersistenceConfig = new PersistenceConfig()
+.setEnabled(true)
+.setAutoRemoveStaleData(true)
+.setKeySize(0);
+
+config.setPersistenceConfig(PersistenceConfig);
+----
+--
+====
+
+|`secure-store` (required)
+|The secure store to use for the storing master
+encryption keys.
+a|'' (empty)
+| See <<configuring-secure-store, Configuring a Secure Store>>
+
+|===
+
+[[configuring-secure-store]]
+=== Configuring a Secure Store
+
+A secure store represents a secure place outside of the persistence store in which Hazelcast can keep its master encryption keys.
+
+Hazelcast provides secure store implementations for storing master encryption keys in the following places:
+
+- https://docs.oracle.com/javase/8/docs/api/java/security/KeyStore.html[Java KeyStore^]: A Java class for storing cryptographic keys and certificates.
+
+- https://www.vaultproject.io/[HashiCorp Vault^]: A tool for securely accessing secrets.
+
+==== Java KeyStore
+
+You can configure members to store your master encryption keys in a Java KeyStore by specifying the following options:
+
+* `path`: The path to the KeyStore file.
+* `type`: The type of KeyStore (`PKCS12`, `JCEKS`, etc.).
+* `password`: The KeyStore password.
+* `current-key-alias`: The alias for the current encryption key entry (optional).
+* `polling-interval`: The polling interval (in seconds) for checking for changes in the KeyStore.
+Disabled by default.
+
+NOTE: Sensitive configuration values such as passwords should be protected using xref:configuration:variable-replacers.adoc[variable replacers].
+
+The Java KeyStore treats all `KeyStore.SecretKeyEntry` entries stored in the KeyStore as
+encryption keys. It expects that these entries use the same protection password as the KeyStore. Entries of other types (private key entries, certificate entries) are ignored. If the
+`current-key-alias` option is configured, the corresponding entry will be treated as the current encryption key,
+otherwise the highest entry in the alphabetical order will be used. The remaining entries will
+represent historical versions of the encryption key.
+
+.Example secure store configuration for Java keystore 
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+  <persistence enabled="true">
+    <encryption-at-rest enabled="true">
+      <key-size>
+        0
+      </key-size>
+      <secure-store>
+        <keystore>
+          <path>/path/to/keystore.file</path>
+          <type>PKCS12</type>
+          <password>password</password>
+          <current-key-alias>current</current-key-alias>
+          <polling-interval>60</polling-interval>
+        </keystore>
+      </secure-store>
+    </encryption-at-rest>
+  </persistence>
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  persistence:
+    enabled: true
+      encryption-at-rest:
+        enabled: true
+        key-size: 0
+        secure-store:
+          keystore:
+            path: /path/to/keystore.file
+            type: PKCS12
+            password: password
+            current-key-alias: current
+            polling-interval: 60
+----
+--
+Java::
++
+--
+[source,java]
+----
+include::ROOT:example$/storage/SampleEncryptionAtRestConfiguration.java[tag=keystore]
+----
+--
+====
+
+==== HashiCorp Vault
+
+You can configure members to store your master encryption key in a Hashicorp Vault store by specifying the following options:
+
+* `address`: The address of the Vault server.
+* `secret-path`: The secret path under which the encryption keys are stored.
+* `token`: The Vault authentication token.
+* `polling-interval`: The polling interval (in seconds) for checking for changes in Vault. Disabled
+by default.
+* `ssl`: The TLS/SSL configuration for HTTPS support. See the xref:security:tls-ssl.adoc[TLS/SSL section] for more
+information about how to use the `ssl` element.
+
+NOTE: Sensitive configuration properties such as `token` should be protected using xref:configuration:variable-replacers.adoc[variable replacers].
+
+The HashiCorp Vault secure store implementation uses the official REST API to integrate with
+HashiCorp Vault. Only for the https://www.vaultproject.io/docs/secrets/kv/index.html[KV secrets engine^],
+both KV V1 and KV V2 can be used, but since only V2 provides secrets versioning, this is
+the recommended option. With KV V1 (no versioning support), only one version of the encryption
+key can be kept, whereas with KV V2, the HashiCorp Vault secure store is able to retrieve
+also the historical encryption keys. (Note that the size of the version history is configurable
+on the Vault side.) Having access to the previous encryption keys may be critical to avoid
+scenarios where the data becomes undecryptable because the master encryption key
+is no longer usable (for instance, when the original master encryption key got rotated out
+in the secure store while the cluster was down).
+
+The encryption key is expected to be stored at the specified secret path and represented as a
+single key/value pair in the following format:
+
+```
+name=Base64-encoded-data
+```
+
+where name can be an arbitrary string. Multiple key/value pairs under the same secret path are not
+supported. Here is an example of how such a key/value pair can be stored using the HashiCorp
+Vault command-line client (under the secret path `hz/cluster`):
+
+```
+vault kv put hz/cluster value=HEzO124Vz...
+```
+
+With KV V2, a second `put` to the same secret path creates a new version of the encryption key.
+With KV V1, it simply overwrites the current encryption key, discarding the old value.
+
+.Example secure store configuration for HashiCorp Vault 
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+  <persistence enabled="true">
+    <encryption-at-rest enabled="true">
+      <key-size>
+        0
+      </key-size>
+      <secure-store>
+        <vault>
+          <address>http://localhost:1234</address>
+          <secret-path>secret/path</secret-path>
+          <token>token</token>
+          <polling-interval>60</polling-interval>
+          <ssl>...</ssl>
+        </vault>
+     </secure-store>
+    </encryption-at-rest>
+  </persistence>
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  persistence:
+    enabled: true
+      encryption-at-rest:
+        enabled: true
+        key-size: 0
+        secure-store:
+          vault:
+            address: http://localhost:1234
+            secret-path: secret/path
+            token: token
+            polling-interval: 60
+            ssl:
+              ...
+----
+--
+Java::
++
+--
+[source,java]
+----
+include::ROOT:example$/storage/SampleEncryptionAtRestConfiguration.java[tag=vault]
+----
+--
+====
+
+[[data-structures]]
+== Data Structure Options
 
 Use the following options to configure persistence for xref:data-structures:map.adoc[map] and xref:jcache:overview.adoc[JCache] data structures.
 
@@ -497,15 +1128,132 @@ config.addMapConfig(mapConfig);
 --
 ====
 
-|`merkle-tree`
+|<<merkle, `merkle-tree`>>
 |Allows restarting members to synchronize their persisted map or JCache data faster with the rest of the cluster.
 
 |enabled
 
-|See xref:recover-single-member.adoc#synchronizing-data-faster[Synchronizing Data Faster] for more information.
+|See <<synch-data, Synchronizing Data Faster>> for more information.
 |===
 
-== Job Snapshot Configuration
+[[merkle]]
+.Merkle tree configuration options
+[cols="1a,1a,1m,2a",options="header"]
+|===
+|Option|Description|Default|Example
+
+|`merkle-tree.enabled`
+|Whether a Merkle tree is generated for the data structure.
+|enabled
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="test-map">
+    <data-persistence enabled="true">
+    </data-persistence>
+    <merkle-tree enabled="true">
+    </merkle-tree>
+  </map>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+  test-map:
+    data-persistence:
+      enabled: true
+    merkle-tree:
+      enabled: true
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+MapConfig mapConfig = config.getMapConfig("test-map");
+mapConfig.getDataPersistenceConfig().setEnabled(true)
+mapConfig.getMerkleTreeConfig().setEnabled(true);
+
+config.addMapConfig(mapConfig);
+----
+--
+====
+
+|`merkle-tree.depth`
+|The depth of the Merkle tree.
+
+The deeper the tree, the more accurate the difference detection but the more space is needed to store the Merkle tree in memory.
+|10
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="test-map">
+    <data-persistence enabled="true">
+    </data-persistence>
+    <merkle-tree enabled="true">
+      <depth>
+        12
+      </depth>
+    </merkle-tree>
+  </map>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+  test-map:
+    data-persistence:
+      enabled: true
+    merkle-tree:
+      enabled: true
+      depth: 12
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+MapConfig mapConfig = config.getMapConfig("test-map");
+mapConfig.getDataPersistenceConfig().setEnabled(true)
+mapConfig.getMerkleTreeConfig().setEnabled(true);
+mapConfig.getMerkleTreeConfig().setDepth(12);
+
+config.addMapConfig(mapConfig);
+----
+--
+====
+|===
+
+[[job]]
+== Job Snapshots Options
 
 Use the following option to configure persistence for job snapshots.
 
@@ -563,7 +1311,7 @@ the data.
 
 == Full Example of Persistence Configuration
 
-The following are example configuration settings for a map instance, a JCache instance, and the Jet engine.
+The following are example configuration settings for a map instance, a JCache instance, and job snapshots.
 
 [tabs] 
 ==== 

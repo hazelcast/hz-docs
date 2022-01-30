@@ -28,6 +28,7 @@ public class TheQueueStore implements QueueStore<Item> {
     }
 
     @Override
+    <1>
     public Item load(Long key) {
         System.out.println("load");
         return null;

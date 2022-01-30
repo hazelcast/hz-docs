@@ -522,7 +522,7 @@ Once the second consumer is started, here is the first consumer output:
 ...
 Consumed 13
 Consumed 15
-Consumer 17
+Consumed 17
 ...
 ```
 
@@ -532,7 +532,7 @@ Here is the second consumer output:
 ...
 Consumed 14
 Consumed 16
-Consumer 18
+Consumed 18
 ...
 ```
 
@@ -543,6 +543,119 @@ is not important, a list of queues is a good solution.
 
 NOTE: The items are taken from the queue in the same order they were put on the queue.
 However, if there is more than one consumer, this order is not guaranteed.
+
+[[configuring-queue]]
+== Configuring Queue
+
+The following are examples of queue configurations. It includes the
+`QueueStore` configuration, which is explained in the <<queueing-with-persistent-datastore,
+Queueing with Persistent Datastore>> section.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <queue name="default">
+        <max-size>0</max-size>
+        <backup-count>1</backup-count>
+        <async-backup-count>0</async-backup-count>
+        <empty-queue-ttl>-1</empty-queue-ttl>
+        <item-listeners>
+            <item-listener>com.hazelcast.examples.ItemListener</item-listener>
+        </item-listeners>
+        <statistics-enabled>true</statistics-enabled>
+        <queue-store>
+            <class-name>com.hazelcast.QueueStoreImpl</class-name>
+            <properties>
+                <property name="binary">false</property>
+                <property name="memory-limit">10000</property>
+                <property name="bulk-load">500</property>
+            </properties>
+        </queue-store>
+        <split-brain-protection-ref>splitbrainprotection-name</split-brain-protection-ref>
+    </queue>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  queue:
+    default:
+      max-size: 0
+      backup-count: 1
+      async-backup-count: 0
+      empty-queue-ttl: -1
+      item-listeners:
+        - include-value: true
+          class-name: com.hazelcast.examples.ItemListener
+      statistics-enabled: true
+      queue-store:
+        class-name: com.hazelcast.QueueStoreImpl
+        properties:
+          binary: false
+          memory-limit: 1000
+          bulk-load: 500
+      split-brain-protection-ref: splitbrainprotection-name
+----
+
+Java::
++
+[source,java]
+----
+include::ROOT:example$/dds/queue/QueueConfiguration.java[tag=queueconf]
+----
+====
+
+Hazelcast distributed queue has one synchronous backup by default.
+By having this backup, when a cluster member with a queue goes down,
+another member having the backup of that queue will continue. Therefore,
+no items are lost. You can define the number of synchronous backups for a
+queue using the `backup-count` element in the declarative configuration.
+A queue can also have asynchronous backups: you can define the number of
+asynchronous backups using the `async-backup-count` element.
+
+To set the maximum size of the queue, use the `max-size` element.
+To purge unused or empty queues after a period of time, use the `empty-queue-ttl` element.
+If you define a value (time in seconds) for the `empty-queue-ttl` element,
+then your queue will be destroyed if it stays empty or unused for the time in seconds that you give.
+
+The following is the full list of queue configuration elements with their descriptions:
+
+* `max-size`: Maximum number of items in the queue. It is used to set an
+upper bound for the queue. You will not be able to put more items when the
+queue reaches to this maximum size whether you have a queue store configured or not.
+See <<setting-a-bounded-queue, Setting a Bounded Queue>>.
+* `backup-count`: Number of synchronous backups. Queue is a non-partitioned
+data structure, so all entries of a queue reside in one partition. When this
+parameter is '1', it means there will be one backup of that queue in another
+member in the cluster. When it is '2', two members will have the backup.
+* `async-backup-count`: Number of asynchronous backups.
+* `empty-queue-ttl`: Used to purge unused or empty queues. If you define a
+value (time in seconds) for this element, then your queue will be destroyed
+if it stays empty or unused for that time.
+* `item-listeners`: Adds listeners (listener classes) for the queue items.
+You can also set the attribute `include-value` to `true` if you want the item
+event to contain the item values. You can set `local` to `true` if you want to
+listen to the items on the local member.
+* `queue-store`: Includes the queue store factory class name and the properties
+*binary*, *memory limit* and *bulk load*. See <<queueing-with-persistent-datastore, Queueing with Persistent Datastore>>.
+* `statistics-enabled`: Specifies whether the statistics gathering is enabled for your queue.
+If set to `false`, you cannot collect statistics in your implementation
+(using `getLocalQueueStats()`) and also
+xref:{page-latest-supported-mc}@management-center:monitor-imdg:monitor-dds.adoc#monitoring-queues[Hazelcast Management Center]
+will not show them. Its default value is `true`.
+* `split-brain-protection-ref` : Name of the split-brain protection configuration that you want this queue to use.
+See <<split-brain-protection-for-queue, Split-Brain Protection for Queue>>.
 
 [[itemids-when-offering-items]]
 === ItemIDs When Offering Items
@@ -625,6 +738,10 @@ the queue is also stored at the configured queue store. When the number of items
 queue exceeds the memory limit, the subsequent items are persisted in the queue store,
 they are not stored in the queue memory.
 
+A queue with a persistent datastore can be defined and configured only on the member side. Therefore, its implementation
+should be written in Java. All Hazelcast clients can access and operate on such a queue as if it is a regular one except that the queue is
+configured to have a persistent datastore.
+
 The `QueueStore` interface enables you to store, load and delete queue items with methods like
 `store`, `storeAll`, `load` and `delete`. The following example class includes all the `QueueStore` methods.
 
@@ -632,8 +749,9 @@ The `QueueStore` interface enables you to store, load and delete queue items wit
 ----
 include::ROOT:example$/dds/queue/TheQueueStore.java[tag=qs]
 ----
+<1> `Item` must be serializable.
 
-`Item` must be serializable. The following is an example queue store configuration.
+The following is an example queue store configuration.
 
 [tabs] 
 ==== 
@@ -647,7 +765,7 @@ XML::
     <queue name="queue">
         <max-size>10</max-size>
         <queue-store>
-            <class-name>com.hazelcast.QueueStoreImpl</class-name>
+            <class-name>com.hazelcast.TheQueueStore</class-name>
             <properties>
                 <property name="binary">false</property>
                 <property name="memory-limit">1000</property>
@@ -669,7 +787,7 @@ hazelcast:
     queue:
       max-size: 10
       queue-store:
-        class-name: com.hazelcast.QueueStoreImpl
+        class-name: com.hazelcast.TheQueueStore
         properties:
           binary: false
           memory-limit: 1000
@@ -718,14 +836,7 @@ The following is a list of methods, grouped by the protection types, that suppor
 ** `Collection.size()`
 ** `BlockingQueue.remainingCapacity()`
 
-[[configuring-queue]]
-== Configuring Queue
-
-The following are examples of queue configurations. It includes the
-`QueueStore` configuration, which is explained in the <<queueing-with-persistent-datastore,
-Queueing with Persistent Datastore>> section.
-
-**Declarative Configuration:**
+The configuration is done on the member side and the following is an example.
 
 [tabs] 
 ==== 
@@ -737,23 +848,7 @@ XML::
 <hazelcast>
     ...
     <queue name="default">
-        <max-size>0</max-size>
-        <backup-count>1</backup-count>
-        <async-backup-count>0</async-backup-count>
-        <empty-queue-ttl>-1</empty-queue-ttl>
-        <item-listeners>
-            <item-listener>com.hazelcast.examples.ItemListener</item-listener>
-        </item-listeners>
-        <statistics-enabled>true</statistics-enabled>
-        <queue-store>
-            <class-name>com.hazelcast.QueueStoreImpl</class-name>
-            <properties>
-                <property name="binary">false</property>
-                <property name="memory-limit">10000</property>
-                <property name="bulk-load">500</property>
-            </properties>
-        </queue-store>
-        <split-brain-protection-ref>splitbrainprotection-name</split-brain-protection-ref>
+        <split-brain-protection-ref>splitBrainProtectionRuleWithFourMembers</split-brain-protection-ref>
     </queue>
     ...
 </hazelcast>
@@ -767,66 +862,27 @@ YAML::
 hazelcast:
   queue:
     default:
-      max-size: 0
-      backup-count: 1
-      async-backup-count: 0
-      empty-queue-ttl: -1
-      item-listeners:
-        - include-value: true
-          class-name: com.hazelcast.examples.ItemListener
-      statistics-enabled: true
-      queue-store:
-        class-name: com.hazelcast.QueueStoreImpl
-        properties:
-          binary: false
-          memory-limit: 1000
-          bulk-load: 500
-      split-brain-protection-ref: splitbrainprotection-name
+      split-brain-protection-ref: splitBrainProtectionRuleWithFourMembers
+----
+
+Java::
++
+[source,java]
+----
+SplitBrainProtectionConfig splitBrainProtectionConfig = new SplitBrainProtectionConfig();
+splitBrainProtectionConfig.setName("splitBrainProtectionRuleWithFourMembers")
+			 .setEnabled(true)
+			 .setMinimumClusterSize(4);
+
+QueueConfig queueConfig = new QueueConfig();
+queueConfig.setSplitBrainProtectionName("splitBrainProtectionRuleWithFourMembers");
+
+Config config = new Config();
+config.addSplitBrainProtectionConfig(splitBrainProtectionConfig);
+config.addQueueConfig(queueConfig);
+
 ----
 ====
 
-**Programmatic Configuration:**
-
-[source,java]
-----
-include::ROOT:example$/dds/queue/QueueConfiguration.java[tag=queueconf]
-----
-
-Hazelcast distributed queue has one synchronous backup by default.
-By having this backup, when a cluster member with a queue goes down,
-another member having the backup of that queue will continue. Therefore,
-no items are lost. You can define the number of synchronous backups for a
-queue using the `backup-count` element in the declarative configuration.
-A queue can also have asynchronous backups: you can define the number of
-asynchronous backups using the `async-backup-count` element.
-
-To set the maximum size of the queue, use the `max-size` element.
-To purge unused or empty queues after a period of time, use the `empty-queue-ttl` element.
-If you define a value (time in seconds) for the `empty-queue-ttl` element,
-then your queue will be destroyed if it stays empty or unused for the time in seconds that you give.
-
-The following is the full list of queue configuration elements with their descriptions:
-
-* `max-size`: Maximum number of items in the queue. It is used to set an
-upper bound for the queue. You will not be able to put more items when the
-queue reaches to this maximum size whether you have a queue store configured or not.
-* `backup-count`: Number of synchronous backups. Queue is a non-partitioned
-data structure, so all entries of a queue reside in one partition. When this
-parameter is '1', it means there will be one backup of that queue in another
-member in the cluster. When it is '2', two members will have the backup.
-* `async-backup-count`: Number of asynchronous backups.
-* `empty-queue-ttl`: Used to purge unused or empty queues. If you define a
-value (time in seconds) for this element, then your queue will be destroyed
-if it stays empty or unused for that time.
-* `item-listeners`: Adds listeners (listener classes) for the queue items.
-You can also set the attribute `include-value` to `true` if you want the item
-event to contain the item values. You can set `local` to `true` if you want to
-listen to the items on the local member.
-* `queue-store`: Includes the queue store factory class name and the properties
-*binary*, *memory limit* and *bulk load*. See the <<queueing-with-persistent-datastore, Queueing with Persistent Datastore section>>.
-* `statistics-enabled`: Specifies whether the statistics gathering is enabled for your queue.
-If set to `false`, you cannot collect statistics in your implementation
-(using `getLocalQueueStats()`) and also
-xref:{page-latest-supported-mc}@management-center:monitor-imdg:monitor-dds.adoc#monitoring-queues[Hazelcast Management Center]
-will not show them. Its default value is `true`.
-* `split-brain-protection-ref` : Name of the split-brain protection configuration that you want this queue to use.
+The value of `split-brain-protection-ref` should be the split-brain protection configuration name which you
+configured under the `split-brain-protection` element as explained in the xref:network-partitioning:split-brain-protection.adoc[Split-Brain Protection section].

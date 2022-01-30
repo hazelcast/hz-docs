@@ -1,45 +1,305 @@
 = Set
 [[set]]
 
-Hazelcast Set (`ISet`) is a distributed and concurrent implementation of `java.util.Set`.
-It has the following features:
+Hazelcast Set, also known as ISet, is a distributed collection that contains no duplicate elements
+and does not preserve the order of elements.
 
-* Hazelcast Set does not allow duplicate elements.
-* Hazelcast Set does not preserve the order of elements.
-* Hazelcast Set is a non-partitioned data structure: all the data that belongs to
+Hazelcast Set is a non-partitioned data structure; all the data that belongs to
 a set lives on one single partition in that member.
-* Hazelcast Set cannot be scaled beyond the capacity of a single machine.
+
+Hazelcast Set cannot be scaled beyond the capacity of a single machine.
 Since the whole set lives on a single partition, storing a large amount of
 data on a single set may cause memory pressure. Therefore, you should use multiple
 sets to store a large amount of data. This way, all the sets are spread across the
 cluster, sharing the load.
-* A backup of Hazelcast Set is stored on a partition of another member in the cluster
-so that data is not lost in the event of a primary member failure.
-* All items are copied to the local member and iteration occurs locally.
-* The equals method implemented in Hazelcast Set uses a serialized byte version of
-objects, as opposed to `java.util.HashSet`.
 
+A backup of set is stored on a partition of another member in the cluster
+so that data is not lost in the event of a primary member failure. All set items are
+copied to the local member and iteration occurs locally.
+
+== Creating a Set
 [[getting-a-set-and-putting-items]]
-== Getting a Set and Putting Items
 
-Use the ``HazelcastInstance``s `getSet` method to get the Set, then use the `add` method to put items into it.
+When you start a Hazelcast member with default configuration, it will have an empty set named `default`.
+See xref:getting-started:get-started-docker.adoc[Start a Local Cluster in Docker] for a quick cluster startup.
 
+You can either use this `default` set or create your own using the set's getter methods as shown in the below
+example. If you pass a name other than `default` as the set name in these methods, it creates a new set with
+the given name; otherwise, it will use this existing set.
+
+In this example, we create a set called `set`, add items to it, and print the items.
+
+[tabs] 
+==== 
+Java:: 
++
+--
+
+. xref:getting-started:install-hazelcast.adoc#using-java[Install the Java client library]
+
+. Add the following to your file:
++
 [source,java]
 ----
-include::ROOT:example$/dds/set/ExampleSet.java[tag=set]
+import com.hazelcast.client.HazelcastClient;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.collection.ISet;
+
+import java.util.Collection;
+
+public class Client {
+
+    public static void main(String[] args) throws Exception {
+
+        HazelcastInstance client = HazelcastClient.newHazelcastClient();
+
+        ISet<String> set = client.getSet("set"); <1>
+        <2>
+        set.add("Tokyo");
+        set.add("Paris");
+        set.add("London");
+        set.add("New York");
+        System.out.println("Putting finished!");
+    }
+}
+----
+--
+
+C++::
++
+--
+
+. link:https://github.com/hazelcast/hazelcast-cpp-client/blob/v5.0.0/Reference_Manual.md#11-installing[Install the latest C++ client library^]
+
+. Add the following to your file:
++
+[source,cpp]
+----
+#include <hazelcast/client/hazelcast_client.h>
+
+int main() {
+    auto hz = hazelcast::new_client().get();
+
+    auto set = hz.get_set("set").get(); <1>
+
+    <2>
+    set->add("Tokyo").get();
+    set->add("Paris").get();
+    set->add("London").get();
+    set->add("New York").get();
+
+    std::cout << "Putting finished!" << std::endl;
+
+    std::cout << "Finished" << std::endl;
+
+    return 0;
+}
+----
+--
+
+C Sharp::
++
+--
+
+. link:http://hazelcast.github.io/hazelcast-csharp-client/latest/doc/download-install.html[Install the latest C Sharp client library^]
+
+. Add the following to your file:
++
+[source,cs]
+----
+using System;
+using System.Threading.Tasks;
+
+namespace Hazelcast.Examples.DistributedObjects
+{
+    public class SetExample
+    {
+        public static async Task Main(string[] args)
+        {
+            var options = new HazelcastOptionsBuilder()
+                .With(args)
+                .WithConsoleLogger()
+                .Build();
+
+            await using var client = await HazelcastClientFactory.StartNewClientAsync(options);
+
+            await using var set = await client.GetSetAsync<string>("set"); <1>
+
+            <2>
+            await set.AddAsync("Tokyo");
+            await set.AddAsync("Paris");
+            await set.AddAsync("London");
+            await set.AddAsync("New York");
+
+            Console.WriteLine("All: " + string.Join(", ", await set.GetAllAsync()));
+
+            Console.WriteLine("Contains: " + await set.ContainsAsync("Paris"));
+
+            Console.WriteLine("Count: " + await set.GetSizeAsync());
+
+            await client.DestroyAsync(set);
+        }
+    }
+}
+----
+--
+
+Node.js::
++
+--
+
+. Install the Node.js client library.
++
+[source,shell]
+----
+npm install hazelcast-client
 ----
 
-Hazelcast Set uses `ItemListener` to listen to events that occur when items are
-added to and removed from the Set. See the xref:events:object-events.adoc#listening-for-item-events[Listening for Item Events section]
+. Add the following to your file:
++
+[source,javascript]
+----
+'use strict';
+
+const { Client } = require('hazelcast-client');
+
+(async () => {
+    try {
+        const client = await Client.newHazelcastClient();
+        const set = await client.getSet('my-distributed-set'); <1>
+
+        <2>
+        await set.add('Tokyo');
+        await set.add('Paris');
+        await set.add('London');
+        await set.add('New York');
+
+        const size = await set.size();
+        console.log('Set size:', size);
+
+        await client.shutdown();
+    } catch (err) {
+        console.error('Error occurred:', err);
+        process.exit(1);
+    }
+})();
+----
+--
+
+Python::
++
+--
+. Install the Python client library.
++
+[source,shell]
+----
+pip install hazelcast-python-client
+----
+
+. Add the following to your file:
++
+[source,python]
+----
+import hazelcast
+
+client = hazelcast.HazelcastClient()
+
+my_set = client.get_set("set") <1>
+
+<2>
+my_set.add("Tokyo")
+my_set.add("Paris")
+my_set.add("London")
+my_set.add("New York")
+
+found = my_set.contains("Paris").result()
+print("Set contains Paris:", found)
+
+items = my_set.get_all().result()
+print("Size of set:", len(items))
+
+print("\nAll Items:")
+for item in items:
+    print(item)
+
+client.shutdown()
+----
+--
+
+Go::
++
+--
+. Install the Go client library.
++
+[source,shell]
+----
+go get github.com/hazelcast/hazelcast-go-client
+----
+
+. Add the following to your file:
++
+[source,go]
+----
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"math/rand"
+	"time"
+
+	"github.com/hazelcast/hazelcast-go-client"
+)
+
+func main() {
+	setItems := 10
+
+	ctx := context.TODO()
+	client, err := hazelcast.StartNewClient(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	rand.Seed(time.Now().Unix())
+	setName := fmt.Sprintf("sample-%d", rand.Int())
+	set, err := client.GetSet(ctx, setName) <1>
+	if err != nil {
+		log.Fatal(err)
+	}
+
+         <2>
+	for i := 0; i < setItems; i++ {
+		_, err = set.Add(ctx, fmt.Sprintf("Item %d", i))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	// Print contents of the set
+	items, err := set.GetAll(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, val := range items {
+		fmt.Println(val)
+	}
+	// Shutdown client
+	client.Shutdown(ctx)
+}
+----
+--
+====
+<1> Create the Set called `set`.
+<2> Add items to `set`.
+
+Hazelcast Set uses item listeners to listen to events that occur when items are
+added to and removed from set. See the xref:events:object-events.adoc#listening-for-item-events[Listening for Item Events section]
 for information about how to create an item listener class and register it.
 
 [[configuring-set]]
 == Configuring Set
 
-The following are the example Hazelcast Set configurations.
-
-
-**Declarative Configuration:**
+The following is an example set configuration.
 
 [tabs] 
 ==== 
@@ -80,31 +340,31 @@ hazelcast:
         - class-name: com.hazelcast.examples.ItemListener
       split-brain-protection-ref: splitbrainprotection-name
 ----
-====
 
-**Programmatic Configuration:**
-
+Java::
++
 [source,java]
 ----
 include::ROOT:example$/dds/set/SetConfiguration.java[tag=sc]
 ----
+====
 
-Hazelcast Set configuration has the following elements:
+The following are the configuration elements and their descriptions:
 
-* `statistics-enabled`: True (default) if statistics gathering is
-enabled on the Set, false otherwise.
 * `backup-count`: Count of synchronous backups. Set is a non-partitioned
-data structure, so all entries of a Set reside in one partition. When this
-parameter is '1', it means there will be one backup of that Set in another
-member in the cluster. When it is '2', two members will have the backup.
-* `async-backup-count`: Count of asynchronous backups.
-* `max-size`: The maximum number of entries for this Set. It can be any number
+data structure, so all entries of a set reside in one partition. For example, if this parameter is `1`,
+there is one backup of the set in one other member. If it is `2`, two members will have the backup.
+* `async-backup-count`: Count of asynchronous backups. See xref:data-structures:backing-up-maps.adoc#in-memory-backup-types[Backup Types]
+to learn more about synchronous and asynchronous backups.
+* `statistics-enabled`: Specifies whether the statistics gathering is enabled for your set.
+If set to `false`, you cannot collect statistics in your implementation. Its default value is `true`.
+* `max-size`: The maximum number of entries for this set. It can be any number
 between 0 and Integer.MAX_VALUE. Its default value is 0, meaning there is no capacity constraint.
 * `item-listeners`: Lets you add listeners (listener classes) for the list items.
 You can also set the attributes `include-value` to `true` if you want the item event
 to contain the item values. You can set `local` to `true` if you want to listen to
 the items on the local member.
-* `split-brain-protection-ref`: Name of the split-brain protection configuration that you want this Set to use.
+* `split-brain-protection-ref`: Name of the split-brain protection configuration that you want this set to use.
 See the <<split-brain-protection-for-iset-and-transactionalset, Split-Brain Protection for ISet and TransactionalSet section>>.
 
 [[split-brain-protection-for-iset-and-transactionalset]]
@@ -142,12 +402,7 @@ TransactionalSet:
 * READ, READ_WRITE:
 ** `size`
 
-
-**Configuring Split-Brain Protection**
-
-Split-brain protection for ISet can be configured programmatically using
-the method https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/config/SetConfig.html[setSplitBrainProtectionName()^],
-or declaratively using the element `split-brain-protection-ref`. The following is an example declarative configuration:
+The configuration is done on the member side and the following is an example.
 
 [tabs] 
 ==== 
@@ -159,7 +414,7 @@ XML::
 <hazelcast>
     ...
     <set name="default">
-        <split-brain-protection-ref>splitbrainprotection-name</split-brain-protection-ref>
+        <split-brain-protection-ref>splitBrainProtectionRuleWithFourMembers</split-brain-protection-ref>
     </set>
     ...
 </hazelcast>
@@ -173,7 +428,25 @@ YAML::
 hazelcast:
   set:
     default:
-      split-brain-protection-ref: splitbrainprotection-name
+      split-brain-protection-ref: splitBrainProtectionRuleWithFourMembers
+----
+
+Java::
++
+[source,java]
+----
+SplitBrainProtectionConfig splitBrainProtectionConfig = new SplitBrainProtectionConfig();
+splitBrainProtectionConfig.setName("splitBrainProtectionRuleWithFourMembers")
+			 .setEnabled(true)
+			 .setMinimumClusterSize(4);
+
+SetConfig setConfig = new SetConfig();
+setConfig.setSplitBrainProtectionName("splitBrainProtectionRuleWithFourMembers");
+
+Config config = new Config();
+config.addSplitBrainProtectionConfig(splitBrainProtectionConfig);
+config.addSetConfig(setConfig);
+
 ----
 ====
 

@@ -1,12 +1,14 @@
-= Adding Dynamic Configuration in REST
-:description: You can use the REST API to add dynamic configuration for some supported features at runtime.
+= Configuration Update and Reload
+:description: You can use the update and reload REST endpoints to add dynamic configuration for some supported features at runtime.
 
 {description}
 
-You have two options for adding dynamic configuration in REST:
+You have two options for adding dynamic configuration via configuration update and reload:
 
-- <<edit-reload, Add new configuration blocks to the configuration file>> that a member has already loaded.
-- <<update, Send a member new configuration blocks>> in a `POST` request.
+- <<reload, Reload>>: Edit the declarative configuration file which the member has configured from and then reload.
+- <<update, Update>>: Include a declarative configuration file in the request parameter.
+
+NOTE: You can use any non-lite member to send the request. Changes will be broadcast to the entire cluster. If you use reload then modifying one member's declarative configuration file is enough.
 
 == Before you Begin
 
@@ -16,12 +18,12 @@ You need an Enterprise license.
 
 include::partial$prereqs-dynamic-config.adoc[]
 
-[[edit-reload]]
-== Editing and Reloading a Configuration File
+[[reload]]
+== Reloading a Configuration File
 
 . Open a member's configuration file and add some new configuration. For example, you may want to configure a new map with a backup count.
 +
-NOTE: Keep all existing configuration the same. You can only add new configuration blocks.
+NOTE: Keep all existing configuration the same. You can only add new configuration blocks. To see what you can add see xref:dynamic-config-overview.adoc#supported-dynamic-configuration-changes[Supported Dynamic Configuration Changes]
 +
 .Example of a new configuration
 [tabs] 
@@ -52,7 +54,7 @@ hazelcast:
 ----
 ====
 
-. Send a `POST` request to the `/reload` endpoint of a cluster member.
+. Send a `POST` request to the `config/reload` endpoint of a cluster member.
 +
 - If your cluster has security enabled, send the cluster password in the request.
 +
@@ -71,18 +73,21 @@ curl -X POST -H "Content-Type: text/plain" --data-urlencode "<cluster-name>" --d
 [[update]]
 == Updating Configuration in a Request 
 
-To update a member's configuration, without editing the configuration file, use the `/update` endpoint.
+To update a member's configuration, without editing the configuration file, use the `config/update` endpoint.
 
-This endpoint takes a URL encoded string of either YAML or XML. You only need to pass this endpoint the `hazelcast` root followed by the new configuration block that you want to add. All existing configuration settings remain unchanged. However, you can include existing configuration blocks as well. The member will just ignore them. 
+This endpoint takes a URL encoded string of either YAML or XML as parameter. You only need to pass the new configuration blocks that you want to add with the `hazelcast` root. All existing configuration settings remain unchanged. However, you can include existing configuration blocks as well. The member will just ignore them.
 
 For example, when a member has configuration for `map-1` and `map-2` in its configuration file, you can pass in a new configuration block for `map-3` in the following ways: 
 
 
 - The `hazelcast` root and the new `map-3` configuration block.
 - The `hazelcast` root, `map-1` and the new `map-3` configuration block.
+- The `hazelcast` root, `map-2` and the new `map-3` configuration block.
 - The `hazelcast` root, `map-1`, `map-2` and the new `map-3` configuration block.
 
-NOTE: The configuration must be URL encoded.
+All will have similar result. The only difference you will observe that in the response you will see different ignored configurations.
+
+NOTE: The configuration string must be URL encoded.
 
 If your cluster has security enabled, send the cluster password in the request.
 
@@ -108,10 +113,11 @@ hazelcast:
 " http://localhost:5701/hazelcast/rest/config/update
 ----
 
+NOTE: If you are using XML file format, please use it with `xmlns` such as `<hazelcast xmlns="http://www.hazelcast.com/schema/config"></hazelcast>` instead of `<hazelcast></hazelcast>`.
+
 include::partial$dyn-config-partial-propagation.adoc[leveloffset=+1]
 
-[[handling-configuration-conflicts]]
-== Handling Configuration Conflicts
+== Request Response
 
 When the member receives a dynamic configuration request, it will check if the configuration already exists and propagate any new configuration across the rest of the cluster as well as members that may join the cluster later.
 
@@ -121,10 +127,10 @@ You should see the new configuration in the response's `addedConfigs` field:
 {"status":"success","message":"Configuration Update successfully finished.","result":{"addedConfigs":[{"sectionName":"map","configName":"new-map"}],"ignoredConfigs":[]}}
 ```
 
-The REST API endpoints are idempotent. If you add a dynamic configuration for an block that already exists, the member will ignore the request and return the change you requested in the `ignoredConfigs` field.
+The REST API endpoints are idempotent. If you add a dynamic configuration for a block that already exists, the member will ignore the request and return the change you requested in the `ignoredConfigs` field.
 
-.Example conflict response
+.Example ignored response
 [source,json]
 ----
-{"status":"success","message":"Configuration Update successfully finished.","result":{"addedConfigs":[],"ignoredConfigs":[{"sectionName":"map","configName":"new-map"}]}}
+{"status":"success","message":"Configuration Update successfully finished.","result":{"addedConfigs":[],"ignoredConfigs":[{"sectionName":"map","configName":"existing-map"}]}}
 ----

@@ -1,9 +1,18 @@
 = Configuring Dynamic Configuration
-:description: You can configure members to keep dynamic configuration changes in memory or persist them in a YAML or XML configuration file.
+:description: You can configure members to keep dynamic configuration changes in memory or persist them to a YAML or XML configuration file.
 
 {description}
 
-NOTE: Please make sure to give write permissions to the configuration file.
+== Glossary
+
+[cols="1e,1a"]
+|===
+|Term|Definition
+
+|root configuration file
+|XML or YAML configuration file that is used to configure a member at startup.
+
+|===
 
 == Quickstart Configuration
 
@@ -41,23 +50,32 @@ hazelcast:
 --
 ====
 
-NOTE: Changes are persisted to a xref:configuring-declaratively.adoc[configuration file], which means that you need to configure Hazelcast with a configuration file. See xref:dynamic-config-overview.adoc[].
+NOTE: Changes are persisted to a xref:configuring-declaratively.adoc[configuration file], which means that you need to configure Hazelcast with a configuration file. See xref:dynamic-config.adoc[].
 
-=== Idempotentcy
+== Production Checklist
 
-Persistence is idempotent. If a member fails to write the changes to a file, you can add the same dynamic configuration again. For example, the following scenario is valid:
+Before you start configuring members to persist dynamic configuration changes, consider the following checklist:
 
-. Start a cluster with 3 members.
-. Try adding dynamic configuration for a new map.
-. The 2nd member doesn't have write permissions for the configuration file, so it doesn't persist the changes.
-. Give the 2nd member write permissions.
-. Add the same map configuration again.
-. This time, the map configuration is added successfully.
+- [ ] Does your cluster have enough available disk space, especially if you want to <<backup, create backups of the configuration file>>?
+- [ ] Do you use <<snippets, configuration snippets>>? You can configure members to back up snippets instead of the <<glossary, root configuration file>>.
+- [ ] Does your cluster have read/write permissions for the configuration file? All members must have write permissions to the configuration file.
+- [ ] Is your cluster free of configuration conflicts? Hazelcast does not support persistence for dynamic configuration in clusters that have conflicting configuration files.
+
+NOTE: Running clusters must be restarted before any configuration changes take effect.
+
 
 [[backup]]
 == Creating Backups of the Configuration File
 
-You can configure number of backups and where they will be stored. By default, 5 backups will be stored in the `dynamic-configuration-backups` folder, which is created at the node startup directory. You can configure both number of the backups and the folder which these backups will be held. If you start multiple member in one machine, each member should have unique backup directory.
+By default, Hazelcast keeps 5 backups of the configuration file in the member's startup directory.
+
+To change the number of backups, configure the `backup-count` option.  To change the directory in which to store the backups, configure the <<dynamic-configuration-backup-dir,`backup-dir`>> option.
+
+The filenames of backups are in the following format, which includes the date and time when they were created followed by the `.backup` extension: `yyyy-MM-dd--HH-mm-ss-SSS.backup`. For example, `2022-01-31--13-23-44-699.backup`.
+
+WARNING: If the backup directory contains existing files with the `.backup` extension or if time is shifted while the member is running, the order of backups can be corrupted.
+
+If you configure the <<snippets, `persistence-file`>> option, that file is backed up instead of the <<glossary, root configuration file>>.
 
 [tabs]
 ====
@@ -89,11 +107,18 @@ hazelcast:
 --
 ====
 
-Note that backups will be named with timestamps which they are created. So the name format will be `yyyy-MM-dd--HH-mm-ss-SSS.backup` and one example would be `2022-01-31--13-23-44-699.backup`. If directory contains other files with `.backup` extension or if time is shifted during running the node then order of backups can be corrupted.
-[[persistence-file]]
+[[snippets]]
 == Changing the Persistence File
 
-If you want to see your dynamic configuration changes in a different file, you can also configure it. If you start multiple member in one machine, each member should have unique persistence file.
+To persist dynamic configuration changes to a file other than the <<glossary, root configuration file>>, set the path to an XML or YAML configuration file in the `persistence-file` option.
+
+The `persistence-file` must be created and must be xref:configuring-declaratively.adoc#composing-declarative-configuration[imported] into the root configuration file.
+
+If you start multiple members on a single device, each member should have a unique persistence file.
+
+If you use the Java API to set the `Config.configFile` property, Hazelcast persists changes to that file.
+
+If you load configuration files from the classpath, Hazelcast persists changes to the exact configuration file in the classpath. For example, if you use Maven, that file could be in the `target` directory instead of `src` directory.
 
 [tabs]
 ====
@@ -123,8 +148,6 @@ hazelcast:
 --
 ====
 
-NOTE: Note that `persistence-file` must be created and must be xref:configuring-declaratively.adoc#composing-declarative-configuration[imported] to the root declarative configuration by the user. You still need to have a xref:configuring-declaratively.adoc[declarative configuration file].
-
 == Configuration Options
 
 Use the following configuration options to configure dynamic configuration for a cluster.
@@ -144,7 +167,7 @@ Use the following configuration options to configure dynamic configuration for a
 | Relative or absolute path to a configuration file. Changes made in dynamic configuration will be persisted to this file. This file must either be the configuration file that is used to start the member, or it must be imported into that file. See xref:configuring-declaratively.adoc#composing-declarative-configuration[Importing Configuration Snippets into Files] Default: Path to the configuration file that was used to start the Hazelcast member.
 
 | backup-dir
-| Relative or absolute path to a directory in which to store backups of the configuration file. Each new backup will be created inside this directory. If this option is not given, a new directory called `dynamic-configuration-backups` will be created in the member's startup directory.                            
+| Relative or absolute path to a directory in which to store backups of the configuration file. Each new backup will be created inside this directory. Default: A new directory called `dynamic-configuration-backups` is created in the member's startup directory.                            
 
 | backup-count
 | Number of backups of the configuration file to keep. To disable backups, set this option to 0. Default: 5.
@@ -183,20 +206,3 @@ hazelcast:
 ----
 --
 ====
-
-== Additional Notes
-
-If you have configuration conflicts between members, please make sure to resolve them before starting the cluster or using dynamic configuration persistence. Using persistence while having a conflicting declarative configuration files isn't supported.
-
-Persistence is idempotent, in case of failure you can retry it. For example the following scenario is valid:
-
-. Start a cluster with 3 members
-. Try adding a new map dynamically
-. Persistence in the 2nd member fails because the file doesn't have write permission.
-. Change file permissions.
-. Retry adding same map dynamically again.
-. This time map added successfully.
-
-If you are persisting into declarative configuration file, the key point identifying the declarative configuration file location is `configFile` filed in the `Config` object. So if you set `Config.configFile` to some other file on the file system, that file will be used for persistence. If you do this please make sure that next time cluster will start from that declarative configuration file, or dynamic changes will be lost. You can use `Config.loadFromFile()` for this.
-
-You can use persistence with declarative configuration files from classpath if file itself also exist. However, dynamic configuration persistence will use the exact file found in the classpath. So for example that file could be in the `target` directory instead of `src`, if you use maven.

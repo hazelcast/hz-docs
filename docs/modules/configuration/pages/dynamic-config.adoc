@@ -1,15 +1,27 @@
-= Overview
-:description: You can temporarily or permanently add new configuration to members at runtime, using dynamic configuration. This feature is useful if you want to configure a running cluster without having to restart the members.
-:keywords: dynamic configuration
+= Dynamic Configuration
+:description: You can use dynamic configuration to add new configuration to members at runtime or update some supported configuration such as Enterprise license keys. This feature is useful if you want to configure a running cluster without having to restart the members.
+:keywords: dynamic configuration, update configuration
 
 {description}
 
 [[supported-dynamic-configuration-changes]]
 == Supported Dynamic Configuration Changes
 
-.Configuration options for dynamic configuration
+You can add dynamic configuration, using the following options:
+
+- xref:dynamic-config-programmatic-api.adoc[Programmatic API] (Java member or client)
+- Dedicated REST API endpoints such as `/addWanConfig`
+- The xref:dynamic-config-update-and-reload.adoc[`/config/update` and `/config/reload` REST API endpoints]
+
+These options support different dynamic configuration changes, and not all changes support <<persistence, persistence>>.
+
+NOTE: To use the REST API endpoints you need an Enterprise license.
+
+See the following table for what's available with each option:
+
+.Supported dynamic configuration options
 |===
-| Dynamic Change | xref:dynamic-config-programmatic-api.adoc[Programmatic API] | Dedicated REST Endpoint | xref:dynamic-config-update-and-reload.adoc[Configuration Update and Reload] | xref:dynamic-config-persistence.adoc[Dynamic Configuration Persistence]
+| Dynamic change | Programmatic API | Dedicated REST endpoint |`/config/update` and `/config/reload` REST API endpoints| Supports persistence
 
 | Add a new <<supported-data-structures, data structure configuration>>
 | Yes
@@ -19,7 +31,7 @@
 
 | Add a new WAN configuration
 | No
-| xref:wan:rest-api.adoc#wr-dynamically-adding[`/addWanConfig]
+| xref:wan:rest-api.adoc#wr-dynamically-adding[`/addWanConfig`]
 | Yes
 | Yes
 
@@ -29,12 +41,6 @@
 | Yes
 | Yes
 
-| xref:security:native-client-security.adoc#handling-permissions-when-a-new-member-joins[Change client permissions]
-| No
-| No
-| No
-| No
-
 | xref:query:indexing-maps.adoc[Add a new index to an existing map]
 | Yes
 | No
@@ -43,7 +49,10 @@
 
 |===
 
-[[supported-data-structures]]
+Although you can configure members to xref:security:native-client-security.adoc#handling-permissions-when-a-new-member-joins[apply the client permissions of a new member], you can't use dynamic configuration to make changes to client permissions.
+
+=== Supported Data Structures
+
 Dynamic configuration is supported for adding the following data structures:
 
 - Map
@@ -63,24 +72,36 @@ Dynamic configuration is supported for adding the following data structures:
 - PNCounter
 - FlakeIdGenerator
 
-== Persisting Configuration Changes
+[[persistence]]
+== Persisting Dynamic Configuration
 
 By default, dynamic configuration changes are stored in-memory and are lost when a cluster restarts.
 
-To allow changes to be persisted, see xref:dynamic-config-persistence.adoc[Dynamic Configuration Persistence].
+To allow changes to be persisted, you must do the following:
 
 - Configure the member, using a xref:configuring-declaratively.adoc[configuration file] or xref:configuring-programmatically.adoc#config-file[loading a configuration file into a configuration object].
 
 - xref:dynamic-config-persistence.adoc[Enable and configure persistence] for dynamic configuration.
+
+=== Idempotentcy
+
+Persistence is idempotent. If a member fails to write the changes to a file, you can add the same dynamic configuration again. For example, the following scenario is valid:
+
+. Start a cluster with 3 members.
+. Try adding dynamic configuration for a new map.
+. The 2nd member doesn't have write permissions for the configuration file, so it doesn't persist the changes.
+. Give the 2nd member write permissions.
+. Add the same map configuration again.
+. This time, the map configuration is added successfully.
 
 == Adding Dynamic Configuration
 
 To add new configuration to members at runtime, you can use the following options:
 
 - xref:dynamic-config-programmatic-api.adoc[Programmatic API] (Java client API or Java member API)
-- xref:dynamic-config-update-and-reload.adoc[REST API]. As well as the `/upload` and `/reload` endpoints, you can use the dedicated REST endpoints. For details, see the <<supported-dynamic-configuration-changes, Supported Dynamic Configuration Changes>> on this page.
+- xref:dynamic-config-update-and-reload.adoc[REST API]. As well as the `/upload` and `/config/reload` endpoints, you can use the dedicated REST endpoints. For details, see the <<supported-dynamic-configuration-changes, Supported Dynamic Configuration Changes>> on this page.
 
-== Dynamic Configuration and User Customizations
+=== Dynamic Configuration and User Customizations
 
 Some dynamic configurations settings may reference
 user customizations, such as a `MapLoader` implementation that is referenced

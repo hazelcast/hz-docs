@@ -1,9 +1,234 @@
-= Serialization Configuration Wrap-Up
+= Configuring Serializers
+:description: You can configure clusters to be able to serialize and deserialize custom objects and classes as well as override built-in serializers and whitelist certain Java classes.
+:page-aliases: untrusted-deserialization-protection.adoc, overriding-built-in-serializers.adoc
 
-This section summarizes the configuration of serialization options, explained in the above sections,
-into all-in-one examples. The following are example serialization configurations.
+You can configure clusters to be able to xref:serialization.adoc[serialize and deserialize custom objects and classes] as well as override built-in serializers and whitelist certain Java classes.
 
-**Declarative Configuration:**
+== Production Checklist
+
+Before you start configuring members, consider the following checklist:
+
+- [ ] For security, do you want to <<untrusted-classes, stop malicious Java classes from being deserialized in your cluster>>?
+
+NOTE: Running clusters must be restarted before any configuration changes take effect.
+
+[[untrusted-classes]]
+== Disallowing Deserialization of Untrusted Java Classes
+
+To stop Hazelcast from deserializing arbitrary classes, you can allow or disallow deserialization of Java classes by class name or package name, using the `java-serialization-filter` option.
+
+The following filtering rules are used when the objects are deserialized:
+
+* When the `whitelist` option is empty:
+** If the deserialized object's class name or package name is blacklisted, deserialization fails.
+** Otherwise, deserialization is allowed.
+* When the `whitelist` option is provided:
+** If the deserialized object's class name or package name is blacklisted, deserialization fails.
+** If the deserialized object's class name or package name is whitelisted, deserialization is allowed
+** Otherwise, deserialization fails.
+
+When deserialization fails, a `SecurityException` is thrown.
+
+By default, class names or package names that have these prefixed are allowed:
+
+* `java`
+* `com.hazelcast.`
+* `[` (for primitives and arrays)
+
+If you do not want to allow these default prefixes, set the `defaults-disabled` attribute to true.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+  ...
+  <serialization>
+    <java-serialization-filter defaults-disabled="true">
+      <whitelist>
+        <class>example.Foo</class>
+        <package>com.acme.app</package>
+        <prefix>com.hazelcast.</prefix>
+        <prefix>java.</prefix>
+        <prefix>javax.</prefix>
+        <prefix>[</prefix>
+      </whitelist>
+      <blacklist>
+        <class>com.acme.app.BeanComparator</class>
+      </blacklist>
+    </java-serialization-filter>
+  </serialization>
+  ...
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  serialization:
+    java-serialization-filter:
+      defaults-disabled: true
+      whitelist:
+        class:
+          - example.Foo
+        package:
+          - com.acme.app
+        prefix:
+          - com.hazelcast.
+          - java.
+          - javax.
+          - \[
+      blacklist:
+        class:
+          - com.acme.app.BeanComparator
+----
+--
+Java::
++
+--
+[source,java]
+----
+Config config = new Config();
+JavaSerializationFilterConfig javaSerializationFilterConfig = new JavaSerializationFilterConfig();
+javaSerializationFilterConfig.getWhitelist().addClasses(SomeDeserialized.class.getName());
+config.getSerializationConfig().setJavaSerializationFilterConfig(javaSerializationFilterConfig);
+----
+--
+====
+
+[[override]]
+== Overriding the Built-in Serializers
+
+To enable your cluster to override the built-in serializers, set the `allow-override-default-serializers` option to `true`.
+
+WARNING: Built-in serializers are used
+heavily by Hazelcast internals. If any of the instances in a cluster overrides
+a built-in serializer, all members and clients in that cluster must override it with the same serializer.
+
+You should override the built-in serializers only for the following use case:
+
+You implement serialization of a type, and Hazelcast later adds a built-in serializer for the same type in a future release.
+
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <serialization>
+        <allow-override-default-serializers>true</allow-override-default-serializers>
+    </serialization>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,xml]
+----
+hazelcast:
+    serialization:
+        allow-override-default-serializers: true
+----
+
+Java::
++
+[source,java]
+----
+SerializationConfig{
+  boolean isAllowOverrideDefaultSerializers();
+ 
+  SerializationConfig setAllowOverrideDefaultSerializers(final boolean allowOverrideDefaultSerializers);}
+----
+====
+
+== Configuration Options
+
+Use these configuration options to configure serialization:
+
+.Serialization configuration options
+[cols="1a,3a,1m",options="header"]
+|===
+|Option|Description|Default
+
+|`portable-version`
+|Defines the version of a portable serialization implementation.
+A portable version differentiates two of the same classes that have differ such as those that have different fields or different field types.
+|0
+
+|`use-native-byte-order`
+|Whether to use the native byte order of the underlying platform.
+|false
+
+|`byte-order`
+|Defines the byte order that the serialization uses: `BIG_ENDIAN` or `LITTLE_ENDIAN`.
+|BIG_ENDIAN
+
+|`enable-compression`
+|Enables compression if the default Java serialization is used.
+|false
+
+|`enable-shared-object`
+|Enables shared object if the default Java serialization is used.
+|false
+
+|`allow-unsafe`
+|Whether to allow `unsafe` to be used.
+|false
+
+|`allow-override-default-serializers`
+|Whether to allow built-in serializers to be overridden. |false
+
+|`data-serializable-factory`
+|Registers a class that implements
+`com.hazelcast.nio.serialization.DataSerializableFactory`. See xref:implementing-dataserializable.adoc#register[Registering EmployeeDataSerializableFactory]
+|
+
+|`portable-factory`
+|Registers a `PortableFactory` class. See xref:implementing-portable-serialization.adoc#register[Registering the Portable Factory]
+|
+
+|`global-serializer`
+|Registers a global serializer class to be used when no other serializer is available.
+This element has the optional boolean attribute `override-java-serialization`.
+When set to `true`, the Java serialization step is assumed to be handled by the global serializer. Default: `false`. See xref:global-serializer.adoc[].
+|
+
+|`serializer`
+|The class name of the custom serializer implementation. See xref:custom-serialization.adoc[]
+|
+
+|`check-class-def-errors`
+|Whether to check for
+class definition errors at startup and throw a serialization exception with an error definition.
+|
+
+|`java-serialization-filter`
+|Provides deserialization protection based on
+<<untrusted-classes, whitelisting and blacklisting the class/package names>>.
+|
+
+|`compact-serialization-config` (beta)
+|Provides ways to enable Compact serialization and register
+explicit or reflective compact serializers for classes. See
+xref:compact-serialization.adoc#compactserializationconfig[CompactSerializationConfig section]
+for details.
+|
+|===
+
+== Full Example of Serialization Configuration
+
+The following are example configuration settings for various serializers.
 
 [tabs] 
 ==== 
@@ -50,6 +275,7 @@ XML::
 
 YAML::
 +
+--
 [source,yaml]
 ----
 hazelcast:
@@ -85,10 +311,10 @@ hazelcast:
           - com.hazelcast.
           - java
 ----
-====
-
-**Programmatic Configuration:**
-
+--
+Java::
++
+--
 [source,java]
 ----
 Config config = new Config();
@@ -104,36 +330,5 @@ SerializerConfig serializerConfig = srzConfig.getSerializerConfig();
 serializerConfig.setTypeClass( "Employee" )
                 .setClassName( "com.EmployeeSerializer" );
 ----
-
-Serialization configuration has the following elements.
-
-* `portable-version`: Defines versioning of the portable serialization.
-Portable version differentiates two of the same classes that have changes, such as adding/removing field or
-changing a type of a field.
-* `use-native-byte-order`: Set to `true` to use native byte order for the underlying platform.
-Its default value is `false`.
-* `byte-order`: Defines the byte order that the serialization uses: `BIG_ENDIAN` or `LITTLE_ENDIAN`.
-Its default value is `BIG_ENDIAN`.
-* `enable-compression`: Enables compression if default Java serialization is used.
-Its default value is `false`.
-* `enable-shared-object`: Enables shared object if default Java serialization is used.
-Its default value is `false`.
-* `allow-unsafe`: Set to `true` to allow `unsafe` to be used.
-Its default value is `false`.
-* `data-serializable-factory`: Custom classes implementing
-`com.hazelcast.nio.serialization.DataSerializableFactory` to be registered.
-These can be used to speed up serialization/deserialization of objects.
-* `portable-factory`: The `PortableFactory` class to be registered.
-* `global-serializer`: The global serializer class to be registered if no other serializer is applicable.
-This element has the optional boolean attribute `override-java-serialization`.
-If set to `true`, the Java serialization step is assumed to be handled by the global serializer.
-Java Serializable and Externalizable is prior to global serializer by default (`false`).
-* `serializer`: The class name of the serializer implementation.
-* `check-class-def-errors`: When set to `true`, the serialization system checks for
-class definitions error at start and throws a Serialization Exception with an error definition.
-* `java-serialization-filter`: Provides deserialization protection based on
-whitelisting and blacklisting the class/package names.
-* `compact-serialization-config`: (BETA) Provides ways to enable Compact serialization, register
-explicit or reflective Compact serializers for classes. See
-xref:compact-serialization.adoc#compactserializationconfig[CompactSerializationConfig section]
-for details.
+--
+====

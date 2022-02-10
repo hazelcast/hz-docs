@@ -1,0 +1,120 @@
+= Dynamic Configuration for Members
+:description: You can use dynamic configuration to add new configuration to members at runtime or update some supported configuration such as Enterprise license keys. This feature is useful if you want to configure a running cluster without having to restart the members.
+:keywords: dynamic configuration, update configuration
+
+{description}
+
+[[supported-dynamic-configuration-changes]]
+== Adding Dynamic Configuration
+
+You can add dynamic configuration, using the following options:
+
+- xref:dynamic-config-programmatic-api.adoc[Programmatic API] (Java member or client)
+- The xref:dynamic-config-update-and-reload.adoc[`/config/update` and `/config/reload` REST endpoints]
+- Dedicated REST endpoints such as `/addWanConfig`
+- SQL
+
+These options support different dynamic configuration changes, and not all changes support <<persistence, persistence>>. See the following table for what's available with each option.
+
+NOTE: To use the REST endpoints you need an Enterprise license.
+
+.Supported dynamic configuration options
+|===
+| Dynamic change | Programmatic API | Dedicated REST endpoint |`/config/update` and `/config/reload` REST endpoints| SQL | Supports persistence
+
+| Add new configuration for a <<supported-data-structures, supported data structure>>
+| Yes
+| No
+| Yes
+| No
+| Yes
+
+| xref:wan:rest-api.adoc#wr-dynamically-adding[Add a new WAN configuration]
+| No
+| Yes
+| Yes
+| No
+| Yes
+
+| xref:deploy:updating-license-rest.adoc[Update a Hazelcast Enterprise license]
+| No
+| Yes
+| Yes
+| No
+| Yes
+
+| xref:query:indexing-maps.adoc[Add a new index to an existing map]
+| Yes
+| No
+| No
+| Yes
+| No
+
+|===
+
+Although you can configure members to xref:security:native-client-security.adoc#handling-permissions-when-a-new-member-joins[apply the client permissions of a new member], you can't use dynamic configuration to make changes to client permissions.
+
+=== Supported Data Structures
+
+Dynamic configuration is supported for the following data structures:
+
+- Map
+- Cache
+- Queue
+- List
+- Set
+- MultiMap
+- ReplicatedMap
+- RingBuffer
+- Topic
+- ReliableTopic
+- Executor
+- DurableExecutor
+- ScheduledExecutor
+- CardinalityEstimator
+- PNCounter
+- FlakeIdGenerator
+
+[[persistence]]
+== Persisting Dynamic Configuration
+
+By default, dynamic configuration changes are stored in-memory and are lost when a cluster restarts.
+
+To allow changes to be persisted, you must do the following:
+
+. Configure the member, using a xref:configuring-declaratively.adoc[configuration file].
++
+NOTE: If you use the Java member API, you need to use an <<config-file, API>> that sets the `configurationFile` field of the `Config` object such as  `Config.setConfigurationFile()` or `Config.loadFromFile()`.
+
+. xref:dynamic-config-persistence.adoc[Enable and configure persistence] for dynamic configuration.
+
+. Add dynamic configuration, using an <<supported-dynamic-configuration-changes, option that supports persistence>>.
+
+=== Idempotentcy
+
+Persistence is idempotent. If a member fails to write changes to a file, you can add the same dynamic configuration again. For example, the following scenario is valid:
+
+. Start a cluster with 3 members.
+. Try adding dynamic configuration for a new map.
+. The 2nd member doesn't have write permissions for the configuration file, so it doesn't persist the changes.
+. Give the 2nd member write permissions.
+. Add the same map configuration again.
+. This time, the map configuration is added successfully.
+
+== Dynamic Configuration and User Customizations
+
+Some dynamic configurations settings may reference
+user customizations, such as a `MapLoader` implementation that is referenced
+in a map's configuration. User customizations can usually be configured using either of the following:
+
+* A class or factory class name, such as `MapStoreConfig.setClassName`, that allows
+Hazelcast members to instantiate the object.
+* An existing instance, such as, `MapStoreConfig.setImplementation`.
+
+When adding a new data structure configuration with user customizations,
+take the following considerations into account:
+
+* Classes are resolved lazily, so they should be either already on each member's local
+classpath or resolvable via xref:clusters:deploying-code-on-member.adoc[user code deployment].
+* Instances (or similarly factory instances) have to be serializable. This is because the entire configuration needs
+to be sent over the network to all cluster members, and their classes have to be available on each member's local classpath.

@@ -1,5 +1,5 @@
 = Configuration Files
-:description: You can declare settings for Hazelcast members, clusters, and clients, using a YAML or XML configuration file. Although Hazelcast members and clients read from a single configuration file, you can store settings in multiple files and import them into a single file to enable reuse.
+:description: You can declare settings for Hazelcast members and clients, using a YAML or XML configuration file. Although Hazelcast members and clients read from a single configuration file, you can store settings in multiple files and import them into a single root file to enable reuse.
 :page-aliases: using-variables.adoc, overriding-configuration-settings.adoc, variable-replacers.adoc
 
 {description}
@@ -83,14 +83,12 @@ xref:clients:java.adoc#blue-green-deployment-and-disaster-recovery[Java client d
 
 == Setting the Path to a Configuration File
 
-Hazelcast members and clients check for a configuration
-
 Before looking for configuration files either in your working directory or in the classpath, Hazelcast checks the following system properties:
 
 - `hazelcast.config` for member configuration
 - `hazelcast.client.config` for client configuration
 
-You may want to use this option if you have configuration files for different environments and you want to start members with different configurations. For example, you may have a test configuration file and a production configuration file.
+You may want to set these properties if you have configuration files for different environments and you want to start members with different configurations. For example, you may have a test configuration file and a production configuration file.
 
 ```
 -Dhazelcast.config=`*`<path to the hazelcast.xml or hazelcast.yaml>
@@ -109,13 +107,18 @@ YAML configuration file.
 
 For details about precedence, see xref:understanding-configuration.adoc#configuration-precedence[Configuration Precedence].
 
-If you use the Java API, you can also use a configuration loader to load a configuration file into the `Config` object. See xref:configuring-programmatically.adoc[Configuration Loaders].
+If you use the Java member API, you can also xref:configuring-programmatically.adoc#config-file[use a configuration file].
 
 [[composing-declarative-configuration]]
 == Importing Configuration Snippets into Files
 
-You can store sections of XML and YAML configuration in separate files and import those into a single configuration file. You can use this technique to reuse the same configuration settings in multiple files. For example, you may want all development clusters to be called `test`. In this case, the `cluster-name` configuration can be stored in one file and imported into the main configuration file:
+If you want to reuse the same configuration settings in multiple files, you can store sections of XML and YAML configuration in separate files and import those into a single _root configuration file_. For example, you may want all development clusters to be called `test`. In this case, the `cluster-name` configuration can be stored in one file and imported into the root configuration file:
 
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
 .development-cluster-config.xml
 [source,xml]
 ----
@@ -126,14 +129,17 @@ You can store sections of XML and YAML configuration in separate files and impor
 
 To import a file into another, use the `<import/>` element.
 
-.hazelcast.xml
+.Root configuration file
 [source,xml]
 ----
 <hazelcast>
     <import resource="development-cluster-config.xml"/>
 </hazelcast>
 ----
-
+--
+YAML:: 
++ 
+-- 
 .development-cluster-config.yaml
 [source,yaml]
 ----
@@ -143,16 +149,23 @@ hazelcast:
 
 To import a file into another, use the `import` key.
 
-.hazelcast.yaml
+.Root configuration file
 [source,yaml]
 ----
 hazelcast:
   import:
     - development-cluster-config.yaml
 ----
+--
+====
 
-You can also import files from the classpath and file system into a configuration file:
+You can also import files from the classpath and file system into a root configuration file:
 
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
 [source,xml]
 ----
 <hazelcast>
@@ -160,7 +173,10 @@ You can also import files from the classpath and file system into a configuratio
     <import resource="classpath:development-network-config.xml"/>  <!-- loaded from classpath -->
 </hazelcast>
 ----
-
+--
+YAML:: 
++ 
+-- 
 [source,yaml]
 ----
 hazelcast:
@@ -170,9 +186,16 @@ hazelcast:
     # loaded from classpath
     - classpath:development-network-config.yaml
 ----
+--
+====
 
-Importing resources with variables in their names is also supported:
+Importing resources with <<variables, variables>> in their names is also supported:
 
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
 [source,xml]
 ----
 <hazelcast>
@@ -180,7 +203,10 @@ Importing resources with variables in their names is also supported:
     <import resource="${environment}-network-config.xml"/>
 </hazelcast>
 ----
-
+--
+YAML:: 
++ 
+-- 
 [source,yaml]
 ----
 hazelcast:
@@ -188,6 +214,8 @@ hazelcast:
     - ${environment}-cluster-config.yaml
     - ${environment}-network-config.yaml
 ----
+--
+====
 
 == Overriding Configuration with System Properties and Environment Variables
 [[overriding-configuration]]
@@ -200,12 +228,8 @@ include::partial$warning-override.adoc[]
 
 See xref:configuring-with-system-properties.adoc[].
 
-== Updating Member Configuration Files at Runtime
-
-When a member is running, you can use dynamic configuration to add some supported configuration to a configuration file at runtime. See xref:dynamic-data-structure-configuration.adoc[].
-
+[[variables]]
 == Using Variables
-[[using-variables]]
 
 In configuration files, you can use
 variables to set configuration settings.
@@ -435,3 +459,7 @@ public interface ConfigReplacer {
     String getReplacement(String maskedValue);
 }
 ----
+
+== Updating Member Configuration Files at Runtime
+
+When a member is running, you can use dynamic configuration to add some supported configuration to a configuration file at runtime. See xref:dynamic-config.adoc[].

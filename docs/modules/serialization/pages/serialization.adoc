@@ -1,67 +1,152 @@
-= Serialization
-:description: To be able to send data over a network between cluster members and/or clients, you have to serialize it into raw bytes. Hazelcast has many serialization methods to choose from, depending on which Hazelcast topology you are using and what you plan on doing with your data.
+= Serializing Objects and Classes
+:description: For data to be sent over a network between cluster members and/or clients, it needs to be serialized into raw bytes. Hazelcast has many serialization options to choose from, depending on what you plan on doing with your data.
+:page-aliases: interface-types.adoc, comparing-interfaces.adoc
 
 {description}
 
-== Serialization in Client/Server Mode
+You can store any primitive types in a Hazelcast data structure and Hazelcast will serialize them for you, using <<built-in, built-in serializers>>. But, to store custom classes or objects, you need to tell a cluster how to serialize and deserialize them when they are sent over the network. For example, you must serialize the following:
 
-In xref:overview:topology.adoc[client/server topologies], you can serialize your
-data on the client side. For example, you can serialize data in JSON and add it to a map.
-This option is useful if you plan on using Hazelcast to store your data in binary. Clients
-can handle serialization without the members needing to know how to do so.
+- Custom objects
 
-However, in the following cases, you must configure your serialization method on the member as well:
+- Tasks used by the executor service
 
-[cols="a,a,a,a"]
+- Some entry processors
+
+== Serialization Options
+
+Hazelcast offers the following serialization options:
+
+[cols="3,3a,4a,1a"]
 |===
-|Case|Clients|Reason|Exceptions
+| Serialization interface| Advantages| Disadvantages|Client support
 
-|When the data structure's values are xref:data-structures:setting-data-format.adoc[stored as objects]
-|All clients
-|Members must be able to serialize or deserialize the object in order to send it to other members or receive it from other members
-|
+| xref:implementing-java-serializable.adoc[`Serializable`]
+| * A standard and basic Java interface
 
-|When you want to xref:computing:entry-processor.adoc[process map entries] or use an xref:computing:executor-service.adoc[executor service]
-|All clients
-|Members need to serialize the tasks
-|When using the Java client with xref:implementing-portable-serialization.adoc[`Portable`] serialization, you don't need to configure serialization on the member. For details, see xref:clusters:accessing-domain-objects.adoc[].
+* Requires no implementation
+| * More time and CPU usage
 
-|When you use xref:query:querying-maps-sql.adoc[SQL queries on nested fields] whose values are not primitives
+* More space occupancy
+
 |Java only
-|Members need to deserialize underlying objects to be able to read nested fields
-|You can query nested fields whose values are primitives because these data types are serialized by Hazelcast by default. See <<data-types-with-built-in-serialization, Data Types with Built-In Serialization>>
+
+| xref:implementing-java-serializable.adoc[`Externalizable`]
+| * A standard Java interface
+
+* More CPU and memory usage efficient than `Serializable`
+| * Serialization interface must be implemented
+
+|Java only
+
+| xref:implementing-dataserializable.adoc[`DataSerializable`]
+| * More CPU and memory usage efficient than `Serializable`
+| * Specific to Hazelcast
+
+|Java only
+
+| xref:implementing-dataserializable.adoc[`IdentifiedDataSerializable`]
+| * More CPU and memory usage efficient than `Serializable`
+
+* Reflection is not used during deserialization
+
+| * Specific to Hazelcast
+
+* Serialization interface must be implemented
+
+* A Factory and configuration must be implemented
+
+|All clients
+
+| xref:implementing-portable-serialization.adoc[`Portable`]
+| * More CPU and memory usage efficient than `Serializable`
+
+* Reflection is not used during deserialization
+
+* Versioning is supported
+
+* Partial deserialization is supported during queries
+
+| * Specific to Hazelcast
+
+* Serialization interface must be implemented
+
+* A Factory and configuration must be implemented
+
+* Class definition is also sent with data but stored only once per class
+
+|All clients
+
+
+| xref:custom-serialization.adoc[Custom Serialization]
+| * Does not require class to implement an interface
+
+* Convenient and flexible
+
+* Can be based on `StreamSerializer` `ByteArraySerializer`
+|* Serialization interface must be implemented
+
+* Plug in and configuration is required
+
+|All clients
+
+| xref:compact-serialization.adoc[Compact Serialization (BETA)]
+| * More memory usage efficient than `Portable`
+
+* Convenient, flexible, and can be used with no configuration
+
+* Does not require class to implement an interface
+
+* Supports schema evolution
+
+* Partial deserialization is supported during queries and indexing
+
+|* Specific to Hazelcast
+
+* Schema is not part of the data but schema distribution
+may incur costs on short-lived use cases
+
+* The format is in a beta state and no compatibility
+guarantees are given yet
+
+|All clients
+
+| xref:serializing-json.adoc[`HazelcastJsonValue`]
+| * No member-side coding required
+
+|* Specific to Hazelcast
+
+* Requires extra metadata to be stored on members.
+
+|All clients
 |===
 
-=== Serialization Options for Clients
+[[steps]]
+== How Hazelcast Serializes Objects
 
-The following serialization options are available for clients:
+When Hazelcast serializes an object:
 
-- IdentifiedDataSerializable
-- Portable
-- Compact (BETA)
-- Custom Serialization
+. It first checks whether the object is `null`.
+. If the above check fails, and the xref:compact-serialization.adoc[Compact Serialization (BETA)] is enabled, then Hazelcast looks for a user-specified xref:compact-serialization.adoc#implementing-compactserializer[CompactSerializer].
+. If the above check fails, then Hazelcast checks if it is an instance of `com.hazelcast.nio.serialization.DataSerializable` or `com.hazelcast.nio.serialization.IdentifiedDataSerializable`.
+. If the above check fails, then Hazelcast checks if it is an instance of `com.hazelcast.nio.serialization.Portable`.
+. If the above check fails, then Hazelcast checks if it is an instance of one of
+the default types.
+. If the above check fails, then Hazelcast looks for a user-specified xref:custom-serialization.adoc[Custom Serializer],
+i.e. an implementation of `ByteArraySerializer` or `StreamSerializer`.
+Custom serializer is searched using the input Object's Class and its parent class up to Object.
+If parent class search fails, all interfaces implemented by the class are also checked (excluding `java.io.Serializable` and `java.io.Externalizable`).
+. If the above check fails, then Hazelcast checks if it is an instance of `java.io.Serializable` or
+`java.io.Externalizable` and a Global Serializer is not registered with Java Serialization Override feature.
+. If the above check fails, Hazelcast uses the registered Global Serializer if one exists.
+. If the above check fails, and the xref:compact-serialization.adoc[Compact Serialization (BETA)] is enabled, then Hazelcast tries to extract a schema out of the Object's class xref:compact-serialization.adoc#using-compact-serialization-with-zero-configuration[automatically], if possible.
 
-For a comparison of these options, see xref:comparing-interfaces.adoc[].
+If all the above checks fail, then serialization fails.
+When a class implements multiple interfaces, the above steps are important
+to determine the serialization mechanism that Hazelcast uses.
+When a class definition is required for any of these serializations, you need to have
+all the classes needed by the application on your classpath because Hazelcast does not
+download them automatically, unless you are using xref:clusters:deploying-code-on-member.adoc[user code deployment].
 
-== Serialization in Embedded Mode
-
-In xref:overview:topology.adoc[embedded mode], because data is partitioned across members in a cluster, each member must be able to serialize and deserialize data in the following cases:
-
-- Adding key/value objects to a map
-
-- Putting items in a queue/set/list
-
-- Sending a runnable using an executor service
-
-- Processing an entry within a map
-
-- Locking an object
-
-- Sending a message to a topic
-
-=== Serialization Options for Members
-
-For a full list of serialization options, see xref:comparing-interfaces.adoc[].
 
 == Data Types with Built-In Serialization
 
@@ -71,4 +156,4 @@ By default, Hazelcast optimizes the serialization for the following data types. 
 `ConcurrentSkipListMap/Set`, `ConcurrentHashMap`, `LinkedHashMap/Set`, `TreeMap/Set`, `ArrayDeque`, `LinkedBlockingQueue`,
 `ArrayBlockingQueue`, `PriorityBlockingQueue`, `PriorityQueue`, `DelayQueue`, `SynchronousQueue`, `LinkedTransferQueue`
 
-If you would rather implement your own serialization for these types, see xref:overriding-built-in-serializers.adoc[Overriding the Default Serializers].
+If you would rather implement your own serialization for these types, you can configure Hazelcast to xref:serialization-configuration.adoc#override[enable overriding the default serializers].

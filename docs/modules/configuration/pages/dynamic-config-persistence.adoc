@@ -1,0 +1,208 @@
+= Configuring Dynamic Configuration
+:description: You can configure members to keep dynamic configuration changes in memory or persist them to a YAML or XML configuration file.
+
+{description}
+
+== Glossary
+
+[cols="1e,1a"]
+|===
+|Term|Definition
+
+|root configuration file
+|XML or YAML configuration file that is used to configure a member at startup.
+
+|===
+
+== Quickstart Configuration
+
+Use this quickstart to test persistence for dynamic configuration changes in development.
+
+NOTE: Before going into production, make sure to read the <<production-checklist, Production Checklist>> section.
+
+By default, persistence for dynamic configuration changes is disabled on all clusters. To start persisting changes on disk, you must first enable the feature on the member.
+
+To enable persistence for dynamic configuration changes, use the following `dynamic-configuration` block:
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+  <dynamic-configuration>
+    <persistence-enabled>true</persistence-enabled>
+  </dynamic-configuration>
+</hazelcast>
+----
+--
+YAML::
++
+--
+[source,yml]
+----
+hazelcast:
+  dynamic-configuration:
+    persistence-enabled: true
+----
+--
+====
+
+NOTE: Changes are persisted to a xref:configuring-declaratively.adoc[configuration file], which means that you need to configure Hazelcast with a configuration file. See xref:dynamic-config.adoc[].
+
+== Production Checklist
+
+Before you start configuring members to persist dynamic configuration changes, consider the following checklist:
+
+- [ ] Does your cluster have enough available disk space, especially if you want to <<backup, create backups of the configuration file>>?
+- [ ] Do you use <<snippets, configuration snippets>>? You can configure members to back up snippets instead of the <<glossary, root configuration file>>.
+- [ ] Does your cluster have read/write permissions for the configuration file? All members must have write permissions to the configuration file.
+- [ ] Is your cluster free of configuration conflicts? Hazelcast does not support persistence for dynamic configuration in clusters that have conflicting configuration files.
+
+NOTE: Running clusters must be restarted before any configuration changes take effect.
+
+
+[[backup]]
+== Creating Backups of the Configuration File
+
+By default, Hazelcast keeps 5 backups of the configuration file in the member's startup directory.
+
+To change the number of backups, configure the `backup-count` option.  To change the directory in which to store the backups, configure the <<dynamic-configuration-backup-dir,`backup-dir`>> option.
+
+The filenames of backups are in the following format, which includes the date and time when they were created followed by the `.backup` extension: `yyyy-MM-dd--HH-mm-ss-SSS.backup`. For example, `2022-01-31--13-23-44-699.backup`.
+
+WARNING: If the backup directory contains existing files with the `.backup` extension or if time is shifted while the member is running, the order of backups can be corrupted.
+
+If you configure the <<snippets, `persistence-file`>> option, that file is backed up instead of the <<glossary, root configuration file>>.
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+  <dynamic-configuration>
+    <persistence-enabled>true</persistence-enabled>
+    <backup-dir>/data/dynamic/backups</backup-dir>
+    <backup-count>7</backup-count>
+  </dynamic-configuration>
+</hazelcast>
+----
+--
+YAML::
++
+--
+[source,yml]
+----
+hazelcast:
+  dynamic-configuration:
+    persistence-enabled: true
+    backup-dir: /data/dynamic/backups
+    backup-count: 7
+----
+--
+====
+
+[[snippets]]
+== Changing the Persistence File
+
+To persist dynamic configuration changes to a file other than the <<glossary, root configuration file>>, set the path to an XML or YAML configuration file in the `persistence-file` option.
+
+The `persistence-file` must be created and must be xref:configuring-declaratively.adoc#composing-declarative-configuration[imported] into the root configuration file.
+
+If you start multiple members on a single device, each member should have a unique persistence file.
+
+If you use the Java API to set the `Config.configurationFile` field, Hazelcast persists changes to that file. An example of a method that sets this field is the `Config.setConfigurationFile()` method.
+
+If you load configuration files from the classpath, Hazelcast persists changes to the exact configuration file in the classpath. For example, if you use Maven, that file could be in the `target` directory instead of `src` directory.
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+  <dynamic-configuration>
+    <persistence-enabled>true</persistence-enabled>
+    <persistence-file>/data/dynamic/persistence.yaml</persistence-file>
+  </dynamic-configuration>
+</hazelcast>
+----
+--
+YAML::
++
+--
+[source,yml]
+----
+hazelcast:
+  dynamic-configuration:
+    persistence-enabled: true
+    persistence-file: /data/dynamic/persistence.yaml
+----
+--
+====
+
+== Configuration Options
+
+Use the following configuration options to configure dynamic configuration for a cluster.
+
+.Configuration options for dynamic configuration
+[cols="20%m,80%a"]
+|===
+| Option|Description
+
+|dynamic-configuration
+| Root configuration
+
+| persistence-enabled
+| Whether changes made in dynamic configuration are persisted to a configuration file. Default: false.
+
+| persistence-file
+| Relative or absolute path to a configuration file. Changes made in dynamic configuration will be persisted to this file. This file must either be the configuration file that is used to start the member, or it must be imported into that file. See xref:configuring-declaratively.adoc#composing-declarative-configuration[Importing Configuration Snippets into Files] Default: Path to the configuration file that was used to start the Hazelcast member.
+
+| backup-dir
+| Relative or absolute path to a directory in which to store backups of the configuration file. Each new backup will be created inside this directory. Default: A new directory called `dynamic-configuration-backups` is created in the member's startup directory.                            
+
+| backup-count
+| Number of backups of the configuration file to keep. To disable backups, set this option to 0. Default: 5.
+|===
+
+== Full Example
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <dynamic-configuration>
+    <persistence-enabled>true</persistence-enabled>
+    <persistence-file>/data/dynamic/persistence.yaml</persistence-file>
+    <backup-dir>/data/dynamic/backups</backup-dir>
+    <backup-count>7</backup-count>
+  </dynamic-configuration>
+</hazelcast>
+----
+--
+YAML::
++ 
+--
+[source,yml]
+----
+hazelcast:
+  dynamic-configuration:
+    persistence-enabled: true
+    persistence-file: /data/dynamic/persistence.yaml
+    backup-dir: /data/dynamic/backups
+    backup-count: 7
+----
+--
+====

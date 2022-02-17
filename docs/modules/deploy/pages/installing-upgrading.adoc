@@ -1,231 +1,316 @@
-= On-Premise
+= Installing Hazelcast On-Premise
+:page-aliases: installing-using-download-archives.adoc
 
 You can install and deploy Hazelcast using the options described
 in this section. 
 
 [[installing-using-cli]]
-== CLI
+== Package Manager
 
-This is the fastest way of getting Hazelcast running. This option is for development purposes. For production setups please use the other deployment options explained on this page.
+This is the fastest way of getting Hazelcast running. This option is for development purposes. For production, use the other deployment options explained on this page.
 
-To install Hazelcast via command line interface, run the following commands:
-
+// tag::cli[]
+. To install Hazelcast, use one of the following methods, depending on your operating system:
++
 [tabs] 
 ==== 
-Homebrew:: 
+Mac:: 
 + 
--- 
-[source,bash]
-----
-brew tap hazelcast/hz
-brew install hazelcast
-----
 --
 
-Debian::
-+
-[source,bash]
-----
-wget -qO - https://repository.hazelcast.com/api/gpg/key/public | sudo apt-key add -
-echo "deb https://repository.hazelcast.com/debian stable main" | sudo tee -a /etc/apt/sources.list
-sudo apt update && sudo apt install hazelcast
-----
-
-RPM::
-+
-[source,bash]
-----
-wget https://repository.hazelcast.com/rpm/hazelcast-rpm.repo -O hazelcast-rpm.repo
-sudo mv hazelcast-rpm.repo /etc/yum.repos.d/
-sudo yum install hazelcast
-----
-====
-
-Then, you can use the following command on your terminal/command line
-to start a standalone Hazelcast member:
+To install on macOS, use the Homebrew package manager.
 
 [source,bash,subs="attributes+"]
 ----
-hz start
+brew tap hazelcast/hz
+brew install hazelcast@{full-version}
+----
+--
+
+Linux::
++
+--
+
+To install on Linux, you can use either of these package managers, depending on your Linux distribution:
+ifdef::snapshot[]
+.Debian
+[source,shell]
+----
+wget -qO - https://repository.hazelcast.com/api/gpg/key/public | sudo apt-key add -
+echo "deb https://repository.hazelcast.com/debian snapshot main" | sudo tee -a /etc/apt/sources.list
+sudo apt update && sudo apt install hazelcast
 ----
 
-For more information visit the GitHub repository
-of the https://github.com/hazelcast/hazelcast-command-line[Command Line Interface (CLI)^].
+.RPM
+[source,shell]
+----
+wget https://repository.hazelcast.com/rpm/snapshot/hazelcast-rpm.repo -O hazelcast-snapshot-rpm.repo
+sudo mv hazelcast-snapshot-rpm.repo /etc/yum.repos.d/
+sudo yum install hazelcast
+----
+endif::[]
+ifndef::snapshot[]
+.Debian
+[source,shell,subs="attributes+"]
+----
+wget -qO - https://repository.hazelcast.com/api/gpg/key/public | sudo apt-key add -
+echo "deb https://repository.hazelcast.com/debian stable main" | sudo tee -a /etc/apt/sources.list
+sudo apt update && sudo apt install hazelcast={full-version}
+----
+
+.RPM
+[source,shell,subs="attributes+"]
+----
+wget https://repository.hazelcast.com/rpm/stable/hazelcast-rpm-stable.repo -O hazelcast-rpm-stable.repo
+sudo mv hazelcast-rpm-stable.repo /etc/yum.repos.d/
+sudo yum install hazelcast={full-version}
+----
+endif::[]
+--
+Windows::
++
+--
+At the moment, Hazelcast does not support any Windows package managers.
+
+To get started with Hazelcast on Windows, you can use <<using-docker,Docker>>, the <<using-the-binary, binary distribution>>, or <<using-java, Java>>.
+--
+====
+
+. Check that Hazelcast is installed.
++
+[source,shell]
+----
+hz -V
+----
++
+You should see the version of both Hazelcast and the command-line client (CLI).
+
+For more information about the package manager, see the link:https://github.com/hazelcast/hazelcast-packaging[GitHub repository].
+
+// end::cli[]
 
 [[installing-using-maven]]
 == Maven
 
-This option is the easiest way for Maven users
-(typically Java developers), especially appropriate
-for the embedded mode when Hazelcast is tightly coupled with the application.
+// tag::maven-install[]
+Hazelcast runs on Java, which means you can add it as a dependency in your Java project.
 
-NOTE: As a prerequisite, make sure you have Java installed on your system.
-If you're using JDK 11 or later, see xref:running-in-modular-java.adoc[].
-For the list of supported Java versions, see xref:supported-jvms.adoc[].
+The Java package includes both a member API and a Java client API. The member API is for xref:ROOT:topologies.adoc[embedded topologies] where you want to deploy and manage a cluster in the same Java Virtual Machine (JVM) as your applications. The Java client is for connecting to an existing member in a client/server topology.
 
-You can find Hazelcast in standard Maven repositories. If your
-project uses Maven, you do not need to add
-additional repositories to your `pom.xml` or add
-`hazelcast-{full-version}.jar` file into your
-classpath (Maven does that for you). Just add the following
-lines to your `pom.xml`:
+. Download and install a xref:deploy:supported-jvms.adoc[supported JDK].
++
+TIP: We recommend installing the link:https://adoptopenjdk.net[AdoptOpenJDK^].
+
+. Add one of the following to your `pom.xml` file.
++
+
+// end::maven-install[]
 
 [tabs] 
 ==== 
-Hazelcast Open Source Edition:: 
+Open Source:: 
 + 
 -- 
 
-[source,xml,subs="attributes+"]
-----
-<dependencies>
-    <dependency>
-        <groupId>com.hazelcast</groupId>
-        <artifactId>hazelcast</artifactId>
-        <version>{full-version}</version>
-    </dependency>
-</dependencies>
-----
---
+// tag::maven-full-oss[]
 
-Hazelcast Enterprise Edition::
-+
+ifdef::snapshot[]
 [source,xml,subs="attributes+"]
 ----
 <repositories>
-    <!-- You need to define following repository: -->
     <repository>
-        <id>Hazelcast Private Release Repository</id>
-        <url>https://repository.hazelcast.com/release/</url>
-    </repository>
-    <!-- Optional repository if you want to use latest snapshots -->
-    <repository>
-        <id>Hazelcast Private Snapshot Repository</id>
-        <url>https://repository.hazelcast.com/snapshot/</url>
+        <id>snapshot-repository</id>
+        <name>Maven2 Snapshot Repository</name>
+        <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+        <releases>
+            <enabled>false</enabled>
+        </releases>
     </repository>
 </repositories>
 
 <dependencies>
-    <!-- You also need to define following dependencies: -->
+   <dependency>
+       <groupId>com.hazelcast</groupId>
+       <artifactId>hazelcast</artifactId>
+       <version>{full-version}</version>
+   </dependency>
+</dependencies>
+----
+endif::[]
+ifndef::snapshot[]
+[source,xml,subs="attributes+"]
+----
+<dependencies>
+   <dependency>
+       <groupId>com.hazelcast</groupId>
+       <artifactId>hazelcast</artifactId>
+       <version>{full-version}</version>
+   </dependency>
+</dependencies>
+----
+endif::[]
+
+// end::maven-full-oss[]
+
+--
+
+Enterprise::
++
+--
+
+// tag::maven-full-ee[]
+
+ifdef::snapshot[]
+[source,xml,subs="attributes+"]
+----
+<repositories>
+    <repository>
+        <id>private-repository</id>
+        <name>Hazelcast Private Repository</name>
+        <url>https://repository.hazelcast.com/release/</url>
+        <releases>
+            <enabled>true</enabled>
+        </releases>
+        <snapshots>
+            <enabled>true</enabled>
+        </snapshots>
+    </repository>
+</repositories>
+
+<dependencies>
     <dependency>
         <groupId>com.hazelcast</groupId>
         <artifactId>hazelcast-enterprise</artifactId>
         <version>{full-version}</version>
-    </dependency>
-    <!-- Optional dependency for including JavaDoc -->
-    <dependency>
-        <groupId>com.hazelcast</groupId>
-        <artifactId>hazelcast-enterprise</artifactId>
-        <version>{full-version}</version>
-        <classifier>javadoc</classifier>
     </dependency>
 </dependencies>
----- 
-====
+----
+endif::[]
+ifndef::snapshot[]
+[source,xml,subs="attributes+"]
+----
+<repositories>
+    <repository>
+        <id>private-repository</id>
+        <name>Hazelcast Private Repository</name>
+        <url>https://repository.hazelcast.com/release/</url>
+        <releases>
+            <enabled>true</enabled>
+        </releases>
+        <snapshots>
+            <enabled>false</enabled>
+        </snapshots>
+    </repository>
+</repositories>
 
-Above dependencies (`hazelcast` and `hazelcast-enterprise`) include both member and Java
-client libraries of Hazelcast. A separate Java client module
-and dependency do not exist.
+<dependencies>
+    <dependency>
+        <groupId>com.hazelcast</groupId>
+        <artifactId>hazelcast-enterprise</artifactId>
+        <version>{full-version}</version>
+    </dependency>
+</dependencies>
+----
+endif::[]
+
+// end::maven-full-ee[]
+
+--
+====
 
 [[installing-using-download-archives]]
 == ZIP/TAR Packages
 
-This option provides the most flexibility and
+The ZIP/TAR packages provide the most flexibility and
 all the tooling, but takes a little longer to install.
 
-Hazelcast offers full and slim distribution packages:
+To download and install a package, do the following:
 
-* The `hazelcast-{full-version}` and `hazelcast-enterprise-{full-version}` ZIP/TAR
-packages contain all Hazelcast Open Source and Enterprise features, respectively.
-* The `hazelcast-{full-version}-slim` and `hazelcast-enterprise-{full-version}-slim` ZIP/TAR
-packages exclude Management Center and connectors for distributed processing. You can use the slim version
-to save memory and later include the additional components.
+=== Open Source
+
+// tag::download-package-oss[]
+
+[tabs] 
+==== 
+Mac:: 
++ 
+--
+ifdef::snapshot[]
+Go to the link:https://oss.sonatype.org/content/repositories/snapshots/com/hazelcast/hazelcast-distribution/{full-version}/[snapshot repository] and click the download link for the TAR file that has the most up-to-date timestamp in the *Last Modified* columns.
+endif::[]
+ifndef::snapshot[]
+. Download a package from https://hazelcast.com/get-started/download/[hazelcast.com^].
+. Extract the downloaded package.
+endif::[]
+--
+Linux:: 
++ 
+--
+ifdef::snapshot[]
+Go to the link:https://oss.sonatype.org/content/repositories/snapshots/com/hazelcast/hazelcast-distribution/{full-version}/[snapshot repository] and click the download link for the TAR file that has the most up-to-date timestamp in the *Last Modified* columns.
+endif::[]
+ifndef::snapshot[]
+. Download a package from https://hazelcast.com/get-started/download/[hazelcast.com^].
+. Extract the downloaded package.
+endif::[]
+--
+Windows:: 
 +
-See the <<full-and-slim-packages, below section>> for the contents of each package.
+--
+ifdef::snapshot[]
+Go to the link:https://oss.sonatype.org/content/repositories/snapshots/com/hazelcast/hazelcast-distribution/{full-version}/[snapshot repository] and click the download link for the ZIP file that has the most up-to-date timestamp in the *Last Modified* columns.
+endif::[]
+ifndef::snapshot[]
+. Download a package from https://hazelcast.com/get-started/download/[hazelcast.com^].
+. Extract the downloaded package.
+endif::[]
+--
+====
 
-NOTE: As a prerequisite, make sure you have Java installed on your system.
-If you're using JDK 11 or later, see xref:running-in-modular-java.adoc[].
-For the list of supported Java versions, see xref:supported-jvms.adoc[].
+// end::download-package-oss[]
 
-You can download and install Hazelcast yourself. You only need to:
+=== Enterprise
 
-* download the package `hazelcast-{full-version}.zip` or `hazelcast-{full-version}.tar.gz`
-from https://hazelcast.com/get-started/download/[hazelcast.com^]
-* extract the downloaded package
-* and add the file `hazelcast-{full-version}.jar` to your classpath.
-
-When you download and extract the Hazelcast ZIP or TAR package, you will
-see the `hz-start and hz-stop` scripts in the `/bin` directory.
-These scripts start/stop a Hazelcast member. See xref:getting-started:get-started-binary.adoc[] to see the start scripts in action.
-
-There are also some other scripts in the packages whose usage descriptions
-are given in their related sections including the xref:management:cluster-utilities.adoc#using-the-hz-cluster-admin-script[`hz-cluster-admin` script],
-xref:cp-subsystem:management.adoc#cp-subsystem-management-apis[CP Subsystem Management APIs section] and
-xref:maintain-cluster:monitoring.adoc#health-check-script[Using the hz-healthcheck Script] sections. You can also check the full list
-of scripts in the `readme.html` which you can see when you extract the downloaded package.
-
-== Full and Slim Packages
-
-The slim distribution package contains the following:
-
-`hazelcast-{full-version}-slim`
-[source,plain]
+// tag::download-package-ee[]
+[tabs] 
+==== 
+Mac:: 
++ 
+--
+[source,bash,subs="attributes+"]
 ----
-├── LICENSE
-├── NOTICE
-├── bin
-│   ├── common.sh
-│   ├── hz-cli
-│   ├── hz-cli.bat
-│   ├── hz-cluster-admin
-│   ├── hz-cluster-cp-admin
-│   ├── hz-healthcheck
-│   ├── hz-start
-│   ├── hz-start.bat
-│   ├── hz-stop
-│   └── hz-stop.bat
-├── config
-│   ├── examples
-│   │   ├── hazelcast-client-full-example.xml
-│   │   ├── hazelcast-client-full-example.yaml
-│   │   ├── hazelcast-client.yaml
-│   │   ├── hazelcast-full-example.xml
-│   │   ├── hazelcast-full-example.yaml
-│   │   ├── hazelcast-security-hardened.yaml
-│   │   └── hazelcast.yaml
-│   ├── hazelcast-client.xml
-│   ├── hazelcast.xml
-│   ├── jmx_agent_config.yaml
-│   ├── jvm-client.options
-│   ├── jvm.options
-│   └── log4j2.properties
-├── lib
-│   ├── cache-api-1.1.1.jar
-│   ├── hazelcast-5.0-SNAPSHOT.jar
-│   ├── hazelcast-download.properties
-│   ├── hazelcast-hibernate53-2.1.1.jar
-│   ├── hazelcast-sql-5.0-SNAPSHOT.jar
-│   ├── hazelcast-wm-4.0.jar
-│   ├── jansi-2.1.0.jar
-│   ├── jline-reader-3.19.0.jar
-│   ├── jline-terminal-3.19.0.jar
-│   ├── jline-terminal-jansi-3.19.0.jar
-│   ├── jmx_prometheus_javaagent-0.14.0.jar
-│   ├── log4j-api-2.14.0.jar
-│   ├── log4j-core-2.14.0.jar
-│   ├── log4j-slf4j-impl-2.14.0.jar
-│   ├── picocli-3.9.0.jar
-│   └── slf4j-api-1.7.30.jar
-└── licenses
-    ├── THIRD-PARTY.txt
-    ├── apache-v2-license.txt
-    └── hazelcast-community-license.txt
+curl 'https://download.hazelcast.com/enterprise/hazelcast-enterprise-{full-version}.tar.gz' | tar xvzf -
 ----
+--
+Linux:: 
++ 
+--
+[source,bash,subs="attributes+"]
+----
+wget 'https://download.hazelcast.com/enterprise/hazelcast-enterprise-{full-version}.tar.gz' | tar xvzf -
+----
+--
+Windows:: 
++
+--
+Download and extract the link:https://download.hazelcast.com/enterprise/hazelcast-enterprise-{full-version}.zip[Hazelcast ZIP file].
+--
+====
 
-The full distribution package contains the following:
+// end::download-package-ee[]
 
-`hazelcast-{full-version}`
-[source,plain]
+
+[[full-slim]]
+== Full and Slim Distributions
+
+Some installation options offer a full and slim distribution.
+
+The full distribution contains all available Hazelcast connectors, libraries, and Management Center.
+
+.What's included in the full distribution
+[%collapsible]
+====
+[source,plain,subs="attributes+"]
 ----
 ├── LICENSE
 ├── NOTICE
@@ -256,33 +341,107 @@ The full distribution package contains the following:
 │   ├── jvm.options
 │   └── log4j2.properties
 ├── custom-lib
-│   ├── hazelcast-3-connector-impl-5.0-SNAPSHOT.jar
+│   ├── hazelcast-3-connector-impl-{full-version}.jar
 │   ├── hazelcast-3.12.12.jar
 │   └── hazelcast-client-3.12.12.jar
 ├── lib
 │   ├── cache-api-1.1.1.jar
-│   ├── hazelcast-3-connector-common-5.0-SNAPSHOT.jar
-│   ├── hazelcast-3-connector-interface-5.0-SNAPSHOT.jar
-│   ├── hazelcast-5.0-SNAPSHOT.jar
+│   ├── hazelcast-3-connector-common-{full-version}.jar
+│   ├── hazelcast-3-connector-interface-{full-version}.jar
+│   ├── hazelcast-{full-version}.jar
 │   ├── hazelcast-download.properties
 │   ├── hazelcast-hibernate53-2.1.1.jar
-│   ├── hazelcast-jet-avro-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-cdc-debezium-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-cdc-mysql-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-cdc-postgres-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-csv-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-elasticsearch-7-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-files-azure-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-files-gcs-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-files-s3-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-grpc-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-hadoop-all-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-kafka-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-kinesis-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-protobuf-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-python-5.0-SNAPSHOT.jar
-│   ├── hazelcast-jet-s3-5.0-SNAPSHOT.jar
-│   ├── hazelcast-sql-5.0-SNAPSHOT.jar
+│   ├── hazelcast-jet-avro-{full-version}.jar
+│   ├── hazelcast-jet-cdc-debezium-{full-version}.jar
+│   ├── hazelcast-jet-cdc-mysql-{full-version}.jar
+│   ├── hazelcast-jet-cdc-postgres-{full-version}.jar
+│   ├── hazelcast-jet-csv-{full-version}.jar
+│   ├── hazelcast-jet-elasticsearch-7-{full-version}.jar
+│   ├── hazelcast-jet-files-azure-{full-version}.jar
+│   ├── hazelcast-jet-files-gcs-{full-version}.jar
+│   ├── hazelcast-jet-files-s3-{full-version}.jar
+│   ├── hazelcast-jet-grpc-{full-version}.jar
+│   ├── hazelcast-jet-hadoop-all-{full-version}.jar
+│   ├── hazelcast-jet-kafka-{full-version}.jar
+│   ├── hazelcast-jet-kinesis-{full-version}.jar
+│   ├── hazelcast-jet-protobuf-{full-version}.jar
+│   ├── hazelcast-jet-python-{full-version}.jar
+│   ├── hazelcast-jet-s3-{full-version}.jar
+│   ├── hazelcast-sql-{full-version}.jar
+│   ├── hazelcast-wm-4.0.jar
+│   ├── jansi-2.1.0.jar
+│   ├── jline-reader-3.19.0.jar
+│   ├── jline-terminal-3.19.0.jar
+│   ├── jline-terminal-jansi-3.19.0.jar
+│   ├── jmx_prometheus_javaagent-0.14.0.jar
+│   ├── log4j-api-2.14.0.jar
+│   ├── log4j-core-2.14.0.jar
+│   ├── log4j-slf4j-impl-2.14.0.jar
+│   ├── picocli-3.9.0.jar
+│   └── slf4j-api-1.7.30.jar
+└── licenses
+    ├── THIRD-PARTY.txt
+    ├── apache-v2-license.
+    ├── attribution.txt
+    └── hazelcast-community-license.txt
+├── management-center
+│   ├── ThirdPartyNotices.txt
+│   ├── bin
+│   │   ├── mc-conf.bat
+│   │   ├── mc-conf.sh
+│   │   ├── mc-start.cmd
+│   │   ├── mc-start.sh
+│   │   ├── start.bat
+│   │   ├── start.sh
+│   │   └── user-lib
+│   ├── hazelcast-management-center-{full-version}.jar
+│   └── license.txt
+└── release_notes.txt
+----
+====
+
+The slim distribution excludes Management Center and connectors. You can use the slim version
+to save memory and later include the additional components, as needed.
+
+.What's included in the slim distribution
+[%collapsible]
+====
+[source,plain,subs="attributes+"]
+----
+├── LICENSE
+├── NOTICE
+├── bin
+│   ├── common.sh
+│   ├── hz-cli
+│   ├── hz-cli.bat
+│   ├── hz-cluster-admin
+│   ├── hz-cluster-cp-admin
+│   ├── hz-healthcheck
+│   ├── hz-start
+│   ├── hz-start.bat
+│   ├── hz-stop
+│   └── hz-stop.bat
+├── config
+│   ├── examples
+│   │   ├── hazelcast-client-full-example.xml
+│   │   ├── hazelcast-client-full-example.yaml
+│   │   ├── hazelcast-client.yaml
+│   │   ├── hazelcast-full-example.xml
+│   │   ├── hazelcast-full-example.yaml
+│   │   ├── hazelcast-security-hardened.yaml
+│   │   └── hazelcast.yaml
+│   ├── hazelcast-client.xml
+│   ├── hazelcast.xml
+│   ├── jmx_agent_config.yaml
+│   ├── jvm-client.options
+│   ├── jvm.options
+│   └── log4j2.properties
+├── lib
+│   ├── cache-api-1.1.1.jar
+│   ├── hazelcast-{full-version}.jar
+│   ├── hazelcast-download.properties
+│   ├── hazelcast-hibernate53-2.1.1.jar
+│   ├── hazelcast-sql-{full-version}.jar
 │   ├── hazelcast-wm-4.0.jar
 │   ├── jansi-2.1.0.jar
 │   ├── jline-reader-3.19.0.jar
@@ -299,3 +458,4 @@ The full distribution package contains the following:
     ├── apache-v2-license.txt
     └── hazelcast-community-license.txt
 ----
+====

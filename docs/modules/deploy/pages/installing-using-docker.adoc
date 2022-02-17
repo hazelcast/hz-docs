@@ -5,22 +5,37 @@
 
 {description}
 
-== Before you Begin
+== Pulling the Docker Image
 
-Make sure you've already installed the official Docker image.
+Hazelcast host a Docker image for the open source edition as well as the Enterprise edition on Docker Hub.
 
-You should be familiar with Docker in general. See the https://docs.docker.com/get-started/[official Docker documentation^] for a basic introduction.
-
-If you need to synchronize Hazelcast data across a wide area network (WAN), you'll need to use xref:wan:wan.adoc[WAN replication], which is a feature of Hazelcast Enterprise.
-
-If you're using Hazelcast Enterprise:
-
-- Set up your license key. See xref:getting-started:get-started-enterprise.adoc[]
-- Use the `hazelcast-enterprise:{full-version}` Docker image.
+[tabs] 
+==== 
+Open Source:: 
++ 
+-- 
+// tag::pull-docker-oss[]
+[source,bash,subs="attributes+"]
+----
+docker pull hazelcast/hazelcast:{full-version}
+----
+// end::pull-docker-oss[]
+--
+Enterprise:: 
++ 
+-- 
+// tag::pull-docker-ee[]
+[source,bash,subs="attributes+"]
+----
+docker pull hazelcast/hazelcast-enterprise:{full-version}
+----
+// end::pull-docker-ee[]
+--
+====
 
 == Starting a Cluster
 
-The default network mode in Docker is bridge. In this mode, all containers run in a single network that is not accessible outside of the Docker host. If you run members on Docker containers on different hosts, you must allow them to discover and connect to each other using one of the following methods:
+The default network mode in Docker is bridge. In this mode, all containers run in a single network that is not accessible outside of the Docker host. If you run member Docker containers on different hosts, you must allow them to discover and connect to each other using one of the following methods:
 
 - Host network mode (Linux only)
 - Port mapping
@@ -31,13 +46,30 @@ WARNING: These methods open Hazelcast members to the public. Anybody who can rea
 
 To allow members and clients on different hosts to discover each other with multicast, you can use the `host` network mode. This mode allows members to share the host’s network stack from their Docker containers.
 
-NOTE: Members will discover and connect to each other automatically only if your local network supports multicast. If your network does not support multicast, members will not form a cluster. In this case, you can try <<port-mapping, port mapping>>.
+Members will discover and connect to each other automatically only if your local network supports multicast. If your network does not support multicast, members will not form a cluster. In this case, you can try <<port-mapping, port mapping>>.
 
+[tabs] 
+==== 
+Open Source:: 
++ 
+--
 [source,bash,subs="attributes+"]
 ----
 docker run --rm --network host --name member1 hazelcast/hazelcast:{full-version}
 docker run --rm --network host --name member2 hazelcast/hazelcast:{full-version}
 ----
+--
+Enterprise:: 
++ 
+--
+[source,bash,subs="attributes+"]
+----
+docker run --rm --network host --name member1 hazelcast/hazelcast-enterprise:{full-version}
+docker run --rm --network host --name member2 hazelcast/hazelcast-enterprise:{full-version}
+----
+--
+====
+
 
 In this mode, each member is available on the internal (private) IP address of the Docker host.
 
@@ -129,7 +161,10 @@ for more information.
 
 == Configuration
 
-You can configure various aspects of your cluster and environment using Docker.
+You can configure various aspects of your cluster and environment with Docker.
+
+We recommend that you use the default
+configuration file as a starting point.
 
 === Memory
 
@@ -154,14 +189,13 @@ variable. Hazelcast passes it to the JVM when starting. For example:
 docker run --memory 2g -e JAVA_OPTS="-XX:MaxRAMPercentage=85.0" --rm hazelcast/hazelcast:{full-version}
 ----
 
-Make sure to leave enough free RAM for Metaspace and other overheads.
+Make sure to leave enough free RAM for metaspace and other overheads.
 
 === Custom Hazelcast Configuration File
 
 You can configure Hazelcast with your own YAML or XML file
 by replacing the default ones in the container at
-`/opt/hazelcast`. We recommend that you use the default
-configuration file as a starting point:
+`/opt/hazelcast`:
 
 [source,bash,subs="attributes+"]
 ----
@@ -180,7 +214,7 @@ docker run \
 -p:5701:5701 hazelcast/hazelcast:{full-version}
 ----
 
-=== Extend Hazelcast's CLASSPATH with Custom Jars and Files
+=== Extend Hazelcast's CLASSPATH with Custom JARS and Files
 
 If you have to add more classes or files to Hazelcast's classpath, one way to
 do it is to put them in a directory such as `ext`, mount it to the
@@ -235,7 +269,7 @@ docker run -v /path/to/log4j2.properties:/opt/hazelcast/log4j2.properties hazelc
 
 == Building a Custom Image from the Slim Image
 
-Hazelcast offers a slim Docker image that
+Hazelcast offers a xref:installing-upgrading.adoc#full-slim[slim] Docker image that
 contains only the core Hazelcast engine. When image size is a concern, you can use it
 as the starting point to build your custom image with just the
 extensions you need.
@@ -250,9 +284,6 @@ ARG REPO_URL=https://repo1.maven.org/maven2/com/hazelcast
 ADD $REPO_URL/hazelcast-kafka/5.0/hazelcast-kafka-5.0-jar-with-dependencies.jar $HZ_HOME/lib/
 # ... more ADD statements ...
 ----
-
-NOTE: To find the available extensions and their URLs, open the
-https://repo1.maven.org/maven2/com/hazelcast/hazelcast[Maven repository] in your browser.
 
 To build an image from a Dockerfile, use the following command, which gives the image the name `hazelcast-with-kafka`:
 

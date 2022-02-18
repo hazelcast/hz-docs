@@ -1,0 +1,228 @@
+= Managing Enterprise License Keys
+:description: To use Hazelcast Enterprise, you need an Enterprise license key. This topic explains how to get a license key, install it on a member, and manage it.
+:page-aliases: installing-license-keys.adoc, monitoring-license-keys.adoc, renewing-license-keys.adoc
+:page-enterprise: true
+
+{description}
+
+// tag::get-license[]
+== Getting an Enterprise License Key
+
+Hazelcast Enterprise requires a license key. You can get a
+30-day trial license from the link:https://hazelcast.com/get-started[Hazelcast website].
+
+[[license-key-format]]License keys have the following format:
+
+```
+<Hazelcast edition>#<Maximum members>#<License key>
+```
+
+- `<Hazelcast edition>`: Name of the product.
+- `<Maximum members>`: Maximum number of members that may use the license at the same time.
+- `<License key>`: Machine-readable license key.
+
+The first two strings up to the second hash (#) character are optional. These strings just provide a way for you to know important information about the license key.
+
+For example, both of the following formats are valid:
+
+.Full-form license
+```
+HazelcastEnterprise#2Nodes#1q2w3e4r5t
+```
+
+.Short-form license
+```
+1q2w3e4r5t
+```
+
+NOTE: These licenses are examples and will not work if you install them on members.
+
+// end::get-license[]
+
+// tag::install-license[]
+== Installing a License Key on Members
+
+To use Hazelcast Enterprise, you need to install a license
+key on all members in a cluster.
+
+NOTE: Hazelcast Enterprise license keys are required only for members.
+You do not need to set a license key for Java clients that are connected to members.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <license-key>Your Enterprise License Key</license-key>
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+
+[source,yaml]
+----
+hazelcast:
+  license-key: Your Enterprise License Key
+----
+--
+Java::
++
+--
+Add your license to the link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/config/Config.html#setLicenseKey-java.lang.String-[`setLicenseKey()`] method.
+
+[source,java]
+----
+Config config = new Config();
+config.setLicenseKey( "Your Enterprise License Key" );
+----
+--
+
+Environment Variable::
++
+--
+[source,shell]
+----
+HZ_LICENSEKEY=<Your Enterprise License Key>
+----
+--
+
+System Property::
++
+--
+[source,shell]
+----
+-Dhazelcast.enterprise.license.key=<Your Enterprise License Key>
+----
+--
+====
+
+// end::install-license[]
+
+// tag::monitor-license[]
+== Monitoring License Keys
+
+It's important to keep track of when your license key is due to expire. If you have an expired license, Hazelcast will not start.
+
+When a license is about to expire, 
+Hazelcast issues the following warning about approaching license expiry in the member logs:
+
+```
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ WARNING @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+HAZELCAST LICENSE WILL EXPIRE IN 29 DAYS.
+Your Hazelcast cluster will stop working after this time.
+
+Your license holder is customer@example-company.com, you should have them contact
+our license renewal department, urgently on sales@hazelcast.com
+or call us on +1 (650) 521-5453
+
+Please quote license id CUSTOM_TEST_KEY
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+```
+
+This frequency of these warnings depends on how long if left until the license expires:
+
+.Frequency of warnings about license expiration
+[cols="1a,1a"]
+|===
+|Time until expiry|Warning frequency
+
+|Two months
+|Daily
+
+|One month
+|Hourly
+
+|One week
+|Every 30 minutes
+
+|===
+
+To get details about your current license, you can use the <<mc, Management Center>>, the <<jmx, JMX API>>, or the <<rest, REST API>>.
+
+[[jmx]]
+=== Getting License Details with the JMX API
+
+The MBean `HazelcastInstance.LicenseInfo` holds all license
+details and can be accessed through Hazelcast's JMX port (if enabled). The
+following parameters represent these details:
+
+* `maxNodeCountAllowed`: Maximum members allowed to form a cluster under
+the current license.
+* `expiryDate`: Expiration date of the current license.
+* `typeCode`: Type code of the current license.
+* `type`: Type of the current license.
+* `ownerEmail`: Email of the current license's owner.
+* `companyName`: Company name on the current license.
+
+Following is the list of license types and type codes:
+
+```
+MANAGEMENT_CENTER(1, "Management Center"),
+ENTERPRISE(0, "Enterprise"),
+ENTERPRISE_SECURITY_ONLY(2, "Enterprise only with security"),
+ENTERPRISE_HD(3, "Enterprise HD"),
+CUSTOM(4, "Custom");
+```
+
+[[rest]]
+=== Getting License Details with the REST API
+
+You can access license details by sending a `GET` request to the `/license` endpoint.
+
+```
+curl -v http://localhost:5701/hazelcast/rest/license
+```
+
+Its output is similar to the following:
+
+```json
+{
+  "licenseInfo": {
+    "expiryDate": 4090168799999,
+    "maxNodeCount": 99,
+    "type": 3,
+    "companyName": null,
+    "ownerEmail": null,"keyHash":"OsLh4O6vqDuKEq8lOANQuuAaRnmDfJfRPrFSEhA7T3Y="
+  }
+}
+```
+
+[[mc]]
+=== Getting License Details in Management Center
+
+See xref:{page-latest-supported-mc}@management-center:ROOT:managing-licenses.adoc[] in the Management Center documentation.
+
+// end::monitor-license[]
+
+// tag::renew-license[]
+
+== Renewing a License Key
+
+License keys are often valid only for a certain period of time.
+
+To upgrade or renew a license key, you can do one of the following:
+
+- Email mailto:sales@hazelcast.com[Sales].
+
+- Email mailto:support@hazelcast.com[Support].
+
+- Call your sales representative.
+
+NOTE: If your license is expired on a running cluster or Management Center,
+do not restart the host device.
+Reach out to Hazelcast Support to resolve any issues with an expired license.
+[[rest-update-license]]
+
+// end::renew-license[]
+
+// tag::update-license[]
+
+== Updating a License Key at Runtime
+
+You can use xref:configuration:dynamic-config.adoc[dynamic configuration] to update a license key at runtime.

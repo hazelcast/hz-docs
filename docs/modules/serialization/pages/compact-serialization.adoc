@@ -10,7 +10,8 @@ results in less memory and bandwidth usage compared to other formats
 the class in any way
 * Supports schema evolution which permits adding or removing fields, or changing
 the types of fields
-* Can work with no configuration or any kind of factory/serializer registration
+* Can work with no configuration or any kind of factory/serializer registration for
+Java classes and Java records
 * Platform and language independent
 * Supports partial deserialization of fields, without deserializing the whole objects during
 queries or indexing
@@ -36,7 +37,7 @@ a class to implement a particular interface. Serializers might be implemented an
 separately from the classes.
 
 It also supports zero-configuration use cases by automatically extracting schemas out of the
-classes using reflection, which is cached and reused later, with no extra cost.
+classes and Java records using reflection, which is cached and reused later, with no extra cost.
 
 The underlying format of the compact serialized objects is platform and language independent.
 Native client supports will be added shortly after promoting this feature to stable status.
@@ -59,10 +60,12 @@ extraction fails, Hazelcast throws an exception.
 Currently, Hazelcast supports extracting schemas out of classes that have the following
 field types:
 
-* Primitive types: `boolean`, `byte`, `short`, `char`, `integer`, `long`, `float`, and `double`.
+* Primitive types: `boolean`, `byte`, `short`, `int`, `long`, `float`, and `double`
+* Wrapper classes of primitive types: `Boolean`, `Byte`, `Short`, `Integer`, `Long`, `Float`, and `Double`
 * `String`
 * `java.time.LocalDate`, `java.time.LocalTime`, `java.time.LocalDateTime`, and `java.time.OffsetDateTime`
 * `java.math.BigDecimal`
+* Enums
 * Arrays of the types shown above
 * Nested classes that contain the fields above and arrays of them
 
@@ -92,13 +95,23 @@ public class Employee {
 }
 ----
 
-If you don't perform any kind of configuration change and use the instances of the class
+If you don't perform any kind of configuration changes and use the instances of the class
 directly, no exceptions are thrown. Hazelcast will generate a schema out of the
 `Employee` class the first time you try to serialize an object, cache it, and reuse it
 for the subsequent serializations and deserializations.
 
-NOTE: For reflective schema extraction and serializer to work, the class must have an empty
-public constructor.
+The same holds true for the Java records. Hazelcast supports serializing and deserializing
+Java records, without an extra configuration as well.
+
+Assuming the `Employee` class above were a Java record:
+
+[source,java]
+----
+public record Employee(long id, String name) {
+}
+----
+
+The following code would work for both of them.
 
 [source,java]
 ----
@@ -127,17 +140,17 @@ For example, assume that you have the same `Employee` class. Then, a Compact ser
 
 [source,java]
 ----
-class EmployeeSerializer implements CompactSerializer<Employee> {
+public class EmployeeSerializer implements CompactSerializer<Employee> {
     @Override
     public Employee read(CompactReader reader) {
-        long id = reader.readLong("id");
+        long id = reader.readInt64("id");
         String name = reader.readString("name");
         return new Employee(id, name);
     }
 
     @Override
     public void write(CompactWriter writer, Employee employee) {
-        writer.writeLong("id", employee.getId());
+        writer.writeInt64("id", employee.getId());
         writer.writeString("name", employee.getName());
     }
 }
@@ -150,8 +163,7 @@ The last step is to register the serializer in the member configuration.
 [source,java]
 ----
 SerializationConfig serializationConfig = new SerializationConfig();
-serializationConfig.
-        getCompactSerializationConfig()
+serializationConfig.getCompactSerializationConfig()
         .setEnabled(true) // Required during BETA
         .register(Employee.class, "employee", new EmployeeSerializer());
 ----
@@ -245,7 +257,7 @@ read the following fields.
 [source,java]
 ----
 public Employee read(CompactReader reader) {
-    long id = reader.readLong("id");
+    long id = reader.readInt64("id");
     String name = reader.readString("name");
     // The new "age" field is there, but the old reader does not
     // know anything about it. Hence, it will simply ignore that field.
@@ -260,12 +272,12 @@ when there is no such field in the data.
 [source,java]
 ----
 public Employee read(CompactReader reader) {
-    long id = reader.readLong("id");
+    long id = reader.readInt64("id");
     String name = reader.readString("name");
     // Read the "age" if it exists, or the default value 0.
-    // reader.readInt("age") would throw if the "age" field
+    // reader.readInt32("age") would throw if the "age" field
     // does not exist in data.
-    int age = reader.readInt("age", 0);
+    int age = reader.readInt32("age", 0);
     return new Employee(id, name, age);
 }
 ----
@@ -311,8 +323,7 @@ Java::
 [source,java]
 ----
 SerializationConfig serializationConfig = new SerializationConfig();
-serializationConfig.
-        getCompactSerializationConfig()
+serializationConfig.getCompactSerializationConfig()
         .setEnabled(true);
 ----
 --
@@ -377,8 +388,7 @@ Java::
 [source,java]
 ----
 SerializationConfig serializationConfig = new SerializationConfig();
-serializationConfig.
-        getCompactSerializationConfig()
+serializationConfig.getCompactSerializationConfig()
         .setEnabled(true)
         .register(Foo.class, "foo", new FooSerializer()); // Use the "foo" as the type name
 ----
@@ -428,8 +438,7 @@ Java::
 [source,java]
 ----
 SerializationConfig serializationConfig = new SerializationConfig();
-serializationConfig.
-        getCompactSerializationConfig()
+serializationConfig.getCompactSerializationConfig()
         .setEnabled(true)
         .register(Bar.class); // Uses the fully qualified class name as the type name
 ----

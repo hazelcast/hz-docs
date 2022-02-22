@@ -27,7 +27,7 @@ xref:interactive-sql-maps.adoc[Try the interactive example,window=_blank]
 
 == Step 1. Create a Mapping to a Map
 
-Before you can query data in a map, you need to create a mapping to one, using the map connector.
+Map doesn't inherently have associated schema or serialization format. Before you can query data in a map, you need to create a mapping to it, using the `IMap` connector.
 
 . In the SQL shell, configure the map connector to set up a SQL connection to a new map called `cities`.
 +
@@ -37,7 +37,8 @@ CREATE MAPPING cities (
 __key INT, 
 countries VARCHAR, 
 cities VARCHAR)
-type IMap OPTIONS('keyFormat'='int', 'valueFormat'='json-flat');
+TYPE IMap
+OPTIONS('keyFormat'='int', 'valueFormat'='json-flat');
 ----
 
 . Add some countries and their capital cities to the map.
@@ -55,7 +56,7 @@ INSERT INTO cities VALUES
 (8, 'Brazil', 'Rio de Janeiro');
 ----
 +
-The first argument of the `VALUES` command is the key of the map entry and the second argument is the value.
+The `VALUES` clause in the example above contains multiple rows, each with 3 fields. Fields appear in the order they were defined in the `CREATE MAPPING` command. The `__key` field is the map's key.
 
 == [[ad-hoc]]Step 2. Run Ad-Hoc Queries
 
@@ -85,7 +86,7 @@ You should see the following:
 
 ----
 
-. Query only the countries by filtering on the `countries` column.
+. Query the countries by selecting only the `countries` column.
 +
 [source,sql]
 ----
@@ -333,11 +334,12 @@ ORDER by sum(population2020.population);
 +
 [source,sql]
 ----
-SELECT cities.countries AS country, sum(population2020.population) AS total_population
+SELECT cities.countries AS country, SUM(population2020.population) AS total_population
 FROM cities
 JOIN population2020
 ON cities.cities = population2020.cities
-GROUP BY cities.countries HAVING SUM(population2020.population) > 15000000;
+GROUP BY cities.countries
+HAVING SUM(population2020.population) > 15000000;
 ----
 +
 ```

@@ -74,7 +74,7 @@ Hazelcast supports the `AND`, `OR`, and `NOT` logical operators. Logical operato
 
 === Comparison Operators
 
-Comparison operators compare two or more operands, and always return a `BOOL`. Comparisons generally require operands to be of the same type.
+Comparison operators compare two or more operands, and always return a `BOOL`. Comparisons require operands to be of comparable type.
 
 .Descriptions of comparison operators
 [cols="20%a,20%m,60%a"]
@@ -87,6 +87,8 @@ Comparison operators compare two or more operands, and always return a `BOOL`. C
 
 |Less Than or Equal To
 |X <= Y
+
+### the <= is rendered as an arrow, using `` doesn't help...
 |Returns `TRUE` if `X` is less than or equal to `Y`.
 
 |Greater Than
@@ -103,11 +105,13 @@ Comparison operators compare two or more operands, and always return a `BOOL`. C
 
 |Not Equal
 |X != Y
+
+X <> Y
 |Returns `TRUE` if `X` is not equal to `Y`.
 
 m|[[between]]BETWEEN
 |X [NOT] BETWEEN [SYMMETRIC] Y AND Z	
-|Returns `TRUE` if `X` is within the given range of `Y` and `Z`. The `SYMMETRIC` keyword allows `Y` and `Z` to be in any order, rather than `Y` being the lowerbound and `Z` being the upperbound.
+|Returns `TRUE` if `X` is within the given range of `Y` and `Z`. The `SYMMETRIC` keyword allows `Y` and `Z` to be in any order, rather than `Y` being the lower bound and `Z` being the upper bound.
 
 m|LIKE
 |X [NOT] LIKE Y [ESCAPE Z]
@@ -135,7 +139,7 @@ The `NOT` keyword inverts the result.
 The `EXISTS` operator supports the following syntax:
 
 ```sql
-WHERE EXISTS [NOT] <query>
+[NOT] EXISTS (<query>)
 ```
 
 === `IS` Operator
@@ -174,7 +178,7 @@ WHERE column_name IN (SELECT STATEMENT);`
 The `IN` operator supports the following syntax:
 
 ```sql
-<search_value> [NOT] IN <value_set>
+<search_value> [NOT] IN (<value_set>)
 ```
 
 === `UNION` and `UNION ALL` Operators
@@ -183,7 +187,7 @@ The `UNION` operator is used to combine the result set of two or more `SELECT` s
 
 The `UNION ALL` operator is used to combine the result set of two or more `SELECT` statements, *including any duplicate values*.
 
-The `UNION`/`UNION ALL` operators allows you to check for a certain value in a given set of values, and returns `TRUE` if an equal value is found.
+NOTE: `UNION ALL` typically performs much better, because duplicate elimination is an expensive operation. Use `UNION` only if you actually need to remove duplicates.
 
 *Syntax*
 
@@ -195,7 +199,7 @@ The `UNION` and `UNION ALL` Operators support the following syntax:
 
 === Mathematical Operators
 
-Mathematical functions perform operations on numbers.
+Mathematical operators perform operations on numbers.
 
 .Descriptions of mathematical operators
 [cols="1a,1m", options="header"]
@@ -233,21 +237,33 @@ Each `condition` must be a boolean expression.
 
 *Syntax*
 
+The `CASE` expression has two forms:
+
+```sql
+CASE value
+  WHEN value1 THEN result1
+  WHEN value2 THEN result2
+  ...
+  ELSE elseResult
+END
+```
+
+This form for returns `result1`, when `value = value1`, `result2` when `value = value2` and `elseResult`, if `value` isn't equal to any of the values in the `WHEN` clause.
+
 ```sql
 CASE
-
   WHEN condition1 THEN result1
   WHEN condition2 THEN result2
-  WHEN conditionN THEN resultN
-
-  ELSE result
-
-END;
+  ...
+  ELSE elseResult
+END
 ```
+
+This form returns `result1` when `condition1` is `TRUE`, `result2` when `condition2` is `TRUE` and `elseResult`, if no condition evaluated to `TRUE`.
 
 === NULLIF
 
-The `NULLIF` expression returns `NULL` if the `X` and `Y` expressions are equal. The data type of the returned `NULL` value is the same as the `X` expression.
+The `NULLIF` expression returns `NULL` if the two operands are equal and returns the first operand, if operands are not equal. The data type of the returned `NULL` value is the same as the `X` expression.
 
 *Syntax*
 
@@ -255,14 +271,32 @@ The `NULLIF` expression returns `NULL` if the `X` and `Y` expressions are equal.
 NULLIF(X, Y)
 ```
 
+*Examples*
+
+```sql
+sql> SELECT NULLIF('foo', 'bar');
++--------------------+
+|EXPR$0              |
++--------------------+
+|foo                 |
++--------------------+
+1 row(s) selected
+sql> SELECT NULLIF('foo', 'foo');
++--------------------+
+|EXPR$0              |
++--------------------+
+|NULL                |
++--------------------+
+```
+
 === COALESCE
 
-The `COALESCE` expression evaluates each expression at a time, starting from the first. If the value of any expression is not `NULL`, its value is returned. If all the expressions are `NULL`, `NULL` is returned. Arguments to the right of the first non-null argument are not evaluated.
+The `COALESCE` function returns the first non-null operand. If all operands are null, it returns `NULL`. Arguments to the right of the first non-null argument are not evaluated.
 
 *Syntax*
 
 ```sql
-COALESCE(X, Y, Z)
+COALESCE(X, Y, Z, ...)
 ```
 
 == Aggregate Functions
@@ -277,26 +311,17 @@ Aggregate functions perform calculations such as returning the mean of all data 
 |COUNT(*) :: BIGINT
 |Calculates the number of input rows.
 
-|COUNT(any) :: BIGINT
-|Calculates the number of input rows in which the input value is not null.
+|COUNT(field) :: BIGINT
+|Calculates the number of input rows in which the field is not null.
 
-|COUNT(DISTINCT *) :: BIGINT
-|Calculates the number of input rows in which the input value is unique.
-
-|COUNT(DISTINCT any) :: BIGINT
-|Calculates the number of input rows in which the input value is unique and not null.
+|COUNT(DISTINCT field) :: BIGINT
+|Calculates the number of distinct values of the given field (ignores the `NULL` value).
 
 |`SUM(TINYINT \| SMALLINT \| INT) :: BIGINT`, `SUM(BIGINT \| DECIMAL) :: DECIMAL`, `SUM(REAL) :: REAL`, `SUM(DOUBLE) :: DOUBLE`
 |Calculates the sum of the non-null input values.
 
-|`SUM(DISTINCT TINYINT \| SMALLINT \| INT) :: BIGINT`, `SUM(DISTINCT BIGINT \| DECIMAL) :: DECIMAL`, `SUM(DISTINCT REAL) :: REAL`, `SUM(DISTINCT DOUBLE) :: DOUBLE`
-|Calculates the sum of the unique, non-null input values.
-
 |`AVG(DECIMAL) :: DECIMAL`, `AVG(DOUBLE) :: DOUBLE`
 |Calculates the mean of all the non-null input values.
-
-|`AVG(DISTINCT DECIMAL) :: DECIMAL`, `AVG(DISTINCT DOUBLE) :: DOUBLE`
-|Calculates the mean of all the unique, non-null input values.
 
 |MIN(any) :: same type as the input
 |Calculates the minimum of the non-null input values. Applicable also to `OBJECT` type, if the underlying value is `java.lang.Comparable`.
@@ -305,6 +330,8 @@ Aggregate functions perform calculations such as returning the mean of all data 
 |Calculates the maximum of the non-null input values. Applicable also to `OBJECT` type, if the underlying value is `java.lang.Comparable`.
 
 |===
+
+NOTE: You can use `DISTINCT` keyword with all aggregate functions. It causes that before calculating the aggregate, duplicates are removed from the set of input values. For example, `SUM(DISTINCT)` applied to input values `1, 1, 2` will produce `3`, because it will add the `1` only once.
 
 For examples of how to use aggregate functions, see the xref:select.adoc[`SELECT` statement documentation].
 
@@ -321,11 +348,11 @@ Conversion functions allow you to convert the result type of one expression to a
 |Converts the result type of `expression` to `data_type`.
 |
 
-`SELECT CAST("2020-06-02 17:00:53.110+00:00" AS TIMESTAMP)``
+`SELECT CAST('2020-06-02 17:00:53.110' AS TIMESTAMP)`
 
 |
 
-`2020-06-03T00:00:53.11Z`
+`2020-06-03T00:00:53.11`
 |===
 
 == Date and Time Functions
@@ -335,35 +362,40 @@ Conversion functions allow you to convert the result type of one expression to a
 |===
 | Function| Description| Example| Result
 
-|`EXTRACT(element, date)`
+|`EXTRACT(<element> FROM <temporal_value>) :: DOUBLE`
 |Returns the `element` date part from the `date` expression.
 
 Supported elements: `MILLENIUM`, `CENTURY`, `DECADE`, `YEAR`, `ISOYEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `DOW`, `ISODOW`, `DOY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND`, `MICROSECOND`, `EPOCH`
 
-Supported date types: `DATE`, `TIME`, `TIMESTAMP`, `TIMESTAMP WITH TIME ZONE`
-|`EXTRACT(WEEK FROM "2017-06-15")`
+Supported temporal types: `DATE`, `TIME`, `TIMESTAMP`, `TIMESTAMP WITH TIME ZONE`
+|`EXTRACT(WEEK FROM date'2017-06-15')`
 |24
 
-|`TO_TIMESTAMP_TZ(BIGINT)`
-|Converts a `BIGINT` value in seconds to `TIMESTAMP_WITH_TIMEZONE`.
+|`TO_TIMESTAMP_TZ(BIGINT) :: TIMESTAMP WITH TIME ZONE`
+|Converts a `BIGINT` value to `TIMESTAMP_WITH_TIMEZONE`. The value is interpreted as number of seconds, milliseconds, microseconds or nanoseconds since the _epoch_, that is since 1970-01-01 00:00 UTC.
+
+The actual time unit of the conversion is determined by the magnitude of the input value:
+
+- less than the number of milliseconds in a year: seconds
+- less than the number of microseconds in a year: milliseconds
+- less than the number of nanoseconds in a year: microseconds
+- otherwise: nanoseconds
+
+This logic causes that any time value between years 1971 up to year 2968 is converted using the correct time unit. Negative values are always converted as seconds.
 
 
 |`SELECT TO_TIMESTAMP_TZ(v) FROM TABLE (generate_series(1,3))`
 |
-1970-01-01T03:00:00.001+03:00
+1970-01-01T03:00:01+03:00
 
-1970-01-01T03:00:00.002+03:00
+1970-01-01T03:00:02+03:00
 
-1970-01-01T03:00:00.003+03:00
+1970-01-01T03:00:03+03:00
 
 |`TO_EPOCH_MILLIS(TIMESTAMP_WITH_TIMEZONE)`
 |Converts `TIMESTAMP_WITH_TIMEZONE` values to an `EPOCH` value in milliseconds.
-|`SELECT TO_EPOCH_MILLIS(TO_TIMESTAMP_TZ(v)) FROM TABLE (generate_series(1,3))`
-|1000
-
-2000
-
-3000
+|`SELECT TO_EPOCH_MILLIS(date'2022-02-22')`
+|1645484400000
 |===
 
 == File Table Functions
@@ -376,7 +408,7 @@ To execute an ad-hoc query against data in files you can use one of the followin
 * `parquet_file`
 
 File table functions create a temporary mapping to a file, which is valid for the duration
-of the statement. These functions accept the same options as those available for the xref:mapping-to-a-file-system.adoc[file connector].
+of the query. These functions accept the same options as those available for the xref:mapping-to-a-file-system.adoc[file connector].
 
 To configure the temporary mapping, you can use either positional arguments or named arguments:
 
@@ -400,22 +432,22 @@ Hazelcast supports the following functions, which can retrieve JSON data.
 
 === JSON_QUERY
 
-The `JSON_QUERY()` function extracts a JSON value from a JSON parameter or a JSON-formatted string that matches a given JsonPath expression.
+The `JSON_QUERY()` function extracts a JSON value from a JSON document or a JSON-formatted string that matches a given JsonPath expression.
 
 *Syntax*
 ```
 JSON_QUERY(jsonArg:{VARCHAR | JSON}, jsonPath:VARCHAR [<wrapperBehavior>] [<onClauseArg> ON ERROR] [<onClauseArg> ON EMPTY])` :: JSON
 ```
 
-- `jsonArg`: JSON or a JSON-formatted string.
+- `jsonArg`: JSON value or a JSON-formatted string.
 
 - `jsonPath`: A xref:working-with-json.adoc#jsonpath[JsonPath] expression that identifies the data that you want to get from the `jsonArg` parameter.
 
 - `wrapperBehavior`: What to do with return results.
 
-** `WITHOUT [ARRAY] WRAPPER` (default): Remove square brackets from the returned JSON value. The return value must be a single value.
-** `WITH [CONDITIONAL] [ARRAY] WRAPPER`: Wrap array return values into a JSON array.
-** `WITH UNCONDITIONAL [ARRAY] WRAPPER`: Wrap all return values into a JSON array.
+** `WITHOUT [ARRAY] WRAPPER` (default): Up to one matched value is returned without wrapping in an array. Fails, if multiple values match.
+** `WITH [CONDITIONAL] [ARRAY] WRAPPER`: Returns a single match directly without wrapping. If there are multiple matches, they are returned as a JSON array.
+** `WITH UNCONDITIONAL [ARRAY] WRAPPER`: Always wrap matched values in a JSON array.
 
 - `onClauseArg`: A value to return in case of the given `ON` condition:
 
@@ -451,7 +483,7 @@ SELECT
   JSON_QUERY('[1,2,3]', '$[*]?(@ > 1)' WITHOUT ARRAY WRAPPER);
 
 -- Result
--- This example throws an error because you cannot return multiple values without the array wrapper.
+-- This example throws an error because you cannot return multiple values without an array wrapper.
 ```
 
 .WITH UNCONDITIONAL WRAPPER
@@ -465,16 +497,16 @@ SELECT
 
 === JSON_VALUE
 
-The `JSON_VALUE()` function extracts a primitive value, such as a string, number, or boolean that matches a given JsonPath expression. This function returns `NULL` if a non-primitive value is selected, unless the `RETURNING` parameter is given.
+The `JSON_VALUE()` function extracts a primitive value, such as a string, number, or boolean that matches a given JsonPath expression. This function returns `NULL` if a non-primitive value is matched, unless the `ON ERROR` behavior is changed.
 
 *Syntax*
 ```
 JSON_VALUE(jsonArg:{VARCHAR \| JSON}, jsonPath:VARCHAR [RETURNING dataType] [<onClauseArg> ON ERROR] [<onClauseArg> ON EMPTY])` :: VARCHAR
 ```
 
-- `jsonArg`: JSON or a JSON-formatted string
+- `jsonArg`: JSON value or a JSON-formatted string
 - `jsonPath`: A xref:working-with-json.adoc#jsonpath[JsonPath] expression that identifies the data that you want to get from the `jsonArg` parameter.
-- `RETURNING`: Returns the value only if it matches the `dataType` or if the value can be cast to the `dataType`, otherwise returns `NULL`.
+- `RETURNING`: Converts the result to the `dataType` (`VARCHAR` by default). If the value cannot be converted to the target type, throws an error.
 - `onClauseArg`: What to return in case of the `ON` condition:
 
 ** `DEFAULT <literal | column | parameter>`
@@ -489,7 +521,7 @@ SELECT
   JSON_VALUE('{"company" : {"employees" : [{"id" : "1","name":"jake"}]}}', '$.company.employees[0].id');
 
 -- Returns
--- 1
+-- 1 (as a VARCHAR)
 ```
 
 === JSON_ARRAY
@@ -523,17 +555,17 @@ The `JSON_OBJECT()` function returns a JSON object from the given key/value pair
 
 *Syntax*
 ```
-JSON_OBJECT([key:VARCHAR : value:ANY], [more key-value pairs] [{ABSENT|NULL} ON NULL]) :: JSON
+JSON_OBJECT([key : value] [, ...] [{ABSENT|NULL} ON NULL]) :: JSON
 ```
 Or
 
 ```
-JSON_OBJECT([KEY key:VARCHAR VALUE value:ANY] [{ABSENT|NULL} ON NULL]) ::= JSON
+JSON_OBJECT([[KEY] key VALUE value] [{ABSENT|NULL} ON NULL]) :: JSON
 ```
 
-- `key`: A name for the key.
+- `key`: A name for the key, must be a VARCHAR
 
-- `value`: Any value such as a literal or a column.
+- `value`: A value for the key, can be any type.
 
 - `ON NULL`: What to do with `NULL` values.
 
@@ -551,10 +583,10 @@ SELECT JSON_OBJECT(KEY 'id' VALUE 1, 'name' VALUE null ABSENT ON NULL)
 ```
 
 ```sql
-SELECT JSON_OBJECT('id': 1, 'name': null ABSENT ON NULL)
+SELECT JSON_OBJECT('id': 1, 'name': 'jake')
 
 -- Result
--- {"id": 1}
+-- {"id": 1, "name":"jake"}
 ```
 
 == Mathematical Functions
@@ -694,7 +726,7 @@ SELECT JSON_OBJECT('id': 1, 'name': null ABSENT ON NULL)
 |
 |
 
-|`CONCAT_WS(separator_string, string1, string2)`
+|`CONCAT_WS(separator_string, string1, string2, ...)`
 |Returns a string that consists of the arguments `string1` `separator_string` `string2`
 |`CONCAT_WS('-', 'John', 'Doe')`
 |John-Doe
@@ -775,12 +807,19 @@ Table-valued functions return tables of batch or streaming sources that you can 
 | Function
 | Description
 
-|`TABLE(generate_series(start_number, stop_number))`
+|`generate_series(start_number, end_number)`
 |Returns a table that contains a series of numbers, starting from the `start_number` argument and ending with the `stop_number` arguments.
 
-|`TABLE(generate_stream(numbers_per_second))`
-|Returns a table that contains a stream of numbers, starting from 0 at a rate of `numbers_per_second` every second
+|`generate_stream(numbers_per_second)`
+|Returns a table that contains a stream of numbers, starting from 0 at a rate of `numbers_per_second` every second, without an upper bound
 |===
+
+To use a table-valued function in FROM clause, you must wrap it in a `TABLE` keyword. For example:
+
+```sql
+SELECT *
+FROM TABLE(generate_series(1, 3));
+```
 
 == Trigonometric Functions
 
@@ -817,30 +856,20 @@ Table-valued functions return tables of batch or streaming sources that you can 
 
 == Windowing Table-Valued Functions
 
-Windowing table-valued functions split infinite streams into bounded chunks that you can apply stateful computations to.
-
-NOTE: All windowing table-valued functions should be used with a `GROUP BY` clause.
+Windowing functions assign input records from the input table into windows. Their output contains all the input columns, with two added columns: `window_start` and `window_end`. You can use the added columns in the `GROUP BY` expression when doing streaming aggregation.
 
 For a guide about streaming windowed aggregations in SQL, see xref:querying-streams.adoc[].
 
-=== TUMBLE
-
-The `TUMBLE()` function takes a table as input and adds a window to the output. The return value is always the original timestamped column, the window start time, and the window end time.
-
-`TUMBLE(TABLE(data), DESCRIPTOR(timecol), size)`
-
-This function takes the following required parameters:
-
-[cols="1m,2a"]
+[cols="1,1", options="header"]
 |===
-|Parameter|Description
+| Function
+| Description
 
-|data
-|A table parameter that must contain a timestamped column.
-|timecol
-|The column that contains the timestamp.
-|size
-|The duration of the tumbling window.
+|`TUMBLE(TABLE(input),DESCRIPTOR(time_col),window_size)`
+|Assigns input records to tumbling windows.
+
+|`HOP(TABLE(input),DESCRIPTOR(time_col),window_size, slide_step)`
+|Assigns input records to hopping windows.
 
 |===
 

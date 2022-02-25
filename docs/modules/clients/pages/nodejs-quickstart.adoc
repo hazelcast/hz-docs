@@ -1,0 +1,234 @@
+= Quickstart
+:description: This tutorial introduces you to Hazelcast's Node.js client. At the end of this tutorial, you'll know how to install the client and connect it a Hazelcast cluster, work with an in-memory storage such as a map, and perform queries using SQL.
+
+Hazelcast Node.js client provides a Promise-based API with a built-in support for native JavaScript objects. Node.js client supports most of the Hazelcast features; see https://hazelcast.com/clients/node-js/#client-features[here].
+
+{description}
+
+== Before You Begin
+
+To complete this tutorial, you need the following:
+
+* macOS, Linux, or Windows
+* Node.js 10 or newer
+* Java 8 or newer
+* Hazelcast 4.0 or newer
+* Latest Hazelcast Node.js client
+
+== Installation
+
+Hazelcast Node.js client is on https://www.npmjs.com/package/hazelcast-client[NPM]:
+
+[source,javascript]
+----
+npm install hazelcast-client --save
+----
+
+Once installed, add it as a dependency to your Node.js project (`require('hazelcast-client')`).
+
+== Start a Hazelcast Cluster
+
+Start a cluster with the default settings using either of the following ways:
+
+* xref:cloud:getting-started.adoc[Hazelcast Cloud]
+* xref:getting-started:quickstart.adoc[Hazelcast CLI]
+* xref:getting-started:get-started-docker.adoc[Docker]
+* xref:getting-started:get-started-binary.adoc[Binary distributions]
+
+When you done, you will have a Hazelcast with a single server on your local machine (if you've used CLI, Docker or binary distributions).
+
+If you want to use Hazelcast Cloud, follow xref:cloud:nodejs-client.adoc[these instructions].
+
+Let's use Docker for this tutorial:
+
+[source,shell,subs="attributes+"]
+----
+docker run -it --rm -p 5701:5701 hazelcast/hazelcast:{full-version}
+----
+
+== Connect to the Cluster
+
+Create a new file called `myClient.js` with the following code.
+
+[source,javascript]
+----
+'use strict';
+
+const { Client } = require('hazelcast-client');
+
+(async () => {
+    try {
+        const cfg = {
+            network: {
+                clusterMembers: ['127.0.0.1:5701'],
+            }
+        };
+        const client = await Client.newHazelcastClient();
+
+    } catch (err) {
+        console.error('Error occurred:', err);
+        process.exit(1);
+    }
+})();
+----
+
+When you run the file using `node myClient.js`, you will see the client is connected to the cluster.
+
+[source,shell,subs="attributes+"]
+----
+[DefaultLogger] INFO at LifecycleService: HazelcastClient is STARTING
+[DefaultLogger] INFO at LifecycleService: HazelcastClient is STARTED
+[DefaultLogger] INFO at ConnectionManager: Trying to connect to 127.0.0.1:5701
+[DefaultLogger] INFO at LifecycleService: HazelcastClient is CONNECTED
+[DefaultLogger] INFO at ConnectionManager: Authenticated with server 172.17.0.2:5701:6d3e6437-ca4b-4c90-8f96-84757fd028c2, server version: {full-version}, local address: 127.0.0.1:51818
+[DefaultLogger] INFO at ClusterService: 
+
+Members [1] {
+	Member [172.17.0.2]:5701 - 6d3e6437-ca4b-4c90-8f96-84757fd028c2
+}
+----
+
+== Work with an In-Memory Storage
+
+Let's manipulate a distributed map on a cluster using the client.
+
+Save the following file as `it.js` and run it using `node it.js`.
+
+[source,javascript]
+----
+const client = await Client.newHazelcastClient();
+
+const personnelMap = await client.getMap('personnelMap');
+await personnelMap.put('Alice', 'IT');
+await personnelMap.put('Bob', 'IT');
+await personnelMap.put('Clark', 'IT');
+console.log('Added IT personnel. Logging all known personnel');
+
+const allPersonnel = await personnelMap.entrySet();
+allPersonnel.forEach(function (person) {
+    console.log(`${person[0]} is in ${person[1]} department`);
+});
+----
+
+You will see the following output.
+
+[source,plain]
+----
+Added IT personnel. Logging all known personnel
+Alice is in IT department
+Clark is in IT department
+Bob is in IT department
+----
+
+The example puts all the IT personnel into a cluster-wide `personnelMap` and then prints all the known personnel.
+
+Now, create a `sales.js` file as shown below and run it using `node sales.js`.
+
+[source,javascript]
+----
+const client = await Client.newHazelcastClient();
+
+const personnelMap = await client.getMap('personnelMap');
+await personnelMap.put('Denise', 'Sales');
+await personnelMap.put('Erwing', 'Sales');
+await personnelMap.put('Faith', 'Sales');
+console.log('Added Sales personnel. Logging all known personnel');
+
+const allPersonnel = await personnelMap.entrySet();
+allPersonnel.forEach(function (person) {
+    console.log(`${person[0]} is in ${person[1]} department`);
+});
+----
+
+You will see the following output.
+
+[source,plain]
+----
+Added Sales personnel. Logging all known personnel
+Denise is in Sales department
+Erwing is in Sales department
+Faith is in Sales department
+Alice is in IT department
+Clark is in IT department
+Bob is in IT department
+----
+
+The `sales.js` code adds only the sales employees, but you get the list all known employees
+including the ones in IT. That is because `personnelMap` lives in the cluster and no matter which client you use,
+you can access the whole map.
+
+== Work with SQL
+
+You can query the entries of a map in your cluster using SQL from your Node.js app.
+
+Create a map called `employees` that contains values of type `Employee`.
+
+[source,javascript]
+----
+class Employee {
+    constructor(name, age) {
+        this.name = name;
+        this.age = age;
+        this.factoryId = 1;
+        this.classId = 2;
+    }
+
+    readPortable(reader) {
+        this.name = reader.readString('name');
+        this.age = reader.readInt('age');
+    }
+
+    writePortable(writer) {
+        writer.writeString('name', this.name);
+        writer.writeInt('age', this.age);
+    }
+}
+
+const employees = await client.getMap('employees');
+
+await employees.set(1, new Employee('John Doe', 33));
+await employees.set(2, new Employee('Jane Doe', 29));
+----
+
+Before starting to query data, you must create a mapping for the `employees` map.
+The `CREATE MAPPING` SQL statement is used for this; you can refer to xref:sql:create-mapping.adoc[here] for its details.
+For the `Employee` class above, the mapping statement is shown below. It is enough to create the mapping once per map.
+
+[source,javascript]
+----
+await client.getSql().execute(`
+    CREATE MAPPING IF NOT EXISTS employees (
+        __key DOUBLE,
+        name VARCHAR,
+        age INT
+    )
+    TYPE IMap
+    OPTIONS (
+      'keyFormat' = 'double',
+      'valueFormat' = 'portable',
+      'valuePortableFactoryId' = '1',
+      'valuePortableClassId' = '2'
+    )
+`);
+----
+
+The following code prints names of the employees whose age is less than 30:
+
+[source,javascript]
+----
+const sqlResult = await client.getSql().execute('SELECT name FROM employees WHERE age < 30');
+
+for await (const row of sqlResult) {
+    console.log(row.name); // Jane Doe
+}
+----
+
+See the full https://github.com/hazelcast/hazelcast-nodejs-client/blob/master/code_samples/sql-basic-usage.js[sample code] for a basic SQL usage.
+See xref:nodejs-samples.adoc[here] for more SQL usages by the Node.js client.
+See xref:sql:sql-overview[here] to learn Hazelcast's SQL feature in detail.
+
+== Next Steps
+
+See xref:nodejs-conf.adoc[here] on how to configure and fine-tune your client.
+
+

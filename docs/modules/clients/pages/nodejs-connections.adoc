@@ -1,0 +1,145 @@
+= Configuring Cluster Connections
+
+
+For the configuration of connection networking, the `network` option is used.
+
+[source,javascript]
+----
+const cfg = {
+    clusterName: 'myCluster' <1>
+    network: {
+        clusterMembers: ['10.1.1.21', '10.1.1.22:5703'], <2>
+        smartRouting: true, <3>
+        redoOperation: true, <4>
+        connectionTimeout: 6000 <5>
+        ssl: {
+            enabled: true <6>
+        hazelcastCloud: {
+            discoveryToken: 'EXAMPLE_TOKEN' <7>
+        }
+    backupAckToClientEnabled: true <8>
+    }
+};
+const client = await Client.newHazelcastClient(cfg);
+----
+<1> Name of the cluster, if it is defined on the server side, to which you want the client to connect.
+<2> Initial list of server addresses which the client will connect to; it is recommended that you give the addresses of all servers in the cluster.
+If the port part is omitted, then `5701`, `5702`, and `5703` will be tried in a random order. Default is `localhost`.
+<3> Defines whether the client is xref:clients:clients-overview.adoc#client-operation-modes[smart or unisocket]. Default is `true` (smart).
+<4> Enables or disables redo-able operations; while sending requests to the servers, the operations can fail due to various reasons.
+Read-only operations are retried by default. If you want to enable retry for the other operations, set to `true`. Default is `false`.
+<5> Timeout value in milliseconds for the servers to accept the client connection requests. Default is `5000` ms.
+<6> Enables/disables TLS/SSL to secure the connection between the clients and servers.
+<7> Your discovery token obtained while creating a cluster on Hazelcast Cloud.
+<8> When an operation with sync backup is sent by a client to the Hazelcast servers, the acknowledgment of the
+operation's backup is sent to the client by the backup replica member(s) when this option is enabled. This improves the performance of the client operations.
+This option has no effect for unisocket clients.
+
+== Configuring Client Connection Retry 
+
+When the client is disconnected from the cluster, it searches for new connections to reconnect. You can configure the frequency of the reconnection attempts and client shutdown behavior using the connectionStrategy.connectionRetry configuration option.
+
+[source,java]
+----
+const cfg = {
+    connectionStrategy: {
+        asyncStart: false,
+        reconnectMode: 'ON',
+        connectionRetry: {
+            initialBackoffMillis: 1000, <1>
+            maxBackoffMillis: 60000, <2>
+            multiplier: 2, <3>
+            clusterConnectTimeoutMillis: 50000, <4>
+            jitter: 0.2 <5>
+        }
+    }
+};
+----
+<1> How long to wait (backoff), in milliseconds, after the first failure before retrying. Default is `1000` ms.
+<2> Upper limit for the backoff in milliseconds. Default is `30000`.
+<3> Factor to multiply the backoff after a failed retry. Default is `1.05`.
+<4> Timeout value in milliseconds for the client to give up to connect to the current cluster. If set to `-1`,
+the client tries to connect forever. If set to 0, the client won't try to connect anymore after the first attempt fails. Default is `-1` (No timeout).
+<5> By how much to randomize backoffs. Default is `0`. It must be in range 0 to 1.
+
+A pseudo-code for connection retry logic is as follows:
+
+[source,plain]
+----
+begin_time = getCurrentTime()
+current_backoff_millis = INITIAL_BACKOFF_MILLIS
+while (tryConnect(connectionTimeout)) != SUCCESS) {
+    if (getCurrentTime() - begin_time >= CLUSTER_CONNECT_TIMEOUT_MILLIS) {
+        // Give up to connecting to the current cluster and switch to another if exists.
+    }
+    Sleep(current_backoff_millis + UniformRandom(-JITTER * current_backoff_millis, JITTER * current_backoff_millis))
+    current_backoff = Min(current_backoff_millis * MULTIPLIER, MAX_BACKOFF_MILLIS)
+}
+----
+Note that, `tryConnect` above tries to connect to any member that the client knows,
+and for each connection we have a connection timeout.
+
+== Assigning Roles to Clients
+
+Through the client labels, you can assign special roles for your
+clients and use these roles to perform some actions specific to those client connections.
+
+You can also group your clients using the client labels.
+These client groups can be blacklisted in Hazelcast Management Center so that they can be
+prevented from connecting to a cluster. See the related section in the Hazelcast Management Center documentation
+for more information on this topic.
+
+You can define the client labels using the `clientLabels` option.
+
+[source,javascript]
+----
+const cfg = {
+    clientLabels: [
+        'role admin',
+        'region foo'
+    ]
+};
+----
+
+== Defining Instance Names
+
+Each client has a name associated with it. By default, it is set to `hz.client_${CLIENT_ID}`.
+Here `CLIENT_ID` starts from 0 and it is incremented by 1 for each new client. This ID
+is incremented and set by the client, so it may not be unique between different clients used by different applications.
+
+You can set the client name using the `instanceName` option.
+
+[source,javascript]
+----
+const cfg = {
+    instanceName: 'blue_client_0'
+};
+----
+
+== Configuring Load Balancer
+
+Load Balancer configuration allows you to specify which cluster member to send next operation when queried.
+
+If it is a smart client, only the operations that are not key-based are routed to the member
+that is returned by the load balancer. If it is not a smart client, load balancer is ignored.
+
+By default, client uses round robin Load Balancer which picks each cluster member in turn.
+Also, the client provides random load balancer which picks the next member randomly as the name suggests.
+You can use one of them by specifying ROUND_ROBIN or RANDOM value on the loadBalancer.type config option.
+
+You can set the load balancer using the `loadBalancer` option.
+
+[source,java]
+----
+const cfg = {
+  loadBalancer: {
+    type: 'RANDOM'
+  }
+};
+----
+
+You can also provide a custom load balancer implementation to use different load balancing policies.
+To do so, you should implement the load balancer interface or extend the `AbstractLoadBalancer` class
+for that purpose and provide the load balancer object into the `loadBalancer.customLoadBalancer` option.
+
+

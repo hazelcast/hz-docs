@@ -1,0 +1,80 @@
+= Java Client Overview
+:page-api-reference: https://docs.hazelcast.org/docs/{page-latest-supported-java-client}/javadoc
+:page-toclevels: 3
+[[java-client]]
+
+The Java client is the fully featured Hazelcast native client which offers all the Hazelcast features for you to use.
+
+NOTE: You do not need to set a license key for your Java clients for which you want to
+use Hazelcast Enterprise features. Hazelcast Enterprise license keys are
+required only for members.
+
+== Java Client Operation Modes
+
+The client has two operation modes because of the distributed nature of the data and cluster.
+
+**Smart Client**: In the smart mode, the clients connect to each cluster member.
+Since each xref:overview:data-partitioning.adoc[data partition] uses the well known and consistent hashing algorithm,
+each client can send an operation to the cluster member that owns the partition that holds their data,
+which increases the overall throughput and efficiency. Smart mode is the default mode.
+
+**Unisocket Client**: For some cases, the clients can be required to connect to
+a single member instead of to each member in the cluster. Firewalls, security, or
+some custom networking issues can be the reason for these cases.
+
+In the unisocket client mode, the clients only connect to one of the configured addresses.
+This single member behaves as a gateway to the other members.
+For any operation requested from the client, it redirects the request to the relevant member and
+returns the response back to the client returned from that member.
+
+== Handling Failures
+
+There are two main failure cases and configurations you can perform to achieve proper behavior.
+
+**Handling Client Connection Failure:**
+
+While the client is trying to connect initially to one of the members in the
+`ClientNetworkConfig.addressList`, all the members might be not available.
+Instead of giving up, throwing an exception and stopping the client,
+the client retries to connect as configured which is described in the
+<<configuring-client-connection-retry, Configuring Client Connection Retry section>>.
+
+The client executes each operation through the already established connection to the cluster.
+If this connection(s) disconnects or drops, the client tries to reconnect as configured.
+
+**Handling Retry-able Operation Failure:**
+
+While sending the requests to related members, operations can fail due to various reasons.
+Read-only operations are retried by default. If you want to enable retry for the other operations,
+you can set the `redoOperation` to `true`. See the <<enabling-redo-operation, Enabling Redo Operation section>>.
+
+You can set a timeout for retrying the operations sent to a member.
+This can be provided by using the property `hazelcast.client.invocation.timeout.seconds` in `ClientProperties`.
+The client retries an operation within this given period, of course, if it is a read-only operation or
+you enabled the `redoOperation` as stated in the above paragraph.
+This timeout value is important when there is a failure resulted by either of the following causes:
+
+* Member throws an exception.
+* Connection between the client and member is closed.
+* Client's heartbeat requests are timed out.
+
+See the <<client-system-properties, Client System Properties section>>
+for the description of the `hazelcast.client.invocation.timeout.seconds` property.
+
+When any failure happens between a client and member
+(such as an exception on the member side or connection issues), an operation is retried if:
+
+* it is certain that it has not run on the member yet
+* or if it is idempotent such as a read-only operation, i.e., retrying does not have a side effect.
+
+If it is not certain whether the operation has run on the member,
+then the non-idempotent operations are not retried.
+However, as explained in the first paragraph of this section,
+you can force all client operations to be retried (`redoOperation`)
+when there is a failure between the client and member.
+But in this case, you should know that some operations may run multiple times causing conflicts.
+For example, assume that your client sent a `queue.offer` operation to the member and
+then the connection is lost. Since there will be no respond for this operation,
+you will not know whether it has run on the member or not. If you enabled `redoOperation`,
+that `queue.offer` operation may rerun and this causes the same objects to be offered twice in the member's queue.
+

@@ -1,7 +1,7 @@
 = CREATE MAPPING
-:description: The CREATE MAPPING statement creates a table that stores essential metadata about a source's data model, data access patterns, and serialization formats so that the SQL service can connect to the data source and query it.
+:description: The CREATE MAPPING statement creates a table that stores essential metadata about a source's data model, connection parameters, and serialization formats so that the SQL service can connect to the data source and query it.
 
-The `CREATE MAPPING` statement creates a table that stores essential metadata about a source's data model, data access patterns, and serialization formats so that the SQL service can connect to the data source and query it.
+The `CREATE MAPPING` statement creates a table that stores essential metadata about a source's data model, connection parameters, and serialization formats so that the SQL service can connect to the data source and query it.
 
 == Syntax Summary
 
@@ -12,7 +12,7 @@ See some <<examples, practical examples>>.
 [source,sql]
 ----
 CREATE [OR REPLACE] MAPPING [IF NOT EXISTS] mapping_name
-[EXTERNAL NAME external_mapping_name]
+[EXTERNAL NAME external_name]
 [ ( column_name column_type [EXTERNAL NAME external_column_name] [, ...] ) ]
 TYPE type_identifier
 [ OPTIONS ( 'option_name' = 'option_value' [, ...] ) ]
@@ -26,14 +26,13 @@ You must provide the following:
 
 - `mapping_name`
 - `type_identifier`
-- `'option_name'` and `'option_value'`
 
 [cols="1a,2a,1a"]
 |===
 |Parameter | Description | Example
 
 |`OR REPLACE`
-|Overwrite an existing mapping of the same name.
+|Overwrite an existing mapping of the same name, if it exists.
 |
 [source,sql]
 ----
@@ -62,7 +61,7 @@ TYPE IMap
 OPTIONS ('keyFormat'='varchar','valueFormat'='int');
 ----
 
-|`external_mapping_name`
+|`external_name`
 |An optional name that identifies the object in the external system. For example, for a Kafka connector, the identifier is the topic name. By default, this parameter is equal to the mapping name.
 |-
 
@@ -80,11 +79,11 @@ OPTIONS ('keyFormat'='varchar','valueFormat'='json-flat');
 ----
 
 |`external_column_name`
-|An optional name of a column. If omitted, Hazelcast assumes this name is equal to the `column_name` parameter.
+|An optional name of a column. If omitted, Hazelcast assumes this name is equal to the `column_name` parameter. For key-value connectors (Kafka, IMap), the key's and value's fields are prefixed by `__key` and `this`.
 |
 
 |`type_identifier`
-|The connector to use to map the data. For example, if you use the `IMap` type, data is mapped to a map.
+|The connector to use to map the data. For example, if you use the `IMap` type, data is mapped to a Hazelcast map.
 |
 [source,sql]
 ----
@@ -96,7 +95,7 @@ OPTIONS (
 ----
 
 |`'option_name'`, `'option_value'`
-|Connector parameters. Check the xref:integrate:connectors.adoc[reference page] for your connector to find out what values you can use. These parameters must be enclosed in single quotes.
+|Connector parameters. Check the xref:integrate:connectors.adoc[reference page] for your connector to find out what values you can use. These parameters must be enclosed in single quotes (a SQL `VARCHAR` literal).
 |
 ```sql
 CREATE MAPPING my_topic(
@@ -113,10 +112,9 @@ OPTIONS (
 |===
 
 == Permissions
+[.enterprise]*Enterprise*
 
-In Hazelcast Enterprise, you can grant or deny permission for certain clients to use this statement.
-
-See xref:security:native-client-security.adoc#sql-permission[SQL Permissions].
+If xref:security:enabling-jaas.adoc[security] is enabled, you can grant or deny permission for certain clients to use this statement. See xref:security:native-client-security.adoc#sql-permission[SQL Permissions].
 
 == Auto-resolving Columns and Options
 

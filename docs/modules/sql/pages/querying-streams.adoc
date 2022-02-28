@@ -1,8 +1,7 @@
 = Stream Processing in SQL
-:description: You can query data in a mapping to a streaming source, using standard SQL as well as some non-standard SQL for features such as windowed aggregations. 
-:page-beta: true
+:description: You can run SQL queries on streaming data, using standard SQL as well as some custom functions for features such as streaming aggregations.
 
-Stream processing is a programming paradigm for performing computations over events as they arrive. These events are never-ending, which is why they are often described as _unbounded_. 
+Stream processing is a programming paradigm for continuously performing computations over events as they arrive. The streams are never-ending, which is why they are often described as _unbounded_.
 
 {description}
 
@@ -29,7 +28,7 @@ This guide explains how to query streams, using the following `trades` data as a
 
 == Creating a Mapping to a Streaming Source
 
-To allow Hazelcast to read data from a streaming source, you need to create a mapping to it. For example, the mapping for the `trades` topic may look like the following:
+To allow Hazelcast to read data from a streaming source, you need to create a mapping to it. For example, the mapping for the `trades` Kafka topic may look like the following:
 
 ```sql
 CREATE OR REPLACE MAPPING trades (
@@ -44,13 +43,11 @@ OPTIONS (
 );
 ```
 
-NOTE: At the moment, the only supported streaming source for SQL is Kafka.
-
-For details about creating a mapping to Kafka, see xref:mapping-to-kafka.adoc[].
+NOTE: At the moment, the only supported streaming source for SQL is a xref:mapping-to-kafka.adoc[Kafka mapping].
 
 == Basic Continuous Queries on a Stream
 
-You can query streams like you would query any batch source. The main difference between streaming and batch queries is that when you query a streaming source, Hazelcast creates a job in the background, which continues to run until you cancel it or the client disconnects.
+You can query streams like you would query any batch source. The main difference between streaming and batch queries is that when you query a streaming source, Hazelcast creates a job, which continues to run until you cancel it or the client disconnects.
 
 For example, you can monitor the whole `trades` stream:
 
@@ -58,9 +55,9 @@ For example, you can monitor the whole `trades` stream:
 SELECT * FROM trades;
 ```
 
-This query starts a job that monitors the `trades` stream for new events and executes the query on new ones.
+This query starts a job that monitors the `trades` stream for new events and executes the query on new events.
 
-The output contains all trades since the query was first executed. If no trades have yet been made, the output will be empty:
+The output contains all trades since the query was first executed. If no trades have yet been made, the output will be empty, however the query will not complete and the client will wait for more rows:
 
 ```
 +------------+------------+-----+----------+
@@ -75,7 +72,7 @@ SELECT * FROM trades
 WHERE price > 10;
 ```
 
-When new streaming events are received, Hazelcast executes your streaming query and returns the result. For example, the following query writes some trading data to the `trades` topic:
+When new events are received, Hazelcast immediately returns the new rows from your active query. For example, the following query writes some trading data to the `trades` topic:
 
 ```sql
 INSERT INTO trades VALUES
@@ -94,24 +91,28 @@ The result of the filter:
 
 == Managing Streaming Queries
 
-Hazelcast converts streaming queries into jobs, which are executed by the Jet engine. Streaming queries continue to run until the client disconnects or you explicitly cancel the job.
+Hazelcast converts streaming queries into jobs, which are executed by the Jet engine. Streaming queries continue to run until the client disconnects or you explicitly close the query.
 
-If the client stops receiving results, but doesn't disconnect, Hazelcast keeps a batch of those results in memory, using backpressure. See xref:architecture:distributed-computing.adoc#backpressure[Backpressure].
+If the client stops receiving results, but doesn't close the result, Hazelcast will fill up internal buffers and then the job will be blocked using backpressure. See xref:architecture:distributed-computing.adoc#backpressure[Backpressure].
 
-You can manage streaming queries, using SQL statements. For example, you may want to show all running queries, cancel a query, or alter a query. See xref:pipelines:job-management.adoc[].
+You can manage jobs backing SQL queries. For example, you may want to show all running jobs or cancel a query. See xref:pipelines:job-management.adoc[].
 
 [[aggregation]]
-== Windowed Aggregations on Streams
+== Stream Aggregation
 
-An aggregate function performs computations over a set of values and returns a single value. For example, the `COUNT()` function returns the number of rows in a table. However, streams are unbounded, making it impossible to count all the rows because they are continuously being appended. To use aggregate functions over a stream, you need a way to order related values and group them into _windows_.
+An aggregate function performs computations over a group of rows and returns a single value. For example, the `COUNT(*)` function returns the number of rows in the group. However, streams are unbounded, making it impossible to count all the rows because they are continuously being appended. To use aggregate functions over a stream, you need a way to group the rows into groups for which the engine can tell, when the group is complete.
 
-A common way to group values into windows is in relation to time, because one event in a stream happens after another. For example, you might want to perform some computations over all trades that happened in the past minute.
+A common way to group values is in relation to time, because a stream of events happening in real time is ordered by time. For example, you might want to perform some aggregation over all trades that happened in the past minute. When a next minute starts, Hazelcast can calculate the aggregation for the previous minute.
 
-To group related values into windows, you need to use a windowing function. Hazelcast supports the following windowing functions:
+To assign events into time-based windows, you need to use a windowing function. Hazelcast supports the following windowing functions:
 
-- `TUMBLE()`: A tumbling window that consists of a series of contiguous time intervals of a fixed size.
+- `TUMBLE()`: A tumbling window assigns events into non-overlapping windows of a fixed length.
 +
 image:ROOT:eventtime-tumbling.svg[A tumbling window]
+
+- `HOP`: A hopping window (sometimes also called _sliding window_), assigns events into overlapping windows of a fixed length. The 4th parameter of this function defines the hop size, i.e. the distance between the starts of two consecutive windows.
++
+image:ROOT:eventtime-sliding.svg[A hopping window]
 
 TIP: For a conceptual introduction to windowing and watermarks, see xref:pipelines:event-time.adoc[].
 
@@ -125,30 +126,30 @@ GROUP BY 1,2; <5>
 ```
 
 <1> Get a count of all trades that happened in the window.
-<2> Use a <<creating-watermarks, watermark>> to drop any late events.
-<3> Use the timestamp in the `trade_time` column to define the window size.
+<2> Use an ordered view of `tables` as input (explained later).
+<3> Use the timestamp in the `trade_time` column to determine the window the event belongs to.
 <4> Set the size of the tumbling window to one minute.
-<5> Group results in the same window, using the `window_start` and `window_end` columns.
+<5> Defines the grouping, the numbers `1` and `2` refer to 1st and 2nd column of the `SELECT` clause, therefore we group by the `window_start` and `window_end` columns.
 
-When new results are available for each one-minute window, they are returned:
+When new results are complete for each one-minute window, they are returned:
 
 ```
 +-------------------+-------------------+--------------------+
 |window_start       |window_end         |        total_trades|
 +-------------------+-------------------+--------------------+
 |2022-01-04T00:00   |2022-01-04T00:01   |                  45|
+...
 ```
 
 === Creating Watermarks
 
-Hazelcast can't emit the result of a windowed aggregation until it has received all the events belonging to the
-window. But streams are infinite, so to tell Hazelcast how long to wait, you must define a watermark.
+Hazelcast can't emit the result of a windowed aggregation until it has received all the events belonging to the window. But streams typically aren't strictly ordered by time, events arrive each with different latency. To tell Hazelcast how long to wait, you must define a watermark.
 
-Watermarks tell Hazelcast how long to wait by defining how much time is allowed between each event. This time is called the _maximum event lag_. Any event that is later than the maximum event lag is dropped.
+One way of assigning watermarks is defined by how much time an event is allowed to be delayed after the newest event received so far. This time is called the _maximum event lag_. Any event that is later than the maximum event lag is dropped. This is the only strategy currently supported.
 
 NOTE: Time is measured by the timestamps in the events, rather than the current time on a system clock.
 
-To impose order over streams, you can use the `IMPOSE_ORDER()` function to create a watermark. The `IMPOSE_ORDER()` function is a stateful function whose state is scoped for the duration of the query. This function injects watermarks that lag a fixed amount behind the maximum value of the field observed since the query started.
+Hazelcast calls the function to add watermarks `IMPOSE_ORDER()`, because it curbs the potentially unbounded disorder of the events in the stream to a fixed value. The `IMPOSE_ORDER()` function is a stateful function whose state is scoped for the duration of the query. This function injects watermarks that lag a fixed amount behind the maximum value of the field observed since the query started.
 
 ```sql
 SELECT *
@@ -159,27 +160,27 @@ FROM TABLE(IMPOSE_ORDER(
 );
 ```
 
-<1> The table that contains the event payload, including the timestamp.
+<1> The table that contains the events, including the timestamp.
 <2> A pointer to the column that contains the timestamp for the watermark.
-<3> The maximum event lag. Any events that are later than this lag are dropped. For example, an event with a timestamp of `yyyy-mm-dd 23:59:59.5` is added to the window. If another event is processed with a timestamp that's 0.5 seconds or more older, such as ``yyyy-mm-dd 23:59:58.9`, that event is dropped because it is too old.
+<3> The maximum event lag. Any events that are later than this lag are dropped. For example, an event with a timestamp of `yyyy-mm-dd 23:59:59.5` is added to the window. If another event is processed with a timestamp that's 0.5 seconds or more old, such as ``yyyy-mm-dd 23:59:58.9`, that event is dropped because it is too old.
 
-If an event is later than the defined maximum event lag, that event is dropped and an entry like the following is added to the log:
+If an event is delayed by more than the defined maximum event lag, it is dropped.
 
-```
- Late event dropped. currentWatermark=Watermark{ts=23:03:00.000}
-```
+NOTE: The above query doesn't currently run in Hazelcast. The `IMPOSE_ORDER()` function must be only used together with `TUMBLE` or `HOP` functions.
 
 For better readability, it's useful to create a view for the watermark like so:
 
 ```sql
 CREATE VIEW trades_ordered AS
-  SELECT *
+SELECT *
   FROM TABLE(IMPOSE_ORDER(
-    TABLE(trades),
-    DESCRIPTOR(trade_time),
-    INTERVAL '0.5' SECONDS)
-  );
+  TABLE(trades),
+  DESCRIPTOR(trade_time),
+  INTERVAL '0.5' SECONDS)
+);
 ```
+
+We already used this view above. Without the view, you would have to have a nested call to `IMPOSE_ORDER` as the first argument to `TUMBLE`/`HOP` function, which is harder to read.
 
 == Related Resources
 

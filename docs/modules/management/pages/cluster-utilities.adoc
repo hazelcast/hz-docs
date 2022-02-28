@@ -264,3 +264,77 @@ When the TLS mutual authentication is enabled, you have to provide the client ce
 ----
 
 NOTE: Currently, this script is not supported on the Windows platforms.
+
+== Integrity Checker
+
+The integrity checker is a utility developed for Java developers who build Hazelcast applications.
+It checks the classpath of your applications built with Hazelcast JAR dependencies (e.g., `hazelcast` or `hazelcast-sql`, using the assembly or other uber-JAR plugins).
+This check involves the verification of all serializer hooks are loaded during a Hazelcast member startup, that is, it verifies that
+the executable of your application contains all the required `META-INF/services` files.
+
+For example, there may be cases where:
+
+* you add a new `DataSerializer` hook for your application, but do not update the corresponding `/META-INF/services/com.hazelcast.DataSerializerHook` file
+* you build an application with a plugin that merges dependency JARs into the application's executable JAR; the plugin might be misconfigured
+and `DataSerializerHook` files are not merged correctly, resulting in a corrupted executable.
+
+The integrity checker is disabled by default and can be used for your development clusters on your local machines
+(not recommended for production clusters where the integrity of applications are already verified, and since it is a compute-intensive check).
+
+You can enable it in the configuration as follows.
+
+[tabs] 
+==== 
+YAML:: 
++ 
+-- 
+[source,yaml]
+----
+hazelcast:
+  integrity-checker:
+    enabled: true
+----
+--
+
+XML::
++
+[source,xml]
+----
+<hazelcast>
+    <integrity-checker enabled="true"/>
+</hazelcast>
+----
+
+Java member API::
++
+[source,java]
+----
+Config config = new Config();
+config.setIntegrityCheckerEnabled(true);
+
+HazelcastInstance hazelcast = Hazelcast.newHazelcastInstance(config);
+----
+
+System Prop::
++
+[source,shell]
+----
+-Dhz.integritychecker.enabled=true
+----
+
+Environment Variable::
++
+[source,shell]
+----
+HZ_INTEGRITYCHECKER_ENABLED=true
+----
+====
+
+If the verification fails, the member does not start and the checker prints which hook
+is missing its corresponding `/META-INF/service/com.hazelcast.DataSerializerHook`. An example log output in the terminal is as follows.
+
+[source,shell,subs="attributes+"]
+----
+SEVERE: [192.168.56.1]:5701 [dev] [{full-version}] Node creation failed
+com.hazelcast.core.HazelcastException: Failed to verify distribution integrity, unable to load DataSerializerHook: com.hazelcast.aggregation.impl.AggregatorDataSerializerHook
+----

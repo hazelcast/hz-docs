@@ -1,18 +1,18 @@
 = Working with JSON Data in SQL
-:description: In Hazelcast, the SQL service supports two data types for JSON data: JSON-FLAT, which does not allow you to query nested keys/values and JSON, which supports nested queries and JSON functions.
+:description: In Hazelcast, the SQL service supports ways of working with JSON data: `json-flat`, which does not allow you to query nested keys/values and `json`, which supports nested queries and JSON functions.
 
-JSON is a semi-structured data type used for holding JSON (JavaScript Object Notation) data. In Hazelcast, the SQL service supports the following JSON data types:
+JSON is a semi-structured data type used for holding JSON (JavaScript Object Notation) data. In Hazelcast, the SQL service supports the following ways of working with JSON data:
 
-- `JSON`: Maps JSON data to a single column where you can use <<jsonpath, JsonPath>> syntax to query and filter it, including nested levels.
-- `JSON-FLAT`: Maps JSON data to columns where you can query only top-level keys/values.
+- `json`: Maps JSON data to a single column of `JSON` type where you can use <<jsonpath, JsonPath>> syntax to query and filter it, including nested levels.
+- `json-flat`: Maps JSON top-level fields to columns with non-JSON types where you can query only top-level keys.
 
-== JSON
+== `json`
 
 The `JSON` data type comes with full support for querying JSON in maps and Kafka topics.
 
-NOTE: The JSON data type is not supported for xref:mapping-to-a-file-system.adoc[file mappings]. Files support the <<json-flat, `JSON-FLAT` data type>>.
+NOTE: The JSON data type is currently not supported for xref:mapping-to-a-file-system.adoc[file mappings]. Files support the <<json-flat, `json-flat` data type>>.
 
-=== Mapping to the `JSON` Type
+=== Mapping to the `json` Type
 
 You can map JSON data to a single column, by creating a mapping to one of the following data sources:
 
@@ -23,7 +23,7 @@ For example, to map the JSON data type to a value in a map:
 
 ```sql
 CREATE MAPPING countries
-type IMap OPTIONS('keyFormat'='int', 'valueFormat'='json');
+TYPE IMap OPTIONS('keyFormat'='int', 'valueFormat'='json');
 ```
 
 This statement creates a mapping to a map with two columns where the key is an `INTEGER` and the value is `JSON`:
@@ -31,31 +31,22 @@ This statement creates a mapping to a map with two columns where the key is an `
 - `__key`: A key as an integer
 - `this`: JSON data
 
-=== Adding JSON to a Table
+=== Creating JSON Data
 
-You can add new JSON data to a table, using a JSON-formatted string, a xref:serialization:serializing-json.adoc[`HazelcastJsonValue`] object, or one of the following JSON functions:
+You can create new JSON data using a JSON-formatted string, or using one of the following JSON functions:
 
 - xref:functions-and-operators.adoc#json-functions[JSON_ARRAY]
 - xref:functions-and-operators.adoc#json-functions[JSON_OBJECT]
 
 .Example JSON-formatted string
-[%collapsible]
 ====
 ```json
 '{"country": "United Kingdom", "cities": [{"city": "London"}]}'
 ```
 ====
 
-.Example HazelcastJsonValue
-[%collapsible]
-====
-```java
-hzInstance.getSql().execute("INSERT INTO countries VALUES (?, ?)", 1L, new HazelcastJsonValue(someJsonStringWithCountries));
-```
-====
 
 .Example JSON function
-[%collapsible]
 ====
 ```sql
 INSERT INTO countries VALUES (1, JSON_OBJECT('country':'United Kingdom', 'cities': JSON_ARRAY(JSON_OBJECT('city':'London'))))
@@ -69,28 +60,32 @@ To query and/or filter JSON, use the <<jsonpath, JsonPath>> syntax in the follow
 - xref:functions-and-operators.adoc#json-functions[JSON_QUERY]
 - xref:functions-and-operators.adoc#json-functions[JSON_VALUE]
 
+The `JSON_QUERY` function returns a JSON value, whereas the `JSON_VALUE` function returns a non-JSON value, which is a `VARCHAR` by default. If you use these functions to extract a string field, `JSON_VALUE` will return the value directly, while `JSON_QUERY` will return it as JSON, in single quotes, and with special characters escaped. `JSON_VALUE` can't be used to extract arrays or objects.
+
 JsonPath is a query language for JSON. The JsonPath format starts with a dollar (`$`) operator that refers to the root level of the JSON. From there, you can add other operators to traverse the data and filter the results.
 
 For example, consider the following JSON data:
 
 ```json
-"countries": [
-  {
-  "country":"United Kingdom",
-  "cities": [{"city": "London"}]
-  },
-  {
-  "country":"France",
-  "cities": [{"city": "Lyon"}]
-  },
-  {
-  "country":"Turkey",
-  "cities": [{"city": "Istanbul"}]
-  }
-]
+{
+  "countries": [
+    {
+      "country":"United Kingdom",
+      "cities": [{"city": "London"}]
+    },
+    {
+      "country":"France",
+      "cities": [{"city": "Lyon"}]
+    },
+    {
+      "country":"Turkey",
+      "cities": [{"city": "Istanbul"}]
+    }
+  ]
+}
 ```
 
-The following examples show you how to use JsonPath to query this dataset.
+The following examples show you how to use JsonPath to query this document.
 
 [cols="50%a,50%a"]
 |===
@@ -104,6 +99,7 @@ SELECT
    FROM countries;
 ----
 |
+Returns the whole document.
 [source,json]
 ----
 {"countries":[{"country":"United Kingdom","cities":[{"city":"London"}]},{"country":"France","cities":[{"city":"Lyon"}]},{"country":"Turkey","cities":[{"city":"Istanbul"}]}]}
@@ -117,6 +113,7 @@ SELECT
    FROM countries;
 ----
 |
+Returns the `cities` property at any depth.
 [source,json]
 ----
 [{"city": "London"},{"city": "Lyon"},{"city": "Istanbul"}]
@@ -130,6 +127,7 @@ SELECT
    FROM countries;
 ----
 |
+Returns all fields of the `countries` property in an array. The `countries` property must be in the root object.
 [source,json]
 ----
 ["United Kingdom",{"city": "London"},"France",{"city": "Lyon"},"Turkey",{"city": "Istanbul"}]
@@ -143,6 +141,7 @@ SELECT
    FROM countries;
 ----
 |
+Returns the `city` properties under the `countries` property in the root document as an array.
 [source,json]
 ----
 ["London","Lyon","Istanbul"]
@@ -156,6 +155,7 @@ SELECT
    FROM countries;
 ----
 |
+Returns the third element of the `countries` array.
 [source,json]
 ----
 {"country":"Turkey","cities":[{"city":"Istanbul"}]}
@@ -165,26 +165,27 @@ SELECT
 [source,sql]
 ----
 SELECT
-   JSON_QUERY(this, '$.countries[0,1]' WITH WRAPPER)
+   JSON_QUERY(this, '$.countries[0,2]' WITH WRAPPER)
    FROM countries;
 ----
 |
+Returns the first and third elements of the `countries` array.
 [source,json]
 ----
-[{"country":"United Kingdom","cities":[{"city":"London"}]},{"country":"France","cities":[{"city":"Lyon"}]}]
+[{"country":"United Kingdom","cities":[{"city":"London"}]},{"country":"Turkey","cities":[{"city":"Istanbul"}]}]]
 ----
-
 |
 [source,sql]
 ----
 SELECT
-   JSON_QUERY(this, '$.countries[*]?(@..city=="London"')
+   JSON_QUERY(this, '$.countries[0 to 2]' WITH WRAPPER)
    FROM countries;
 ----
 |
+Returns elements one through three of the `countries` array, including the third element.
 [source,json]
 ----
-{"country":"United Kingdom","cities":[{"city":"London"}]}
+[{"country":"United Kingdom","cities":[{"city":"London"}]},{"country":"France","cities":[{"city":"Lyon"}]},{"country":"Turkey","cities":[{"city":"Istanbul"}]}]
 ----
 
 |===
@@ -203,33 +204,36 @@ These are the supported operators from the JsonPath standard.
 |$
 |Root
 
-|@
-|Current node
-
 |*
 |Wildcard
 
-|..
-|Recursive descent
-
 |.<name>
-|Child
+|Child property
+
+|..
+|Child property at any level deeper
 
 |['<name>' (, '<name>')]
-|Children
+|List of child properties
 
 |[<number> (, <number>)]
-|Indexes
+|List of array indexes
+
+|[<number> *to* <number>]
+|Array range
 
 |?(<expression>)
 |Filter expression
+
+|@
+|Current node in filter expression
 |===
 
-== JSON-FLAT
+== `json-flat`
 
-The `JSON-FLAT` data type comes with partial support for querying JSON in maps, Kafka topics, and files.
+The `json-flat` format comes with partial support for querying JSON in maps, Kafka topics, and files.
 
-=== Mapping to the `JSON-FLAT` Type
+=== Mapping to the `json-flat` Type
 
 You can map JSON data to a multiple columns, by creating a mapping to one of the following data sources:
 
@@ -240,11 +244,13 @@ You can map JSON data to a multiple columns, by creating a mapping to one of the
 For example, consider the following JSON data:
 
 ```json
-"countries": "United Kingdom",
-"cities": "London"
+{
+  "countries": "United Kingdom",
+  "cities": "London"
+}
 ```
 
-To map the `JSON-FLAT` data to a value in a map, you need to provide the JSON keys as column names:
+To map the JSON data using the `json-flat` format in a map, you need to provide the JSON keys as column names:
 
 ```sql
 CREATE MAPPING cities (
@@ -265,7 +271,7 @@ INSERT INTO cities VALUES
 (1, 'United Kingdom','London');
 ```
 
-=== Querying `JSON-FLAT`
+=== Querying `json-flat`
 
 To query the JSON values, select the column names.
 
@@ -321,9 +327,6 @@ TIMESTAMP
 
 TIMESTAMP WITH TIME ZONE
 
-
-
-a|All other types
-| OBJECT
+OBJECT
 
 |===

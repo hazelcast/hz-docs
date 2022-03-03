@@ -15,7 +15,7 @@ See some <<examples, practical examples>>.
 ----
 SELECT [ DISTINCT ] [ * | expression [ [ AS ] expression_alias ] [, ...] ]
 FROM from_item [, ...]
-[JOIN from_item [ ON join_condition | USING ( join_column [, ...] ) ]]
+[[INNER | LEFT | RIGHT | CROSS] JOIN from_item [ ON join_condition | USING ( join_column [, ...] ) ]]
 [ WHERE condition ]
 [ GROUP BY { expression | expression_index } [, ...] ]
 [ HAVING condition [, ...] ]
@@ -26,7 +26,7 @@ FROM from_item [, ...]
 
 The `SELECT` statement accepts the following parameters.
 
-You must provide an `expression` parameter and a `from_item` parameter.
+You must provide at least one `expression` parameter in the `SELECT` clause.
 
 [cols="1a,2a,1a"]
 |===
@@ -34,11 +34,11 @@ You must provide an `expression` parameter and a `from_item` parameter.
 
 |`DISTINCT`
 |The `SELECT DISTINCT` statement returns only unique rows, ignoring any duplicates.
-|<<get-columns, Get columns>>
+|<<get-columns-by-name, Get columns>>
 
 |`expression`
-|The columns to select such as names of columns or the `*` wildcard.
-|<<get-columns, Get columns>>
+|The columns to select such as names of columns, the `*` wildcard, or an expression.
+|<<get-columns-by-name, Get columns>>
 
 |`from_item`
 |A table expression that can be one of the following:
@@ -47,7 +47,7 @@ You must provide an `expression` parameter and a `from_item` parameter.
 - `(SELECT ... ) AS table_alias`
 - `TABLE(function_name([ argument [, ...] ] ))`
 - `(VALUES (expression, [, ...]) [, ...] )`
-|<<get-columns, Get columns>>
+|<<get-columns-by-name, Get columns>>
 
 | `JOIN`
 |An optional clause that, if given, combines the results of two or more table expressions based on the values of particular columns. `JOIN` expressions (also called joins) define a data source in the `FROM` sub-clause.
@@ -65,6 +65,10 @@ You must provide an `expression` parameter and a `from_item` parameter.
 | `HAVING condition`
 |An optional filter that selects only group rows that satisfy the condition. Unlike `WHERE` filters, the `HAVING` filter is applied to group rows created by a `GROUP BY` subquery or aggregate functions such as `SUM()`.
 |<<aggregate-data, Aggregate data>>
+
+|`ORDER BY`
+|An optional clause that specifies the order of rows to be returned by the query. Without this clause, the order is arbitrary.
+|<<sort, Sort and limit results>>
 
 |===
 
@@ -146,11 +150,10 @@ WHERE likes > 20 AND name = 'Mary';
 +------------+--------------------+------------+
 ```
 
+[[sort]]
 === Sort and Limit Results
 
 You can use the standard SQL clauses `ORDER BY`, `LIMIT`, and `OFFSET` to sort and limit the result set of a query.
-
-NOTE: To use these clauses on map entries, the map entries must be indexed. See xref:query:indexing-maps.adoc[].
 
 NOTE: You cannot use these clauses in subqueries.
 
@@ -183,15 +186,13 @@ LIMIT 5;
 
 You can use the standard SQL `JOIN` clause to combines rows from two or more tables, based on a related column among them.
 
-This clause has the following limitatons:
+This clause has the following limitations:
 
 - You cannot join two streams.
 
-- The table on the opposite side of a `RIGHT JOIN` or a `LEFT JOIN` cannot be a stream.
+- The table on the outer side of a `RIGHT JOIN` or a `LEFT JOIN` cannot be a stream.
 
-- At the moment, Hazelcast supports only `INNER JOIN`, `LEFT JOIN` and `RIGHT JOIN`.
-
-- You cannot reorder the results of a join. Tables are always joined in the order they appear in the `FROM` clause.
+- Hazelcast currently doesn't do join order optimization. Tables are always joined in the order they appear in the `FROM` clause. Reordering the tables in the JOIN clause can greatly affect the query performance.
 
 The following query gets the names of all employees that are managers and their departments.
 
@@ -199,10 +200,10 @@ The following query gets the names of all employees that are managers and their 
 ----
 SELECT
     managers.department, employees.name
-FROM 
+FROM
     managers
 JOIN employees
-ON managers.manager_id = employees.employee_id
+ON managers.manager_id = employees.manager_id
 ----
 
 The following query is equivalent.
@@ -213,7 +214,7 @@ SELECT
     managers.department, employees.name
 FROM 
     managers, employees
-WHERE managers.manager_id = employees.employee_id
+WHERE managers.manager_id = employees.manager_id
 ----
 
 === Alias Columns in the Query Results
@@ -262,18 +263,19 @@ SELECT SUM(likes) AS total_likes FROM csv_likes;
 +--------------------+
 ```
 
-To filter for the names that have more than 100 likes, use the `HAVING` clause, which is equivalent to the `WHERE` clause but for aggregate groups.
+To filter for the names that have more than 100 likes, use the `HAVING` clause, which is equivalent to the `WHERE` clause, but is applied after the aggregation is performed.
 
 [source,sql]
 ----
-SELECT name AS most_liked
+SELECT name AS much_liked
 FROM csv_likes
-GROUP BY name HAVING SUM(likes) > 100;
+GROUP BY name
+HAVING SUM(likes) > 100;
 ----
 
 ```
 +--------------------+
-|most_liked          |
+|much_liked          |
 +--------------------+
 |Jerry               |
 |Greg                |

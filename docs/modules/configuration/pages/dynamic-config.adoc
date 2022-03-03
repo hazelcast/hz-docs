@@ -9,10 +9,11 @@
 
 You can add dynamic configuration, using the following options:
 
-- xref:dynamic-config-programmatic-api.adoc[Programmatic API] (Java member or client)
-- The xref:dynamic-config-update-and-reload.adoc[`/config/update` and `/config/reload` REST endpoints]
-- Dedicated REST endpoints such as `/addWanConfig`
+- Programmatic API (Java member or client)
 - SQL
+- Management Center
+- Update and reload REST endpoints
+- Dedicated REST endpoints such as `/addWanConfig`
 
 These options support different dynamic configuration changes, and not all changes support <<persistence, persistence>>. See the following table for what's available with each option.
 
@@ -20,40 +21,43 @@ NOTE: To use the REST endpoints you need an Enterprise license.
 
 .Supported dynamic configuration options
 |===
-| Dynamic change | Programmatic API | Dedicated REST endpoint |`/config/update` and `/config/reload` REST endpoints| SQL | Supports persistence
+| Dynamic change | Programmatic API | Dedicated REST endpoint |Update and reload| SQL | Management Center |Supports persistence
 
-| Add configuration for a new <<supported-data-structures, supported data structure>>
-| Yes
+| Add a new configuration block for a supported data structure
+| <<supported, Yes>>
 | No
-| Yes
+| <<supported, Yes>>
 | No
-| Yes
+| xref:{page-latest-supported-mc}@management-center:clusters:update-config.adoc[Yes]
+| <<persistence, Yes>>
 
-| xref:wan:rest-api.adoc#wr-dynamically-adding[Add a new WAN configuration]
+| Add a new WAN configuration block
 | No
-| Yes
-| Yes
+| xref:wan:rest-api.adoc#wr-dynamically-adding[Yes]
+| xref:dynamic-config-update-and-reload.adoc[Yes]
 | No
-| Yes
+| xref:{page-latest-supported-mc}@management-center:clusters:update-config.adoc[Yes]
+| <<persistence, Yes>>
 
-| xref:deploy:updating-license-rest.adoc[Update a Hazelcast Enterprise license]
+| Update a Hazelcast Enterprise license
 | No
-| Yes
-| Yes
+| xref:deploy:updating-license-rest.adoc[Yes]
+| xref:dynamic-config-update-and-reload.adoc[Yes]
 | No
-| Yes
+| xref:{page-latest-supported-mc}@management-center:clusters:update-config.adoc[Yes]
+| <<persistence, Yes>>
 
-| xref:query:indexing-maps.adoc[Add a new index to an existing map]
-| Yes
+| Add a new index to an existing map
+| xref:query:indexing-maps.adoc[Yes]
 | No
 | No
-| Yes
+| xref:query:indexing-maps.adoc[Yes]
+|Yes, using xref:sql:create-index.adoc[`CREATE INDEX`] in the xref:{page-latest-supported-mc}@management-center:tools:sql-browser.adoc[SQL browser]
 | No
 
 |===
 
-Although you can configure members to xref:security:native-client-security.adoc#handling-permissions-when-a-new-member-joins[apply the client permissions of a new member], you can't use dynamic configuration to make changes to client permissions.
-
+[[supported]]
 === Supported Data Structures
 
 Dynamic configuration is supported for the following data structures:
@@ -82,16 +86,19 @@ By default, dynamic configuration changes are stored in-memory and are lost when
 
 To persist changes, you must follow one of the following procedures:
 
-=== Persisting Changes in Kubernetes
+- <<manual, Manual deployments>>
+- <<k8, Kubernetes>>
 
-To persist changes in Kubernetes, you must do the following:
+Persistence is idempotent. If a member fails to write changes to a file, you can add the same dynamic configuration again. For example, the following scenario is valid:
 
-. Update the ConfigMap with any of the configuration <<options, options>> that are supported by the `/config/reload` or `/config/update` REST endpoints.
-. Apply your ConfigMap changes to Kubernetes. For example, you can use `kubectl replace configmap`.
-. Do one of the following:
-** Wait 2-3 minutes for the ConfigMap changes to be applied to your pods, then call the xref:dynamic-config-update-and-reload.adoc[`/config/reload`] endpoint.
-** Call the xref:dynamic-config-update-and-reload.adoc[`config/update` REST endpoint] to reflect the changes you made to the ConfigMap in Hazelcast.
+. Start a cluster with 3 members.
+. Try adding dynamic configuration for a new map.
+. The 2nd member doesn't have write permissions for the configuration file, so it doesn't persist the changes.
+. Give the 2nd member write permissions.
+. Add the same map configuration again.
+. This time, the map configuration is added successfully.
 
+[[manual]]
 === Persisting Changes in Manual Deployments
 
 To persist changes, you must do the following:
@@ -104,16 +111,16 @@ NOTE: If you use the Java member API, you need to use an <<config-file, API>> th
 
 . Add dynamic configuration, using an <<options, option that supports persistence>>.
 
-=== Idempotentcy
+[[k8]]
+=== Persisting Changes in Kubernetes
 
-Persistence is idempotent. If a member fails to write changes to a file, you can add the same dynamic configuration again. For example, the following scenario is valid:
+To persist changes in Kubernetes, you must do the following:
 
-. Start a cluster with 3 members.
-. Try adding dynamic configuration for a new map.
-. The 2nd member doesn't have write permissions for the configuration file, so it doesn't persist the changes.
-. Give the 2nd member write permissions.
-. Add the same map configuration again.
-. This time, the map configuration is added successfully.
+. Update the ConfigMap with any of the configuration <<options, options>> that are supported by the `/config/reload` or `/config/update` REST endpoints.
+. Apply your ConfigMap changes to Kubernetes. For example, you can use `kubectl replace configmap`.
+. Do one of the following:
+** Wait 2-3 minutes for the ConfigMap changes to be applied to your pods, then call the xref:dynamic-config-update-and-reload.adoc[`/config/reload`] endpoint.
+** Call the xref:dynamic-config-update-and-reload.adoc[`config/update` REST endpoint] to reflect the changes you made to the ConfigMap in Hazelcast.
 
 == Dynamic Configuration and User Customizations
 
@@ -132,3 +139,7 @@ take the following considerations into account:
 classpath or resolvable via xref:clusters:deploying-code-on-member.adoc[user code deployment].
 * Instances (or similarly factory instances) have to be serializable. This is because the entire configuration needs
 to be sent over the network to all cluster members, and their classes have to be available on each member's local classpath.
+
+== Limitations
+
+Although you can configure members to xref:security:native-client-security.adoc#handling-permissions-when-a-new-member-joins[apply the client permissions of a new member], you can't use dynamic configuration to make changes to client permissions.

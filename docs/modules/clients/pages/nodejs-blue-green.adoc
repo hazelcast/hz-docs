@@ -1,0 +1,76 @@
+= Configuring for Blue-Green Deployments
+
+
+Hazelcast provides disaster recovery for the client-cluster connections and can use the well-known blue-green mechanism,
+so that a Node.js client is automatically diverted to another cluster on demand or when the intended
+cluster becomes unavailable. These features require Hazelcast Enterprise edition on the server side.
+
+Using the blue-green system, the clients can connect to another cluster automatically
+when they are blacklisted from their currently connected cluster.
+See xref:getting-started:blue-green.adoc[here] for information on the blue-green deployment support.
+
+With the disaster recovery, the clients tries to connect to alternative clusters
+described in the failover config when one of your clusters is gone due to a failure.
+See xref:clients:java.adoc#disaster-recovery-mechanism[here] for information on the disaster recovery.
+
+== Before You Begin
+
+To complete the tutorial in this section, you need the following:
+
+[cols="1a,1a"]
+|===
+|Prerequisites|Useful resources
+
+|Trial license
+|https://trialrequest.hazelcast.com/[Hazelcast website]
+
+|Docker image for the full Hazelcast distribution
+|xref:get-started-enterprise.adoc[Install Hazelcast Enterprise]
+|===
+
+THe following steps start two Hazelcast clusters each having a single server and a Node.js client in a blue-green deployment scenario.
+
+. Run the following Docker command in a terminal to start a cluster named `blue`.
++
+[source,shell,subs="attributes+"] 
+----
+docker run \
+    -e HZ_CLUSTERNAME=blue \
+    -e HZ_LICENSEKEY=<your license key> \ <1>
+    -p 5701:5701 hazelcast/hazelcast-enterprise:{full-version}
+----
+<1> Replace the `<your license key>` placeholder with your Hazelcast Enterprise license key.
+. Run the following Docker command in a new terminal to start a cluster named `green`.
++
+[source,shell,subs="attributes+"] 
+----
+docker run \
+    -e HZ_CLUSTERNAME=green \
+    -e HZ_LICENSEKEY=<your license key> \
+    -p 5701:5701 hazelcast/hazelcast-enterprise:{full-version}
+----
+. In order to configure the client for blue-green deployment or disaster recovery you need to start
+it with the `Client.newHazelcastFailoverClient` function and provide the client failover configuration, like shown below.
++
+[source,javascript]
+----
+const client = await Client.newHazelcastFailoverClient({
+    tryCount: 3, <1>
+    clientConfigs: [ <2>
+        {
+            clusterName: 'blue',
+            network: {
+                clusterMembers: 'blue.127.0.0.1:5701'
+            }
+        },
+        {
+            clusterName: 'green',
+            network: {
+                clusterMembers: 'green.127.0.0.1:5701'
+            }
+        }
+    ]
+});
+----
+<1> Count of attempts to connect to a cluster. Its default value is `Number.MAX_SAFE_INTEGER`. It must be non-negative.
+<2> List of client configs for alternative clusters to be used by the client. 

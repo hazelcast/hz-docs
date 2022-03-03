@@ -1,0 +1,320 @@
+= Securing Client Connections
+:description: Security features of Hazelcast Node.js client include using TLS/SSL for connections between members and between clients and members, mutual authentication and credentials.
+
+{description} These security features require Hazelcast Enterprise edition on the server side. By default, the client does not use any authentication method and just uses the configured cluster name to connect to members.
+
+== Before You Begin
+
+To complete the tutorials in this section, you need the following:
+
+[cols="1a,1a"]
+|===
+|Prerequisites|Useful resources
+
+|Trial license
+|https://trialrequest.hazelcast.com/[Hazelcast website]
+
+|Hazelcast Enterprise distribution
+|https://hazelcast.com/get-started/download/[ZIP^] or https://hazelcast.com/get-started/download/[TAR^]
+
+|===
+
+For enabling the security features, you are going to use the Hazelcast ZIP/TAR distribution for convenience.
+It is simpler to configure the server side using the configuration files that come with this distribution.
+
+Once you download and
+extract the https://hazelcast.com/get-started/download/[ZIP^] or https://hazelcast.com/get-started/download/[TAR^] distribution,
+you will find the `hazelcast.xml` and `hazelcast-full-example.xml` configuration files in the `config` and `/config/examples`  directories, respectively.
+The server side configurations suggested in the following tutorials must be made in these files.
+
+== TLS/SSL
+
+THe following steps start a Hazelcast server and Node.js client to communicate each other over SSL.
+
+. Configure the server side by editing `/config/examples/hazelcast-full-example.xml` as follows:
+** change the `<ssl enabled="false"/>` line to `<ssl enabled="true"/>`
+** provide your license key for the `<license-key>Your Hazelcast Enterprise License Key</license-key>` line.
+. Start a single-server cluster using the Hazelcast start script.
++
+[source,shell]
+----
+/bin hz start -c=./config/examples/hazelcast-full-example.xml
+----
+. To configure and connect the client to the cluster, create a `secure-client.js` file with the following code and run `node secure-client.js`.
++
+[source,javascript]
+----
+'use strict';
+
+const { Client } = require('hazelcast-client');
+
+(async () => {
+    try {
+        const cfg = {
+            network: {
+                clusterMembers: ['127.0.0.1:5701'],
+                ssl: {
+                    enabled: true
+                }
+            }
+        };
+        const client = await Client.newHazelcastClient(cfg);
+
+    } catch (err) {
+        console.error('Error occurred:', err);
+        process.exit(1);
+    }
+})();
+----
+
+== Mutual Authentication
+
+The following steps enable the connection between a Hazelcast cluster and Node.js client to be mutually authenticated.
+
+. Configure the server side by editing the `config/hazelcast.xml` as follows.
++
+[source,xml]
+----
+<hazelcast>
+    ...
+    <network>
+        ...
+        <ssl enabled="true">
+            <properties>
+                <property name="javax.net.ssl.mutualAuthentication">REQUIRED</property>
+            </properties>
+        </ssl>
+    </network>
+</hazelcast>
+----
+. Start a single-server cluster using the Hazelcast start script.
++
+[source,shell]
+----
+/bin hz start
+----
+. To configure and connect the client to the cluster, create a `mutual-auth-client.js` file with the following code and run `node mutual-auth-client.js`.
++
+[source,javascript]
+----
+'use strict';
+
+const { Client } = require('hazelcast-client');
+
+(async () => {
+    try {
+        const cfg = {
+            network: {
+                clusterMembers: ['127.0.0.1:5701'],
+                ssl: {
+                    enabled: true
+                    sslOptionsFactoryProperties: {
+                        caPath: 'ca.pem',
+                        keyPath: 'key.pem',
+                        certPath: 'cert.pem',
+                        rejectUnauthorized: false
+                    }
+                }
+            }
+        };
+        const client = await Client.newHazelcastClient(cfg);
+
+    } catch (err) {
+        console.error('Error occurred:', err);
+        process.exit(1);
+    }
+})();
+----
+
+== Authenticating with Username/Password
+
+The following steps enable a Node.js client to connect to a Hazelcast cluster with username and password credentials.
+
+. Configure the server side by editing the `config/hazelcast.xml` as follows.
++
+[source,xml]
+----
+<hazelcast>
+    ...
+    <security enabled="true">
+        <realms>
+            <realm name="usernamePasswordCredentials">
+                <identity>
+                    <username-password username="admin" password="some-strong-password"/>
+                </identity>
+            </realm>
+        </realms>
+        <member-authentication realm="usernamePasswordCredentials"/>
+    </security>
+    ...
+</hazelcast>
+----
+. Start a single-server cluster using the Hazelcast start script.
++
+[source,shell]
+----
+/bin hz start
+----
+. To configure and connect the client to the cluster, create a `credentials-client.js` file with the following code and run `node credentials.js`.
++
+[source,javascript]
+----
+'use strict';
+
+const { Client } = require('hazelcast-client');
+
+(async () => {
+    const client = await Client.newHazelcastClient({
+            network: {
+                clusterMembers: ['127.0.0.1:5701'],
+            }
+            security: {
+                usernamePassword: {
+                    username: 'admin',
+                    password: 'some-strong-password',
+                }
+            }
+    });
+    console.log('The client is authenticated using username password credentials');
+
+    await client.shutdown();
+})().catch(err => {
+    console.error('Error occurred:', err);
+    process.exit(1);
+});
+----
+
+== Authenticating with Tokens
+
+The client can authenticate with a token against the servers. The following steps enable a Node.js client to connect to a Hazelcast cluster with a token.
+
+. Configure the server side by editing the `config/hazelcast.xml` as follows.
++
+[source,xml]
+----
+<hazelcast>
+    ...
+    <security enabled="true">
+        <realms>
+            <realm name="token">
+                <authentication>
+                    <jaas>
+                        <login-module class-name="org.example.CustomTokenLoginModule"/> <1>
+                    </jaas>
+                </authentication>
+            </realm>
+        </realms>
+        <client-authentication realm="token"/>
+    </security>
+    ...
+</hazelcast>
+----
+<1> There is no out-of-the-box support token-based authentication on the server side, so you have to provide your
+login module to use in the server configuration. The login module is responsible for performing the authentication
+against the decoded version of the token sent by the client. See xref:security:jaas-authentication.adoc#clusterloginmodule[Login Module] to learn how to implement a login module.
+. Start a single-server cluster using the Hazelcast start script.
++
+[source,shell]
+----
+/bin hz start
+----
+. To configure and connect the client to the cluster, create a `token-client.js` file with the following code and run `node token-client.js`.
++
+[source,javascript]
+----
+'use strict';
+
+const { Client } = require('hazelcast-client');
+
+(async () => {
+    const client = await Client.newHazelcastClient({
+            network: {
+                clusterMembers: ['127.0.0.1:5701'],
+            }
+            security: {
+                token: {
+                    token: 'bXktdG9rZW4=', <1>
+                    encoding: TokenEncoding.BASE64 // Or, 'base64' string. <2>
+                }
+            }
+    });
+    console.log('The client is authenticated using token');
+
+    await client.shutdown();
+})().catch(err => {
+    console.error('Error occurred:', err);
+    process.exit(1);
+});
+----
+<1> String representation of the token encoded with the given `encoding`.
+<2> Possible values for encoding are case-insensitive values of `ascii` and `base64`; default is `ascii`
+
+== Custom Authentication
+
+The client can use a custom object during the authentication against the members. The following steps enable a Node.js client to connect to a Hazelcast cluster with custom credentials.
+
+. Configure the server side by editing the `config/hazelcast.xml` as follows.
++
+[source,xml]
+----
+<hazelcast>
+    ...
+    <security enabled="true">
+        <realms>
+            <realm name="custom-credentials">
+                <authentication>
+                    <jaas>
+                        <login-module class-name="org.example.CustomCredentialsLoginModule"/> <1>
+                    </jaas>
+                </authentication>
+            </realm>
+        </realms>
+        <client-authentication realm="custom-credentials"/>
+    </security>
+    ...
+</hazelcast>
+----
+<1> There is no out-of-the-box support token-based authentication on the server side, so you have to provide your
+login module in the server configuration to use custom authentication. The login module is responsible for performing the authentication
+against the deserialized version of the credentials sent by the client. See xref:security:jaas-authentication.adoc#clusterloginmodule[Login Module] to learn how to implement a login module.
+. Start a single-server cluster using the Hazelcast start script.
++
+[source,shell]
+----
+/bin hz start
+----
+. To configure and connect the client to the cluster, create a `custom-client.js` file with the following code and run `node custom-client.js`.
++
+[source,javascript]
+----
+'use strict';
+
+const { Client } = require('hazelcast-client');
+
+(async () => {
+    try {
+        const cfg = {
+            network: {
+                clusterMembers: ['127.0.0.1:5701'],
+            security: {
+                custom: {
+                    someField: 'someValue',
+                    factoryId: 1,
+                    classId: 1,
+                    readPortable: function (reader) {
+                        this.someField = reader.readString('someField');
+                    },
+                    writePortable: function (writer) {
+                        writer.writeString('someField', this.someField);
+                    }
+                }
+            }  
+        };
+        const client = await Client.newHazelcastClient(cfg);
+
+    } catch (err) {
+        console.error('Error occurred:', err);
+        process.exit(1);
+    }
+})();
+----

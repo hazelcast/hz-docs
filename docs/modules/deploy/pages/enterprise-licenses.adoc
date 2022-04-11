@@ -1,13 +1,13 @@
 = Managing Enterprise License Keys
 :description: To use Hazelcast Enterprise, you need an Enterprise license key. This topic explains how to get a license key, install it on a member, and manage it.
-:page-aliases: installing-license-keys.adoc, monitoring-license-keys.adoc, renewing-license-keys.adoc
+:page-aliases: installing-license-keys.adoc, monitoring-license-keys.adoc, renewing-license-keys.adoc, deploy:updating-license-rest.adoc
 :page-enterprise: true
 
 {description}
 
-// tag::get-license[]
 == Getting an Enterprise License Key
 
+// tag::get-license[]
 Hazelcast Enterprise requires a license key. You can get a
 30-day trial license from the link:https://hazelcast.com/get-started[Hazelcast website].
 
@@ -21,9 +21,7 @@ Hazelcast Enterprise requires a license key. You can get a
 - `<Maximum members>`: Maximum number of members that may use the license at the same time.
 - `<License key>`: Machine-readable license key.
 
-The first two strings up to the second hash (#) character are optional. These strings just provide a way for you to know important information about the license key.
-
-For example, both of the following formats are valid:
+The first two strings up to the second hash (#) character are optional. These strings provide information about the license key. For example, both of the following formats are valid:
 
 .Full-form license
 ```
@@ -39,10 +37,10 @@ NOTE: These licenses are examples and will not work if you install them on membe
 
 // end::get-license[]
 
-// tag::install-license[]
-== Installing a License Key on Members
+== Configuring a License Key on Members
 
-To use Hazelcast Enterprise, you need to install a license
+// tag::install-license[]
+To use Hazelcast Enterprise, you need to configure a license
 key on all members in a cluster.
 
 NOTE: Hazelcast Enterprise license keys are required only for members.
@@ -223,6 +221,43 @@ Reach out to Hazelcast Support to resolve any issues with an expired license.
 
 // tag::update-license[]
 
+[[update]]
 == Updating a License Key at Runtime
 
-You can use xref:configuration:dynamic-config.adoc[dynamic configuration] to update a license key at runtime.
+You can use any xref:configuration:dynamic-config.adoc[dynamic configuration] option to update a license key at runtime.
+
+To use the dedicated `/license` endpoint, do the following:
+
+. xref:clients:rest.adoc#using-the-rest-endpoint-groups[Enable the REST API].
++
+WARNING: By default, if a member shuts down, its license key will not be persisted. To persist the license key, xref:configuration:dynamic-config.adoc#persistence[enable persistence for dynamic configuration].
+
+. Send a `POST` request to the `/license` endpoint. 
++
+```bash
+curl --data "{cluster-name}&{password}&{license}" http://localhost:5001/hazelcast/rest/license
+```
++
+NOTE: The request parameters must be URL-encoded as described in the xref:clients:rest.adoc[REST Client section].
+
+This command updates the license on all running Hazelcast members of the cluster.
+If successful, you should see something like the following:
+
+```json
+{
+  "status": "success",
+  "licenseInfo": {
+    "expiryDate": 1560380399161,
+    "maxNodeCount": 10,
+    "type": -1,
+    "companyName": "ExampleCompany",
+    "ownerEmail": "info@example.com",
+    "keyHash": "ml/u6waTNQ+T4EWxnDRykJpwBmaV9uj+skZzv0SzDhs="
+  },
+  "message": "License updated at run time - please make sure to update the license in the persistent configuration to avoid losing the changes on restart."
+}
+```
+
+If the update fails on some members, the whole operation fails, leaving the cluster in
+a potentially inconsistent state where some members have been switched to the new license
+while some have not. You must resolve this situation manually.

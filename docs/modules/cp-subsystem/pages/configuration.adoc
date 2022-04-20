@@ -1,265 +1,970 @@
-= CP Subsystem Configuration
+= Configuring CP Subsystem
+:description: You can configure clusters to enable the CP Subsystem as well as fine-tune many other options such as CP groups sizes and persistence of CP state.
+:page-aliases: persistence.adoc
 
-* `cp-member-count`: Number of CP members to initialize CP Subsystem. It is `0`
-by default, meaning that CP Subsystem is disabled. CP Subsystem is enabled when
-a positive value is set (should be `3` at the minimum since CP Subsystem
-must have at least 3 members). After CP Subsystem is initialized successfully, more
-CP members can be added at run-time and the number of active CP members can go
-beyond the configured CP member count. The number of CP members can be smaller
-than the total size of the Hazelcast cluster. For instance, you can run `5` CP
-members in a Hazelcast cluster of ``20`` members.
-+
-If set, must be greater than or equal to `group-size`.
-+
-* `group-size`: Number of CP members to form CP groups. If set, it must be
-an odd number between `3` and `7`. Otherwise, `cp-member-count` is respected
-while forming CP groups.
-+
-If set, must be smaller than or equal to `cpMemberCount`.
-+
-* `session-time-to-live-seconds`: Duration for a CP session to be kept alive
-after the last received heartbeat. A CP session is closed if no session
-heartbeat is received during this duration. Session TTL must be decided wisely.
-If a very low value is set, a CP session can be closed prematurely if its owner
-Hazelcast instance temporarily loses connectivity to CP Subsystem because of a
-network partition or a GC pause. In such an occasion, all CP resources of this
-Hazelcast instance, such as `FencedLock` or `ISemaphore`, are released.
-On the other hand, if a very large value is set, CP resources can remain
-assigned to an actually crashed Hazelcast instance for too long and liveliness
-problems can occur. CP Subsystem offers an API in `CPSessionManagementService`
-to deal with liveliness issues related to CP sessions. In order to prevent
-premature session expires, session TTL configuration can be set a relatively
-large value and `CPSessionManagementService.forceCloseSession(String, long)`
-can be manually called to close CP session of a crashed Hazelcast instance.
-+
-Must be greater than `session-heartbeat-interval-seconds`, and smaller than or
-equal to `missing-cp-member-auto-removal-seconds`.
-+
-Default value is `300` seconds.
-+
-* `session-heartbeat-interval-seconds`: Interval for the periodically-committed
-CP session heartbeats. A CP session is started on a CP group with the first
-session-based request of a Hazelcast instance. After that moment, heartbeats
-are periodically committed to the CP group.
-+
-Must be smaller than `session-time-to-live-seconds`.
-+
-Default value is `5` seconds.
-+
-* `missing-cp-member-auto-removal-seconds`: Duration to wait before
-automatically removing a missing CP member from CP Subsystem. When a CP member
-leaves the Hazelcast cluster, it is not automatically removed from CP
-Subsystem, since it could be still alive and left the cluster because of
-a network partition. On the other hand, if a missing CP member is actually
-crashed, it creates a danger for its CP groups, because it will be still part
-of majority calculations. This situation could lead to losing majority of CP
-groups if multiple CP members leave the cluster over time.
-+
-With the default configuration, missing CP members are automatically removed
-from CP Subsystem after `4` hours. This feature is very useful in terms of
-fault tolerance when CP member count is also configured to be larger than group
-size. In this case, a missing CP member will be safely replaced in its CP
-groups with other available CP members in CP Subsystem. This configuration also
-implies that no network partition is expected to be longer than the configured
-duration.
-+
-If a missing CP member comes back alive after it is automatically removed from
-CP Subsystem with this feature, that CP member must be terminated manually.
-+
-Must be greater than or equal to `session-time-to-live-seconds`.
-+
-Default value is `14400` seconds (`4` hours).
-+
-* `fail-on-indeterminate-operation-state`: Offers a choice between
-at-least-once and at-most-once execution of the operations on top of the Raft
-consensus algorithm. It is disabled by default and offers at-least-once
-execution guarantee. If enabled, it switches to at-most-once execution
-guarantee. When you invoke an API method on a CP data structure proxy, it
-replicates an internal operation to the corresponding CP group. After this
-operation is committed to majority of this CP group by the Raft leader member, it
-sends a response for the public API call. If a failure causes loss of
-the response, then the calling side cannot determine if the operation is
-committed on the CP group or not. In this case, if this configuration is
-disabled, the operation is replicated again to the CP group, and hence could be
-committed multiple times. If it is enabled, the public API call fails with
-`IndeterminateOperationStateException`.
-+
-Default value is `false`.
-+
-* `persistence-enabled`: Specifies whether CP Subsystem Persistence is globally
-enabled for CP groups created in CP Subsystem. If enabled, CP members persist
-their local CP data to stable storage and can recover from crashes.
-+
-Default value is `false`.
-* `base-dir`: Specifies the parent directory where CP data is stored. You can
-use the default value, or you can specify the value of another directory, but it
-is mandatory that `base-dir` element has a value. This directory is created
-automatically if it does not exist.
-+
-`base-dir` is used as the parent directory, and a unique directory is created
-inside `base-dir` for each CP member which uses the same `base-dir`. That
-means, `base-dir` is shared among multiple CP members safely. This is
-especially useful for cloud environments where CP members generally use
-a shared filesystem.
-+
-Default value is `cp-data`.
-+
-* `data-load-timeout-seconds`: Timeout duration for CP members to restore their
-data from disk. A CP member fails its startup if it cannot complete its CP data
-restore process in the configured duration.
-+
-Default value is `120` seconds.
+{description}
 
-**Declarative Configuration:**
+== Quickstart Configuration
+
+Use this quickstart to test CP Subsystem in development.
+
+NOTE: Before going into production, make sure to read the <<production-checklist, Production Checklist>> section.
+
+By default, CP Subsystem runs in unsafe mode, which means it is disabled. To enable the CP Subsystem, you must first configure a non-zero value for the <<cp-member-count, `cp-member-count`>> option:
 
 [tabs] 
 ==== 
 XML:: 
 + 
--- 
+--
 [source,xml]
 ----
 <hazelcast>
-    ...
-    <cp-subsystem>
-        <cp-member-count>7</cp-member-count>
-        <group-size>3</group-size>
-        <session-time-to-live-seconds>300</session-time-to-live-seconds>
-        <session-heartbeat-interval-seconds>5</session-heartbeat-interval-seconds>
-        <missing-cp-member-auto-removal-seconds>14400</missing-cp-member-auto-removal-seconds>
-        <fail-on-indeterminate-operation-state>false</fail-on-indeterminate-operation-state>
-        <persistence-enabled>true</persistence-enabled>
-        <base-dir>/custom-cp-dir</base-dir>
-    </cp-subsystem>
-    ...
+  <cp-subsystem>
+    <cp-member-count>3</cp-member-count>
+    <!-- configuration options here -->
+  </cp-subsystem>
 </hazelcast>
 ----
 --
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    cp-member-count: 3
+    # configuration options here
 
-YAML::
-+
+----
+--
+Java:: 
++ 
+--
+Use the link:https://javadoc.io/doc/com.hazelcast/hazelcast/{full-version}/com/hazelcast/config/cp/CPSubsystemConfig.html[`CPSubsystemConfig`] object.
+
+[source,java]
+----
+Config config = new Config();
+
+config.getCPSubsystemConfig()
+.setCPMemberCount(3)
+----
+--
+====
+
+== Production Checklist
+
+Before you start configuring members, consider the following checklist:
+
+- [ ] Are you already <<persistence, persisting AP data structures in the same cluster>>?
+
+NOTE: Running clusters must be restarted before any configuration changes take effect.
+
+[[persistence]]
+== Persisting CP Data Structures
+[.enterprise]*Enterprise*
+
+To enable xref:cp-subsystem:cp-subsystem.adoc#persistence[CP Subsystem Persistence], set the <<persistence-enabled, `persistence-enabled`>> option to `true`.
+
+When CP Subsystem Persistence is enabled, all Hazelcast cluster members, including AP members, create
+a sub-directory under the base `cp-data` directory. CP members persist CP state in these sub-directories. AP members persist only
+their status as non-CP members.
+
+NOTE: If you have both CP and AP members in
+your cluster when CP Subsystem Persistence is enabled, and if you want to
+perform a cluster-wide restart, you need to ensure that AP members are also
+restarted with their CP persistence stores.
+
+To change the base directory, set a value in the <<base-dir, `base-dir`>> option.
+
+[[ap-cp]]
+=== CP Subsystem Persistence and AP Persistence
+
+As well as CP Subsystem Persistence, Hazelcast offers xref:storage:persistence.adoc[Persistence] for some AP data structures. If you persist AP and CP data structures in a single
+Hazelcast cluster, be aware that member or cluster restarts can fail because of either the persisted AP data structures or the CP data structures.
+
+== Choosing a Group Size
+
+For all xref:cp-subsystem.adoc#cp-groups[CP groups], you can set the number of CP members that should participate in each one, using the <<group-size, `group-size`>> option.
+
+To scale out throughput and memory capacity, you can choose a CP group size that is smaller
+than the CP member count configuration to distribute your CP data structures to
+multiple CP groups.
+
+CP groups usually
+consist of an odd number of CP members between three and seven. An odd number of CP members is more
+advantageous to an even number because of the quorum or majority calculations.
+For a CP group of `N` members, the majority is calculated as `N / 2 + 1`. For
+example, in a CP group of five CP members, operations are committed when they are
+replicated to at least three CP members. This CP group can tolerate the failure of two CP
+members and remain available. However, if you run a CP group with six CP members,
+it can still tolerate the failure of two CP members because the majority of six is four.
+Therefore, it does not improve the degree of fault tolerance compared to five CP
+members.
+
+[[sessions]]
+== Configuring CP Sessions
+
+xref:cp-subsystem:cp-subsystem.adoc#sessions[Sessions] offer a trade-off between liveliness and safety. If you set a
+small value for the <<session-time-to-live-seconds,`session-time-to-live-seconds`>> option, a
+session owner could be considered crashed very quickly and its resources can be
+released prematurely. On the other hand, if you set a large value, a session
+could be kept alive for an unnecessarily long duration even if its owner
+actually crashes. However, it is a safer approach to not use a small session
+`session-time-to-live-seconds` duration. If a session owner is known to be crashed, its session could be closed manually.
+
+[[fencedlock-configuration]]
+== Configuring Fenced Locks
+
+By default, fenced locks are reentrant. When a caller acquires the lock, it can
+acquire the lock reentrantly as many times as it wants in a linearizable manner.
+
+You can configure the reentrancy behavior in the <<lock-acquire-limit,`lock-acquire-limit`>> option. For example,
+reentrancy can be disabled by setting this option to `1`, making the lock a non-reentrant mutex. You can also set a custom reentrancy limit. When the reentrancy limit is already reached, the fenced lock does not block a lock call. Instead, it fails
+with `LockAcquireLimitReachedException` or a specified return value.
+
+== Configuring Semaphores
+
+By default, a caller must
+acquire permits before releasing them and it cannot release a permit
+that it has not acquired. This means that you can acquire a permit
+from one thread and release it from another thread, using the same
+caller, but not different callers. In this mode,
+acquired permits are automatically released upon failure of the caller.
+
+To enable a permit to be released without acquiring it first, enable JDK compatibility by setting the <<jdk-compatibility,`jdk-compatibility`>> option to `true`. Because
+acquired permits are not bound to threads.
+
+WARNING: When `jdk-compatibility` is set to `true`, Hazelcast does not
+auto-cleanup acquired permits upon caller failures. If a permit holder fails, its permits must be released manually.
+
+[[remove]]
+== Removing Missing CP Members Automatically
+
+When a CP member is shut down, its behavior differs, depending on whether <<persistence, CP Subsystem Persistence>> is enabled.
+
+=== Persistence Disabled
+
+When CP Subsystem Persistence is disabled (default), CP members that are shut down are automatically removed from the CP Subsystem and replaced with other
+available CP members in all its CP groups. By default, missing CP members are automatically removed
+from the CP Subsystem after 4 hours. You can configure this time, using the <<missing-cp-member-auto-removal-seconds,`missing-cp-member-auto-removal-seconds`>> option.
+
+If a missing CP member rejoins the cluster after it is automatically removed from the
+CP Subsystem, that CP member must be terminated manually.
+
+If no CP members are available to replace a missing CP member, the group size of any groups that it was in is reduced and the majority values are recalculated.
+
+These members are removed because they lose their state after shutting down and so cannot rejoin the CP Subsystem.
+
+=== Persistence Enabled
+
+When CP Subsystem Persistence is enabled, CP members that are shut down remain in the CP Subsystem, so they remain part of the CP group majority calculations. These CP members can come back by
+restoring their CP state from disk. Therefore, these CP members are not removed from the CP
+Subsystem. It is your responsibility to
+<<remove, remove CP members>> if they do not
+restart.
+
+[[IndeterminateOperationStateException]]
+== Handling Indeterminate Operation State
+
+When you invoke an API method on a CP data structure, the method
+replicates an internal operation to the corresponding CP group. After the CP leader commits this
+operation to the majority of the CP group, it
+sends a response to the public API call. If a failure causes loss of the response, then the caller cannot determine if the operation is committed on the CP group or not.
+
+You can handle loss of the response in two ways:
+
+- To allow CP leaders to replicate the operation to the CP group multiple times, set the <<fail-on-indeterminate-operation-state,`fail-on-indeterminate-operation-state`>> option to `false` (default).
+- To send an `IndeterminateOperationStateException` back to the caller, set the `fail-on-indeterminate-operation-state` option to `true`.
+
+== Global Configuration Options
+
+Use these configuration options to configure the CP Subsystem.
+
+.CP Subsystem configuration options
+[cols="1a,1a,1m,2a",options="header"]
+|===
+|Option|Description|Default|Example
+
+|[[cp-member-count]]`cp-member-count`
+|Number of CP members to initialize the CP Subsystem. If set, must be greater than or equal to <<group-size, `group-size`>>.
+
+a|`0` (disabled, running in xref:cp-subsystem:cp-subsystem.adoc#unsafe-mode[unsafe mode])
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <cp-member-count>7</cp-member-count>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
 [source,yaml]
 ----
 hazelcast:
   cp-subsystem:
     cp-member-count: 7
-    group-size: 3
-    session-time-to-live-seconds: 300
-    session-heartbeat-interval-seconds: 5
-    missing-cp-member-auto-removal-seconds: 14400
-    fail-on-indeterminate-operation-state: false
-    persistence-enabled: true
-    base-dir: custom-cp-dir
 ----
-====
-
-**Programmatic Configuration:**
-
+--
+Java:: 
++ 
+--
 [source,java]
 ----
-include::ROOT:example$/cp/CpSubsystemConfiguration.java[tag=cpconf]
+Config config = new Config();
+
+config.getCPSubsystemConfig()
+.setCPMemberCount(7)
 ----
+--
+====
 
-== FencedLock Configuration
+|[[group-size]]`group-size`
+|Number of CP members to particiate in each CP group. If set, this value must conform to the following rules:
+- Must be
+an odd number between `3` and `7`.
+- Must be smaller than or equal to <<cp-member-count, `cp-member-count`>>.
+a|Same as <<cp-member-count, `cp-member-count`>>
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <group-size>7</grou-size>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    group-size: 7
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
 
-* `name`: Name of the `FencedLock`.
-* `lock-acquire-limit`: Maximum number of reentrant lock acquires. Once
-a caller acquires the lock this many times, it will not be able to acquire
-the lock again, until it makes at least one `unlock()` call.
-+
-By default, no upper bound is set for the number of reentrant lock acquires,
-which means that once a caller acquires a `FencedLock`, all its further
-`lock()` calls will succeed. However, for instance, if you set
-`lock-acquire-limit` to `2`, once a caller acquires the lock, it will be able
-to acquire it once more, but its third `lock()` call will not succeed.
-+
-If `lock-acquire-limit` is set to 1, then the lock becomes non-reentrant.
-+
-`0` means there is no upper bound for the number of reentrant lock acquires.
-+
-Default value is `0`.
+config.getCPSubsystemConfig()
+.setGroupSize(7)
+----
+--
+====
 
-**Declarative Configuration:**
+|[[session-time-to-live-seconds]]`session-time-to-live-seconds`
+|Duration for a <<sessions, CP session>> to be kept alive
+after the last received heartbeat. A CP session is closed if no session
+heartbeat is received during this duration.
+
+Must be greater than `session-heartbeat-interval-seconds`, and smaller than or
+equal to `missing-cp-member-auto-removal-seconds`.
+
+|300
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <session-time-to-live-seconds>300</session-time-to-live-seconds>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    session-time-to-live-seconds: 300
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+config.getCPSubsystemConfig()
+.setSessionTimeToLiveSeconds(300)
+----
+--
+====
+
+|[[session-heartbeat-interval-seconds]]`session-heartbeat-interval-seconds`
+|Interval in seconds for the periodically committed
+xref:cp-subsystem:cp-subsystem.adoc#sessions[CP session heartbeats].
+
+Must be smaller than `session-time-to-live-seconds`.
+
+|5
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <session-heartbeat-interval-seconds>5</session-heartbeat-interval-seconds>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    session-heartbeat-interval-seconds: 5
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+config.getCPSubsystemConfig()
+.setSessionHeartbeatIntervalSeconds(5)
+----
+--
+====
+
+|[[missing-cp-member-auto-removal-seconds]]`missing-cp-member-auto-removal-seconds`
+|Duration in seconds to wait before
+automatically removing a missing CP member from the CP Subsystem.
+
+Must be greater than or equal to <<session-time-to-live-seconds,`session-time-to-live-seconds`>>.
+
+NOTE: This option does not apply when CP Subsystem Persistence is enabled. See <<remove, Removing Missing CP Members Automatically>>.
+
+a|`14400` seconds (4 hours)
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <session-time-to-live-seconds>14400
+    </session-time-to-live-seconds>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    session-time-to-live-seconds: 14400
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+config.getCPSubsystemConfig()
+.setSessionTimeToLiveSeconds(14400)
+----
+--
+====
+
+|[[fail-on-indeterminate-operation-state]]`fail-on-indeterminate-operation-state`
+|Whether CP Subsystem operations use
+at-least-once and at-most-once execution guarantees. By default, operations use an at-least-once
+execution guarantee. If set to `true`, operations use an at-most-once execution
+guarantee. See <<IndeterminateOperationStateException, Handling Indeterminate Operation State>>
+
+|false
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <fail-on-indeterminate-operation-state>false
+    </fail-on-indeterminate-operation-state>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    fail-on-indeterminate-operation-state: false
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+config.getCPSubsystemConfig()
+.setFailOnIndeterminateOperationState(false)
+----
+--
+====
+
+|[[persistence-enabled]]`persistence-enabled` [.enterprise]*Enterprise*
+|Whether <<persistence, CP Subsystem Persistence>> is globally
+enabled for CP groups created in the CP Subsystem. If enabled, CP members persist
+their local CP data to stable storage and can recover from crashes.
+
+|false
+|[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <persistence-enabled>false
+    </persistence-enabled>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    persistence-enabled: false
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+config.getCPSubsystemConfig()
+.setPersistenceEnabled(false)
+----
+--
+====
+
+|[[base-dir]]`base-dir`
+|Parent directory where persisted CP data is stored. This directory is created
+automatically if it does not exist.
+
+This directory is shared among multiple CP members safely. This is
+especially useful for cloud environments where CP members generally use
+a shared filesystem.
+
+|cp-data
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <base-dir>cp-data
+    </base-dir>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    base-dir: cp-data
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+config.getCPSubsystemConfig()
+.setBaseDir("/cp-data")
+----
+--
+====
+
+|[[data-load-timeout-seconds]]`data-load-timeout-seconds`
+|Timeout duration in seconds for CP members to restore their
+persisted data from disk. A CP member fails its startup if it cannot complete its CP data
+restore process in the configured duration.
+
+|120
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <data-load-timeout-seconds>120
+    </data-load-timeout-seconds>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    data-load-timeout-seconds: 120
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+config.getCPSubsystemConfig()
+.setDataLoadTimeoutSeconds(120)
+----
+--
+====
+
+|===
+
+[[fenced-lock-config]]
+== Fenced Lock Options
+
+Use the following options to configure fenced locks:
 
 [tabs] 
 ==== 
 XML:: 
 + 
--- 
+--
 [source,xml]
 ----
 <hazelcast>
-    ...
-    <cp-subsystem>
-        ...
-        <locks>
-            <fenced-lock>
-                <name>reentrant-lock</name>
-                <lock-acquire-limit>0</lock-acquire-limit>
-            </fenced-lock>
-            <fenced-lock>
-                <name>limited-reentrant-lock</name>
-                <lock-acquire-limit>10</lock-acquire-limit>
-            </fenced-lock>
-            <fenced-lock>
-                <name>non-reentrant-lock</name>
-                <lock-acquire-limit>1</lock-acquire-limit>
-            </fenced-lock>
-        </locks>
-    </cp-subsystem>
-    ...
+  <cp-subsystem>
+    <locks>
+      <fenced-lock>
+        <!-- insert configuration options here -->
+      </fenced-lock>
+    </locks>
+  </cp-subsystem>
 </hazelcast>
 ----
 --
-
-YAML::
-+
+YAML:: 
++ 
+--
 [source,yaml]
 ----
 hazelcast:
   cp-subsystem:
     locks:
-      reentrant-lock:
-        lock-acquire-limit: 0
-      limited-reentrant-lock:
-        lock-acquire-limit: 10
-      non-reentrant-lock:
-        lock-acquire-limit: 1
+      # insert configuration options here
 ----
-====
-
-**Programmatic Configuration:**
+--
+Java:: 
++ 
+--
+Add configuration options to the link:https://javadoc.io/doc/com.hazelcast/hazelcast/{full-version}/com/hazelcast/config/cp/FencedLockConfig.html[`FencedLockConfig` object].
 
 [source,java]
 ----
-include::ROOT:example$/cp/CpSubsystemConfiguration.java[tag=cplockconf]
+Config config = new Config();
+
+FencedLockConfig lockConfig = new FencedLockConfig(/*options*/);
+
+config.getCPSubsystemConfig().addLockConfig(lockConfig);
 ----
+--
+====
 
-== Semaphore Configuration
+[cols="1a,1a,1m,2a",options="header"]
+|===
+|Option|Description|Default|Example
 
-* `name`: Name of the CP `ISemaphore`.
-* `jdk-compatible`: Enables / disables JDK compatibility of the CP
-`ISemaphore`. When it is JDK compatible, just as in
-the `j.u.c.Semaphore.release()` method, a permit can be released without
-acquiring it first, because acquired permits are not bound to threads. However,
-there is no auto-cleanup of the acquired permits upon Hazelcast server / client
-failures. If a permit holder fails, its permits must be released manually. When
-JDK compatibility is disabled, a `HazelcastInstance` must acquire permits
-before releasing them and it cannot release a permit that it has not acquired.
-It means, you can acquire a permit from one thread and release it from another
-thread using the same `HazelcastInstance`, but not different
-``HazelcastInstance``s. In this mode, acquired permits are automatically
-released upon failure of the holder `HazelcastInstance`. So there is a minor
-behavioral difference to the `j.u.c.Semaphore.release()` method.
-+
-JDK compatibility is disabled by default.
-* `initial-permits`: Number of permits to initialize the Semaphore.
-If a positive value is set, the Semaphore is initialized with the given number
-of permits.
-+
-Default value is 0.
+|[[name]]`name`
+|The name of the fenced lock to configure.
 
-**Declarative Configuration:**
+a|' ' (empty)
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <locks>
+      <fenced-lock>
+        <name>lock1</name>
+      </fenced-lock>
+    </locks>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    locks:
+      lock1:
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+FencedLockConfig lockConfig = new FencedLockConfig(lock1, /*acquire limit*/);
+
+config.getCPSubsystemConfig().addLockConfig(lockConfig);
+----
+--
+====
+
+|[[lock-acquire-limit]]`lock-acquire-limit`
+|Maximum number of reentrant lock acquisitions. Once a caller acquires the lock this many times, it will not be able to acquire the lock again, until it makes at least one `unlock()` call. If lock-acquire-limit is set to `1`, then the lock becomes non-reentrant.
+a|`0` (no limit)
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <locks>
+      <fenced-lock>
+        <name>lock1</name>
+        <acquire-limit>1</acquire-limit>
+      </fenced-lock>
+    </locks>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    locks:
+      lock1:
+        lock-acquire-limit: 1
+
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+FencedLockConfig lockConfig = new FencedLockConfig(lock1, 1);
+
+config.getCPSubsystemConfig().addLockConfig(lockConfig);
+----
+--
+====
+|===
+
+[[semaphore-config]]
+== Semaphore Options
+
+Use the following options to configure semaphores:
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    < semaphores >
+      <semaphore>
+        <!-- insert configuration options here -->
+      </semaphore >
+    </semaphores >
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    semaphores:
+      # insert configuration options here
+----
+--
+Java:: 
++ 
+--
+Add configuration options to the link:https://javadoc.io/doc/com.hazelcast/hazelcast/{full-version}/com/hazelcast/config/cp/SemaphoreConfig.html[`SemaphoreConfig` object].
+
+[source,java]
+----
+Config config = new Config();
+
+SemaphoreConfig semaphoreConfig = new SemaphoreConfig(/*insert configuration options here*/);
+
+config.getCPSubsystemConfig().addSemaphoreConfig(semaphoreConfig);
+----
+--
+====
+
+[cols="1a,1a,1m,2a",options="header"]
+|===
+|Option|Description|Default|Example
+
+
+|[[semaphore-name]]`name`
+|Name of the semaphore.
+a|' ' (empty)
+
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <semaphores>
+      <semaphore>
+          <name>sem1</name>
+      </semaphore>
+    </semaphores>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    semaphores:
+      sem1:
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+SemaphoreConfig semaphoreConfig = new SemaphoreConfig("sem1");
+
+config.getCPSubsystemConfig().addSemaphoreConfig(semaphoreConfig);
+----
+--
+====
+
+|[[jdk-compatible]]`jdk-compatible`
+|Whether JDK compatibility is enabled. See <<semaphores, Semaphores>>.
+
+|false
+
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <semaphores>
+      <semaphore>
+          <name>sem1</name>
+          <jdk-compatible>false</jdk-compatible>
+      </semaphore>
+    </semaphores>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    semaphores:
+      sem1:
+        jdk-compatible: false
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+SemaphoreConfig semaphoreConfig = new SemaphoreConfig("sem1", false);
+
+config.getCPSubsystemConfig().addSemaphoreConfig(semaphoreConfig);
+----
+--
+====
+
+|[[initial-permits]]`initial-permits`
+|Number of permits to initialize the semaphore. If a positive value is set, the semaphore is initialized with the given number of permits.
+|0
+|
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <semaphores>
+      <semaphore>
+          <name>sem1</name>
+          <initial-permits>1</initial-permits>
+      </semaphore>
+    </semaphores>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    semaphores:
+      sem1:
+        initial-permits: 1
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+SemaphoreConfig semaphoreConfig = new SemaphoreConfig("sem1", false, 1);
+
+config.getCPSubsystemConfig().addSemaphoreConfig(semaphoreConfig);
+----
+--
+====
+|===
+
+[[raft]]
+== Raft Algorithm Options
+
+Use these options to fine-tune the Raft
+consensus algorithm.
+
+WARNING: Do not change these settings unless you know what you're doing.
 
 [tabs] 
 ==== 
@@ -269,86 +974,248 @@ XML::
 [source,xml]
 ----
 <hazelcast>
-    ...
     <cp-subsystem>
-        ...
-        <semaphores>
-            <semaphore>
-                <name>jdk-compatible-semaphore</name>
-                <jdk-compatible>true</jdk-compatible>
-            </semaphore>
-            <semaphore>
-                <name>another-semaphore</name>
-                <jdk-compatible>false</jdk-compatible>
-                <initial-permits>5</initial-permits>
-            </semaphore>
-        </semaphores>
+        <raft-algorithm>
+          <!-- insert configuration options here -->
+        </raft-algorithm>
     </cp-subsystem>
-    ...
 </hazelcast>
 ----
 --
 
 YAML::
 +
+--
 [source,yaml]
 ----
 hazelcast:
   cp-subsystem:
-    semaphores:
-      jdk-compatible-semaphore:
-        jdk-compatible: true
-      another-semaphore:
-        jdk-compatible: false
-        initial-permits: 5
+    raft-algorithm:
+      # insert configuration options here
 ----
-====
+--
 
-**Programmatic Configuration:**
+Java::
++
+--
+Add configuration options to the link:https://javadoc.io/doc/com.hazelcast/hazelcast/{full-version}/com/hazelcast/config/cp/RaftAlgorithmConfig.html[`RaftAlgorithmConfig` object].
 
 [source,java]
 ----
-include::ROOT:example$/cp/CpSubsystemConfiguration.java[tag=cpsemaconf]
+Config config = new Config();
+
+RaftAlgorithmConfig raftConfig = new RaftAlgorithmConfig();
+
+config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
 ----
+--
+====
 
-== Raft Algorithm Configuration
+[cols="1a,1a,1m,2a",options="header"]
+|===
+|Option|Description|Default|Example
 
-WARNING: These parameters tune specific parameters of Hazelcast's Raft
-consensus algorithm implementation and are only for power users.
-
-* `leader-election-timeout-in-millis`: Leader election timeout in milliseconds.
+|[[leader-election-timeout-in-millis]]`leader-election-timeout-in-millis`
+|Leader election timeout in milliseconds.
 If a candidate cannot win the majority of the votes in time, a new election
 round is initiated.
+|2000
+|
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <cp-subsystem>
+        <raft-algorithm>
+            <leader-election-timeout-in-millis>2000</leader-election-timeout-in-millis>
+        </raft-algorithm>
+    </cp-subsystem>
+</hazelcast>
+----
+--
+
+YAML::
 +
-Default value is `2000` milliseconds.
-* `leader-heartbeat-period-in-millis`: Duration in milliseconds for a Raft
-leader member to send periodic heartbeat messages to its followers in order to
-denote its liveliness. Periodic heartbeat messages are actually append entries
-requests and can contain log entries for the lagging followers. If a too small
-value is set, heartbeat messages are sent from Raft leaders to followers too
-frequently and it can cause an unnecessary usage of CPU and network.
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    raft-algorithm:
+      leader-election-timeout-in-millis: 2000
+----
+--
+Java::
 +
-Default value is `5000` milliseconds.
-* `max-missed-leader-heartbeat-count`: Maximum number of missed Raft leader
-heartbeats for a follower to trigger a new leader election round. For instance,
-if `leader-heartbeat-period-in-millis` is `1` second and this value is set to
-``5``, then a follower triggers a new leader election round if `5` seconds pass
-after the last heartbeat message of the current Raft leader member. If this
+--
+
+[source,java]
+----
+Config config = new Config();
+
+RaftAlgorithmConfig raftConfig = new RaftAlgorithmConfig().setLeaderElectionTimeoutInMillis(2000);
+
+config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
+----
+--
+====
+
+|[[leader-heartbeat-period-in-millis]]`leader-heartbeat-period-in-millis`
+|Duration in milliseconds for a Raft leader to send periodic heartbeat messages to its followers to indicate its liveliness. Periodic heartbeat messages are actually append entries requests and can contain log entries for the lagging followers. If a too small value is set, heartbeat messages are sent from Raft leaders to followers too frequently and it can cause an unnecessary usage of CPU and network bandwidth.
+|5000
+|
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <cp-subsystem>
+        <raft-algorithm>
+            <leader-heartbeat-period-in-millis>5000</leader-heartbeat-period-in-millis>
+        </raft-algorithm>
+    </cp-subsystem>
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    raft-algorithm:
+      leader-heartbeat-period-in-millis: 5000
+----
+--
+Java::
++
+--
+
+[source,java]
+----
+Config config = new Config();
+
+RaftAlgorithmConfig raftConfig = new RaftAlgorithmConfig().setLeaderHeartbeatPeriodInMillis(5000);
+
+config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
+----
+--
+====
+
+|[[max-missed-leader-heartbeat-count]]`max-missed-leader-heartbeat-count`
+|Maximum number of missed Raft leader heartbeats for a follower to trigger a new leader election round. For example, if `leader-heartbeat-period-in-millis` is `1` and this value is set to
+`5`, then a follower triggers a new leader election round if five seconds pass after the last heartbeat message of the current Raft leader. If this
 duration is too small, new leader election rounds can be triggered
-unnecessarily if the current Raft leader temporarily slows down or a network
-congestion occurs. If it is too large, it takes longer to detect failures of
-Raft leaders.
+unnecessarily if the current Raft leader temporarily slows down or a network congestion occurs. If it is too large, it takes longer to detect failures of Raft leaders.
+|5
+|
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <cp-subsystem>
+        <raft-algorithm>
+            <max-missed-leader-heartbeat-count>5</max-missed-leader-heartbeat-count>
+        </raft-algorithm>
+    </cp-subsystem>
+</hazelcast>
+----
+--
+
+YAML::
 +
-Default value is `5`.
-* `append-request-max-entry-count`: Maximum number of Raft log entries that can
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    raft-algorithm:
+      max-missed-leader-heartbeat-count: 5
+----
+--
+
+Java::
++
+--
+
+[source,java]
+----
+Config config = new Config();
+
+RaftAlgorithmConfig raftConfig = new RaftAlgorithmConfig().setMaxMissedLeaderHeartbeatCount(5);
+
+config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
+----
+--
+====
+
+|[[append-request-max-entry-count]]`append-request-max-entry-count`
+|Maximum number of Raft log entries that can
 be sent as a batch in a single append entries request. In Hazelcast's Raft
 consensus algorithm implementation, a Raft leader maintains a separate
 replication pipeline for each follower. It sends a new batch of Raft log
 entries to a follower after the follower acknowledges the last append entries
 request sent by the leader.
+|100
+|
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <cp-subsystem>
+        <raft-algorithm>
+            <append-request-max-entry-count>100</append-request-max-entry-count>
+        </raft-algorithm>
+    </cp-subsystem>
+</hazelcast>
+----
+--
+
+YAML::
 +
-Default value is `100`.
-* `commit-index-advance-count-to-snapshot`: Number of new commits to initiate
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    raft-algorithm:
+      append-request-max-entry-count: 100
+----
+--
+Java::
++
+--
+
+[source,java]
+----
+Config config = new Config();
+
+RaftAlgorithmConfig raftConfig = new RaftAlgorithmConfig().setMaxMissedLeaderHeartbeatCount(100);
+
+config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
+----
+--
+====
+
+|[[commit-index-advance-count-to-snapshot]]`commit-index-advance-count-to-snapshot`
+|Number of new commits to initiate
 a new snapshot after the last snapshot taken by the local Raft member. This value
 must be configured wisely as it effects performance of the system in multiple
 ways. If a small value is set, it means that snapshots are taken too frequently
@@ -358,28 +1225,8 @@ performance. Moreover, a Raft leader can send too many snapshots to followers
 and this can create an unnecessary overhead on network. On the other hand, if
 a very large value is set, it can create a memory overhead since Raft log
 entries are going to be kept in memory until the next snapshot.
-+
-Default value is `10000`.
-* `uncommitted-entry-count-to-reject-new-appends`: Maximum number of
-uncommitted log entries in the leader's Raft log before temporarily rejecting
-new requests of callers. Since Raft leaders send log entries to followers in
-batches, they accumulate incoming requests in order to improve the throughput.
-You can configure this field by considering your degree of concurrency in your
-callers. For instance, if you have at most `1000` threads sending requests to
-a Raft leader, you can set this field to `1000` so that callers do not get
-retry responses unnecessarily.
-+
-Default value is `100`.
-* `append-request-backoff-timeout-in-millis`: Timeout duration in milliseconds
-to apply backoff on append entries requests. After a Raft leader sends
-an append entries request to a follower, it will not send a subsequent append
-entries request either until the follower responds or this timeout occurs.
-Backoff durations are increased exponentially if followers remain unresponsive.
-+
-Default value is `100` milliseconds.
-
-**Declarative Configuration:**
-
+|10000
+|
 [tabs] 
 ==== 
 XML:: 
@@ -388,45 +1235,145 @@ XML::
 [source,xml]
 ----
 <hazelcast>
-    ...
     <cp-subsystem>
-        ...
         <raft-algorithm>
-            <leader-election-timeout-in-millis>2000</leader-election-timeout-in-millis>
-            <leader-heartbeat-period-in-millis>5000</leader-heartbeat-period-in-millis>
-            <max-missed-leader-heartbeat-count>5</max-missed-leader-heartbeat-count>
-            <append-request-max-entry-count>100</append-request-max-entry-count>
             <commit-index-advance-count-to-snapshot>10000</commit-index-advance-count-to-snapshot>
-            <uncommitted-entry-count-to-reject-new-appends>200</uncommitted-entry-count-to-reject-new-appends>
-            <append-request-backoff-timeout-in-millis>250</append-request-backoff-timeout-in-millis>
         </raft-algorithm>
-        ...
     </cp-subsystem>
-    ...
 </hazelcast>
 ----
 --
 
 YAML::
 +
+--
 [source,yaml]
 ----
 hazelcast:
   cp-subsystem:
     raft-algorithm:
-      leader-election-timeout-in-millis: 2000
-      leader-heartbeat-period-in-millis: 5000
-      max-missed-leader-heartbeat-count: 5
-      append-request-max-entry-count: 100
       commit-index-advance-count-to-snapshot: 10000
-      uncommitted-entry-count-to-reject-new-appends: 200
-      append-request-backoff-timeout-in-millis: 250
 ----
-====
-
-**Programmatic Configuration:**
+--
+Java::
++
+--
 
 [source,java]
 ----
-include::ROOT:example$/cp/CpSubsystemConfiguration.java[tag=cpraftconf]
+Config config = new Config();
+
+RaftAlgorithmConfig raftConfig = new RaftAlgorithmConfig().setCommitIndexAdvanceCountToSnapshot(10000);
+
+config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
 ----
+--
+====
+
+|[[uncommitted-entry-count-to-reject-new-appends]]`uncommitted-entry-count-to-reject-new-appends`
+|Maximum number of
+uncommitted log entries in the leader's Raft log before temporarily rejecting
+new requests of callers. Since Raft leaders send log entries to followers in
+batches, they accumulate incoming requests in order to improve the throughput.
+You can configure this field by considering your degree of concurrency in your
+callers. For instance, if you have at most `1000` threads sending requests to
+a Raft leader, you can set this field to `1000` so that callers do not get
+retry responses unnecessarily.
+|100
+|
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <cp-subsystem>
+        <raft-algorithm>
+            <uncommitted-entry-count-to-reject-new-appends>200</uncommitted-entry-count-to-reject-new-appends>
+        </raft-algorithm>
+    </cp-subsystem>
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    raft-algorithm:
+      uncommitted-entry-count-to-reject-new-appends: 200
+----
+--
+Java::
++
+--
+
+[source,java]
+----
+Config config = new Config();
+
+RaftAlgorithmConfig raftConfig = new RaftAlgorithmConfig().setCommitIndexAdvanceCountToSnapshot(200);
+
+config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
+----
+--
+====
+
+|[[append-request-backoff-timeout-in-millis]]`append-request-backoff-timeout-in-millis`
+|Timeout duration in milliseconds
+to apply backoff on append entries requests. After a Raft leader sends
+an append entries request to a follower, it will not send a subsequent append
+entries request either until the follower responds or this timeout occurs.
+Backoff durations are increased exponentially if followers remain unresponsive.
+|100
+|
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <cp-subsystem>
+        <raft-algorithm>
+            <append-request-backoff-timeout-in-millis>250</append-request-backoff-timeout-in-millis>
+        </raft-algorithm>
+    </cp-subsystem>
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    raft-algorithm:
+      append-request-backoff-timeout-in-millis: 250
+----
+--
+
+Java::
++
+--
+
+[source,java]
+----
+Config config = new Config();
+
+RaftAlgorithmConfig raftConfig = new RaftAlgorithmConfig().setAppendRequestBackoffTimeoutInMillis(250);
+
+config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
+----
+--
+====
+
+|===

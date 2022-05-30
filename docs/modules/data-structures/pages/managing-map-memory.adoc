@@ -157,9 +157,10 @@ NOTE: The above scenario is simply an example that describes how the eviction pr
 Hazelcast finds the most optimum number of entries to be evicted according to your cluster
 size and selected policy.
 
+[[policy]]
 === eviction-policy
 
-This element defines which map entries to remove when the size of map grows larger than
+This element defines which map entries to remove when the size of the map grows larger than
 the value specified by the `size` element.
 
 - Accepted values:
@@ -281,30 +282,33 @@ As well as the method parameters, you can also use the `map.setTTL()` method to 
 `myMap.setTTL( "1", 50, TimeUnit.SECONDS )`
 
 [[forced-eviction]]
-=== Forced Eviction
+== Forced Eviction for the HD Memory Store
 [.enterprise]*Enterprise*
 
-Sometimes, the strategy set up in an eviction policy may not free enough memory and Hazelcast may throw an out-of-memory exception.
+Forced eviction is an automatic process that Hazelcast uses to remove data from the HD Memory Store. When your eviction policy does not free enough native memory, operations that add entries to a map such as `map.put()` trigger the forced eviction process. 
 
-If you are using Hazelcast Enterprise, Hazelcast can use forced eviction to remove more entries before throwing an exception.
+You cannot configure forced eviction. It is either enabled or disabled, depending on how your map or cache is configured.   
 
-NOTE: Hazelcast can only use this feature for maps whose in-memory format is set to `NATIVE`.
+For a map, forced eviction is enabled only the map is configured with the following:
 
-The forced eviction mechanism tries to free more memory in the following order:
+- An <<policy, eviction policy>> other than `NONE`
+- The xref:setting-data-format.adoc[`NATIVE` in-memory format]
 
-* When the normal eviction is not enough, forced eviction is triggered and first it tries to evict approx. 20% of the entries from the current partition. It retries this five times.
-* If the result of above step is still not enough, forced eviction applies the above step to all maps. This time it might perform eviction from some other partitions too, provided that they are owned by the same thread.
-* If that is still not enough to free up your memory, it evicts not the 20% but all the entries from the current partition.
-* If that is not enough, it will evict all the entries from the other data structures; from the partitions owned by the local thread.
+For a cache, forced eviction is enabled when you use the xref:setting-data-format.adoc[`NATIVE` in-memory format].
 
-Finally, when all the above steps are not enough, Hazelcast throws a native `OutOfMemoryException`.
+The forced eviction process tries to free memory in the following order:
 
-When you have an evictable cache/map, you should safely write entries to it without facing with any memory shortages. Forced eviction helps to achieve this. Regular eviction removes one entry at a time while forced eviction can remove multiple entries, which can even be owned by other caches/maps.
+. Evict 20% of entries in the current partition for the map or cache that triggered the forced eviction process. Hazelcast retries the operation that triggered the forced eviction process up to five times. If the operation throws a native out-of-memory exception on the fifth try, see step 2.
+. Evict 20% of entries for all maps or caches that meet the conditions for forced eviction and that are in a partition that is owned by the same partition thread that triggered the forced eviction process.
+. Remove the remaining 80% of entries in the current partition for the map or cache that triggered the forced eviction process.
+. Remove all entries from maps or caches that meet the conditions for forced eviction and that are in a partition that is owned by the same partition thread that triggered the forced eviction process.
+
+If the operation still fails to remove enough data, Hazelcast throws a native out-of-memory exception.
 
 [[custom-eviction-policy]]
 == Creating a Custom Eviction Policy
 
-Apart from the policies such as LRU and LFU, which Hazelcast provides out-of-the-box, you can develop and use your own eviction policy. Because eviction is run by the Hazelcast cluster itself, these custom eviction policies can only be written in Java and implememted as part of starting up the cluster member. 
+Apart from the policies such as LRU and LFU, which Hazelcast provides out-of-the-box, you can develop and use your own eviction policy. Because eviction is run by the Hazelcast cluster itself, these custom eviction policies can only be written in Java and implemented as part of starting up the cluster member. 
 
 To achieve this, you need to provide an implementation of `MapEvictionPolicyComparator` as in the following `OddEvictor` example:
 
@@ -345,12 +349,3 @@ hazelcast:
         comparator-class-name: com.mycompany.OddEvictor
 ----
 ====
-
-If you Hazelcast with Spring, you can enable your policy as shown below.
-
-[source,xml]
-----
-<hz:map name="test">
-    <hz:map-eviction comparator-class-name="com.package.OddEvictor"/>
-</hz:map>
-----

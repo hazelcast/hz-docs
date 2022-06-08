@@ -3,58 +3,69 @@
 :page-toclevels: 3
 [[clc-client]]
 
-Hazelcast Command-Line Client or *hzc* in short, is a command-line tool.
+The Hazelcast Command-Line Client (CLC) is a command-line tool to connect and operate on Hazelcast Platform and Hazelcast Cloud. You can use the CLC to execute commands through a terminal.
 
-It provides access to Hazelcast Cluster similar to Hazelcast Clients (Java, C++, .NET, Nodejs, Python, Go) with commands as opposed to writing actual code.
+== Installing the Hazelcast CLC
+You can install the Hazelcast CLC locally on Linux and macOS.
 
-== Installation
-To get started, you need to install the *hzc* (Hazelcast Command-line Client). There are two methods to install.
-
-You can install it with a custom script
-[source,bash,subs="attributes+"]
+[tabs]
+====
+Installer Script::
++
+--
+[source,bash]
 ----
 curl https://raw.githubusercontent.com/hazelcast/hazelcast-commandline-client/main/scripts/install.sh | bash
 ----
-or as a brew package
-[source,bash,subs="attributes+"]
+--
+Homebrew::
++
+[source,bash]
 ----
 brew tap hazelcast/homebrew-hz
 brew install hazelcast-commandline-client
 ----
+====
+
 NOTE: To take advantage of auto-completion support, follow the instructions that appear during installation.
 
-== Uninstallation
+== Uninstalling the Hazelcast CLC
 
-You can choose the corresponding uninstallation option.
+You can choose the uninstallation option that corresponds to the installation method.
 
-- Uninstall the brew package
-[source,bash,subs="attributes+"]
+[tabs]
+====
+Installer Script::
++
+--
+[source,bash]
+----
+~/.local/share/hz-cli/bin/uninstall.sh
+----
+--
+Homebrew::
++
+[source,bash]
 ----
 brew uninstall hazelcast-commandline-client
 brew untap hazelcast/homebrew-hz            # optional
 ----
-- Uninstall the script installation
-[source,bash,subs="attributes+"]
-----
-~/.local/share/hz-cli/bin/uninstall.sh
-----
-== Usage
+====
 
-== Configuring HZC
+== Configuring the Hazelcast CLC
 
-Hzc uses xref:go.adoc[hazelcast-go-client] under the hood to connect to cluster and to make operations.
+You can configure the Hazelcast CLC with connection and authentication settings, using a configuration file or with top-level flags.
 
-The default configuration is written to "~/.local/share/hz-cli/config.yaml" on your system on the first execution. You can modify this yaml file to change the configuration.
+Configuration values are evaluated in the following precedence, with items higher on the list taking priority:
 
-You can also specify a custom config file with `--config/-c` flag. In this case, default file will not be considered.
-
+- Top-level configuration flags
+** `--address`/`-a`: Addresses of the members in the cluster (default is localhost:5701).
+** `--cloud-token`:  Hazelcast Cloud discovery token
+** `--cluster-name`: Name of the cluster to connect to (default is dev)
+- Custom configuration file that is specified with the `-config` flag
++
 `hzc -c /some/custom/config.yaml`
-
-You can always override some fields of the configuration file with the following top level flags:
-
-- *--address/-a*: Addresses of the instances in the cluster (default is localhost:5701).
-- *--cloud-token*:  Hazelcast Cloud token
-- *--cluster-name*: name of the cluster to connect (default is dev)
+- Default configuration file that's stored on `/.local/share/hz-cli/config.yaml`
 
 === Configuring SSL
 
@@ -104,6 +115,7 @@ Cloud SSL configuration:
 [source,yaml]
 ----
 ssl:
+    servername: "hazelcast.cloud"
     capath: "/tmp/ca.pem"
     certpath: "/tmp/cert.pem"
     keypath: "/tmp/key.pem"
@@ -116,11 +128,15 @@ hazelcast:
       enabled: true
 ----
 
-=== Modes
+== Modes
 
-*hzc* packs 3 usage modes to simplify different use cases.
+You can use the Hazelcast CLC in three modes:
 
-*Default (Non-interactive)*
+- Non-Interactive
+- Interactive
+- SQL Browser
+
+=== Non-Interactive
 
 You can execute commands similar to any other command line tool. It can also be useful for scripting.
 [source,bash,subs="attributes+"]
@@ -128,7 +144,7 @@ You can execute commands similar to any other command line tool. It can also be 
 hzc map --cluster-name cluster1 --name myMap put --key myKey --value myValue
 ----
 
-*Interactive*
+=== Interactive
 
 This starts an interactive prompt, in which you can interactively navigate commands and explore possible subcommands and flags. It is also useful for manual tasks.
 
@@ -139,7 +155,7 @@ image:ROOT:hzc-interactive-screenshot.png[HZC interactive]
 hzc
 ----
 
-On this mode, you can also leverage the "use" command to avoid re-typing the distributed object name on each command. Note that map name "m1" is referenced only once.
+In this mode, you can also leverage the "use" command to avoid re-typing the distributed object name on each command. Note that map name "m1" is referenced only once.
 ----
 hzc
 Connecting to the cluster ...
@@ -150,7 +166,7 @@ v1
 hzc localhost:5701@dev&m:m1>
 ----
 
-*SQL Browser*
+=== SQL Browser
 
 All the modes support executing SQL statements. In addition to that, this mode makes it easier to navigate results with an interactive browser.
 
@@ -165,16 +181,18 @@ hzc sql
 
 == Commands
 
-=== Distributed Data Structures
+=== hzc map
+Map command groups the following sub-commands.
 
-==== Map
-*clear*: Clears entries of the map
+==== clear
+Clears entries of the map
 
 * --name/-n: name of the map
 
 `hzc map clear --name tmpMap`
 
-*get*: Gets the value corresponding to the key from the specified map.
+==== get
+Gets the value corresponding to the key from the specified map.
 
 * --name/-n: name of the map
 * --key/-k: key of the entry
@@ -183,7 +201,9 @@ hzc sql
 
 `hzc map get --key-type int16 --key 2012 --name yearbook`
 
-*get-all*: Gets all the entries corresponding to given keys from the specified map.
+==== get-all
+
+Gets all the entries corresponding to given keys from the specified map.
 
 * --name/-n: name of the map
 * --key/-k: key of the entry
@@ -194,7 +214,9 @@ hzc sql
 
 `hzc get-all -n mapname -k 12 -k 25 --key-type int16 --delim ":"`
 
-*put*: Sets the value for the given key and for specified map.
+==== put
+
+Sets the value for the given key and for specified map.
 
 * --key/-k: key of the entry
 * --name/-n: name of the map
@@ -213,7 +235,9 @@ hzc sql
 
 `hzc map put --key-type string --key hello --value-type float32 --value 19.94 --name myMap --ttl 1300ms --max-idle 1400ms`
 
-*put-all*: Puts given key-value pairs as entries to the specified map.
+==== put-all
+
+Puts given key-value pairs as entries to the specified map.
 
 * --key/-k: key of the entry
 * --name/-n: name of the map
@@ -249,7 +273,9 @@ Example json-entry file:
    }
 ```
 
-*remove*: Deletes the value for the given key from the specified map.
+==== remove
+
+Deletes the value for the given key from the specified map.
 
 * --name/-n: name of the map
 * --key/-k: key of the entry
@@ -270,46 +296,50 @@ hzc map get --key k1    # "--name m1" is inferred
 hzc map use --reset	  # resets the behaviour
 ----
 
-==== Cluster
+=== hzc cluster
 Cluster commands are a group of administrative cluster operation.
 
-Hzc uses REST-API for cluster management operations. In order to perform them, you have to enable the REST-API in the "member"
-configuration (which is disabled by default).
+You must enable the REST API on all members of your cluster to use the cluster commands. These commands use the Hazelcast REST API for cluster management operations. To enable REST API, follow the instructions in the member log or see the documentation: xref:maintain-cluster:rest-api.adoc#enabling-rest-api[enabling-rest-api].
 
-To enable REST API, follow the instructions in the member log or see the documentation: xref:maintain-cluster:rest-api.adoc#enabling-rest-api[enabling-rest-api]
-
-*change-state*: Changes the state of the cluster.
+==== change-state
+Changes the state of the cluster.
 
 * --state/-s: new state of the cluster
 ** possible values: active, no_migration, frozen, passive
 
 `hzc cluster change-state --state passive`
 
-*get-state*: Gets the state of the cluster.
+==== get-state
+Gets the state of the cluster.
 
 `hzc cluster get-state`
 
-*shutdown*: Shutdowns the cluster
+==== shutdown
+Shutdowns the cluster
 
 `hzc cluster shutdown`
 
-*version*: Retrieves and prints the version of the cluster
+==== version
+Retrieves and prints the version of the cluster
 
 `hzc cluster version`
 
-==== SQL
+=== hzc sql
 You can execute a SQL statement or start the SQL Browser with the "sql" command.
 
 `hzc sql` starts the SQL Browser.
 
 `hzc sql "select * from employees"` executes the given query. You can also change the output format with "--output" or "-o" flags. Supported styles are "csv" and "pretty"[default].
 
-=== Querying with SQL
+== Querying with SQL
 
-You can query a map with SQL using 3 different modes of *hzc*.
+You can use SQL to query a map, using all three modes of the Hazelcast CLC.
 
-Default:
-
+[tabs]
+====
+Non-Interactive::
++
+--
 [source,bash]
 ----
 hzc sql "select * from employees"
@@ -322,9 +352,9 @@ hzc sql "select * from employees"
 | 3                   | 22                  | Joe Taylor          |
 | 75                  | 33                  | Mandy Bronson       |
 ----
-
-Interactive:
-
+--
+Interactive::
++
 [source,bash]
 ----
 hzc
@@ -339,12 +369,14 @@ hzc localhost:5701@dev> sql "select * from employees"
 | 3                   | 22                  | Joe Taylor          |
 | 75                  | 33                  | Mandy Bronson       |
 ----
-SQL Browser:
-
+--
+SQL Browser::
++
 1. Type `hzc sql` to navigate to the browser
 2. Type the query you want to execute
 3. Press ctrl+E to execute
 4. Press tab to change keyboard focus from query editor to result browser
-5. Use "w,a,s,d" or arrow keys or "h,j,k,l" to navigate the result rows
+5. Use "w,a,s,d", arrow keys or "h,j,k,l" to navigate the result rows
+====
 
 For details about querying with SQL, see xref:query:sql-overview.adoc[SQL Overview].

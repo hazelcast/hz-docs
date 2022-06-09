@@ -6,6 +6,7 @@
 The Hazelcast Command-Line Client (CLC) is a command-line tool to connect to and operate on Hazelcast Platform and Hazelcast Cloud. You can use the CLC to execute commands through a terminal.
 
 == Installing the Hazelcast CLC
+
 You can install the Hazelcast CLC locally on Linux and macOS.
 
 [tabs]
@@ -48,17 +49,17 @@ Homebrew::
 [source,bash]
 ----
 brew uninstall hazelcast-commandline-client
-brew untap hazelcast/homebrew-hz            # optional
+brew untap hazelcast/homebrew-hz # optional
 ----
 ====
 
 == Configuring the Hazelcast CLC
 
-You can configure the Hazelcast CLC with connection and authentication settings, using a configuration file or with top-level flags.
+You can configure the Hazelcast CLC with connection and authentication settings, using a configuration file or with global parameters.
 
 Configuration values are evaluated in the following precedence, with items higher on the list taking priority:
 
-- Top-level configuration flags
+- Global parameters
 ** `--address`/`-a`: Addresses of the members in the cluster (default is localhost:5701).
 ** `--cloud-token`:  Hazelcast Cloud discovery token
 ** `--cluster-name`: Name of the cluster to connect to (default is dev)
@@ -134,19 +135,20 @@ You can use the Hazelcast CLC in three modes:
 
 - Non-Interactive
 - Interactive
-- SQL Browser
+- SQL
 
-=== Non-Interactive
+=== Non-Interactive Mode
 
-You can execute commands similar to any other command line tool. It can also be useful for scripting.
+You can execute commands similar to any other command-line tool. This mode is useful for scripting.
+
 [source,bash,subs="attributes+"]
 ----
 hzc map --cluster-name cluster1 --name myMap put --key myKey --value myValue
 ----
 
-=== Interactive
+=== Interactive Mode
 
-This starts an interactive prompt, in which you can interactively navigate commands and explore possible subcommands and flags. It is also useful for manual tasks.
+Interactive mode allows you to interactively navigate commands and explore possible subcommands and parameters. It is also useful for manual tasks.
 
 image:ROOT:hzc-interactive-screenshot.png[HZC interactive]
 
@@ -155,7 +157,7 @@ image:ROOT:hzc-interactive-screenshot.png[HZC interactive]
 hzc
 ----
 
-In this mode, you can also leverage the "use" command to avoid re-typing the distributed object name on each command. Note that map name "m1" is referenced only once.
+In this mode, you can also leverage the <<map, `hzc map use` command>> to avoid re-typing the object name on each command. Note that map name "m1" is referenced only once.
 ----
 hzc
 Connecting to the cluster ...
@@ -166,13 +168,13 @@ v1
 hzc localhost:5701@dev&m:m1>
 ----
 
-=== SQL Browser
+=== SQL Mode
 
-All the modes support executing SQL statements. In addition to that, this mode makes it easier to navigate results with an interactive browser.
+All modes support <<sql-query, executing SQL statements>>. In addition to that, the SQL mode makes it easier to navigate results with an interactive SQL browser.
 
-image:ROOT:hzc-sql-browser-screenshot.png[HZC SQL Browser]]
+image:ROOT:hzc-sql-browser-screenshot.png[Using SQL mode with Hazelcast CLC]
 
-To start the browser simply type
+To start SQL mode, do the following:
 
 [source,bash,subs="attributes+"]
 ----
@@ -181,163 +183,294 @@ hzc sql
 
 == Commands
 
-=== hzc map
-Map command groups the following sub-commands.
+[cols="1m,2a"]
+|===
+|Command|Description
 
-==== clear
-Clears entries of the map
+|<<map, hzc map>>
+|Manage map data structures.
 
-* --name/-n: name of the map
+|<<cluster, hzc cluster>>
+|Manage the Hazelcast cluster.
 
-`hzc map clear --name tmpMap`
+|<<sql, hzc sql>>
+|Start a SQL browser.
 
-==== get
-Gets the value corresponding to the key from the specified map.
+|===
 
-* --name/-n: name of the map
-* --key/-k: key of the entry
-* [optional] --key-type: specifies the type of the key
-**   possible values: string [default], boolean, json, int8, int16, int32, int64, float32, float64
+[[map]]
+== hzc map
 
-`hzc map get --key-type int16 --key 2012 --name yearbook`
+Manage map data structures.
 
-==== get-all
+=== hzc map clear
 
-Gets all the entries corresponding to given keys from the specified map.
+Remove all entries in a map.
 
-* --name/-n: name of the map
-* --key/-k: key of the entry
-* [optional] --key-type: specifies the type of the key
-**   possible values: string [default], boolean, json, int8, int16, int32, int64, float32, float64
-* [optional] --delim: delimiter that separates the key and the value
-** [default ":"]
+```
+hzc map clear --name
+```
 
-`hzc get-all -n mapname -k 12 -k 25 --key-type int16 --delim ":"`
+Parameters:
 
-==== put
+- `--name -n` (required): Name of the map.
 
-Sets the value for the given key and for specified map.
+Example:
 
-* --key/-k: key of the entry
-* --name/-n: name of the map
-* --value/-v: value to be set
-** mutually exclusive with "--value-file"
-* --value-file/-f: path to file that contains the value to be set. Use "-" (dash) to read from stdin
-** mutually exclusive with "--value"
-* [optional] --key-type: specifies the type of the key
-**   possible values: string [default], boolean, json, int8, int16, int32, int64, float32, float64
-* [optional] --value-type/-t: specifies the type of the value
-**   possible values: string [default], boolean, json, int8, int16, int32, int64, float32, float64
-* --max-idle: the maximum time for this entry to stay idle in the map
-** possible values: ns, us, ms, s, m, h (nanosecond, microsecond, millisecond, second, minute, hour). Can not be shorter than 1 second.
-* --ttl: duration after which entry will expire and get evicted
-** possible values: ns, us, ms, s, m, h (nanosecond, microsecond, millisecond, second, minute, hour). Can not be shorter than 1 second.
+```
+hzc map clear --name tmpMap
+```
 
-`hzc map put --key-type string --key hello --value-type float32 --value 19.94 --name myMap --ttl 1300ms --max-idle 1400ms`
+=== hzc map get
 
-==== put-all
+Get a value from a map.
 
-Puts given key-value pairs as entries to the specified map.
+```
+hzc map get --name
+            --key
+            [--key-type {string (default), boolean, json, int8, int16, int32, int64, float32, float64}]
+            
+```
 
-* --key/-k: key of the entry
-* --name/-n: name of the map
-* --value/-v: value to be set
-** mutually exclusive with "--value-file", "--json-entry"
-* --value-file/-f: path to file that contains the value to be set. Use "-" (dash) to read from stdin
-** mutually exclusive with "--value", "--json-entry"
-* [optional] --key-type: specifies the type of the key
-** possible values: string [default], boolean, json, int8, int16, int32, int64, float32, float64
-* [optional] --value-type/-t: specifies the type of the value
-** possible values: string [default], boolean, json, int8, int16, int32, int64, float32, float64
-** mutually exclusive with "--json-entry"
-* --json-entry: path to json file that contains entries
-** mutually exclusive with "--value", "--value-file", "--value-type"
+Parameters:
 
-[source,bash,subs="attributes+"]
-----
+- `--name -n` (required): Name of the map.
+- `--key -k` (required): Key of the map entry.
+- `--key-type` (optional): Data type of the key. 
+
+Example:
+
+```
+hzc map get --name yearbook --key 2012 --key-type int16  
+```
+
+=== hzc map get-all
+
+Get all entries with the given keys from a map.
+
+```
+hzc map get-all --name
+                --key
+                [--key-type {string (default), boolean, json, int8, int16, int32, int64, float32, float64}]
+                [--delim {":" (default)}]
+            
+```
+
+Parameters:
+
+- `--name -n` (required): Name of the map.
+- `--key -k` (required): Key of the map entry.
+- `--key-type` (optional): Data type of the key. 
+- `--delim` (optional): Delimiter to separate the key and the value.
+
+Example:
+
+```
+hzc get-all -n mapname -k 12 -k 25 --key-type int16 --delim ":"  
+```
+
+=== hzc map put
+
+Set the value of a given key in a map.
+
+```
+hzc map put --name
+            --key
+            --value
+            [--value-file]
+            [--key-type {string (default), boolean, json, int8, int16, int32, int64, float32, float64}]
+            [--value-type {string (default), boolean, json, int8, int16, int32, int64, float32, float64}]
+            [--max-idle {ns, us, ms, s, m, h (nanosecond, microsecond, millisecond, second, minute, hour)}]
+            [--ttl {ns, us, ms, s, m, h (nanosecond, microsecond, millisecond, second, minute, hour)}]
+            
+```
+
+Parameters:
+
+- `--name -n` (required): Name of the map.
+- `--key -k` (required): Key of the map entry.
+- `--value -v` (required): Value to set for the key. Mutually exclusive with `--value-file`.
+- `--value-file -f` (optional): Path to a file that contains the value to set for the key. Use `-` (dash) to read from stdin. Mutually exclusive with `--value`.
+- `--key-type` (optional): Data type of the key. 
+- `--value-type -t` (optional): Data type of the value.
+- `--max-idle` (optional): Maximum time for this entry to stay idle in the map. Cannot be shorter than 1 second.
+- `--ttl` (optional): Duration after which the entry will expire and be evicted. Cannot be shorter than 1 second.
+
+Example:
+
+```
+hzc map put --key-type string --key hello --value-type float32 --value 19.94 --name myMap --ttl 1300ms --max-idle 1400ms
+```
+
+=== hzc map put-all
+
+Add the given key-value entry pairs to a map.
+
+```
+hzc map put-all --name
+            --key
+            --value
+            [--value-file]
+            [--key-type {string (default), boolean, json, int8, int16, int32, int64, float32, float64}]
+            [--value-type {string (default), boolean, json, int8, int16, int32, int64, float32, float64}]
+            [--max-idle {ns, us, ms, s, m, h (nanosecond, microsecond, millisecond, second, minute, hour)}]
+            [--ttl {ns, us, ms, s, m, h (nanosecond, microsecond, millisecond, second, minute, hour)}]
+            
+```
+
+Parameters:
+
+- `--name -n` (required): Name of the map.
+- `--key -k` (required): Key of the map entry.
+- `--value -v` (required): Value to set for the key. The `--value` and `value-file` parameters are mutually exclusive.
+- `--value-file -f` (optional): Path to a file that contains the value to set for the key. Use `-` (dash) to read from stdin. The `--value` and `value-file` parameters are mutually exclusive.
+- `--key-type` (optional): Data type of the key. 
+- `--value-type -t` (optional): Data type of the value.
+- `--json-entry` (optional): Path to a JSON file that contains entries. The --`json-entry`, `--value`, `--value-file`, and `--value-type` parameters are mutually exclusive.
+
+Example:
+
+```bash
 # Keys and values are matched with the given order
-hzc map put-all -n mapname --key-type int16 -k 1 -k 2 --value-type json -f valueFile.json -v '{"field":"tmp"}'
-hzc map put-all -n mapname --json-entry entries.json`
-----
-
-Example json-entry file:
+hzc map put-all --name mapname --key-type int16 --key 1 --key 2 --value-type json --value-file valueFile.json --value '{"field":"tmp"}'
 ```
+
+```bash
+hzc map put-all --name mapname --json-entry entries.json
+```
+
+.entries.json
+```json
 {
-     "key1": "value1",
-     "key2": {
-       "innerData": "data",
-       "anotherInnerData": 5.0
-     },
-     "key3": true,
-     "key4": [1, 2, 3, 4, 5]
-   }
+  "key1": "value1",
+  "key2": {
+    "innerData": "data",
+    "anotherInnerData": 5.0
+  },
+  "key3": true,
+  "key4": [1, 2, 3, 4, 5]
+}
 ```
 
-==== remove
+=== hzc map remove
 
-Deletes the value for the given key from the specified map.
+Delete the value for a given key in a map.
 
-* --name/-n: name of the map
-* --key/-k: key of the entry
-* [optional] --key-type: specifies the type of the key
-**   possible values: string [default], boolean, json, int8, int16, int32, int64, float32, float64
+```
+hzc map remove --name
+               --key
+               [--key-type {string (default), boolean, json, int8, int16, int32, int64, float32, float64}]          
+```
 
-` hzc map remove -n mapname -k k1`
+Parameters:
 
-*use*: Sets the default map name (interactive-mode only).
+- `--name -n` (required): Name of the map.
+- `--key -k` (required): Key of the map entry.
+- `--key-type` (optional): Data type of the key. 
 
-* --reset: unset default name for map
+Example:
+
+```
+hzc map remove --name mapname --key k1  
+```
+
+=== hzc map use
+
+Set the default map name. This command is only for interactive-mode.
+
+```
+hzc map use mapName
+            [--reset]        
+```
+
+Parameters:
+
+- `mapName`: Name of the map to use as the default.
+- `--reset` (optional): unset default name for map
+
+Example:
 
 [source,bash,subs="attributes+"]
 ----
-Available Commands:
-hzc map use m1    # sets the default map name to m1 unless set explicitly
-hzc map get --key k1    # "--name m1" is inferred
-hzc map use --reset	  # resets the behaviour
+hzc map use m1 # sets the default map name to m1 unless set explicitly in a parameter
+hzc map get --key k1 # "--name m1" is inferred
+hzc map use --reset	# resets the default map name
 ----
 
-=== hzc cluster
+[[cluster]]
+== hzc cluster
+
 Cluster commands are a group of administrative cluster operation.
 
 You must enable the REST API on all members of your cluster to use the cluster commands. These commands use the Hazelcast REST API for cluster management operations. To enable REST API, follow the instructions in the member log or see the documentation: xref:maintain-cluster:rest-api.adoc#enabling-rest-api[enabling-rest-api].
 
-==== change-state
-Changes the state of the cluster.
+=== hzc cluster change-state
 
-* --state/-s: new state of the cluster
-** possible values: active, no_migration, frozen, passive
+Change the state of the cluster.
 
-`hzc cluster change-state --state passive`
+```
+hzc cluster change-state --state {active, no_migration, frozen, passive}
+```
 
-==== get-state
-Gets the state of the cluster.
+Parameters:
 
-`hzc cluster get-state`
+- `--state -s`: New state of the cluster.
 
-==== shutdown
-Shutdowns the cluster
+Example:
 
-`hzc cluster shutdown`
+```
+hzc cluster change-state --state passive
+```
 
-==== version
-Retrieves and prints the version of the cluster
+=== hzc cluster get-state
 
-`hzc cluster version`
+Get the state of the cluster.
 
-=== hzc sql
-You can execute a SQL statement or start the SQL Browser with the "sql" command.
+Example:
 
-`hzc sql` starts the SQL Browser.
+```
+hzc cluster get-state
+```
 
-`hzc sql "select * from employees"` executes the given query. You can also change the output format with "--output" or "-o" flags. Supported styles are "csv" and "pretty"[default].
+=== hzc cluster shutdown
 
-== Querying with SQL
+Shut down the cluster.
+
+Example:
+
+```
+hzc cluster shutdown
+```
+
+=== hzc cluster version
+
+Get the version of the cluster.
+
+Example:
+
+```
+hzc cluster version
+```
+
+[[sql]]
+== hzc sql
+
+Execute a SQL statement or start the interactive SQL browser.
+
+`hzc sql` starts the interactive SQL browser.
+
+`hzc sql "select * from employees"` executes the given query.
+
+You can also change the output format with `--output` or `-o` parameters. Supported styles are "csv" and "pretty" (default).
+
+[[sql-query]]
+== Querying with SQL using Hazelcast CLC
 
 You can use SQL to query a map, using all three modes of the Hazelcast CLC.
 
 [tabs]
 ====
-Non-Interactive::
+Non-Interactive mode::
 +
 --
 [source,bash]
@@ -353,8 +486,9 @@ hzc sql "select * from employees"
 | 75                  | 33                  | Mandy Bronson       |
 ----
 --
-Interactive::
+Interactive mode::
 +
+--
 [source,bash]
 ----
 hzc
@@ -370,13 +504,16 @@ hzc localhost:5701@dev> sql "select * from employees"
 | 75                  | 33                  | Mandy Bronson       |
 ----
 --
-SQL Browser::
+
+SQL mode::
 +
-1. Type `hzc sql` to navigate to the browser
-2. Type the query you want to execute
-3. Press ctrl+E to execute
-4. Press tab to change keyboard focus from query editor to result browser
-5. Use "w,a,s,d", arrow keys or "h,j,k,l" to navigate the result rows
+--
+1. Enter `hzc sql`.
+2. Enter the query you want to execute.
+3. Press btn:[Ctrl + E] to execute the query.
+4. Press tab to change the keyboard focus from the query editor to the result browser.
+5. Use btn:[w,a,s,d], arrow keys or btn:[h,j,k,l] to navigate the result rows.
+--
 ====
 
 For details about querying with SQL, see xref:query:sql-overview.adoc[SQL Overview].

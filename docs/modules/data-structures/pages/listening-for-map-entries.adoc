@@ -36,7 +36,18 @@ C++::
 --
 [source,cpp]
 ----
+#include <hazelcast/client/hazelcast_client.h>
 
+class Employee {
+public:
+    std::string surname;
+    Employee(std::string surname) {
+        this->surname = std::move(surname);
+    }
+    hazelcast::client::hazelcast_json_value to_json(){
+        return hazelcast::client::hazelcast_json_value("{ \"surname\": \"" + surname + "\" }");
+    }
+};
 
 ----
 --
@@ -94,8 +105,24 @@ C++::
 --
 [source,cpp]
 ----
+#include "Employee.h"
 
-
+int main() {
+    hazelcast::client::client_config config;
+    config.set_property("hazelcast.map.entry.filtering.natural.event.types", "true");
+    auto hz = hazelcast::new_client(std::move(config)).get();
+    auto map = hz.get_map("map").get();
+    hazelcast::client::query::sql_predicate sqlPredicate(hz,"surname=smith");
+    map->add_entry_listener(
+            hazelcast::client::entry_listener().on_added([](hazelcast::client::entry_event &&event) {
+                std::cout << "Entry Added:" << event << std::endl;
+            }).on_removed([](hazelcast::client::entry_event &&event) {
+                std::cout << "Entry Removed:" << event << std::endl;
+            }).on_updated([](hazelcast::client::entry_event &&event) {
+                std::cout << "Entry Updated:" << event  << std::endl;
+            }), sqlPredicate, true).get();
+    std::cout << "Entry Listener registered" << std::endl;
+}
 ----
 --
 
@@ -171,7 +198,7 @@ When the listener is running, a change to any record with the name `smith` will 
 
 ```
 entryAdded:EntryEvent {Address[192.168.178.10]:5702} key=1,oldValue=null,
-value=Person{name= smith }, event=ADDED, by Member [192.168.178.10]:5702
+value={surname=smith}, event=ADDED, by Member [192.168.178.10]:5702
 ```
 
 In our example, we're sending an event log to the system output. You can replace this action with any code you want to run when the specified map event occurs. 

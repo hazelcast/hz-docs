@@ -1,4 +1,5 @@
 = High-Density Memory Store
+:description: The High-Density Memory Store is Hazelcast's enterprise in-memory storage solution. It solves garbage collection limitations so that applications can exploit hardware memory more efficiently without the need of oversized clusters.
 :page-enterprise: true
 
 By default, data structures in Hazelcast store data on heap in
@@ -15,7 +16,7 @@ device to avoid garbage collection pauses. This results in oversized clusters
 to hold the data and leads to performance level requirements.
 
 In [navy]*Hazelcast Enterprise*, the High-Density Memory Store is
-Hazelcast's new enterprise in-memory storage solution. It solves garbage
+Hazelcast's enterprise in-memory storage solution. It solves garbage
 collection limitations so that applications can exploit hardware memory
 more efficiently without the need of oversized clusters. High-Density
 Memory Store is designed as a pluggable memory manager which enables multiple
@@ -93,7 +94,7 @@ Memory for tracking the used and available memory blocks. It is used only by
 the **POOLED** memory allocator. Its default value is **12.5**. Please note that
 when the memory runs out, you get a `NativeOutOfMemoryException`;  if your store
 has a large number of entries, you should consider increasing this percentage.
-* **persistent-memory:** See the <<using-persistent-memory, Using Persistent Memory section>> below.
+* **persistent-memory:** See <<using-persistent-memory, Using the High-Density Memory Store with Persistent Memory Devices>>.
 
 The following is the programmatic configuration example.
 
@@ -159,25 +160,28 @@ See the xref:ROOT:system-properties.adoc[System Properties appendix] on how to u
 system properties.
 
 [[using-persistent-memory]]
-== Using Persistent Memory
+== Using the High-Density Memory Store with Persistent Memory Devices
 
-NOTE: The High-Density Memory Store uses persistent memory in volatile mode,
-which means all data is lost after the instance restarts. For durability, please check
-the xref:persistence.adoc[Persistence] feature.
+To extend the memory available to the High-Density Memory Store, you can use persistent memory devices, such as Intel(R) Optane(TM) DC. This is a cost-efficient way to provide additional storage for data structures like IMap, ICache, and Near Cache.
 
-To support larger and more affordable storage for data structures like IMap,
-ICache and Near Cache, Hazelcast provides integration with persistent memory
-technologies like Intel(R) Optane(TM) DC. To benefit from the technology, you
-do not need to make any changes in your application code.
-Only a few configuration changes are required.
+Importantly, the High-Density Memory Store uses the memory provided by the persistent memory device as _volatile_ memory. This means that all data stored on the device is lost when a Hazelcast member or cluster is restarted. To recover data from individual members or clusters after planned or unplanned shutdowns, you need to xref:persistence.adoc[persist data on disk].
 
-NOTE: Note that integration with Intel(R) Optane(TM) DC is supported on Linux
-operating system and it is for Optane DIMMs (not SSDs).
+To use a persistence memory device, you don't need to make any changes to your application code. The following example shows you how to configure the dual in-line memory modules (DIMMs) of Intel(R) Optane(TM) DC as the High-Density Memory Store in Hazelcast.
 
-The optional `persistent-memory` element in the `native-memory` configuration block
-enables the persistent memory usage and defines the directories where this memory
-is mounted along with its operational mode. See the element descriptions below the
-following configuration snippets.
+=== Configuring Intel(R) Optane(TM)
+
+Prerequisites:
+
+- Linux x86_64 operating system
+- Dual socket machine with both sockets populated with Intel(R) Optane(TM) DC DIMMs configured in interleaved mode
+- DIMMs mounted as  `/mnt/pmem0` and `/mnt/pmem1`, and known as NUMA node0 and node1 respectively
+
+NOTE: Currently the only supported configuration is Intel(R) Optane(TM) DC DIMMs running on Linux x86_64.
+
+
+==== Example Configuration Elements and Attributes
+
+The optional `persistent-memory` element in the `native-memory` configuration block enables the use of the persistent memory device and defines the directories where this memory is mounted along with its operational mode.
 
 **Declarative Configuration:**
 
@@ -245,120 +249,85 @@ PersistentMemoryConfig pmemConfig = memoryConfig.getPersistentMemoryConfig()
 config.setNativeMemoryConfig(memoryConfig);
 ----
 
-The above snippets demonstrate how to configure the persistent memory as
-High-Density Memory Store in Hazelcast. The example assumes dual-socket machine;
-both sockets are populated with Intel(R) Optane(TM) DC persistent memory DIMMs that
-are configured in interleaved mode. The two sockets' DIMMs are mounted as `/mnt/pmem0`
-and `/mnt/pmem1` and are known as NUMA node0 and node1, respectively.
+The following elements and attributes are also used in the configuration: 
 
-Here are the descriptions of the  persistent memory configuration elements and attributes:
-
-* `enabled`: Specifies whether the persistent memory usage is enabled or not. Its default value is `false`, 
-i.e., persistent memory usage is disabled.
-* `mode`: Defines the persistent memory operational mode. Two modes are supported:
-** `MOUNTED`: If you choose this mode, the persistent memory is mounted into the file system (aka FS DAX).
-** `SYSTEM_MEMORY`: If you choose this mode, the persistent memory is onlined as system memory (aka KMEM DAX).
-* `directories`: List of the persistent memory mounting directories to store data of all the data structures backed by
-High-Density Memory Store. When you provide the directories:
-** the persistent memory usage is enabled automatically and you do not need to explicitly
+* `enabled`: Specifies whether use of memory on the persistent memory device is enabled or not. The default value is `false`, that is use of the device is disabled.
+* `mode`: Defines the operational mode of the persistent memory device. Two modes are supported:
+** `MOUNTED`: If you choose this mode, the memory is mounted into the file system (aka FS DAX).
+** `SYSTEM_MEMORY`: If you choose this mode, the memory is onlined as system memory (aka KMEM DAX).
+* `directories`: A list of the mounted directories for the persistent memory device which are available for the storage of all data structures backed by the High-Density Memory Store. When you specify the mounted directories, the following rules apply:
+** Use of memory on the persistent memory device is enabled automatically, you do not need to explicitly
 set the `enabled` attribute to `true`
-** the `mode` should be set to `MOUNTED`.
+** Set the `mode` to `MOUNTED`.
 +
-If you do not provide a persistent memory directory is configured, standard RAM is used.
+If you don't specify a directory for the persistent memory device, standard RAM is used instead.
+
+
 
 === Allocation Strategies
 
-Since on multi-socket machines there could be multiple persistent memory
-mount points, the memory allocations need to follow an allocation strategy.
-Starting with 4.1, Hazelcast supports two allocation strategies:
+Since on multi-socket machines there could be multiple mount points for persistent memory devices, the memory allocations need to follow an allocation strategy. Starting with 4.1, Hazelcast supports two allocation strategies:
 
 * Round-robin allocation strategy
 * NUMA-aware allocation strategy
 
-Hazelcast's memory allocator chooses and statically caches one of them for
-every allocator thread for the entire lifetime of the Hazelcast instance.
+Hazelcast's memory allocator chooses and statically caches one of them for every allocator thread for the entire lifetime of the Hazelcast instance.
 
 ==== Round-robin Allocation Strategy
 
-Hazelcast iterates over the configured persistent memory directories and
-makes sure every allocation is done in a different directory than the last.
-This is a best-effort attempt to distribute the allocations evenly on the
-persistent memory DIMMs, which is important from the utilization and
-performance points of view as well. This is the default allocation strategy.
+Hazelcast iterates over the configured memory directories and
+makes sure that every allocation is done in a different directory from the last. This is a best-effort attempt to distribute the allocations evenly on the memory modules, which is also important for memory utilization and
+performance. This is the default allocation strategy.
 
 ==== NUMA-aware Allocation Strategy
 
-The persistent memory modules are mounted in the memory slots just like the
-regular memory modules and sharing the same memory bus. Therefore, the same
-NUMA locality concerns apply to the persistent memory that apply to regular
-memory. This means accessing the persistent memory modules attached to the
-socket on which the current thread runs is cheaper than accessing the
-persistent memory modules attached to a different socket. These are typically
-referenced as NUMA-local and NUMA-remote memories. To achieve the best
-possible performance, Hazelcast implements a NUMA-aware  allocation strategy
-to ensure all persistent memory accesses are local, if certain conditions hold.
+The persistent memory modules are mounted in memory slots just like the
+regular memory modules, and share the same memory bus. Therefore, the same
+NUMA locality concerns apply to the memory from a persistent memory device as regular memory. It is cheaper to access memory modules attached to the socket on which the current thread runs than from a different socket. The modules are typically referenced as NUMA-local and NUMA-remote memories. To achieve the best
+possible performance, Hazelcast implements a NUMA-aware allocation strategy
+to ensure that all accesses to memory modules are local, if certain conditions hold.
 
-To enable this allocation strategy for a certain thread, the thread has to be
+To enable this allocation strategy for a certain thread, the thread must be
 bounded to a single NUMA node, which means the kernel's scheduler makes sure
-the thread can be scheduled only on the CPUs of a single NUMA node. Starting
-with Hazelcast 4.1 this can be done with thread group granularity. For the
-detailed explanation please refer to the xref:performance:cpu-thread-affinity.adoc[thread affinity documentation]. What
-makes the biggest impact on performance is enabling the NUMA-aware allocation
-strategy for the operation threads. An example configuration for that is as follows:
+that the thread can only be scheduled on the CPUs of a single NUMA node. Starting with Hazelcast 4.1, this can be done with thread group granularity. For a detailed explanation, see xref:performance:cpu-thread-affinity.adoc[]. 
+
+Enabling the NUMA-aware allocation strategy for the operation threads can make the biggest impact on performance. For example:
 
 ```
 -Dhazelcast.operation.thread.affinity=[0-9,20-29]:20,[10-19,30-39]:20
 ```
 
-The above example configuration restricts all 40 operation threads to run on a single NUMA node
-on a dual-socket 40 core system, where node0's CPU set is `[0-9,20-29]` and
-node1's CPU set is `[10-19,30-39]`. The NUMA nodes and their CPU sets can be
-discovered by the `numactl -H` command.
+This configuration restricts all 40 operation threads to run on a single NUMA node on a dual-socket 40 core system, where:
+
+- node0's CPU set is `[0-9,20-29]`
+- node1's CPU set is `[10-19,30-39]`. 
+
+To discover the NUMA nodes and their CPU sets, use the `numactl -H` command.
 
 The second requirement for the NUMA-aware strategy is defining the NUMA node
-for every persistent memory directory in the configuration. If both configurations
-are done properly, the threads in the thread groups restricted to run on a single
-NUMA node will use the NUMA-aware allocation strategy, while the rest of threads
-will still use the round-robin strategy. To check which persistent memory is
-attached to which NUMA node, the command `ndctl list -v -m fsdax` can be used.
-Please check which mount point represents which persistent memory device in the
-output of `ndctl`.
+for every directory configured for the persistent memory device. 
+
+If both parts of the configuration are completed, the threads in the thread groups restricted to run on a single NUMA node will use the NUMA-aware allocation strategy. The rest of threads will still use the round-robin strategy. To identify the memory attached to a NUMA node, use the `ndctl list -v -m fsdax` command. From the output of `ndctl` you can you can check which mount point represents which persistent memory device.
 
 === Allocation Overflowing
 
-Since both allocation strategies try to allocate from a single persistent
-memory directory, it may happen that the chosen directory cannot serve the
-allocation request due to lack of free capacity. In this case, both strategies
-take the other directories and try to serve the allocation from those. Please
-note that this compromises the NUMA-aware strategy in the way that there will
-be NUMA-remote persistent memory accesses.
+Since both allocation strategies try to allocate from a single
+memory directory, lack of capacity can prevent the chosen directory from serving the allocation request. In this case, both strategies
+take the other directories and try to serve the allocation from those. This fallback option compromises the NUMA-aware strategy as there will
+be NUMA-remote accesses to memory on the persistent memory device.
 
-=== On the Performance of Persistent Memory
+=== Performance of Memory Modules
+ 
+While the memory modules of a persistent memory device are mounted next to the regular memory modules, and share the same memory bus, they have
+different performance characteristics.
 
-While the persistent memory modules are mounted next to the regular memory
-modules and sharing the same memory bus, the two types of the modules have
-different performance characteristics. First, the persistent memory modules
-can be accessed with higher latency than the regular memory modules. Second,
-while with the regular memory modules the performance of the reads and the
-writes are not different, this is not the case with the persistent memory
-modules. The persistent memory has an asymmetric performance profile, which
-means the writes are slower than the reads.
+- Memory modules on the persistent memory device can be accessed with higher latency than the regular memory modules. 
+- Performance of reads and writes on regular memory modules are the same. On a persistent memory device, the memory modules have an asymmetric performance profile, which means that the writes are slower than the reads.
 
-Despite the above facts, whether the higher latency of the persistent memory
-impacts the performance of Hazelcast depends on multiple factors. Since
-Hazelcast is a distributed platform, the higher latency of the persistent memory
-modules can easily be hidden by the latency variance of the network and in the
-end, in certain use cases there may be no observable difference in the throughput
-of Hazelcast if it stores its data on persistent memory or on regular memory.
-Such a use case is caching, where accessing the entries remotely through
-Hazelcast clients results in a very similar throughput. Based on our tests with
-Intel(R) Optane(TM) DC persistent memory modules we recommend the Optane modules
-for the caching use case up to 10KB entry size.
+Despite the above facts, whether the higher latency of the memory from persistent memory devices impacts the performance of Hazelcast depends on multiple factors. 
 
-Other use cases that don't involve networking, such as iterating over all entries
-with entry processors can be impacted by the higher latency of the persistent
-memory modules, especially, if the entry processors update a significant portion
-of the entries. In general, in such a use case the higher the entry size, the
-higher the impact on the performance. That means with smaller entry sizes the
-performance of Hazelcast with persistent memory can be comparable to the
-performance with regular memory.
+=== Performance Impacts on Different Use Cases
+
+Hazelcast is a distributed platform so the higher latency of memory on a persistent memory device can easily be hidden by the latency variance of the network. For certain use cases there may be no observable difference in the throughput whether Hazelcast stores its data on memory from a persistent memory device or on regular memory. An example of this is caching, where accessing the entries remotely through Hazelcast clients results in a very similar throughput. Based on our tests with Intel(R) Optane(TM) DC persistent memory modules, we recommend Optane modules for the caching use case up to a 10 KB entry size.
+
+Other use cases that don't involve networking, such as iterating over all entries with entry processors can be impacted by the higher latency of the memory modules on a persistent memory device, especially if the entry processors update a significant portion of the entries. For this type use case, the higher the entry size, the higher the impact on the performance. That means with smaller entry sizes the performance of Hazelcast with memory modules on a persistent memory device can be comparable to the performance with regular memory.

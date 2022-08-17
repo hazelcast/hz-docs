@@ -71,7 +71,13 @@ Go::
 -- 
 [source,go]
 ----
-
+func employee(name string, surname string) serialization.JSON {
+	text := fmt.Sprintf(`{
+		"name":"%s",
+		"surname": "%s"
+	}`, name, surname)
+	return serialization.JSON(text)
+}
 ----
 --
 ====
@@ -133,33 +139,18 @@ func main() {
 	// error handling is omitted for brevity
 	ctx := context.TODO()
 	client, _ := hazelcast.StartNewClient(ctx)
-	entryListenerConfig := hazelcast.MapEntryListenerConfig{
-		IncludeValue: true,
-		Predicate:    predicate.Equal("surname", "Smith"),
-	}
-	m, _ := client.GetMap(ctx, "somemap")
-	entryListenerConfig.NotifyEntryAdded(true)
-	entryListenerConfig.NotifyEntryRemoved(true)
-	entryListenerConfig.NotifyEntryUpdated(true)
-	entryListenerConfig.NotifyEntryEvicted(true)
-	entryListenerConfig.NotifyEntryLoaded(true)
-
-	m.AddEntryListener(ctx, entryListenerConfig, func(event *hazelcast.EntryNotified) {
-		switch event.EventType {
-		case hazelcast.EntryAdded:
-			fmt.Println("Entry Added:", event)
-		case hazelcast.EntryRemoved:
-			fmt.Println("Entry Removed:", event)
-		case hazelcast.EntryUpdated:
-			fmt.Println("Entry Updated:", event)
-		case hazelcast.EntryEvicted:
-			fmt.Println("Entry Remove:", event)
-		case hazelcast.EntryLoaded:
-			fmt.Println("Entry Loaded:", event)
-		}
-	})
-
-
+	m, _ := client.GetMap(ctx, "map")
+	subscriptionID, _ := m.AddListenerWithPredicate(ctx, hazelcast.MapListener{
+		EntryAdded: func(event *hazelcast.EntryNotified) {
+			fmt.Println("Entry Added:", event.Key)
+		},
+		EntryUpdated: func(event *hazelcast.EntryNotified) {
+			fmt.Println("Entry Updated:", event.Key)
+		},
+		EntryRemoved: func(event *hazelcast.EntryNotified) {
+			fmt.Println("Entry Removed:", event.Key)
+		},
+	}, predicate.Equal("surname", "smith"), true)
 ----
 --
 ====
@@ -167,11 +158,11 @@ func main() {
 
 NOTE: See xref:query:how-distributed-query-works.adoc[How Distributed Query Works] for more information about creating predicates. 
 
-When the listener is running, a change to any record with the name `smith` will display output similar to the one below. 
+When the listener is running, a change to any record with the surname `smith` will display output similar to the one below.
 
 ```
 entryAdded:EntryEvent {Address[192.168.178.10]:5702} key=1,oldValue=null,
-value=Person{name= smith }, event=ADDED, by Member [192.168.178.10]:5702
+value=Person{surname= smith }, event=ADDED, by Member [192.168.178.10]:5702
 ```
 
 In our example, we're sending an event log to the system output. You can replace this action with any code you want to run when the specified map event occurs. 

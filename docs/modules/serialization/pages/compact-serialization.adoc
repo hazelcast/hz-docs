@@ -1,8 +1,6 @@
 = Compact Serialization
-:page-beta: true
 
-As an enhancement to existing serialization methods, Hazelcast offers a beta version
-of the compact serialization, with the following main features.
+As an enhancement to existing serialization methods, Hazelcast offers Compact Serialization, with the following main features.
 
 * Separates the schema from the data and stores it per type, not per object which
 results in less memory and bandwidth usage compared to other formats
@@ -39,18 +37,11 @@ separately from the classes.
 It also supports zero-configuration use cases by automatically extracting schemas out of the
 classes and Java records using reflection, which is cached and reused later, with no extra cost.
 
-The underlying format of the compact serialized objects is platform and language independent.
-Native client supports will be added shortly after promoting this feature to stable status.
-
-Note that, currently, the feature is in BETA state and Hazelcast does not guarantee behavior or API
-compatibility.
-
-During the BETA period, Compact serialization has to be enabled explicitly as shown in the
-<<compactserializationconfig, CompactSerializationConfig section>>.
+The underlying format of the Compact serialized objects is platform and language independent.
 
 == Using Compact Serialization With Zero-Configuration
 
-Compact serialization can be used without a registering the serializer in the member
+Compact serialization can be used without a registering the serializer in the member or client
 configuration. Hazelcast tries
 to extract a schema out of the class, using reflection. If successful, it registers the
 reflective serializer associated with the extracted schema and uses it while
@@ -60,13 +51,13 @@ extraction fails, Hazelcast throws an exception.
 Currently, Hazelcast supports extracting schemas out of classes that have the following
 field types:
 
-* Primitive types: `boolean`, `byte`, `short`, `int`, `long`, `float`, and `double`
-* Wrapper classes of primitive types: `Boolean`, `Byte`, `Short`, `Integer`, `Long`, `Float`, and `Double`
+* Primitive types: `boolean`, `byte`, `char`, `short`, `int`, `long`, `float`, and `double`
+* Wrapper classes of primitive types: `Boolean`, `Byte`, `Character`, `Short`, `Integer`, `Long`, `Float`, and `Double`
 * `String`
 * `java.time.LocalDate`, `java.time.LocalTime`, `java.time.LocalDateTime`, and `java.time.OffsetDateTime`
 * `java.math.BigDecimal`
 * Enums
-* Arrays of the types shown above
+* Array, `List`, `ArrayList`, `Set`, `HashSet`, `Map`, `HashMap` of the types shown above
 * Nested classes that contain the fields above and arrays of them
 
 Assume that you have the following `Employee` class.
@@ -76,9 +67,6 @@ Assume that you have the following `Employee` class.
 public class Employee {
     private long id;
     private String name;
-
-    public Employee() {
-    }
 
     public Employee(long id, String name) {
         this.id = id;
@@ -115,21 +103,12 @@ The following code would work for both of them.
 
 [source,java]
 ----
-ClientConfig config = new ClientConfig();
-config.getSerializationConfig()
-        .getCompactSerializationConfig()
-        .setEnabled(true); // Required during BETA
-
-HazelcastInstance client = HazelcastClient.newHazelcastClient(config);
+HazelcastInstance client = HazelcastClient.newHazelcastClient();
 IMap<Long, Employee> map = client.getMap("employees");
 Employee employee = new Employee(1, "John Doe");
 map.set(1L, employee);
 Employee employeeFromMap = map.get(1L);
 ----
-
-NOTE: Because compact serialization is in beta, to use zero-configuration,
-you have to enable it in the member configuration. This limitation will
-be removed when the beta period ends.
 
 == Implementing CompactSerializer
 
@@ -153,10 +132,20 @@ public class EmployeeSerializer implements CompactSerializer<Employee> {
         writer.writeInt64("id", employee.getId());
         writer.writeString("name", employee.getName());
     }
+
+    @Override
+    public Class<Employee> getCompactClass() {
+        return Employee.class;
+    }
+
+    @Override
+    public String getTypeName() {
+        return "employee";
+    }
 }
 ----
 
-The last step is to register the serializer in the member configuration.
+The last step is to register the serializer in the member or client configuration.
 
 **Programmatic Configuration:**
 
@@ -164,8 +153,7 @@ The last step is to register the serializer in the member configuration.
 ----
 SerializationConfig serializationConfig = new SerializationConfig();
 serializationConfig.getCompactSerializationConfig()
-        .setEnabled(true) // Required during BETA
-        .register(Employee.class, "employee", new EmployeeSerializer());
+        .addSerializer(new EmployeeSerializer());
 ----
 
 **Declarative Configuration:**
@@ -180,12 +168,12 @@ XML::
 <hazelcast>
     ...
     <serialization>
-        <compact-serialization enabled="true">
-            <registered-classes>
-                <class type-name="employee" serializer="com.example.EmployeeSerializer">
-                    com.example.Employee
-                </class>
-            </registered-classes>
+        <compact-serialization>
+            <serializers>
+                <serializer>
+                    com.example.EmployeeSerializer
+                </serializer>
+            </serializers>
         </compact-serialization>
     </serialization>
     ...
@@ -200,11 +188,8 @@ YAML::
 hazelcast:
   serialization:
     compact-serialization:
-      enabled: true
-      registered-classes:
-        - class: com.example.Employee
-          type-name: employee
-          serializer: com.example.EmployeeSerializer
+      serializers:
+         - serializer: com.example.EmployeeSerializer
 ----
 ====
 
@@ -266,7 +251,7 @@ public Employee read(CompactReader reader) {
 ----
 
 Then, when faced with binary data serialized by the old writer, new readers will be able to
-read the following fields. Also, Hazelcast provides convenient APIs to read default values
+read the following fields. Also, Hazelcast provides convenient APIs to check  existence of fields in the data.
 when there is no such field in the data.
 
 [source,java]
@@ -274,10 +259,15 @@ when there is no such field in the data.
 public Employee read(CompactReader reader) {
     long id = reader.readInt64("id");
     String name = reader.readString("name");
-    // Read the "age" if it exists, or the default value 0.
+    // Read the "age" if it exists, or use the default value 0.
     // reader.readInt32("age") would throw if the "age" field
     // does not exist in data.
-    int age = reader.readInt32("age", 0);
+    int age;
+    if (reader.getFieldKind("age") == FieldKind.INT32) {
+        age = reader.readInt32("age");
+    } else {
+        age = 0;
+    }
     return new Employee(id, name, age);
 }
 ----
@@ -287,57 +277,17 @@ written by a new writer, they will be able to read all fields.
 
 == CompactSerializationConfig
 
-During the beta period, compact serialization must be enabled in the member configuration.
-
-[tabs]
-====
-XML::
-+
---
-[source,xml]
-----
-<hazelcast>
-    ...
-    <serialization>
-        <compact-serialization enabled="true" />
-    </serialization>
-    ...
-</hazelcast>
-----
---
-
-YAML::
-+
---
-[source,yaml]
-----
-hazelcast:
-  serialization:
-    compact-serialization:
-      enabled: true
-----
---
-Java::
-+
---
-[source,java]
-----
-SerializationConfig serializationConfig = new SerializationConfig();
-serializationConfig.getCompactSerializationConfig()
-        .setEnabled(true);
-----
---
-====
-
-Apart from that, the configuration can be used to register either
+The configuration can be used to register either
 
 - an explicit `CompactSerializer`
-- a reflective serializer for a class.
+- a reflective serializer for a class to override other serialization mechanisms.
 
-In case of an explicit serializer, you have to supply a type name for the class.
+In case of an explicit serializer, you have to supply a type name for the class
+in the serializer.
 
-Choosing a type name will associate that name with the schema and will make the polyglot
-use cases where there are multiple clients from different languages easier.
+Choosing a type name will associate that name with the schema and will make the
+polyglot use cases where there are multiple clients from different languages
+easier.
 
 When a class is serialized using the reflective serializer, Hazelcast will choose the
 fully qualified class name as the type name automatically.
@@ -354,12 +304,12 @@ XML::
 <hazelcast>
     ...
     <serialization>
-        <compact-serialization enabled="true">
-            <registered-classes>
-                <class type-name="foo" serializer="com.example.FooSerializer">
-                    com.example.Foo
-                </class>
-            </registered-classes>
+        <compact-serialization>
+            <serializers>
+                <serializer>
+                    com.example.FooSerializer
+                </serializer>
+            </serializers>
         </compact-serialization>
     </serialization>
     ...
@@ -375,11 +325,8 @@ YAML::
 hazelcast:
   serialization:
     compact-serialization:
-      enabled: true
-      registered-classes:
-        - class: com.example.Foo
-          type-name: foo
-          serializer: com.example.FooSerializer
+      serializers:
+        - serializer: com.example.FooSerializer
 ----
 --
 Java::
@@ -389,14 +336,16 @@ Java::
 ----
 SerializationConfig serializationConfig = new SerializationConfig();
 serializationConfig.getCompactSerializationConfig()
-        .setEnabled(true)
-        .register(Foo.class, "foo", new FooSerializer()); // Use the "foo" as the type name
+        .addSerializer(new FooSerializer());
 ----
 --
 ====
 
 Lastly, the following is a sample configuration that registers reflective
 serializer for a certain class, without implementing an explicit serializer.
+
+This way, one can override other serialization mechanisms for a certain class
+such as Java serializable.
 
 [tabs]
 ====
@@ -408,10 +357,10 @@ XML::
 <hazelcast>
     ...
     <serialization>
-        <compact-serialization enabled="true">
-            <registered-classes>
+        <compact-serialization>
+            <classes>
                 <class>com.example.Bar</class>
-            </registered-classes>
+            </classes>
         </compact-serialization>
     </serialization>
     ...
@@ -427,8 +376,7 @@ YAML::
 hazelcast:
   serialization:
     compact-serialization:
-      enabled: true
-      registered-classes:
+      classes:
         - class: com.example.Bar
 ----
 --
@@ -439,15 +387,14 @@ Java::
 ----
 SerializationConfig serializationConfig = new SerializationConfig();
 serializationConfig.getCompactSerializationConfig()
-        .setEnabled(true)
-        .register(Bar.class); // Uses the fully qualified class name as the type name
+        .addClass(Bar.class); // Uses the fully qualified class name as the type name
 ----
 --
 ====
 
 If you want to override the serialization mechanism used for `Serializable` or
-`Externalizable` classes and use compact serialization, you must register
-reflective serializers for them.
+`Externalizable` classes and use Compact serialization without writing any
+serializer, you must add those classes to the configuration.
 
 == GenericRecord Representation
 

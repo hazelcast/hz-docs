@@ -1,5 +1,5 @@
 = Stream Processing in SQL
-:description: You can run SQL queries on streaming data, using standard SQL as well as some custom functions for features such as streaming aggregations.
+:description: You can run SQL queries on single streams of data or streams merged from multiple stream, using standard SQL as well as some custom functions for features such as streaming aggregations and stream-to-stream joins.
 
 Stream processing is a programming paradigm for continuously performing computations over events as they arrive. The streams are never-ending, which is why they are often described as _unbounded_.
 
@@ -7,35 +7,54 @@ Stream processing is a programming paradigm for continuously performing computat
 
 == Context
 
-This guide explains how to query streams, using the following `trades` data as an example:
+This guide explains how to query streams, using the following e-commerce data in examples:
 
 [cols="1m,1m"]
+.Orders
 |===
 |Field|Data type
 
-|trade_amount
+|order_amount
 |BIGINT
 
-|trade_ticker
+|order_id
 |VARCHAR
 
-|price
-|DECIMAL
+|order_time
+|TIMESTAMP
 
-|trade_time
+|product_id
+|BIGINT
+
+|unit_price
+|DECIMAL
+|===
+
+[cols="1m,1m"]
+.Deliveries
+|===
+|Field|Data type
+
+|address
+|VARCHAR
+
+|delivery_id
+|BIGINT
+
+|delivery_time
 |TIMESTAMP
 |===
 
 == Creating a Mapping to a Streaming Source
 
-To allow Hazelcast to read data from a streaming source, you need to create a mapping to it. For example, the mapping for the `trades` Kafka topic may look like the following:
+To allow Hazelcast to read data from a streaming source, you need to create a mapping to it. For example, the mapping for the `orders` Kafka topic may look like the following:
 
 ```sql
-CREATE OR REPLACE MAPPING trades (
-  trade_amount BIGINT,
-  trade_ticker VARCHAR,
-  price DECIMAL,
-  trade_time TIMESTAMP)
+CREATE OR REP_LACE MAPPING orders (
+  order_amount BIGINT,
+  order_id VARCHAR,
+  unit_price DECIMAL,
+  order_time TIMESTAMP)
 TYPE Kafka
 OPTIONS (
   'valueFormat' = 'json-flat',
@@ -49,44 +68,44 @@ NOTE: At the moment, the only supported streaming source for SQL is a xref:mappi
 
 You can query streams like you would query any batch source. The main difference between streaming and batch queries is that when you query a streaming source, Hazelcast creates a job, which continues to run until you cancel it or the client disconnects.
 
-For example, you can monitor the whole `trades` stream:
+For example, you can monitor the whole `orders` stream:
 
 ```sql
-SELECT * FROM trades;
+SELECT * FROM orders;
 ```
 
-This query starts a job that monitors the `trades` stream for new events and executes the query on new events.
+This query starts a job that monitors the `orders` stream for new events and executes the query on new events.
 
-The output contains all trades since the query was first executed. If no trades have yet been made, the output will be empty, however the query will not complete and the client will wait for more rows:
+The output contains all orders since the query was first executed. If no orders have been submitted, the output is empty. However, the query will continue to run as orders are processed, and the client waits for more row entries:
 
 ```
-+------------+------------+-----+----------+
-|trade_amount|trade_ticker|price|trade_time|
-+------------+------------+-----+----------+
++------------+--------+----------+----------+
+|order_amount|order_id|unit_price|order_time|
++------------+--------+----------+----------+
 ```
 
-You can also use other clauses such as the `WHERE` clause to filter the output of the stream:
+You can also use other SQL clauses to extract the data that you need, such as the `WHERE` clause to filter the output of the stream:
 
 ```sql
-SELECT * FROM trades
-WHERE price > 10;
+SELECT * FROM orders
+WHERE unit_price > 10;
 ```
 
-When new events are received, Hazelcast immediately returns the new rows from your active query. For example, the following query writes some trading data to the `trades` topic:
+When new events are received, Hazelcast immediately adds new rows from your active query. For example, the following query writes order details to the `orders` topic:
 
 ```sql
 INSERT INTO trades VALUES
-  (100, 'ABCD', 11, '2022-01-01 00:00:00'),
-  (20, 'EFGH', 1.5, '2022-01-01 00:01:00');
+  (100, '9344ABCD', 11, '2022-01-01 00:00:00'),
+  (20, '5622EFGH', 1.5, '2022-01-01 00:01:00');
 ```
 
 The result of the filter:
 
 ```
-+------------+------------+-----+-------------------+
-|trade_amount|trade_ticker|price|trade_time---------|
-+------------+------------+-----+-------------------+
-|         100|      'ABCD'|   11|2022-01-01 00:00:00|
++------------+--------+----------+-------------------+
+|order_amount|order_id|unit_price|order_time---------|
++------------+--------+----------+-------------------+
+|         100|  'ABCD'|        11|2022-01-01 00:00:00|
 ```
 
 == Managing Streaming Queries
@@ -98,11 +117,14 @@ If the client stops receiving results, but doesn't close the result, Hazelcast w
 You can manage jobs backing SQL queries. For example, you may want to show all running jobs or cancel a query. See xref:pipelines:job-management.adoc[].
 
 [[aggregation]]
-== Stream Aggregation
+== Stream Aggregation for Single or Merged Data Streams
 
-An aggregate function performs computations over a group of rows and returns a single value. For example, the `COUNT(*)` function returns the number of rows in the group. However, streams are unbounded, making it impossible to count all the rows because they are continuously being appended. To use aggregate functions over a stream, you need a way to group the rows into groups for which the engine can tell, when the group is complete.
+An aggregate function performs computations over a group of rows and returns a single value. For example, the `COUNT(*)` function returns the number of rows in the group. However, streams are unbounded, making it impossible to count all the rows because they are continuously being appended. 
 
-A common way to group values is in relation to time, because a stream of events happening in real time is ordered by time. For example, you might want to perform some aggregation over all trades that happened in the past minute. When a next minute starts, Hazelcast can calculate the aggregation for the previous minute.
+A common way to resolve this problem is to group values from a data stream by time because events that happen in real time are ordered by time. For example, you might want to perform some aggregation computations on all orders that were submitted in the past minute. This grouping sets a limit on the orders that are evaluated. When the next minute starts, Hazelcast can calculate the aggregation on events from the previous minute.
+
+
+===Assigning Time-Based Windows for Events
 
 To assign events into time-based windows, you need to use a windowing function. Hazelcast supports the following windowing functions:
 
@@ -116,71 +138,139 @@ image:ROOT:eventtime-sliding.svg[A hopping window]
 
 TIP: For a conceptual introduction to windowing and watermarks, see xref:pipelines:event-time.adoc[].
 
+=== Aggregation Windows for a Single Data Stream
+
+The following example creates an output that shows the number of orders that are submitted each minute.
+
 ```sql
-SELECT window_start, window_end, COUNT(*) AS total_trades <1>
+SELECT window_start, window_end, COUNT(*) AS total_orders <1>
 FROM TABLE(TUMBLE(
-  TABLE trades_ordered, <2>
-  DESCRIPTOR(trade_time), <3>
+  TABLE orders_submitted, <2>
+  DESCRIPTOR(order_time), <3>
   INTERVAL '1' MINUTE)) <4>
 GROUP BY 1,2; <5>
 ```
 
-<1> Get a count of all trades that happened in the window.
+<1> Get a count of all orders that were submitted in the window.
 <2> Use an ordered view of `tables` as input (explained later).
-<3> Use the timestamp in the `trade_time` column to determine the window the event belongs to.
+<3> Use the timestamp in the `order_time` column to determine the window the event belongs to.
 <4> Set the size of the tumbling window to one minute.
 <5> Defines the grouping, the numbers `1` and `2` refer to 1st and 2nd column of the `SELECT` clause, therefore we group by the `window_start` and `window_end` columns.
 
-When new results are complete for each one-minute window, they are returned:
+New results for each one-minute window are only returned when all events that belong to the window have been processed:
 
 ```
 +-------------------+-------------------+--------------------+
-|window_start       |window_end         |        total_trades|
+|window_start       |window_end         |        total_orders|
 +-------------------+-------------------+--------------------+
 |2022-01-04T00:00   |2022-01-04T00:01   |                  45|
 ...
 ```
 
-=== Creating Watermarks
+=== Processing Aggregation Windows and Watermarks
 
-Hazelcast can't emit the result of a windowed aggregation until it has received all the events belonging to the window. But streams typically aren't strictly ordered by time, events arrive each with different latency. To tell Hazelcast how long to wait, you must define a watermark.
+As stated in the previous section, Hazelcast can't emit the result of an aggregation for a time-based window until it has received all the events belonging to that window. Due to differences in latency, events may not arrive at the Jet engine for processing in strict chronological order. Watermarks are designed to deal with this issue. They tell Hazelcast how long to wait before an aggregation window is closed.
 
-One way of assigning watermarks is defined by how much time an event is allowed to be delayed after the newest event received so far. This time is called the _maximum event lag_. Any event that is later than the maximum event lag is dropped. This is the only strategy currently supported.
+In Hazelcast, you can only assigning watermarks that tell the processing engine the maximimum time to wait after the newest event received so far. This value is called the _maximum event lag_. Any event that arrives later than the maximum event lag for a particular aggregation window is dropped.
 
 NOTE: Time is measured by the timestamps in the events, rather than the current time on a system clock.
 
-Hazelcast calls the function to add watermarks `IMPOSE_ORDER()`, because it curbs the potentially unbounded disorder of the events in the stream to a fixed value. The `IMPOSE_ORDER()` function is a stateful function whose state is scoped for the duration of the query. This function injects watermarks that lag a fixed amount behind the maximum value of the field observed since the query started.
+Hazelcast uses the `IMPOSE_ORDER()` function to add watermarks, because it curbs the potentially unbounded disorder of the events in the stream to a fixed value. The `IMPOSE_ORDER()` function is a stateful function whose state is scoped for the duration of the query. 
+
+In this example, the `IMPOSE_ORDER()` function injects watermarks that define a maximum event lag of 0.5 seconds for each aggregation window. An order event with a timestamp of `yyyy-mm-dd 23:59:59.5` is added to the window. If another event is processed with a timestamp that's 0.5 seconds or more old, such as ``yyyy-mm-dd 23:59:58.9`, that event is dropped because it is too old.
 
 ```sql
 SELECT *
 FROM TABLE(IMPOSE_ORDER(
-  TABLE trades, <1>
-  DESCRIPTOR(trade_time), <2>
+  TABLE orders, <1>
+  DESCRIPTOR(order_time), <2>
   INTERVAL '0.5' SECONDS) <3>
 );
 ```
 
 <1> The table that contains the events, including the timestamp.
 <2> A pointer to the column that contains the timestamp for the watermark.
-<3> The maximum event lag. Any events that are later than this lag are dropped. For example, an event with a timestamp of `yyyy-mm-dd 23:59:59.5` is added to the window. If another event is processed with a timestamp that's 0.5 seconds or more old, such as ``yyyy-mm-dd 23:59:58.9`, that event is dropped because it is too old.
-
-If an event is delayed by more than the defined maximum event lag, it is dropped.
+<3> The maximum event lag.
 
 NOTE: The above query doesn't currently run in Hazelcast. The `IMPOSE_ORDER()` function must be only used together with `TUMBLE` or `HOP` functions.
 
 For better readability, it's useful to create a view for the watermark like so:
 
 ```sql
-CREATE VIEW trades_ordered AS
+CREATE VIEW orders_submitted AS
 SELECT *
   FROM TABLE(IMPOSE_ORDER(
-  TABLE trades,
-  DESCRIPTOR(trade_time),
+  TABLE orders,
+  DESCRIPTOR(order_time),
   INTERVAL '0.5' SECONDS)
 );
 ```
 
 We already used this view above. Without the view, you would have to have a nested call to `IMPOSE_ORDER` as the first argument to `TUMBLE`/`HOP` function, which is harder to read.
+
+=== Aggregation Windows for Multiple Data Streams
+
+You can also use time-based windows for the merging and aggregation of data from two or more data streams. In this case, you need to define the time-based relationship between the streams.
+
+The following examples show you how to merge data from an `orders` and a `delivery` events stream and write this data to a single, aggregated view for querying.  
+
+==== *Create Mappings*
+
+As for an individual data stream, you must start by creating a mapping for each Kafka topic that you want to use as a data source.
+
+```sql
+CREATE OR REPLACE MAPPING orders (
+  order_id VARCHAR,
+  order_time TIMESTAMP
+  product_id BIGINT)
+TYPE Kafka
+OPTIONS (
+  'valueFormat' = 'json-flat',
+  'bootstrap.servers' = 'kafka:9092'
+);
+```
+```sql
+CREATE OR REPLACE MAPPING deliveries (
+  delivery_id BIGINT,
+  order_id VARCHAR
+  delivery_time TIMESTAMP
+  address TIMESTAMP )
+TYPE Kafka
+OPTIONS (
+  'valueFormat' = 'json-flat',
+  'bootstrap.servers' = 'kafka:9092'
+);
+```
+
+==== *Merge the Streams*
+
+Next, you need to define the timebound relationship between the two event streams. This is defined in a SQL `SELECT` statement using a `JOIN`. The conditions of the `JOIN` define how long the Jet engine will buffer the events from each event stream before processing them. In Hazelcast, this is called the _postpone_ time, which acts in a similar way to the maximum event lag for a single stream.
+
+```sql
+SELECT * 
+  FROM orders_submitted AS os
+  JOIN deliveries_ordered AS do
+    ON do.delivery_time BETWEEN os.order_time
+    AND os.order_time + INTERVAL `1` HOUR,
+```
+In this example, deliveries within one hour of an order fall within the processing window.
+
+==== *Write Merged Streams to an Aggregated View*
+
+You can use the `IMPOSE_ORDER` function to write the results of the `SELECT` statement straight to a view ready for querying.
+
+```sql
+CREATE VIEW orders_and_deliveries AS
+SELECT *
+  FROM TABLE(IMPOSE_ORDER
+  (TABLE orders_submitted,
+  DESCRIPTOR(order_time),
+  INTERVAL '1' HOUR))
+  AS os
+  JOIN deliveries_ordered AS do
+    ON do.delivery.time BETWEEN os.order_time
+    AND os.order_time + INTERVAL `1` HOUR
+```
 
 == Related Resources
 

@@ -1,0 +1,40 @@
+name: Backport changes to the beta branch
+on:
+ push:
+  branches:
+   - main
+jobs:
+  backport:
+    strategy:
+      matrix:
+        branch: ['v/5.2-BETA-1']
+    runs-on: ubuntu-latest
+    steps:
+    
+      - name: checkout
+        uses: actions/checkout@v2
+        with:
+         fetch-depth: 0
+
+      - name: Set up git config
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "<>"
+          
+      - name: Check PR for backport label
+        id: check_pr_labels
+        uses: shioyang/check-pr-labels-on-push-action@v1.0.3
+        with:
+         github-token: ${{ secrets.GITHUB_TOKEN }}
+         labels: '["backport to beta"]'
+        
+      - name: See result
+        run: echo "${{ steps.check_pr_labels.outputs.result }}"
+
+      - name: Checkout maintenance branch and cherry-pick
+        if: ${{ steps.check_pr_labels.outputs.result == 'true' }}
+        run: |
+          git fetch
+          git checkout ${{ matrix.branch }}
+          git cherry-pick -x --strategy=recursive -X theirs $GITHUB_SHA
+          git push

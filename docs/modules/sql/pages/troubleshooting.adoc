@@ -1,17 +1,50 @@
 = Troubleshooting SQL
-:description: This topic provides solutions to common errors in SQL queries.
+:description: This topic provides solutions to some common errors in SQL queries.
+:toclevels: 3
 
 {description}
 
-== JSON_QUERY evaluated to multiple values
+== Mapping Errors
 
-If you see this error, the JsonPath is matching multiple values, which results in invalid JSON. If you expect multiple values to be returned from the JsonPath expression, you should add a wrapper, such as the `WITH CONDITIONAL ARRAY WRAPPER` clause, to wrap the matches in an array.
+This section provides troubleshooting for the `CREATE MAPPING` statement.
 
-See the xref:sql:functions-and-operators.adoc#json_query[`JSON_QUERY` reference].
+=== Reading Parquet files is not supported in local filesystem mode
 
-== jsonpath.InvalidPathException
+You cannot create mappings to local files in the parquet format.
 
-If you see this error, the JsonPath in your query is invalid.
+To read from local files in the parquet format, you can use the Java link:https://docs.hazelcast.org/docs/5.1/javadoc/com/hazelcast/jet/pipeline/file/FileSourceBuilder.html[`FileSourceBuilder` API] with the `useHadoopforLocalFiles` method. See the xref:integrate:file-connector.adoc#usehadoopforlocalfiles[unified file connector documentation] for examples.
+
+=== Could not find ReadFileFnProvider
+
+Hazelcast cannot read the file format that you're trying to map to. This error could be thrown because you are using the slim distribution of Hazelcast Platform, which doesn't come with the ability to read the file format by default.
+
+Use the xref:getting-started:editions.adoc[full distribution] of Hazelcast Platform or find the missing module and add it to your cluster members' classpaths.
+
+=== No suitable FileSourceFactory found
+
+Hazelcast cannot read from the specified file system.
+
+To read from some file systems, you must add additional modules to your cluster members' classpaths. See xref:sql:mapping-to-a-file-system.adoc#supported-file-systems[Supported file systems].
+
+=== java.net.UnknownHostException: path
+
+Your mapping contains an invalid URL.
+
+Make sure that all your URLs are resolvable.
+
+== JSON Errors
+
+This section provides troubleshooting for using JSON in SQL.
+
+=== JSON_QUERY evaluated to multiple values
+
+The JsonPath is matching multiple values, which results in invalid JSON.
+
+If the JsonPath expression can match multiple values in some edge cases, add a wrapper, such as the xref:sql:functions-and-operators.adoc#json_query[`WITH CONDITIONAL ARRAY WRAPPER`] clause, to wrap the matches in an array.
+
+=== jsonpath.InvalidPathException
+
+The JsonPath in your query is invalid.
 
 Check the xref:working-with-json.adoc#jsonpath-syntax[supported JsonPath syntax].
 

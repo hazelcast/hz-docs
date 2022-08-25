@@ -5,7 +5,7 @@ When a split is detected, the side that will initiate the merge process is decid
 This decision is based on the cluster size; the smaller cluster, by
 member count, merges into the bigger one. If they have an equal number of members,
 then a hashing algorithm determines the merging cluster. When deciding the merging side,
-both sides ensure that there's no intersection in their member lists. In some cases, recovery from
+both sides ensure that there's no overlap in their member lists. In some cases, recovery from
 split-brain may be problematic due to discovery issues; see <<eliminating-unsuccessful-cluster-merges, Eliminating Unsuccessful Cluster Merges>> on how to overcome these issues.
 
 After the merging side is decided, the oldest cluster member of
@@ -557,10 +557,10 @@ since they block your partition threads. Also the `LifeCycleEvent.MERGED` or
 
 In some cases, Hazelcast Platform members which initially can form a cluster (join to each other) may not be
 able to recover from the split-brain even though the network failure which caused the split-brain is healed.
-The reason is that the master member of the smaller cluster fails to discover the master member of the bigger cluster, so the split-brain merge process never begins.
+The reason is that the master member of the cluster, which responsible for initiating the healing, fails to discover the other cluster's master member, so the split-brain merge process never begins.
 
-Considering a scale-up situation; you add new members after some time since the initial member count in the cluster has become
-insufficient. The IP addresses of these new members may not exist in the configurations of
+Considering the scenario when you are scaling-up a cluster. You need to add new members because the initial member count in the cluster is insufficient.
+The IP addresses of these new members may not exist in the configurations of
 the initial set of members, since the new addresses are not added into the the configurations of the initial members while starting them.
 So, in a cluster with a long lifecycle, some members may not have the address of every other member, resulting in split-brain recovery failures.
 
@@ -568,7 +568,7 @@ To overcome this issue, you can use the following REST endpoint to update the me
 
 [source,shell]
 ----
-hazelcast/rest/config/tcp-ip/member-list
+/hazelcast/rest/config/tcp-ip/member-list
 ----
 
 You can send a `GET` request to the above endpoint to retrieve the current member list from the member and a `POST` request for updating the member list.
@@ -577,7 +577,7 @@ The following is the cURL command to retrieve the member list, and its response 
 
 [source,shell]
 ----
-curl -X GET http://<member IP address>:<port>/hazelcast/rest/config/tcp-ip/member-list
+curl http://<member IP address>:<port>/hazelcast/rest/config/tcp-ip/member-list
 
 {"status":"success","member-list":["<member-1-address>","<member-2-address>","<member-3-address>", ...]}
 ----
@@ -586,13 +586,20 @@ The following is the cURL command to update the member list, and its response fo
 
 [source,shell]
 ----
-curl -X POST -H "Content-Type: text/plain" --data-urlencode "<cluster-name>" --data-urlencode "<cluster-password>" --data-urlencode "<member1-address>,<member2-address>,<member3-address>" http://<member IP address>:<port>/hazelcast/rest/config/tcp-ip/member-list
+curl --data-urlencode "<cluster-name>" --data-urlencode "" --data-urlencode "<member1-address>,<member2-address>,<member3-address>" http://<member IP address>:<port>/hazelcast/rest/config/tcp-ip/member-list
 
 {"status":"success","message":"The member list of TCP-IP join config is updated at run time. ","member-list":["<member1-address>","<member2-address>","<member3-address>"]
 ----
 
-For these `GET` and `POST` requests, you need to enable the `CLUSTER_READ` and `CLUSTER_WRITE` endpoint groups, respectively, in the cluster members. See xref:maintain-cluster:rest-api.adoc#enabling-endpoint-groups[Enabling Endpoint Groups].
+[NOTE]
+====
+If xref:security:overview.adoc[security] enabled and xref:security:simple-authentication.adoc[custom member authentication] is used in your cluster, the cURL command to update the member list would
+look like the following.
 
-By using this REST endpoint, you are able to add the address of the bigger cluster's master to the smaller cluster's members. Therefore, the smaller cluster master will find the bigger cluster's master
-member and the split-brain merge will be able to proceed.
+curl --data-urlencode "<username>" --data-urlencode "<password>" --data-urlencode "<member1-address>,<member2-address>,<member3-address>" http://<member IP address>:<port>/hazelcast/rest/config/tcp-ip/member-list
+====
+
+For these requests to work, you need to enable the `CLUSTER_READ` and `CLUSTER_WRITE` endpoint groups, respectively, in the cluster members. See xref:maintain-cluster:rest-api.adoc#enabling-endpoint-groups[Enabling Endpoint Groups].
+
+By using this REST endpoint, you are able to add the missing addresses of the members from the other cluster to your members. Therefore, one cluster master member will find the other cluster's master member.
 

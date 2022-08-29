@@ -1,5 +1,6 @@
-= Working with an External Data Store
+= External Data Stores
 :description: One of the most common implementations of Hazelcast is as a front-end cache for an external storage system, such as a relational database. Hazelcast offers a way to automate the process of loading the data into an in-memory map for faster application access, as well as automatically write updates back to the external storage to keep the systems synchronized.
+:page-beta: true
 
 {description}
 
@@ -180,9 +181,9 @@ incremental loading, the `MapLoader.loadAllKeys()` method returns an `Iterable` 
 
 === Write-Through Persistence
 
-Write-through persistence performs synchronous updates to both the map and the external data store. When implemented, the `map.put(key,value)` call triggers the following actions in order: 
+Write-through persistence performs synchronous updates to both the map and the external data store. When implemented, the `map.put(key,value)` call triggers the following actions in order:
 
-1. Call `MapStore.store(key,value)` - this writes the entry to the external data store. 
+1. Call `MapStore.store(key,value)` - this writes the entry to the external data store.
 2. Write entry to in-memory primary map.
 3. Write entry to backup maps, if configured (i.e. if the `backup-count` property is greater than 0).
 
@@ -192,18 +193,18 @@ The same behavior goes for the `map.remove(key)`, the only difference is that `M
 
 === Write-Behind Persistence
 
-Write-behind persistence performs asynchronous updates to the external data store. When triggered, the `map.put(key,value)` call triggers the following actions in order: 
+Write-behind persistence performs asynchronous updates to the external data store. When triggered, the `map.put(key,value)` call triggers the following actions in order:
 
-1. Write entry to primary map. 
-2. Write entry to backup maps, if configured. 
+1. Write entry to primary map.
+2. Write entry to backup maps, if configured.
 3. Mark entry as "dirty" - entry has not been written to external store.
-4. After `write-delay-seconds` has elapsed, write entry to external store using defined `MapStore.storeAll`. 
+4. After `write-delay-seconds` has elapsed, write entry to external store using defined `MapStore.storeAll`.
 
-`write-delay-seconds` is the interval between writes to the external store. For example, if you configure an interval of 5 seconds, every 5 seconds the cluster will store all "dirty" entries. In other words, the longest delay between writing to memory and writing to the store will be 5 seconds, but for any given entry, it could be less depending on when the `map.put` occurred. Another way to to look at write-behind is as scheduled batch update at given intervals. 
+`write-delay-seconds` is the interval between writes to the external store. For example, if you configure an interval of 5 seconds, every 5 seconds the cluster will store all "dirty" entries. In other words, the longest delay between writing to memory and writing to the store will be 5 seconds, but for any given entry, it could be less depending on when the `map.put` occurred. Another way to to look at write-behind is as scheduled batch update at given intervals.
 
-For fault tolerance, dirty entries are stored in a queue on the primary member and also on a back-up member. If you have eviction configured, the eviction process overrides the timer and forces dirty entries to be stored in order to empty the queue and free up memory. 
+For fault tolerance, dirty entries are stored in a queue on the primary member and also on a back-up member. If you have eviction configured, the eviction process overrides the timer and forces dirty entries to be stored in order to empty the queue and free up memory.
 
-If `MapStore` throws an exception, then Hazelcast tries to store the entry again. If the entry still cannot be stored, the cluster logs the event and re-queues the entry. 
+If `MapStore` throws an exception, then Hazelcast tries to store the entry again. If the entry still cannot be stored, the cluster logs the event and re-queues the entry.
 
 In write-behind mode, Hazelcast coalesces enqueued updates on a specific key by default. Only the most recent enqueued update for each key will be written when the `write-delay-seconds` interval has elapsed. You can override this and write all enqueued updates by setting the `MapStoreConfig.setWriteCoalescing()` system property to `FALSE`.
 
@@ -216,7 +217,7 @@ Batch operations are only allowed in write-behind mode. If your application perf
 
 == Creating the `MapStore` Implementation
 
-The following example shows you how to implement the `MapStore` interface. 
+The following example shows you how to implement the `MapStore` interface.
 
 [source,java]
 ----
@@ -268,13 +269,13 @@ NOTE: Please note that if you are using post-processing in combination with xref
 
 == Configuring Hazelcast to use your `MapStore` Implementation
 
-Once you've created your `MapStore` implementation, you need to configure your map to use it. 
+Once you've created your `MapStore` implementation, you need to configure your map to use it.
 
-[tabs] 
-==== 
-XML:: 
-+ 
--- 
+[tabs]
+====
+XML::
++
+--
 [source,xml]
 ----
 <hazelcast>
@@ -391,11 +392,11 @@ You can prepare your own `MapLoader` to access a database such as Cassandra and 
 You can define the database properties, such as its URL and name, using the `properties` configuration element. The following is a configuration example
 for MongoDB:
 
-[tabs] 
-==== 
-XML:: 
-+ 
--- 
+[tabs]
+====
+XML::
++
+--
 [source,xml]
 ----
 <hazelcast>

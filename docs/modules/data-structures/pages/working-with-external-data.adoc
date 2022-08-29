@@ -252,9 +252,21 @@ TIP: link:https://github.com/hazelcast/hazelcast-code-samples/tree/master/distri
 
 == Offloading MapStore and MapLoader Operations
 
-Offloading `MapStore` and `MapLoader` operations allow these operations to work asynchronously, meaning they do not block each other.
-This provides faster executions of these operations, resulting in higher throughput of the whole cluster.
-For this, you can use the `offload` configuration element as shown below. It is enabled by default (`true`). You can configure the offloading for each map in your cluster.
+To improve cluster throughput, all MapStore operations do not block partition threads.
+Each partition in a member is managed by a single thread, ensuring that the write operations to a given partition are handled
+one at a time in first-in-first-out order. However, MapStore operations may take a long time to connect to the external data source and complete, blocking the affected partitions. 
+To avoid blocking partition threads, MapStore operations that communicate with the external data source are handled asynchronously, using an <<configuring-the-offload-executor, executor>>.
+
+=== Limitations
+
+* The `init()` and `destroy()` methods of the `MapLoaderLifecycleSupport` interface cannot be offloaded. These methods are triggered only once in the whole lifecycle of a map.
+* Cluster-wide map bulk loading operations cannot be offloaded. These include `loadAll()`, `loadAllKeys()`, `putAll()` and `removeAll()` methods.
+* Offloading cannot be used for xref:tiered-storage:overview.adoc[tiered storage], since you cannot enable both MapStore and tiered storage for a map.
+
+=== Blocking Partition Threads
+
+If you want to block partition threads until MapStore operations are complete, 
+you can configure the `offload` setting for the MapStore. It is enabled by default (`true`) and can be configured for each map in your cluster.
 
 [tabs] 
 ==== 
@@ -265,7 +277,7 @@ XML::
 ----
 <hazelcast>
     <map name="default">
-        <map-store enabled="true" initial-mode="LAZY">
+        <map-store enabled="true">
             <offload>true</offload>
             ...
         </map-store>
@@ -283,7 +295,6 @@ hazelcast:
     default:
       map-store:
         enabled: true
-        initial-mode: LAZY
         offload: true
         ...
 ----
@@ -295,12 +306,50 @@ Java::
 Config config = new Config();
 MapConfig mapConfig = config.getMapConfig();
 MapStoreConfig mapStoreConfig = mapConfig.getMapStoreConfig();
-mapStoreConfig.setOffload("true");
+mapStoreConfig.setOffload(true);
 ...
 ----
 ====
 
-NOTE: Offloading cannot be used for xref:tiered-storage:overview.adoc[Tiered Storage], and for `MapLoaderLifecycleSupport`, since it is a one time operation per member along the lifecycle of a map.
+=== Configuring the Offload Executor
+
+You can configure the executor that handles asynchronous MapStore operations as a regular Hazelcast Platform xref:computing:executor-service.adoc#configuring-executor-service[executor].
+The offload executor's name is `hz:map-store-offloadable`.
+
+[tabs] 
+==== 
+
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <executor-service name="hz:map-store-offloadable">
+        <pool-size>1</pool-size>
+        <queue-capacity>10</queue-capacity>
+    </executor-service>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  ..
+  executor-service:
+    "hz:map-store-offloadable":
+      pool-size: 1
+      queue-capacity: 10
+----
+====
+
+Here, you can set the number of threads for this executor and its task queue capacity. See xref:computing:executor-service.adoc#configuring-executor-service[Configuring Executor Service]
+for the full descriptions of configuration elements.
 
 == Managing the Lifecycle of a MapLoader
 

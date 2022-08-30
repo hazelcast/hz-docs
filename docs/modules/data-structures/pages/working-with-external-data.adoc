@@ -5,13 +5,13 @@
 
 [[loading-and-storing-persistent-data]]
 
-Applications that access in-memory data are using gets, puts, or performing queries as described elsewhere in this documentation. When you work with an external data store, the Hazelcast cluster members are retrieving data from and writing data to that external data store independently of the application.  
+Applications that need to access in-memory data use `gets`, `puts`, or xref:query:overview.adoc[other queries] to access this data. However, when you work with an external data store, members of the Hazelcast cluster retrieve data from and write data to the external data store independently of the application.
 
 image:ROOT:externalData.png[Working with External Data]
 
 NOTE: This feature is a server-side feature. Because these operations run within the Hazelcast cluster natively, the interfaces that perform these functions are only available in Java.
 
-To load data from external systems in a map you will use the Java link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/MapLoader.html[`MapLoader`] interface. 
+To load data from external systems in a map you will use the Java link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/MapLoader.html[`MapLoader`] interface.
 
 To save map entries to an external system, you will use the Java link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/MapStore.html[`MapStore`] interface.
 
@@ -20,7 +20,7 @@ To save map entries to an external system, you will use the Java link:https://do
 |Interface| Description
 
 |MapLoader
-|This method gets invoked when the application requests a value from the map. If the requested value does not exist in memory, the `MapLoader.load()` method tries to load it from the data store. Once loaded into memory, the map entry remains until it is changed, movd, or evicted. 
+|This method gets invoked when the application requests a value from the map. If the requested value does not exist in memory, the `MapLoader.load()` method tries to load it from the data store. Once loaded into memory, the map entry remains until it is changed, moved, or evicted.
 
 |MapStore
 |This method replicates updates to the in-memory map data to the data store. This replication can be implemented as a blocking (write-through) or non-blocking (write-behind) operation. (See below for details.)
@@ -33,13 +33,15 @@ NOTE: The `MapStore` interface extends the `MapLoader` interface. Therefore, all
 
 == Loading Data From Your External Store
 
+The `MapLoader` interface includes the following features for loading data.
+
 === Read-Through Persistence
 
 When you have MapLoader implemented, a `map.get()` triggers the `load()` method if the requested entry does not exist in memory. The MapLoader retrieves the requested entry, hands it to Hazelcast, which adds it to the in-memory map. This automatic loading is called read-through persistence.
 
 === Map Initialization
 
-Although read-through persistence will retrieve a requested map entry from the external data store, retrieving each individual entry as it is requested is inefficient. Instead, use the `MapLoader.loadAllKeys()` method to pre-populate your in-memory map. When used, each Hazelcast cluster member connects to the database to retrieve its owned portion of the map. This parallel processing is the fastest way to retrieve entries from the data store. 
+Although read-through persistence will retrieve a requested map entry from the external data store, retrieving each individual entry as it is requested is inefficient. Instead, use the `MapLoader.loadAllKeys()` method to pre-populate your in-memory map. When used, each Hazelcast cluster member connects to the database to retrieve its owned portion of the map. This parallel processing is the fastest way to retrieve entries from the data store.
 
 You have two options for pre-populating your map.
 
@@ -48,10 +50,10 @@ You have two options for pre-populating your map.
 |Initial Mode| Behavior
 
 |EAGER
-|The `MapLoader.loadAllKeys()` method is invoked the first time you create or get the map. All cluster members connect to the database and load all their local active partitions. This is a blocking operation; your application will be unable to read from or write to the map until all cluster members have loaded their partitions. 
+|The `MapLoader.loadAllKeys()` method is invoked the first time you create or get the map. All cluster members connect to the database and load all their local active partitions. This is a blocking operation; your application will be unable to read from or write to the map until all cluster members have loaded their partitions.
 
 |LAZY
-|After getting or creating the map, the `MapLoader.loadAllKeys()` method is triggered when you first access a map using one of the <<IMap Operations that Trigger `MapStore` and `MapLoader`>>. LAZY is the default mode. 
+|After getting or creating the map, the `MapLoader.loadAllKeys()` method is triggered when you first access a map using one of the <<IMap Operations that Trigger `MapStore` and `MapLoader`>>. LAZY is the default mode.
 |===
 
 NOTE: If you add indices to your map with the link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/config/IndexConfig.html[IndexConfig^]
@@ -60,7 +62,7 @@ class or the xref:query:how-distributed-query-works.adoc#indexing-queries[`addIn
 If your implementation of the `MapLoader.loadAllKeys()` method returns a `null` value, nothing will be loaded. Your `MapLoader.loadAllKeys()` method can also return all or some of the keys, depending on how you set up your `MapLoader` implementation. For example, you can specify a range of keys to be pre-loaded, then rely on read-through persistence to load the remaining keys on demand.
 
 
-Here's the `MapLoader` initialization process in detail: 
+Here's the `MapLoader` initialization process in detail:
 
 . Initialization starts depending on the value of the `initial-mode` property. If it is set to `EAGER`, initialization starts on all partitions as soon as the map is created (i.e. when `map.get()` is called).  If it is set to `LAZY`, data is loaded when a `map.get()` or other operation tries to read an entry from the map.
 . Hazelcast calls the `MapLoader.loadAllKeys()` to get all your keys on one of the members.
@@ -116,7 +118,7 @@ NOTE: When you set `MapStoreConfig.setWriteCoalescing()` to `FALSE`, after you r
 
 === Batch Updates
 
-Batch operations are only allowed in write-behind mode. If your application performs a batch update or batch delete from the in-memory map, Hazelcast will call the `MapStore.storeAll(map)` and `MapStore.deleteAll(collection)` methods defined in your `MapStore` class to do all writes in a single call. 
+Batch operations are only allowed in write-behind mode. If your application performs a batch update or batch delete from the in-memory map, Hazelcast will call the `MapStore.storeAll(map)` and `MapStore.deleteAll(collection)` methods defined in your `MapStore` class to do all writes in a single call.
 
 
 == Creating the `MapStore` Implementation

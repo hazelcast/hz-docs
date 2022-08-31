@@ -124,7 +124,7 @@ Unlike batch processing, working with data streams means dealing with a potentia
 Hazelcast supports two types of time-based windows:
 
 - <<tumbling-windows, Tumbling windows>>
-- Hopping, or sliding windows
+- <<hopping-windows, Hopping windows>>
 
 [[tumbling-windows]]
 === Tumbling Windows
@@ -147,10 +147,10 @@ GROUP BY 1,2; <5>
 ```
 
 <1> Get a count of all orders that were submitted in the window.
-<2> Use an ordered view of `tables` as input (explained later).
+<2> <<late-events, Handle late events>>.
 <3> Use the timestamp in the `order_time` column to determine the window the event belongs to.
 <4> Set the size of the tumbling window to one day.
-<5> Defines the grouping, the numbers `1` and `2` refer to 1st and 2nd column of the `SELECT` clause, therefore we group by the `window_start` and `window_end` columns.
+<5> Defines the grouping, the numbers `1` and `2` refer to 1st and 2nd column of the `SELECT` clause, therefore you group by the `window_start` and `window_end` columns.
 
 New results for each one-day window are only returned when all events that belong to the window have been processed. To learn more about this, see <<late-events>>.
 
@@ -182,10 +182,10 @@ GROUP BY 1,2; <5>
 ```
 
 <1> Get a count of all deliveries in the window.
-<2> Use an ordered view of `tables` as input (explained later).
+<2> <<late-events, Handle late events>>.
 <3> Use the timestamp in the `delivery_time` column to determine the window the event belongs to.
 <4> Set the size of the step to one day and the window to seven days.
-<5> Defines the grouping, the numbers `1` and `2` refer to 1st and 2nd column of the `SELECT` clause, therefore we group by the `window_start` and `window_end` columns.
+<5> Defines the grouping, the numbers `1` and `2` refer to 1st and 2nd column of the `SELECT` clause, therefore you group by the `window_start` and `window_end` columns.
 
 ```
 +-------------------+-------------------+--------------------+
@@ -200,11 +200,9 @@ New results for each seven-day window are only returned when all events that bel
 [[late-events]]
 == Handling Late Events
 
-As stated in the previous section, Hazelcast can't emit the result of an aggregation for a time-based window until it has received all the events belonging to that window. However, due to differences in latency, events that are marked with a timestamp that falls within the window may not arrive for processing until after the window ends. 
+As stated in the previous section, Hazelcast can't emit the results of windowed aggregations or stream-to-stream joins until it has received all the events belonging to the defined timeframe. However, due to differences in latency, events that fall within the timeframe may not arrive for processing until after it ends. To place a limit on late events, Hazelcast uses the `IMPOSE_ORDER()` function. This function allows you to specify a _maximum event lag_. Any event that arrives later than the maximum event lag is dropped. 
 
 NOTE: Time is measured by the timestamps in the events, rather than the current time on a system clock.
-
-Hazelcast uses the `IMPOSE_ORDER()` function to place a limit on late events. This function allows you to specify a _maximum event lag_. Any event that arrives later than the maximum event lag for a particular aggregation window is dropped.
 
 In the following example, the `IMPOSE_ORDER()` function injects a maximum event lag of 0.5 seconds for each aggregation window. An order event with a timestamp of `yyyy-mm-dd 23:59:59.5` is added to the window. If another event is processed with a timestamp that's 0.5 seconds or more old, such as ``yyyy-mm-dd 23:59:58.9`, that event is dropped because it is too old.
 
@@ -223,10 +221,10 @@ FROM TABLE(IMPOSE_ORDER(
 
 NOTE: The above query doesn't currently run in Hazelcast. The `IMPOSE_ORDER()` function must be only used together with `TUMBLE` or `HOP` functions.
 
-For better readability, it's useful to create a view for the watermark like so:
+For better readability, it's useful to create a view:
 
 ```sql
-CREATE VIEW orders_submitted AS
+CREATE VIEW orders_ordered AS
 SELECT *
   FROM TABLE(IMPOSE_ORDER(
   TABLE orders,
@@ -235,16 +233,16 @@ SELECT *
 );
 ```
 
-We already used this view above. Without the view, you would have to have a nested call to `IMPOSE_ORDER` as the first argument to `TUMBLE`/`HOP` function, which is harder to read.
+Without the view, you would have to have a nested call to `IMPOSE_ORDER` as the first argument to `TUMBLE`/`HOP` function, which is harder to read.
 
 [[joins]]
-=== Stream-To-Stream Joins with SQL
+== Stream-To-Stream Joins
 
 If you have two or more streams of related data, you can join them together on a related field, process them, and store the result.
 
-The following examples show you how to merge data from an `orders` and a `delivery` events stream and write this data to a single, aggregated view for querying.  
+The following examples show you how to merge data from an `orders` and a `deliveries` events stream and write this data to a single, aggregated view for querying.  
 
-==== *Create Mappings*
+=== Create Mappings
 
 As for an individual data stream, you must start by creating a mapping for each Kafka topic that you want to use as a data source.
 
@@ -271,12 +269,11 @@ OPTIONS (
   'bootstrap.servers' = 'kafka:9092'
 );
 ```
+=== Join the Streams
 
-==== *Join the Streams*
+Next, you need to specify the timebound relationship between the two event streams. This is defined in a SQL `SELECT` statement using a `JOIN`. The conditions of the `JOIN` tell the Jet engine how long to buffer the events from each event stream before processing them; the _postpone_ time. Without this delay, the stream is unlimited, and any queries are rejected. 
 
-Next, you need to specify the timebound relationship between the two event streams. This is defined in a SQL `SELECT` statement using a `JOIN`. The conditions of the `JOIN` state how long the Jet engine will buffer the events from each event stream before processing them. This is called the _postpone_ time.
-
-For example, you might want to know how many next-day deliveries are being made. The following `SELECT` statement finds all deliveries that are made within one day of an order.
+For example, you might want to know how many next-day deliveries are being made. The following `SELECT` statement finds all deliveries that are made within one day of an order. In this case, the _postpone_ time is defined by the one-day interval between orders and deliveries.
 
 ```sql
 SELECT * 
@@ -285,7 +282,7 @@ SELECT *
     ON do.delivery_time BETWEEN os.order_time
     AND os.order_time + INTERVAL `1` DAY,
 ```
-==== *Write Merged Streams to an Aggregated View*
+=== Write Merged Streams to an Aggregated View
 
 You can use the `IMPOSE_ORDER` function to write the results of the `SELECT` statement straight to a view ready for querying.
 
@@ -305,4 +302,4 @@ SELECT *
 == Related Resources
 
 - xref:learn-sql.adoc[Get started with streaming queries in SQL] with a quick tutorial.
-- xref:join-two-streams.adoc[Practise joining data streams and querying the results].
+- xref:tutorials:join-two-streams.adoc[Practise joining data streams and querying the results].

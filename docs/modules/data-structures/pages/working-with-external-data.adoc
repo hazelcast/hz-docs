@@ -1,47 +1,53 @@
-= Working with an External Data Store
-:description: One of the most common implementations of Hazelcast is as a front-end cache for an external storage system, such as a relational database. Hazelcast offers a way to automate the process of loading the data into an in-memory map for faster application access, as well as automatically write updates back to the external storage to keep the systems synchronized.
+= MapStore and MapLoader
+:description: MapStore is an API for building a cache on top of Hazelcast. The MapStore interface includes methods that are triggered when operations are invoked on a map. You can implement your own logic in these methods to connect to an external data store, load data from it, and write data back to it. For example, you can use a MapStore to load data into your cluster from a MongoDB, MySQL, or PostgreSQL database.
 
 {description}
 
-[[loading-and-storing-persistent-data]]
-
-Applications that need to access in-memory data use `gets`, `puts`, or xref:query:overview.adoc[other queries] to access this data. However, when you work with an external data store, members of the Hazelcast cluster retrieve data from and write data to the external data store independently of the application.
-
 image:ROOT:externalData.png[Working with External Data]
 
-NOTE: This feature is a server-side feature. Because these operations run within the Hazelcast cluster natively, the interfaces that perform these functions are only available in Java.
+MapStore supports the following caching patterns:
 
-To load data from external systems in a map you will use the Java link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/MapLoader.html[`MapLoader`] interface.
+- <<read-through, Read-through>>: If an entry does not exist in memory when an application asks for it, Hazelcast asks the MapStore implementation to load that entry from the data store. If the entry exists, the MapStore implementation requests it from the data store and Hazelcast puts it into memory.
 
-To save map entries to an external system, you will use the Java link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/MapStore.html[`MapStore`] interface.
+- <<write-through,Write-through>>: When new entries are added to a map, those entries are added to the data store synchronously.
+
+- <<write-behind,Write-behind>>: When new entries are added to a map, those entries are added to the data store asynchronously, after a configured delay.
+
+NOTE: This feature is a server-side feature. Operations run within the Hazelcast cluster. As a result, the interfaces that perform these functions are available only in Java.
+
+== Differences Between MapLoader and MapStore
+
+The `MapStore` interface extends the `MapLoader` interface. Therefore, all methods and configuration parameters of the `MapLoader` interface are also available on the `MapStore` interface.
+
+If you only want to load data from external systems in a map, use the link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/MapLoader.html[`MapLoader`] interface.
+
+If you also want to save map entries to an external system, use the link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/MapStore.html[`MapStore`] interface. 
 
 [cols="1m,5a"]
 |===
 |Interface| Description
 
 |MapLoader
-|This method gets invoked when the application requests a value from the map. If the requested value does not exist in memory, the `MapLoader.load()` method tries to load it from the data store. Once loaded into memory, the map entry remains until it is changed, moved, or evicted.
+|The methods on the `MapLoader` interface get invoked when the application requests a value from the map. If the requested value does not exist in memory, the `MapLoader.load()` method tries to load it from the data store. Once loaded into memory, the map entry remains until it is changed, moved, or evicted.
 
 |MapStore
-|This method replicates updates to the in-memory map data to the data store. This replication can be implemented as a blocking (write-through) or non-blocking (write-behind) operation. (See below for details.)
-
+|The methods on the `MapStore` interface can also replicate updates made to a map to the data store. This replication can be implemented as a blocking (write-through) or non-blocking (write-behind) operation.
 |===
 
-NOTE: The data store that you choose must be a centralized system that is accessible from all Hazelcast members. Persistence to a local file system is not supported.
+== Connecting to an External Data Store
 
-NOTE: The `MapStore` interface extends the `MapLoader` interface. Therefore, all methods and configuration parameters of the `MapLoader` interface are also available on the `MapStore` interface.
+To connect a MapStore or MapLoader to an external data store, you have the following options:
 
-== Loading Data From Your External Store
+- Use a third-party library or JDBC driver in the `init()`  method of the <<managing-the-lifecycle-of-a-maploader,`MapLoaderlifeCycleSupport` implementation>>.
 
-The `MapLoader` interface includes the following features for loading data.
+- <<generic-mapstore, Configure a connection>> to the external data store on the member.
 
-=== Read-Through Persistence
+The data store that you choose must be a centralized system that is accessible to all Hazelcast members. Persistence to a local file system is not supported.
 
-When you have MapLoader implemented, a `map.get()` triggers the `load()` method if the requested entry does not exist in memory. The MapLoader retrieves the requested entry, hands it to Hazelcast, which adds it to the in-memory map. This automatic loading is called read-through persistence.
+[[init]]
+== Pre-Populating a Map
 
-=== Map Initialization
-
-Although read-through persistence will retrieve a requested map entry from the external data store, retrieving each individual entry as it is requested is inefficient. Instead, use the `MapLoader.loadAllKeys()` method to pre-populate your in-memory map. When used, each Hazelcast cluster member connects to the database to retrieve its owned portion of the map. This parallel processing is the fastest way to retrieve entries from the data store.
+You can use the `MapLoader.loadAllKeys()` method to pre-populate your map. When used, each Hazelcast cluster member connects to the database to retrieve its owned portion of the map. This parallel processing is the fastest way to retrieve entries from the data store.
 
 You have two options for pre-populating your map.
 
@@ -53,27 +59,25 @@ You have two options for pre-populating your map.
 |The `MapLoader.loadAllKeys()` method is invoked the first time you create or get the map. All cluster members connect to the database and load all their local active partitions. This is a blocking operation; your application will be unable to read from or write to the map until all cluster members have loaded their partitions.
 
 |LAZY
-|After getting or creating the map, the `MapLoader.loadAllKeys()` method is triggered when you first access a map using one of the <<IMap Operations that Trigger `MapStore` and `MapLoader`>>. LAZY is the default mode.
+|After getting or creating the map, the `MapLoader.loadAllKeys()` method is triggered when you first access a map using one of the <<Map Operations that Trigger MapStore and MapLoader>>. LAZY is the default mode.
 |===
 
-NOTE: If you add indices to your map with the link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/config/IndexConfig.html[IndexConfig^]
-class or the xref:query:how-distributed-query-works.adoc#indexing-queries[`addIndex`] method, then the `initial-mode` property is overridden by `EAGER`.
+NOTE: If you add xref:query:how-distributed-query-works.adoc#indexing-queries[indexes] to the map, then the `initial-mode` property is overridden by `EAGER`.
 
-If your implementation of the `MapLoader.loadAllKeys()` method returns a `null` value, nothing will be loaded. Your `MapLoader.loadAllKeys()` method can also return all or some of the keys, depending on how you set up your `MapLoader` implementation. For example, you can specify a range of keys to be pre-loaded, then rely on read-through persistence to load the remaining keys on demand.
-
+If your implementation of the `MapLoader.loadAllKeys()` method returns a `null` value, nothing is loaded. Your `MapLoader.loadAllKeys()` method can also return all or some of the keys, depending on how you set up your `MapLoader` implementation. For example, you can specify a range of keys to be pre-loaded, then rely on read-through persistence to load the remaining keys on demand.
 
 Here's the `MapLoader` initialization process in detail:
 
-. Initialization starts depending on the value of the `initial-mode` property. If it is set to `EAGER`, initialization starts on all partitions as soon as the map is created (i.e. when `map.get()` is called).  If it is set to `LAZY`, data is loaded when a `map.get()` or other operation tries to read an entry from the map.
-. Hazelcast calls the `MapLoader.loadAllKeys()` to get all your keys on one of the members.
+. Initialization starts depending on the value of the `initial-mode` property. If the `initial-mode` property is set to `EAGER`, initialization starts on all partitions as soon as the map is created.  If the `initial-mode` property is set to `LAZY`, data is loaded when an operation tries to read an entry from the map.
+. Hazelcast calls the `MapLoader.loadAllKeys()` method on one member to get all the keys.
 . That member distributes keys to all other members in batches.
-. Each member loads values of all its owned keys by calling `MapLoader.loadAll(keys)` for their own keys.
+. Each member loads all values of its owned keys by calling `MapLoader.loadAll(keys)`.
 . Each member puts its owned entries into the map by calling `IMap.putTransient(key,value)`.
 
-NOTE: If the load mode is `LAZY` and the `clear()` method is called (which triggers `MapStore.deleteAll()`), Hazelcast removes **ONLY** the
-loaded entries from your map and data store. Since all the data is not loaded in this case (`LAZY` mode), please note that there may still be entries in your data store.
+NOTE: If the `initial-mode` property mode is set to `LAZY` and the `clear()` method is called, Hazelcast removes *only* the
+loaded entries from the map and the data store. Since all the data is not loaded in this case (`LAZY` mode), some entries may still exist in the data store.
 
-NOTE: If you do not want the MapStore start to load as soon as the first cluster member starts, you can use the system property `hazelcast.initial.min.cluster.size`. For example, if you set its value as `3`, loading process will be blocked until three cluster members are completely up.
+NOTE: If you do not want the MapStore to load as soon as the first cluster member starts, you can use the `hazelcast.initial.min.cluster.size` system property. For example, if you set its value as `3`, the loading process will be blocked until three cluster members are running.
 
 [[loading-keys-incrementally]]
 === Loading Keys Incrementally
@@ -81,11 +85,13 @@ NOTE: If you do not want the MapStore start to load as soon as the first cluster
 If the number of keys to load is large, it is more efficient to load them incrementally rather than loading them all at once. To support
 incremental loading, the `MapLoader.loadAllKeys()` method returns an `Iterable` which can be lazily populated with the results of a database query. Hazelcast iterates over the returned data and, while doing so, sends the keys to their respective owner members. The iterator that was returned from the `MapLoader.loadAllKeys()` may also implement the `Closeable` interface, in which case the iterator is closed when the iteration is over. This is intended for releasing resources such as closing a JDBC result set.
 
+[[read-through]]
+== Read-Through Persistence
 
+A `map.get()` triggers the `load()` method if the requested entry does not exist in memory. The MapLoader retrieves the requested entry, and Hazelcast adds it to the map. This automatic loading is called read-through persistence.
 
-== Writing Data to Your External Store
-
-=== Write-Through Persistence
+[[write-through]]
+== Write-Through Persistence
 
 Write-through persistence performs synchronous updates to both the map and the external data store. When implemented, the `map.put(key,value)` call triggers the following actions in order: 
 
@@ -93,11 +99,12 @@ Write-through persistence performs synchronous updates to both the map and the e
 2. Write entry to in-memory primary map.
 3. Write entry to backup maps, if configured (i.e. if the `backup-count` property is greater than 0).
 
-If the `MapStore.store(key,value)` method throws an exception, it is propagated to the original `IMap.put()` or `IMap.remove()` call in the form of `RuntimeException`.
+If the `MapStore.store(key,value)` method throws an exception, it is propagated to the original `map.put()` or `map.remove()` call in the form of `RuntimeException`.
 
 The same behavior goes for the `map.remove(key)`, the only difference is that `MapStore.delete(key)` is called when the entry will be deleted.
 
-=== Write-Behind Persistence
+[[write-behind]]
+== Write-Behind Persistence
 
 Write-behind persistence performs asynchronous updates to the external data store. When triggered, the `map.put(key,value)` call triggers the following actions in order: 
 
@@ -118,44 +125,44 @@ NOTE: When you set `MapStoreConfig.setWriteCoalescing()` to `FALSE`, after you r
 
 === Batch Updates
 
-Batch operations are only allowed in write-behind mode. If your application performs a batch update or batch delete from the in-memory map, Hazelcast will call the `MapStore.storeAll(map)` and `MapStore.deleteAll(collection)` methods defined in your `MapStore` class to do all writes in a single call.
+Batch operations are only allowed in write-behind mode. If your application performs a batch update or batch delete from the in-memory map, Hazelcast calls the `MapStore.storeAll(map)` and `MapStore.deleteAll(collection)` methods defined in your `MapStore` class to do all writes in a single call.
 
-
-== Creating the `MapStore` Implementation
+== Example Implementation
 
 The following example shows you how to implement the `MapStore` interface. 
 
-[source,java]
+[source,java,indent=0]
 ----
 include::ROOT:example$/dds/map/PersonMapStore.java[tag=personms]
 ----
 
-During the initial loading process, the `MapStore` interface uses an ExecutorService thread, not a partition thread, in order to avoid affecting ongoing partition operations. After the initial loading process, the `IMap.get()` and `IMap.put()` methods use a partition thread.
+During the initial loading process, the `MapStore` interface uses an ExecutorService thread, not a partition thread, in order to avoid affecting ongoing partition operations. After the initial loading process, the `map.get()` and `map.put()` methods use a partition thread.
 
 NOTE: Each member receives an instance of the `MapStore` implementation, which means that multiple threads can access it at the same time. If you use multiple threads to access shared state in a `MapStore` implementation,  you need to make sure that the implementation is thread safe.
 
 NOTE: `MapStore` or `MapLoader` implementations should not use Hazelcast Map/Queue/MultiMap/List/Set operations. Your implementation should
 only work with your data store. Otherwise, you may get into deadlock situations.
 
-NOTE: To monitor the `MapLoader` instance for each loaded entry, use the `EntryLoadedListener` interface. See the xref:events:object-events.adoc#listening-for-map-events[Listening for Map Events section] to learn how you can catch entry-based events.
-
 [[forcing-all-keys-to-be-loaded]]
 === Forcing All Keys To Be Loaded
 
-The `MapLoader.loadAll()` method loads some or all keys into a data store in order to optimize multiple load operations. This method has two signatures (the same method can take two different parameter lists). One signature loads the given keys and the other loads all keys. See the example code below.
+The `MapLoader.loadAll()` method loads some or all keys into a data store in order to optimize multiple load operations. This method has two signatures. One signature loads the given keys and the other loads all keys. See the example code below.
 
-[source,java]
+[source,java,indent=0]
 ----
 include::ROOT:example$/dds/map/LoadAll.java[tag=loadall]
 ----
 
+== Monitoring Loaded Entries
+
+To monitor the `MapLoader` instance for each loaded entry, use the `EntryLoadedListener` interface. See the xref:events:object-events.adoc#listening-for-map-events[Listening for Map Events section] to learn how you can catch entry-based events.
 
 [[post-processing-objects-in-map-store]]
-=== Post-Processing Objects in `MapStore`
+== Editing Objects in a Map
 
-In some scenarios, you may need to modify the object after writing it to the external data store. For example, you can get an ID or version auto-generated by your database, but then need to modify the in-memory entry for local use without writing the change back to the external store.
+In some scenarios, you may need to edit an object after writing it to the external data store. For example, you can get an ID or version auto-generated by your database, but then need to edit the in-memory entry for local use without writing the change back to the external store.
 
-To post-process an object, implement the `PostProcessingMapStore` interface to put the modified object into the distributed map. This triggers an extra step of `Serialization`, so use it only when needed. (This is only valid when using `write-through` to update your external data store.)
+To edit an object, implement the `PostProcessingMapStore` interface to put the edited object into the distributed map. This triggers an extra step of `Serialization`, so use it only when needed. (This is only valid when using `write-through` to update your external data store.)
 
 Here is an example of post processing:
 
@@ -170,12 +177,23 @@ class ProcessingStore implements MapStore<Integer, Employee>, PostProcessingMapS
 }
 ----
 
-NOTE: Please note that if you are using post-processing in combination with xref:computing:entry-processor.adoc[Entry Processors], post-processed values will not be carried to in-memory backups.
+NOTE: Please note that if you are editing an object in combination with xref:computing:entry-processor.adoc[Entry Processors], edited values will not be saved to in-memory backups.
 
+== Configuring Hazelcast to use your MapStore Implementation
 
-== Configuring Hazelcast to use your `MapStore` Implementation
+Once you've created your `MapStore` implementation, you need to configure your map to use it. You have two options:
 
-Once you've created your `MapStore` implementation, you need to configure your map to use it. 
+- Use an existing connection.
+- Create a new connection.
+
+[[existing-connection]]
+=== Using an Existing Connection
+
+If you have an xref:external-data-stores:external-data-stores.adoc[external data store] already configured, you can configure your MapStore to use that existing connection.
+
+When you configure your MapStore to use that existing connection, Hazelcast creates a xref:sql:mapping-to-jdbc.adoc[SQL mapping with the JDBC connector]. The name of the mapping is the same name as your map prefixed with `__map-store.`. This mapping is then used to read data from the store, or write data to it. This mapping is removed when the map is removed.
+
+This is a basic example configuration that shows you the minimal configuration that is required. This example is for an external data store configuration called `my-mysql-database`.
 
 [tabs] 
 ==== 
@@ -187,11 +205,69 @@ XML::
 <hazelcast>
     ...
     <map name="default">
-        <map-store enabled="true" initial-mode="LAZY">
+        <map-store enabled="true">
+            <class-name>com.hazelcast.mapstore.GenericMapStore</class-name> <1>
+            <properties>
+                <property name="external-data-store-ref">my-mysql-database</property> <2>
+            </properties>
+        </map-store>
+    </map>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.mapstore.GenericMapStore <1>
+        properties:
+            external-data-store-ref: my-mysql-database <2>
+----
+--
+Java::
++
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName(GenericMapStore.class.getName()); <1>
+mapStoreConfig.setProperty("external-data-store-ref", "my-mysql-database"); <2>
+mapConfig.setMapStoreConfig(mapStoreConfig);
+instance().getConfig().addMapConfig(mapConfig);
+----
+--
+====
+
+<1> The `GenericMapStore` implementation is built into Hazelcast. This implementation reads from the external data store configuration to create the mapping.
+<2> The name of your external data store configuration.
+
+You can also configure the mapping, using other <<external-data-store-ref,properties>>.
+
+=== Creating a New Connection
+
+To create a new connection to your data store, you must pass in the name of your class that implements the `MapStore` or `MapLoader.`
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="default">
+        <map-store enabled="true">
             <class-name>com.hazelcast.examples.DummyStore</class-name>
-            <write-delay-seconds>60</write-delay-seconds>
-            <write-batch-size>1000</write-batch-size>
-            <write-coalescing>true</write-coalescing>
         </map-store>
     </map>
     ...
@@ -208,25 +284,628 @@ hazelcast:
     default:
       map-store:
         enabled: true
-        initial-mode: LAZY
         class-name: com.hazelcast.examples.DummyStore
-        write-delay-seconds: 60
-        write-batch-size: 1000
-        write-coalescing: true
 ----
 ====
 
-The following are the descriptions of `MapStore` configuration elements and attributes:
+[[config]]
+=== Configuration Options
 
-* `class-name`: Name of the class implementing `MapLoader` and/or `MapStore`.
-* `write-delay-seconds`: Number of seconds to delay to call the `MapStore.store(key, value)``. If the value is zero then it is write-through, so the `MapStore.store(key,value)` method is called as soon as the entry is updated. Otherwise, it is write-behind; so the updates will be stored after the `write-delay-seconds` value by calling the `Hazelcast.storeAll(map)` method. Its default value is 0 (write-through).
-* `write-batch-size`: Used to create batch chunks when writing to the external data store. In default mode, all map entries are tried to be written in one go. To create
-batch chunks, the minimum meaningful value for write-batch-size is 2. For values smaller than 2, it works as in default mode.
-* `write-coalescing`: In write-behind mode, Hazelcast coalesces updates on a specific key by default; it applies only the last update on it. You can set this
-element to `false` to store all updates performed on a key to the data store.
-* `enabled`: True to enable this map-store, false to disable. Its default value is true.
-* [[initial-mode]]`initial-mode`: Sets the initial load mode. LAZY is the default load mode, where load is asynchronous. EAGER means map operations are blocked until all partitions are loaded.
+Use these configuration options to configure the Mapstore for specific maps.
 
+If you are using Java to configure the Mapstore, use the link:https://javadoc.io/static/com.hazelcast/hazelcast/{full-version}/com/hazelcast/config/MapStoreConfig.html[`MapStoreConfig` object].
+
+.MapStore configuration options
+[cols="1a,1a,1m,2a",options="header"]
+|===
+|Option|Description|Default|Example
+
+|[[enabled]]`enabled`
+|Whether the MapStore is enabled for the map.
+
+|true
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setEnabled(true);
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|[[class-name]]`class-name`
+|Name of a class that implements `MapLoader` and/or `MapStore`.
+
+a|`''` (empty)
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.examples.DummyStore</class-name>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.examples.DummyStore
+----
+--
+Java:: 
++ 
+--
+
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName("com.hazelcast.examples.DummyStore");
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|[[write-delay-seconds]]`write-delay-seconds`
+|Number of seconds of delay before the `MapStore.store(key, value)` method is called. If this value is zero, the Mapstore is write-through, otherwise it is write-behind.
+
+|0
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.examples.DummyStore
+      </class-name>
+      <write-delay-seconds>0
+      </write-delay-seconds>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.examples.DummyStore
+        write-delay-seconds: 0
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName("com.hazelcast.examples.DummyStore");
+mapStoreConfig.setWriteDelaySeconds(0)
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|[[write-batch-size]]`write-batch-size`
+|Number of batches to group map entries into before writing them to the external data store. By default, all map entries are written in one go.
+
+|1
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.examples.DummyStore
+      </class-name>
+      <write-batch-size>1
+      </write-batch-size>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.examples.DummyStore
+        write-batch-size: 1
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName("com.hazelcast.examples.DummyStore");
+mapStoreConfig.setWriteBatchSize(1)
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|[[write-coalescing]]`write-coalescing`
+|When `write-coalescing` is `true`, only the latest store operation on a key is written to the external data store when the change is made within the <<write-delay-seconds,`write-delay-seconds`>> time window. If this value is `false`, Hazelcast writes every change to the external data store in order.
+
+|true
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.examples.DummyStore
+      </class-name>
+      <write-coalescing>true
+      </write-coalescing>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.examples.DummyStore
+        write-coalescing: true
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName("com.hazelcast.examples.DummyStore");
+mapStoreConfig.setWriteCoalescing(true)
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|[[initial-mode]]`initial-mode`
+|The load mode for <<init, pre-populating the map>>:
+
+- `LAZY`: asynchronous
+- `EAGER`: Map operations are blocked until all partitions are loaded.
+
+|LAZY
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.examples.DummyStore
+      </class-name>
+      <initial-mode>LAZY
+      </initial-mode>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.examples.DummyStore
+        initial-mode: LAZY
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName("com.hazelcast.examples.DummyStore");
+mapStoreConfig.setInitialLoadMode(MapStoreConfig.InitialLoadMode.LAZY)
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|[[external-data-store-ref]]`external-data-store-ref`
+|The name of the configured external
+data store to use to set up a mapping. Use this property when you have an <<existing-connection, existing connection to an external data store>>.
+
+a|`''` (empty)
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.mapstore.GenericMapStore</class-name>
+      <properties>
+          <property name="external-data-store-ref">my-mysql-database</property>
+      </properties>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.mapstore.GenericMapStore
+        properties:
+            external-data-store-ref: my-mysql-database
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName(GenericMapStore.class.getName());
+mapStoreConfig.setProperty("external-data-store-ref", "my-mysql-database");
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|[[table-name]]`table-name`
+|Name of the table to read from.
+
+a|The name of the map.
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.mapstore.GenericMapStore</class-name>
+      <properties>
+          <property name="external-data-store-ref">my-mysql-database</property>
+          <property name="table-name">test</property>
+      </properties>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.mapstore.GenericMapStore
+        properties:
+            external-data-store-ref: my-mysql-database
+            table-name: test
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName(GenericMapStore.class.getName());
+mapStoreConfig.setProperty("external-data-store-ref", "my-mysql-database");
+mapStoreConfig.setProperty("table-name", "test");
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|[[mapping-type]]`mapping-type`
+|SQL connector to use for the mapping.
+
+a|The SQL connector is derived from the external data store in the configuration.
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.mapstore.GenericMapStore</class-name>
+      <properties>
+          <property name="external-data-store-ref">my-mysql-database</property>
+          <property name="mapping-type">JDBC</property>
+      </properties>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.mapstore.GenericMapStore
+        properties:
+            external-data-store-ref: my-mysql-database
+            mapping-type: JDBC
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName(GenericMapStore.class.getName());
+mapStoreConfig.setProperty("external-data-store-ref", "my-mysql-database");
+mapStoreConfig.setProperty("mapping-type", "JDBC");
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|[[id-column]]`id-column`
+|Name of the column with the primary key.
+
+|id
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.mapstore.GenericMapStore</class-name>
+      <properties>
+          <property name="external-data-store-ref">my-mysql-database</property>
+          <property name="id-column">id</property>
+      </properties>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.mapstore.GenericMapStore
+        properties:
+            external-data-store-ref: my-mysql-database
+            id-column: id
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName(GenericMapStore.class.getName());
+mapStoreConfig.setProperty("external-data-store-ref", "my-mysql-database");
+mapStoreConfig.setProperty("id-column", "id");
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|[[columns]]`columns`
+|Names of the columns to map. This value must include a subset of columns in
+the table. Missing columns must have a default value defined.
+
+|
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.mapstore.GenericMapStore</class-name>
+      <properties>
+          <property name="external-data-store-ref">my-mysql-database</property>
+          <property name="columns">name</property>
+      </properties>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.mapstore.GenericMapStore
+        properties:
+            external-data-store-ref: my-mysql-database
+            columns: name
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName(GenericMapStore.class.getName());
+mapStoreConfig.setProperty("external-data-store-ref", "my-mysql-database");
+mapStoreConfig.setProperty("columns", "name");
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|===
 
 == Setting Expiration Times on Loaded and Stored Data Entries
 
@@ -240,8 +919,7 @@ key-specific time-to-live values in the external storage.
 
 Similar to `EntryLoader`, in order to store custom expiration times associated with the entries, you may use `EntryStore`. `EntryStore` allows you to retrieve associated expiration date for each entry. The expiration date is an offset from an epoch in milliseconds. Epoch is January 1, 1970 UTC which is used by `System.currentTimeMillis()`.
 
-NOTE: Although the expiration date is expressed in milliseconds, expiration dates are rounded to the nearest lower whole second because the `IMap` interface
-uses second granularity when it comes to expiration.
+NOTE: Although the expiration date is expressed in milliseconds, expiration dates are rounded to the nearest lower whole second.
 
 The following example shows you how to implement the `EntryStore` interface.
 
@@ -252,7 +930,6 @@ include::ROOT:example$/dds/map/PersonEntryStore.java[tag=personms]
 
 TIP: link:https://github.com/hazelcast/hazelcast-code-samples/tree/master/distributed-map/mapstore/src/main/java[See more MapStore/MapLoader code samples].
 
-
 == Managing the Lifecycle of a MapLoader
 
 With `MapLoader` (and `MapStore` which extends it), you can do the regular store and load operations. If you need to perform other operations on create or on destroy of a `MapLoader`, such as establishing a connection to a database or accessing to other Hazelcast maps,
@@ -262,38 +939,11 @@ The `init()` method initializes the `MapLoader` implementation. Hazelcast calls 
 
 The `destroy()` method is called during the graceful shutdown of a Hazelcast instance. You can override this method to clean up the resources held by the `MapLoader` implementation, such as closing the database connections.
 
-See https://github.com/hazelcast/hazelcast-code-samples/blob/master/hazelcast-integration/mongodb/src/main/java/com/hazelcast/loader/MongoMapStore.java[here^] to see this interface in action.
+See an https://github.com/hazelcast/hazelcast-code-samples/blob/master/hazelcast-integration/mongodb/src/main/java/com/hazelcast/loader/MongoMapStore.java[example of this interface].
 
-[[storing-entries-to-multiple-maps]]
-== Storing Entries to Multiple Maps
+=== Configuring a Connection Using Properties
 
-A configuration can be applied to more than one map using wildcards (see xref:configuration:using-wildcards.adoc[Using Wildcards]), meaning that the configuration is shared among the maps. But `MapStore` does not know which entries to store when there is one configuration applied to multiple maps.
-
-To store entries when there is one configuration applied to multiple maps, use Hazelcast's `MapStoreFactory` interface. Using the `MapStoreFactory` interface, ``MapStore``s for each map can be created when a wildcard configuration is used. Example code is shown below.
-
-[source,java]
-----
-Config config = new Config();
-MapConfig mapConfig = config.getMapConfig( "*" );
-MapStoreConfig mapStoreConfig = mapConfig.getMapStoreConfig();
-mapStoreConfig.setFactoryImplementation( new MapStoreFactory<Object, Object>() {
-    @Override
-    public MapLoader<Object, Object> newMapStore( String mapName, Properties properties ) {
-        return null;
-    }
-});
-----
-
-To initialize the `MapLoader` implementation with the given map name, configuration properties and the Hazelcast instance, implement the
-https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/MapLoaderLifecycleSupport.html[`MapLoaderLifecycleSupport` interface^]
-which is described in the previous section.
-
-
-NOTE: For a list of all `IMap` methods that trigger the `MapLoader` methods, see <<map-mapstore, MapStore and MapLoader Methods Triggered by IMap Operations>>
-
-=== Accessing a Database Using `Properties`
-
-You can prepare your own `MapLoader` to access a database such as Cassandra and MongoDB. For this, you can first declaratively specify the database properties in your `hazelcast.xml` configuration file and then implement the `MapLoaderLifecycleSupport` interface to pass those properties.
+You can prepare your own `MapLoader` to access a database such as Cassandra and MongoDB. For this, you can first declaratively specify the database properties in your configuration file and then implement the `MapLoaderLifecycleSupport` interface to receive those properties.
 
 You can define the database properties, such as its URL and name, using the `properties` configuration element. The following is a configuration example
 for MongoDB:
@@ -348,21 +998,48 @@ give those properties in the `init()` method, as shown below:
 include::ROOT:example$/dds/map/YourMapStoreImplementation.java[tag=ymsi]
 ----
 
-See the full example https://github.com/hazelcast/hazelcast-code-samples/tree/master/hazelcast-integration/mongodb[here^].
+See the https://github.com/hazelcast/hazelcast-code-samples/tree/master/hazelcast-integration/mongodb[full example].
+
+[[storing-entries-to-multiple-maps]]
+== Storing Entries to Multiple Maps
+
+A configuration can be applied to more than one map using wildcards (see xref:configuration:using-wildcards.adoc[Using Wildcards]), meaning that the configuration is shared among the maps. But `MapStore` does not know which entries to store when there is one configuration applied to multiple maps.
+
+To store entries when there is one configuration applied to multiple maps, use Hazelcast's `MapStoreFactory` interface. Using the `MapStoreFactory` interface, ``MapStore``s for each map can be created when a wildcard configuration is used. Example code is shown below.
+
+[source,java]
+----
+Config config = new Config();
+MapConfig mapConfig = config.getMapConfig( "*" );
+MapStoreConfig mapStoreConfig = mapConfig.getMapStoreConfig();
+mapStoreConfig.setFactoryImplementation( new MapStoreFactory<Object, Object>() {
+    @Override
+    public MapLoader<Object, Object> newMapStore( String mapName, Properties properties ) {
+        return null;
+    }
+});
+----
+
+To initialize the `MapLoader` implementation with the given map name, configuration properties and the Hazelcast instance, implement the
+https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/MapLoaderLifecycleSupport.html[`MapLoaderLifecycleSupport` interface^]
+which is described in the previous section.
+
+
+NOTE: For a list of all map methods that trigger the MapLoader and MapStore, see <<map-mapstore, MapStore and MapLoader Methods Triggered by Map Operations>>
 
 
 [[map-mapstore]]
-== IMap Operations that Trigger `MapStore` and `MapLoader`
+== Map Operations that Trigger MapStore and MapLoader
 
-This section summarizes the `IMap` operations that may trigger the `MapStore` or `MapLoader` methods.
+This section summarizes the map operations that may trigger the `MapStore` or `MapLoader` methods.
 
 NOTE: If the <<initial-mode, `initial-mode` property>> of the `MapLoader`
-implementation is set to `LAZY`, the first time any link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/IMap.html[`IMap` method]
+implementation is set to `LAZY`, the first time any link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/IMap.html[map method]
 is called, it triggers the `MapLoader.loadAllKeys()` method.
 
 [cols="1m,5a"]
 |===
-|`IMap` Method|Impact on the `MapStore`/`MapLoader` implementations
+|Map method|Trigger
 
 |flush()
 |This method flushes all the local dirty entries by calling the `MapStore.storeAll(Map)` or `MapStore.deleteAll(Collection)` methods with the elements marked as dirty.

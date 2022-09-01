@@ -1,5 +1,5 @@
 = Acting Upon Changes to a Map
-:description: You can set up monitoring of a map to look for specific events, such as adding an entry, updating a specific entry, or deleting an entry. You can use these events to trigger execution of code, or even intercept the event and change it before it affects the data in memory. 
+:description: You can set up monitoring of a map to look for specific events, such as adding an entry, updating a specific entry, or deleting an entry. You can use these events to trigger execution of code, or even intercept the event and change it before it affects the data in memory.
 
 {description}
 
@@ -10,7 +10,7 @@ Hazelcast offers two methods for monitoring map activity. `MapListener` allows y
 
 == Listening to an Entire Map
 
-If you want to listen to changes to all map entries, see xref:events:object-events.adoc#listening-for-map-events[Listening for Map Events] for an explanation and example of the `MapListener` method. 
+If you want to listen to changes to all map entries, see xref:events:object-events.adoc#listening-for-map-events[Listening for Map Events] for an explanation and example of the `MapListener` method.
 
 
 == Listening for Specific Map Entries using Predicates
@@ -21,17 +21,17 @@ If you want to listen to changes to all map entries, see xref:events:object-even
 
 The easiest way to explain this is through an example. We are going to listen for changes made to the map entry for an employee with the surname "smith". First, let's create the `Employee` class.
 
-[tabs] 
-==== 
-Java:: 
-+ 
+[tabs]
+====
+Java::
++
 --
 [source,java]
 ----
 include::ROOT:example$/dds/map/Employee.java[tag=emp]
 ----
 --
-C++:: 
+C++::
 +
 --
 [source,cpp]
@@ -41,34 +41,43 @@ C++::
 ----
 --
 
-C Sharp:: 
+C Sharp::
 +
--- 
+--
 [source,cs]
 ----
 
 ----
 --
 
-Node.js:: 
-+ 
--- 
+Node.js::
++
+--
 [source,javascript]
 ----
+class Employee {
 
+    constructor(surname) {
+        this.surname = surname;
+    }
+
+    toString() {
+        return "Employee: " + this.surname;
+    }
+}
 ----
 --
-Python:: 
-+ 
--- 
+Python::
++
+--
 [source,python]
 ----
 
 ----
 --
-Go:: 
-+ 
--- 
+Go::
++
+--
 [source,go]
 ----
 
@@ -79,17 +88,17 @@ Go::
 
 Then, let's create a listener that tracks the `ADDED`, `UPDATED` and `REMOVED` entry events with the `surname` predicate.
 
-[tabs] 
-==== 
-Java:: 
-+ 
+[tabs]
+====
+Java::
++
 --
 [source,java]
 ----
 include::ROOT:example$/dds/map/ListenerWithPredicate.java[tag=lwp]
 ----
 --
-C++:: 
+C++::
 +
 --
 [source,cpp]
@@ -99,34 +108,59 @@ C++::
 ----
 --
 
-C Sharp:: 
+C Sharp::
 +
--- 
+--
 [source,cs]
 ----
 
 ----
 --
 
-Node.js:: 
-+ 
--- 
+Node.js::
++
+--
 [source,javascript]
 ----
+const { Client, Predicates } = require('hazelcast-client');
+
+async function main() {
+    const client = await Client.newHazelcastClient();
+    const map = await client.getMap('map');
+    const listener = {
+        added: (entryEvent) => {
+            console.log('Entry added: ' + `${entryEvent.key}, ${entryEvent.value}`);
+        },
+        removed: (entryEvent) => {
+            console.log('Entry removed: ' + `${entryEvent.key}, ${entryEvent.value}`);
+        },
+        updated: (entryEvent) => {
+            console.log('Entry updated: ' + `${entryEvent.key}, ${entryEvent.value}`);
+        }
+    };
+    await map.addEntryListenerWithPredicate(listener, new Predicates.sql('surname=smith'), undefined, true);
+    console.log('Entry listener registered');
+    await client.shutdown();
+}
+
+main().catch(err => {
+    console.error('Error occurred:', err);
+    process.exit(1);
+});
 
 ----
 --
-Python:: 
-+ 
--- 
+Python::
++
+--
 [source,python]
 ----
 
 ----
 --
-Go:: 
-+ 
--- 
+Go::
++
+--
 [source,go]
 ----
 func main() {
@@ -165,16 +199,16 @@ func main() {
 ====
 
 
-NOTE: See xref:query:how-distributed-query-works.adoc[How Distributed Query Works] for more information about creating predicates. 
+NOTE: See xref:query:how-distributed-query-works.adoc[How Distributed Query Works] for more information about creating predicates.
 
-When the listener is running, a change to any record with the name `smith` will display output similar to the one below. 
+When the listener is running, a change to any record with the name `smith` will display output similar to the one below.
 
 ```
 entryAdded:EntryEvent {Address[192.168.178.10]:5702} key=1,oldValue=null,
 value=Person{name= smith }, event=ADDED, by Member [192.168.178.10]:5702
 ```
 
-In our example, we're sending an event log to the system output. You can replace this action with any code you want to run when the specified map event occurs. 
+In our example, we're sending an event log to the system output. You can replace this action with any code you want to run when the specified map event occurs.
 
 NOTE: The default backwards-compatible event publishing strategy only publishes `UPDATED` events when map entries are updated to a value that matches the predicate with which the listener was registered. This implies that when using the default event publishing strategy, your listener is not notified about an entry whose value is updated from one that matches the predicate to a new value that does not match the predicate.
 

@@ -1,0 +1,521 @@
+= Hazelcast Command-Line Client
+:page-api-reference: https://github.com/hazelcast/hazelcast-commandline-client
+:page-toclevels: 3
+:page-beta: true
+
+The Hazelcast Command-Line Client (CLC) is a command-line tool to connect to and operate on Hazelcast Platform and Hazelcast Cloud. You can use the CLC to execute commands through a terminal.
+
+== Installing the Hazelcast CLC
+
+You can install the Hazelcast CLC locally on Linux and macOS.
+
+[tabs]
+====
+Installer Script::
++
+--
+[source,bash]
+----
+curl https://raw.githubusercontent.com/hazelcast/hazelcast-commandline-client/main/scripts/install.sh | bash
+----
+--
+Homebrew::
++
+[source,bash]
+----
+brew tap hazelcast/homebrew-hz
+brew install hazelcast-commandline-client
+----
+====
+
+NOTE: To take advantage of auto-completion support, follow the instructions that appear during installation.
+
+== Uninstalling the Hazelcast CLC
+
+You can choose the uninstallation option that corresponds to the installation method.
+
+[tabs]
+====
+Installer Script::
++
+--
+[source,bash]
+----
+~/.local/share/hz-cli/bin/uninstall.sh
+----
+--
+Homebrew::
++
+[source,bash]
+----
+brew uninstall hazelcast-commandline-client
+brew untap hazelcast/homebrew-hz # optional
+----
+====
+
+== Configuring the Hazelcast CLC
+
+You can configure the Hazelcast CLC with connection and authentication settings, using a configuration file or with global parameters.
+
+Configuration values are evaluated in the following precedence, with items higher on the list taking priority:
+
+- Global parameters
+** `--address`/`-a`: Addresses of the members in the cluster (default is localhost:5701).
+** `--cloud-token`:  Hazelcast Cloud discovery token
+** `--cluster-name`: Name of the cluster to connect to (default is dev)
+- Custom configuration file that is specified with the `-config` flag
++
+`hzc -c /some/custom/config.yaml`
+- Default configuration file that's stored on `/.local/share/hz-cli/config.yaml`
+
+=== Configuring SSL
+
+You can use the following configuration file to enable SSL support:
+
+[source,yaml]
+----
+ssl:
+  enabled: true
+  servername: "HOSTNAME-FOR-SERVER"
+  # or: insecureskipverify: true
+hazelcast:
+  cluster:
+    security:
+      credentials:
+        username: "OPTIONAL USERNAME"
+        password: "OPTIONAL PASSWORD"
+    name: "CLUSTER-NAME"
+    network:
+    addresses:
+    - "localhost:5701"
+----
+
+Mutual authentication is also supported:
+[source,yaml]
+----
+ssl:
+  enabled: true
+  servername: "HOSTNAME-FOR-SERVER"
+  # insecureskipverify: true
+  capath: "/tmp/ca.pem"
+  certpath: "/tmp/cert.pem"
+  keypath: "/tmp/key.pem"
+  keypassword: "PASSWORD FOR THE KEY"
+hazelcast:
+  cluster:
+    security:
+      credentials:
+        username: "OPTIONAL USERNAME"
+        password: "OPTIONAL PASSWORD"
+    name: "CLUSTER-NAME"
+    network:
+      addresses:
+        - "localhost:5701"
+----
+
+Cloud SSL configuration:
+
+[source,yaml]
+----
+ssl:
+  enabled: true
+  capath: "/tmp/ca.pem"
+  certpath: "/tmp/cert.pem"
+  keypath: "/tmp/key.pem"
+  keypassword: "PASSWORD FOR THE KEY"
+hazelcast:
+  cluster:
+    name: "CLUSTER NAME"
+    cloud:
+      token: "HAZELCAST CLOUD TOKEN"
+      enabled: true
+----
+
+== Modes
+
+You can use the Hazelcast CLC in three modes:
+
+- Non-Interactive
+- Interactive
+- SQL
+
+=== Non-Interactive Mode
+
+You can execute commands similar to any other command-line tool. This mode is useful for scripting.
+
+[source,bash,subs="attributes+"]
+----
+hzc map --cluster-name cluster1 --name myMap put --key myKey --value myValue
+----
+
+=== Interactive Mode
+
+Interactive mode allows you to interactively navigate commands and explore possible subcommands and parameters. It is also useful for manual tasks.
+
+image:ROOT:hzc-interactive-screenshot.png[HZC interactive]
+
+[source,bash,subs="attributes+"]
+----
+hzc
+----
+
+In this mode, you can also leverage the <<map, `hzc map use` command>> to avoid re-typing the object name on each command. Note that map name "m1" is referenced only once.
+----
+hzc
+Connecting to the cluster ...
+hzc localhost:5701@dev> map use m1
+hzc localhost:5701@dev&m:m1> map put -k k1 -v v1
+hzc localhost:5701@dev&m:m1> map get -k k1
+v1
+hzc localhost:5701@dev&m:m1>
+----
+
+=== SQL Mode
+
+All modes support <<sql-query, executing SQL statements>>. In addition to that, the SQL mode makes it easier to navigate results with an interactive SQL browser.
+
+image:ROOT:hzc-sql-browser-screenshot.png[Using SQL mode with Hazelcast CLC]
+
+To start SQL mode, do the following:
+
+[source,bash,subs="attributes+"]
+----
+hzc sql
+----
+
+== Commands
+
+[cols="1m,2a"]
+|===
+|Command|Description
+
+|<<map, hzc map>>
+|Manage map data structures.
+
+|<<cluster, hzc cluster>>
+|Manage the Hazelcast cluster.
+
+|<<sql, hzc sql>>
+|Start a SQL browser.
+
+|===
+
+[[map]]
+== hzc map
+
+Manage map data structures.
+
+=== hzc map clear
+
+Remove all entries in a map.
+
+```
+hzc map clear --name
+```
+
+Parameters:
+
+- `--name -n` (required): Name of the map.
+
+Example:
+
+```
+hzc map clear --name tmpMap
+```
+
+=== hzc map get
+
+Get a value from a map.
+
+```
+hzc map get --name
+            --key
+            [--key-type {string (default), boolean, json, int8, int16, int32, int64, float32, float64}]
+            
+```
+
+Parameters:
+
+- `--name -n` (required): Name of the map.
+- `--key -k` (required): Key of the map entry.
+- `--key-type` (optional): Data type of the key. 
+
+Example:
+
+```
+hzc map get --name yearbook --key 2012 --key-type int16  
+```
+
+=== hzc map get-all
+
+Get all entries with the given keys from a map.
+
+```
+hzc map get-all --name
+                --key
+                [--key-type {string (default), boolean, json, int8, int16, int32, int64, float32, float64}]
+                [--delim {":" (default)}]
+            
+```
+
+Parameters:
+
+- `--name -n` (required): Name of the map.
+- `--key -k` (required): Key of the map entry.
+- `--key-type` (optional): Data type of the key. 
+- `--delim` (optional): Delimiter to separate the key and the value.
+
+Example:
+
+```
+hzc get-all -n mapname -k 12 -k 25 --key-type int16 --delim ":"  
+```
+
+=== hzc map put
+
+Set the value of a given key in a map.
+
+```
+hzc map put --name
+            --key
+            --value
+            [--value-file]
+            [--key-type {string (default), boolean, json, int8, int16, int32, int64, float32, float64}]
+            [--value-type {string (default), boolean, json, int8, int16, int32, int64, float32, float64}]
+            [--max-idle {ns, us, ms, s, m, h (nanosecond, microsecond, millisecond, second, minute, hour)}]
+            [--ttl {ns, us, ms, s, m, h (nanosecond, microsecond, millisecond, second, minute, hour)}]
+            
+```
+
+Parameters:
+
+- `--name -n` (required): Name of the map.
+- `--key -k` (required): Key of the map entry.
+- `--value -v` (required): Value to set for the key. Mutually exclusive with `--value-file`.
+- `--value-file -f` (optional): Path to a file that contains the value to set for the key. Use `-` (dash) to read from stdin. Mutually exclusive with `--value`.
+- `--key-type` (optional): Data type of the key. 
+- `--value-type -t` (optional): Data type of the value.
+- `--max-idle` (optional): Maximum time for this entry to stay idle in the map. Cannot be shorter than 1 second.
+- `--ttl` (optional): Duration after which the entry will expire and be evicted. Cannot be shorter than 1 second.
+
+Example:
+
+```
+hzc map put --key-type string --key hello --value-type float32 --value 19.94 --name myMap --ttl 1300ms --max-idle 1400ms
+```
+
+=== hzc map put-all
+
+Add the given key-value entry pairs to a map.
+
+```
+hzc map put-all --name
+            --key
+            --value
+            [--value-file]
+            [--key-type {string (default), boolean, json, int8, int16, int32, int64, float32, float64}]
+            [--value-type {string (default), boolean, json, int8, int16, int32, int64, float32, float64}]
+            [--max-idle {ns, us, ms, s, m, h (nanosecond, microsecond, millisecond, second, minute, hour)}]
+            [--ttl {ns, us, ms, s, m, h (nanosecond, microsecond, millisecond, second, minute, hour)}]
+            
+```
+
+Parameters:
+
+- `--name -n` (required): Name of the map.
+- `--key -k` (required): Key of the map entry.
+- `--value -v` (required): Value to set for the key. The `--value` and `value-file` parameters are mutually exclusive.
+- `--value-file -f` (optional): Path to a file that contains the value to set for the key. Use `-` (dash) to read from stdin. The `--value` and `value-file` parameters are mutually exclusive.
+- `--key-type` (optional): Data type of the key. 
+- `--value-type -t` (optional): Data type of the value.
+- `--json-entry` (optional): Path to a JSON file that contains entries. The --`json-entry`, `--value`, `--value-file`, and `--value-type` parameters are mutually exclusive.
+
+Example:
+
+```bash
+# Keys and values are matched with the given order
+hzc map put-all --name mapname --key-type int16 --key 1 --key 2 --value-type json --value-file valueFile.json --value '{"field":"tmp"}'
+```
+
+```bash
+hzc map put-all --name mapname --json-entry entries.json
+```
+
+.entries.json
+```json
+{
+  "key1": "value1",
+  "key2": {
+    "innerData": "data",
+    "anotherInnerData": 5.0
+  },
+  "key3": true,
+  "key4": [1, 2, 3, 4, 5]
+}
+```
+
+=== hzc map remove
+
+Delete the value for a given key in a map.
+
+```
+hzc map remove --name
+               --key
+               [--key-type {string (default), boolean, json, int8, int16, int32, int64, float32, float64}]          
+```
+
+Parameters:
+
+- `--name -n` (required): Name of the map.
+- `--key -k` (required): Key of the map entry.
+- `--key-type` (optional): Data type of the key. 
+
+Example:
+
+```
+hzc map remove --name mapname --key k1  
+```
+
+=== hzc map use
+
+Set the default map name. This command is only for interactive-mode.
+
+```
+hzc map use mapName
+            [--reset]        
+```
+
+Parameters:
+
+- `mapName`: Name of the map to use as the default.
+- `--reset` (optional): unset default name for map
+
+Example:
+
+[source,bash,subs="attributes+"]
+----
+hzc map use m1 # sets the default map name to m1 unless set explicitly in a parameter
+hzc map get --key k1 # "--name m1" is inferred
+hzc map use --reset	# resets the default map name
+----
+
+[[cluster]]
+== hzc cluster
+
+Cluster commands are a group of administrative cluster operation.
+
+You must enable the REST API on all members of your cluster to use the cluster commands. These commands use the Hazelcast REST API for cluster management operations. To enable REST API, follow the instructions in the member log or see xref:maintain-cluster:rest-api.adoc#enabling-rest-api[Enabling the REST API].
+
+=== hzc cluster change-state
+
+Change the state of the cluster.
+
+```
+hzc cluster change-state --state {active, no_migration, frozen, passive}
+```
+
+Parameters:
+
+- `--state -s`: New state of the cluster.
+
+Example:
+
+```
+hzc cluster change-state --state passive
+```
+
+=== hzc cluster get-state
+
+Get the state of the cluster.
+
+Example:
+
+```
+hzc cluster get-state
+```
+
+=== hzc cluster shutdown
+
+Shut down the cluster.
+
+Example:
+
+```
+hzc cluster shutdown
+```
+
+=== hzc cluster version
+
+Get the version of the cluster.
+
+Example:
+
+```
+hzc cluster version
+```
+
+[[sql]]
+== hzc sql
+
+Execute a SQL statement or start the interactive SQL browser.
+
+`hzc sql` starts the interactive SQL browser.
+
+`hzc sql "select * from employees"` executes the given query.
+
+You can also change the output format with `--output` or `-o` parameters. Supported styles are "csv" and "pretty" (default).
+
+[[sql-query]]
+== Querying with SQL using Hazelcast CLC
+
+You can use SQL to query a map, using all three modes of the Hazelcast CLC.
+
+[tabs]
+====
+Non-Interactive mode::
++
+--
+[source,bash]
+----
+hzc sql "select * from employees"
++-----------------------------------------------------------------+
+|        __key        |         age         |         name        |
++-----------------------------------------------------------------+
+| 12                  | 41                  | Jane Brown          |
+| 5                   | 33                  | Mandy Bronson       |
+| 21                  | 30                  | Mike McGregor       |
+| 3                   | 22                  | Joe Taylor          |
+| 75                  | 33                  | Mandy Bronson       |
+----
+--
+Interactive mode::
++
+--
+[source,bash]
+----
+hzc
+Connecting to the cluster ...
+hzc localhost:5701@dev> sql "select * from employees"
++-----------------------------------------------------------------+
+|        __key        |         age         |         name        |
++-----------------------------------------------------------------+
+| 12                  | 41                  | Jane Brown          |
+| 5                   | 33                  | Mandy Bronson       |
+| 21                  | 30                  | Mike McGregor       |
+| 3                   | 22                  | Joe Taylor          |
+| 75                  | 33                  | Mandy Bronson       |
+----
+--
+
+SQL mode::
++
+--
+1. Enter `hzc sql`.
+2. Enter the query you want to execute.
+3. Press btn:[Ctrl + E] to execute the query.
+4. Press tab to change the keyboard focus from the query editor to the result browser.
+5. Use btn:[w,a,s,d], arrow keys or btn:[h,j,k,l] to navigate the result rows.
+--
+====
+
+For details about querying with SQL, see xref:query:sql-overview.adoc[SQL Overview].

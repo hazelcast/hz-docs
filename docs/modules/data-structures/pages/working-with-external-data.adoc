@@ -252,7 +252,7 @@ TIP: link:https://github.com/hazelcast/hazelcast-code-samples/tree/master/distri
 
 == Offloading MapStore and MapLoader Operations
 
-To improve cluster throughput, all MapStore operations do not block partition threads.
+To improve cluster throughput, MapStore/MapLoader API calls are offloaded. This way partition threads are not blocked by them.
 Each partition in a member is managed by a single thread, ensuring that the write operations to a given partition are handled
 one at a time in first-in-first-out order. However, MapStore operations may take a long time to connect to the external data source and complete, blocking the affected partitions. 
 To avoid blocking partition threads, MapStore operations that communicate with the external data source are handled asynchronously, using an <<configuring-the-offload-executor, executor>>.
@@ -260,13 +260,11 @@ To avoid blocking partition threads, MapStore operations that communicate with t
 === Limitations
 
 * The `init()` and `destroy()` methods of the `MapLoaderLifecycleSupport` interface cannot be offloaded. These methods are triggered only once in the whole lifecycle of a map.
-* MapStore methods `loadAll()` and `loadAllKeys()` cannot be offloaded.
 * Offloading cannot be used for xref:tiered-storage:overview.adoc[tiered storage], since you cannot enable both MapStore and tiered storage for a map.
 
 === Blocking Partition Threads
 
-If you want to block partition threads until MapStore operations are complete, 
-you can configure the `offload` setting for the MapStore. It is enabled by default (`true`) and can be configured for each map in your cluster.
+If you want to block partition threads until MapStore operations are complete, set the `offload` element to `false`. It is enabled by default (`true`) and can be configured for each map in your cluster.
 
 [tabs] 
 ==== 
@@ -278,7 +276,7 @@ XML::
 <hazelcast>
     <map name="default">
         <map-store enabled="true">
-            <offload>true</offload>
+            <offload>false</offload>
             ...
         </map-store>
     </map>
@@ -295,7 +293,7 @@ hazelcast:
     default:
       map-store:
         enabled: true
-        offload: true
+        offload: false
         ...
 ----
 
@@ -306,7 +304,7 @@ Java::
 Config config = new Config();
 MapConfig mapConfig = config.getMapConfig();
 MapStoreConfig mapStoreConfig = mapConfig.getMapStoreConfig();
-mapStoreConfig.setOffload(true);
+mapStoreConfig.setOffload(false);
 ...
 ----
 ====

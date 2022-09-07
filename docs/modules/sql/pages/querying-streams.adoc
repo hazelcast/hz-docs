@@ -18,7 +18,7 @@ This guide explains how to query streams, using the following e-commerce data in
 |BIGINT
 
 |order_id
-|VARCHAR
+|BIGINT
 
 |order_time
 |TIMESTAMP
@@ -52,7 +52,7 @@ To allow Hazelcast to read data from a streaming source, you need to create a ma
 ```sql
 CREATE OR REPLACE MAPPING orders (
   order_amount BIGINT,
-  order_id VARCHAR,
+  order_id BIGINT,
   unit_price DECIMAL,
   order_time TIMESTAMP)
 TYPE Kafka
@@ -95,17 +95,17 @@ When new events are received, Hazelcast immediately adds new rows from your acti
 
 ```sql
 INSERT INTO orders (order_amount, order_id, unit_price,) VALUES
-  (100, 'ABCD', 11, '2022-01-01 00:00:00'),
-  (20, 'EFGH', 1.5, '2022-01-01 00:01:00');
+  (100, '1111', 11, '2022-01-01 00:00:00'),
+  (20, '2222', 1.5, '2022-01-01 00:01:00');
 ```
 
 The result of the filter:
 
 ```
 +------------+--------+----------+-------------------+
-|order_amount|order_id|unit_price|order_time---------|
+|order_amount|order_id|unit_price|order_time         |
 +------------+--------+----------+-------------------+
-|         100|  'ABCD'|        11|2022-01-01 00:00:00|
+|         100|  '1111'|        11|2022-01-01 00:00:00|
 ```
 
 == Managing Streaming Queries
@@ -164,9 +164,9 @@ New results for each one-day window are only returned when all events that belon
 [[hopping-windows]]
 === Hopping Windows
 
-Hopping windows, sometimes called _sliding windows_, also allow you to group events by time. However, hopping windows can overlap. They're useful for taking a snapshot of data. 
+Hopping windows also allow you to group events by time. However, hopping windows can overlap. They're useful for taking a snapshot of data. 
 
-For example, let's say that you want to find out if your company is meeting their seven-day target for deliveries, and you want to take a snapshot of this data every day. In this case, you define the size of the window, and the sliding interval, or `step`, between windows.
+For example, let's say that you want to find out if your company is meeting their seven-day target for deliveries, and you want to take a snapshot of this data every day. In this case, you define the size of the window, and the interval, or `step`, between windows.
 
 image:ROOT:hopping-window.svg[A hopping window]
 
@@ -219,9 +219,7 @@ FROM TABLE(IMPOSE_ORDER(
 <2> A pointer to the column that contains the timestamp for the watermark.
 <3> The maximum event lag.
 
-NOTE: The above query doesn't currently run in Hazelcast. The `IMPOSE_ORDER()` function must be only used together with `TUMBLE` or `HOP` functions.
-
-For better readability, it's useful to create a view:
+As good practice, and for better readability, always create a view:
 
 ```sql
 CREATE VIEW orders_ordered AS
@@ -233,7 +231,7 @@ SELECT *
 );
 ```
 
-Without the view, you would have to have a nested call to `IMPOSE_ORDER` as the first argument to `TUMBLE`/`HOP` function, which is harder to read.
+Without the view, you would have to have a nested call to `IMPOSE_ORDER` as the first argument to `TUMBLE`/`HOP` function, which is harder to read and more difficult to reuse.
 
 [[joins]]
 == Stream-To-Stream Joins
@@ -248,7 +246,7 @@ As for an individual data stream, you must start by creating a mapping for each 
 
 ```sql
 CREATE OR REPLACE MAPPING orders (
-  order_id VARCHAR,
+  order_id BIGINT,
   order_time TIMESTAMP
   product_id BIGINT)
 TYPE Kafka
@@ -271,7 +269,7 @@ OPTIONS (
 ```
 === Join the Streams
 
-Next, you need to specify the timebound relationship between the two event streams. This is defined in a SQL `SELECT` statement using a `JOIN`. The conditions of the `JOIN` tell the Jet engine how long to buffer the events from each event stream before processing them; the _postpone_ time. Without this delay, the stream is unlimited, and any queries are rejected. 
+Next, you need to specify the timebound relationship between the two event streams. This is defined in a SQL `SELECT` statement using a `JOIN`. The mandatory timed conditions of the `JOIN` tell the Jet engine how long to buffer the events from each event stream before processing them; the _postpone_ time. Without this delay, the stream of events held in memory is potentially unlimited.
 
 For example, you might want to know how many next-day deliveries are being made. The following `SELECT` statement finds all deliveries that are made within one day of an order. In this case, the _postpone_ time is defined by the one-day interval between orders and deliveries.
 

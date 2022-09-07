@@ -104,7 +104,37 @@ C Sharp::
 -- 
 [source,cs]
 ----
+public static async Task Main(params string[] args)
+{
+	var options = new HazelcastOptionsBuilder()
+		.With(args)
+		.WithConsoleLogger()
+		.Build();
 
+	// create an Hazelcast client and connect to a server running on localhost
+	await using var client = await HazelcastClientFactory.StartNewClientAsync(options);
+
+	// get the distributed map from the cluster
+	await using var map = await client.GetMapAsync<string, string>("listener-example");
+
+	// subscribe to events
+	var id = await map.SubscribeAsync(handle => handle
+		.EntryAdded((m, a) =>
+		{
+			Console.WriteLine("Added '{0}': '{1}'", a.Key, a.Value);
+		})
+		.EntryUpdated((m, a) =>
+		{
+			Console.WriteLine("Updated '{0}': '{1}' (was: '{2}')", a.Key, a.Value, a.OldValue);
+		})
+		.EntryRemoved((m, a) =>
+		{
+			Console.WriteLine("Removed '{0}': '{1}'", a.Key, a.OldValue);
+		}), Predicates.Sql("surname=smith"));
+
+	// unsubscribe
+	await map.UnsubscribeAsync(id);
+}
 ----
 --
 

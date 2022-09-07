@@ -252,19 +252,20 @@ TIP: link:https://github.com/hazelcast/hazelcast-code-samples/tree/master/distri
 
 == Offloading MapStore and MapLoader Operations
 
-To improve cluster throughput, MapStore and MapLoader API calls are offloaded. This way partition threads are not blocked by them.
+To improve cluster throughput, MapStore and MapLoader API calls, such as `load()` and `store()` operations, are offloaded by default. This way partition threads are not blocked by them.
 Each partition in a member is managed by a single thread, ensuring that the write operations to a given partition are handled
-one at a time in first-in-first-out order. However, MapStore operations may take a long time to connect to the external data source and complete, blocking the affected partitions. 
+one at a time in first-in-first-out order. However, MapStore and MapLoader operations may take a long time to connect to the external data source and complete, blocking the affected partitions. 
 To avoid blocking partition threads, MapStore operations that communicate with the external data source are handled asynchronously, using an <<configuring-the-offload-executor, executor>>.
 
 === Limitations
 
-* The `init()` and `destroy()` methods of the `MapLoaderLifecycleSupport` interface cannot be offloaded. These methods are triggered only once in the whole lifecycle of a map.
-* Offloading cannot be used for xref:tiered-storage:overview.adoc[tiered storage], since you cannot enable both MapStore and tiered storage for a map.
+* The `init()` and `destroy()` methods of the `MapLoaderLifecycleSupport` interface are not offloaded. These methods are triggered only once in the whole lifecycle of a map.
+* Offloading is not supported for xref:tiered-storage:overview.adoc[tiered storage], since currently MapStore and tiered storage cannot be enabled for a map at the same time.
 
-=== Blocking Partition Threads
+=== Choosing Not To Offload
 
-If you want to block partition threads until the MapStore and MapLoader API calls are complete, set the `offload` element to `false`. It is enabled by default (`true`) and can be configured for each map in your cluster.
+You can choose not to offload MapStore and MapLoader operations, which is the behavior for the previous Hazelcast Platform releases. For this,
+set the `offload` configuration element to `false`. This way partition threads will be blocked during MapStore and MapLoader API operations.
 
 [tabs] 
 ==== 
@@ -276,7 +277,7 @@ XML::
 <hazelcast>
     <map name="default">
         <map-store enabled="true">
-            <offload>false</offload>
+            <offload>false</offload> <1>
             ...
         </map-store>
     </map>
@@ -293,7 +294,7 @@ hazelcast:
     default:
       map-store:
         enabled: true
-        offload: false
+        offload: false <1>
         ...
 ----
 
@@ -304,10 +305,11 @@ Java::
 Config config = new Config();
 MapConfig mapConfig = config.getMapConfig();
 MapStoreConfig mapStoreConfig = mapConfig.getMapStoreConfig();
-mapStoreConfig.setOffload(false);
+mapStoreConfig.setOffload(false); <1>
 ...
 ----
 ====
+<1> It is enabled by default (`true`) and can be configured for each map in your cluster.
 
 === Configuring the Offload Executor
 

@@ -1,0 +1,383 @@
+= Configuring a Map with the Generic MapStore
+:description: You can configure a map with the generic MapStore to use it as a cache with an external data store.
+
+{description}
+
+== Before you Begin
+
+You need a xref:external-data-stores:external-data-stores.adoc[data store connection] that's configured on all cluster members.
+
+== Quickstart Configuration
+
+This is a basic example configuration that shows you the minimal configuration that is required. This example is for an external data store configuration called `my-mysql-database`.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <map name="default">
+        <map-store enabled="true">
+            <class-name>com.hazelcast.mapstore.GenericMapStore</class-name> <1>
+            <properties>
+                <property name="external-data-store-ref">my-mysql-database</property> <2>
+            </properties>
+        </map-store>
+    </map>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.mapstore.GenericMapStore <1>
+        properties:
+            external-data-store-ref: my-mysql-database <2>
+----
+--
+Java::
++
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName(GenericMapStore.class.getName()); <1>
+mapStoreConfig.setProperty("external-data-store-ref", "my-mysql-database"); <2>
+mapConfig.setMapStoreConfig(mapStoreConfig);
+instance().getConfig().addMapConfig(mapConfig);
+----
+--
+====
+
+<1> The `com.hazelcast.mapstore.GenericMapStore` implementation is built into Hazelcast. This implementation reads from the external data store configuration to create a <<mapping, SQL mapping>>.
+<2> The name of your external data store configuration.
+
+[[mapping]]
+== SQL Mapping for the Generic MapStore
+
+When you configure a map with the generic MapStore, Hazelcast creates a xref:sql:mapping-to-jdbc.adoc[SQL mapping with the JDBC connector]. The name of the mapping is the same name as your map prefixed with `__map-store.`. This mapping is used to read data from the data store or write data to the data store and it is removed whenever the configured map is removed. You can also configure this SQL mapping, using <<external-data-store-ref, configuration properties>>.
+
+== Configuration Properties for the Generic MapStore
+
+These configuration properties allow you to configure the generic MapStore and its SQL mapping.
+
+.Generic MapStore configuration options
+[cols="1a,1a,1m,2a",options="header"]
+|===
+|Option|Description|Default|Example
+
+|[[external-data-store-ref]]`external-data-store-ref` (required)
+|The name of the configured external
+data store to use to set up a mapping. Use this property when you have an <<existing-connection, existing connection to an external data store>>.
+
+a|`''` (empty)
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.mapstore.GenericMapStore</class-name>
+      <properties>
+          <property name="external-data-store-ref">my-mysql-database</property>
+      </properties>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.mapstore.GenericMapStore
+        properties:
+            external-data-store-ref: my-mysql-database
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName(GenericMapStore.class.getName());
+mapStoreConfig.setProperty("external-data-store-ref", "my-mysql-database");
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|[[table-name]]`table-name`
+|Name of the table to read from.
+
+a|The name of the map.
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.mapstore.GenericMapStore</class-name>
+      <properties>
+          <property name="external-data-store-ref">my-mysql-database</property>
+          <property name="table-name">test</property>
+      </properties>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.mapstore.GenericMapStore
+        properties:
+            external-data-store-ref: my-mysql-database
+            table-name: test
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName(GenericMapStore.class.getName());
+mapStoreConfig.setProperty("external-data-store-ref", "my-mysql-database");
+mapStoreConfig.setProperty("table-name", "test");
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|[[mapping-type]]`mapping-type`
+|SQL connector to use for the mapping.
+
+a|The SQL connector is derived from the external data store in the configuration.
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.mapstore.GenericMapStore</class-name>
+      <properties>
+          <property name="external-data-store-ref">my-mysql-database</property>
+          <property name="mapping-type">JDBC</property>
+      </properties>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.mapstore.GenericMapStore
+        properties:
+            external-data-store-ref: my-mysql-database
+            mapping-type: JDBC
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName(GenericMapStore.class.getName());
+mapStoreConfig.setProperty("external-data-store-ref", "my-mysql-database");
+mapStoreConfig.setProperty("mapping-type", "JDBC");
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|[[id-column]]`id-column`
+|Name of the column that contains the primary key.
+
+|id
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.mapstore.GenericMapStore</class-name>
+      <properties>
+          <property name="external-data-store-ref">my-mysql-database</property>
+          <property name="id-column">id</property>
+      </properties>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.mapstore.GenericMapStore
+        properties:
+            external-data-store-ref: my-mysql-database
+            id-column: id
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName(GenericMapStore.class.getName());
+mapStoreConfig.setProperty("external-data-store-ref", "my-mysql-database");
+mapStoreConfig.setProperty("id-column", "id");
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|[[columns]]`columns`
+|Names of the columns to map. This value must include a subset of columns in
+the table. Missing columns must have a default value defined.
+
+|
+|
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="default">
+    <map-store enabled="true">
+      <class-name>com.hazelcast.mapstore.GenericMapStore</class-name>
+      <properties>
+          <property name="external-data-store-ref">my-mysql-database</property>
+          <property name="columns">name</property>
+      </properties>
+    </map-store>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    default:
+      map-store:
+        enabled: true
+        class-name: com.hazelcast.mapstore.GenericMapStore
+        properties:
+            external-data-store-ref: my-mysql-database
+            columns: name
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+MapConfig mapConfig = new MapConfig("default");
+
+MapStoreConfig mapStoreConfig = new MapStoreConfig();
+mapStoreConfig.setClassName(GenericMapStore.class.getName());
+mapStoreConfig.setProperty("external-data-store-ref", "my-mysql-database");
+mapStoreConfig.setProperty("columns", "name");
+
+mapConfig.setMapStoreConfig(mapStoreConfig);
+----
+--
+====
+
+|===
+
+
+== Related Resources
+
+To monitor MapStores for each loaded entry, use the `EntryLoadedListener` interface. See the xref:events:object-events.adoc#listening-for-map-events[Listening for Map Events section] to learn how you can catch entry-based events.
+
+xref:mapstore-triggers.adoc[].
+
+== Next Steps
+
+xref:configuration-guide.adoc[Configure a map to use the generic MapStore]. The cluster does not load the MapStore until you do this.

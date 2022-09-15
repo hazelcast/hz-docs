@@ -152,28 +152,19 @@ auto-cleanup acquired permits upon caller failures. If a permit holder fails, it
 [[remove]]
 == Removing Missing CP Members Automatically
 
-When a CP member is shut down, its behavior differs, depending on whether <<persistence, CP Subsystem Persistence>> is enabled.
+If CP Subsystem Persistence is disabled, CP members lose their state after shutting down and so cannot rejoin the CP Subsystem. You can configure CP members to be automatically removed from the CP Subsystem after they shut down as well as how long to wait after they shut down before removing them.
 
-=== Persistence Disabled
-
-When CP Subsystem Persistence is disabled (default), CP members that are shut down are automatically removed from the CP Subsystem and replaced with other
-available CP members in all its CP groups. By default, missing CP members are automatically removed
-from the CP Subsystem after 4 hours. You can configure this time, using the <<missing-cp-member-auto-removal-seconds,`missing-cp-member-auto-removal-seconds`>> option.
+By default, missing CP members are automatically removed
+from the CP Subsystem after 4 hours and replaced with other
+available CP members in all its CP groups. You can configure this time, using the <<missing-cp-member-auto-removal-seconds,`missing-cp-member-auto-removal-seconds`>> option.
 
 If a missing CP member rejoins the cluster after it is automatically removed from the
 CP Subsystem, that CP member must be terminated manually.
 
 If no CP members are available to replace a missing CP member, the group size of any groups that it was in is reduced and the majority values are recalculated.
 
-These members are removed because they lose their state after shutting down and so cannot rejoin the CP Subsystem.
-
-=== Persistence Enabled
-
-When CP Subsystem Persistence is enabled, CP members that are shut down remain in the CP Subsystem, so they remain part of the CP group majority calculations. These CP members can come back by
-restoring their CP state from disk. Therefore, these CP members are not removed from the CP
-Subsystem. It is your responsibility to
-<<remove, remove CP members>> if they do not
-restart.
+NOTE: When CP Subsystem Persistence is enabled, CP members are not automatically removed from the CP
+Subsystem. These CP members can restore their CP state from disk and rejoin their CP groups. It is your responsibility to xref:management.adoc#removing-a-cp-member[remove CP members] if they do not restart.
 
 [[IndeterminateOperationStateException]]
 == Handling Indeterminate Operation State
@@ -381,6 +372,8 @@ config.getCPSubsystemConfig()
 automatically removing a missing CP member from the CP Subsystem.
 
 Must be greater than or equal to <<session-time-to-live-seconds,`session-time-to-live-seconds`>>.
+
+A value of `0` means the time is unlimited, so CP members are never automatically removed.
 
 NOTE: This option does not apply when CP Subsystem Persistence is enabled. See <<remove, Removing Missing CP Members Automatically>>.
 

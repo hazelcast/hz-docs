@@ -36,7 +36,14 @@ C++::
 --
 [source,cpp]
 ----
+#include <hazelcast/client/hazelcast_client.h>
 
+struct Employee {
+    std::string surname;
+    hazelcast::client::hazelcast_json_value to_json(){
+        return hazelcast::client::hazelcast_json_value("{ \"surname\": \"" + surname + "\" }");
+    }
+};
 
 ----
 --
@@ -95,7 +102,21 @@ C++::
 [source,cpp]
 ----
 
-
+int main() {
+    hazelcast::client::client_config config;
+    auto hz = hazelcast::new_client(std::move(config)).get();
+    auto map = hz.get_map("map").get();
+    hazelcast::client::query::sql_predicate sqlPredicate(hz,"surname=smith");
+    map->add_entry_listener(
+            hazelcast::client::entry_listener().on_added([](hazelcast::client::entry_event &&event) {
+                std::cout << "Entry Added:" << event << std::endl;
+            }).on_removed([](hazelcast::client::entry_event &&event) {
+                std::cout << "Entry Removed:" << event << std::endl;
+            }).on_updated([](hazelcast::client::entry_event &&event) {
+                std::cout << "Entry Updated:" << event  << std::endl;
+            }), sqlPredicate, true).get();
+    std::cout << "Entry Listener registered" << std::endl;
+}
 ----
 --
 

@@ -2,19 +2,22 @@
 
 == New Features
 
-* **Streaming SQL**: Hazelcast Platform now supports stream-to-stream joins. You can
-combine data from different streams into a new stream which allows you to enrich the data
-of one stream with the data of another. See xref:sql:querying-streams.adoc#joins[Stream-To-Stream Joins].
-* **Out-of-the-box Connector for Relational Databases**: You were required to write Java code to get
-data from an external storage system (such as a relational database) into Hazelcast by implementing
-`MapLoader` and `MapStore` interfaces. With this release, you can achieve this in a "zero-code" way.
-See xref:data-structures:working-with-external-data.adoc#configuring-hazelcast-to-use-your-mapstore-implementation[Configuring Hazelcast to use your MapStore Implementation].
-* **JDBC Connector**: Hazelcast Platform's SQL engine now can connect to any database supporting the JDBC interface.
-We have also added the SQL based `GenericMapStore`; a map store implementation which uses the JDBC connector.
-See xref:sql:mapping-to-jdbc.adoc[Mapping to JDBC].
+* xref:sql:querying-streams.adoc#joins[*SQL stream-to-stream joins*]: You can now enrich the data
+of one stream with the data of another by
+joining them together.
+* xref:mapstore:configuring-a-generic-mapstore.adoc[*Generic MapStore*]: You no longer need to write Java code to get
+data from an external data store, such as a relational database, into Hazelcast by implementing the
+`MapStore` or `MapLoader` interfaces.
+* xref:sql:mapping-to-jdbc.adoc[*JDBC connector*]: You can now use SQL to connect to and query any database that supports the JDBC interface.
+* xref:sql:user-defined-types.adoc[*Experimental User Defined Types*]: You can now query nested objects within Java, compact, and portable mappings using the User Defined Types (UDTs).
+UDT support is disabled by default.
 
 == Breaking Changes
 
+* Introduced a check to control the versions of Hazelcast Platform members and xref:management:cluster-utilities.adoc#hazelcast-command-line-tool[Hazelcast CLI] are matched.
+Previously, it was possible to submit a job using a different version of CLI from the member version. Generally, it would work when there were no change in the serialized form of pipeline.
+Now, Hazelcast fails earlier in this case.
+https://github.com/hazelcast/hazelcast/pull/22224[#22224]
 * Removed the `BETA` annotations from the compact serialization
 and `GenericRecord` related classes, i.e., they are stable. Now, compact serialization is enabled by default;
 the `enabled` attribute within the `compact-serialization` configuration block does not exist anymore.
@@ -32,6 +35,10 @@ https://github.com/hazelcast/hazelcast/issues/17058[#17058]
 
 === Distribution
 
+* Removes `hazelcast-hibernate53` dependency from the main Hazelcast Platform distribution as it is not needed anymore.
+https://github.com/hazelcast/hazelcast/pull/22282[#22282]
+* Minor versions of Hazelcast Platform are now released as X.Y.0, instead of the previous X.Y versioning scheme.
+https://github.com/hazelcast/hazelcast/pull/22218[#22218]
 * Upgraded the Kafka client library to version 2.8.1.
 https://github.com/hazelcast/hazelcast/pull/20938[#20938]
 
@@ -76,6 +83,8 @@ https://github.com/hazelcast/hazelcast/pull/20998[#20998]
 
 === Configuration
 
+* REST API is now enabled by default. ???
+https://github.com/hazelcast/hazelcast/pull/22249[#22249]
 * Member discoveries in cloud environments (AWS, GCP, Azure, Kubernetes, Eureka) in Spring XML can be configured now using property placeholders.
 https://github.com/hazelcast/hazelcast/pull/21995[#21995]
 * Added configuration elements for external data stores used by map stores, and JDBC sinks and sources.
@@ -86,6 +95,9 @@ This way, a map store operation does not block the next operations by blocking a
 Partition threads are one of the most important shared resources in a cluster; this offloading enables faster completion of the operations in these threads.
 See xref:data-structures:working-with-external-data.adoc#offloading-mapstore-and-maploader-operations[Offloading MapStore and MapLoader Operations].
 https://github.com/hazelcast/hazelcast/pull/21651[#21651]
+* Introduced a way to configure AWS Asynchronous Client's executor service used by Jet engine's Kinesis sources and sinks (thread pool size, threads names pattern).
+For this purpose, `AwsConfig` is exnteded with an additional `executorServiceSupplier` field that allows to specify what executor service to be used.
+https://github.com/hazelcast/hazelcast/pull/21075[#21075]
 
 === WAN Replication
 
@@ -124,9 +136,15 @@ https://github.com/hazelcast/hazelcast/pull/19954[#19954]
 
 == Fixes
 
+* Fixed an issue where the `IS NULL` condition was being ignored when there is another condition for the same column.
+https://github.com/hazelcast/hazelcast/pull/22238[#22238]
+* Fixed an issue where the `IMap.get()` call was blocked when `NoNodeAvailableException` is thrown from the MapStore.
+https://github.com/hazelcast/hazelcast/pull/22168[#22168]
 * Fixed an issue where the cluster merge was not happening properly when the master member does not know the addresses of the other members and if
 the other members start before the master one.
 https://github.com/hazelcast/hazelcast/pull/22021[#22021]
+* Fixed an issue where the failover client statistics was not calculated properly.
+https://github.com/hazelcast/hazelcast/pull/21807[#21807]
 * Fixed an issue where an internal periodic task (with an interval of 1 second) was trying to connect a client to all cluster members, even if there is no connection to the cluster yet:
 ** A client connects to the cluster (where smart routing is enabled by default)
 ** Connection is lost due to a failure
@@ -180,3 +198,4 @@ We would like to thank the contributors from our open source community
 who worked on this release:
 
 * https://github.com/dreis2211[Christoph Dreis]
+* https://github.com/anestoruk[Andrzej Nestoruk]

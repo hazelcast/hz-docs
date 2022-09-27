@@ -1,11 +1,15 @@
 = Configuring Connections to External Data Stores
-:description: You can define external data stores in your members' configuration files or with the xref:configuration:configuring-programmatically.adoc[Java member API]. You can then reference these data stores in the JDBC connector for the xref:integrate:jdbc-connector.adoc[Pipeline API], xref:sql:mapping-to-jdbc.adoc[SQL mappings], and in xref:mapstore:configuring-a-generic-mapstore.adoc[MapStores].
+:description: You can define reusable connections to external data stores in your members' configuration files or with the Java member API. When you have a configured connection, you can then use it in the Pipeline API, SQL mappings, and MapStores.
 :page-beta: true
 
 {description}
 
+== Quickstart Configuration
 
-The following example defines a MySQL and a H2 data store.
+To configure a connection to the external data store, you must provide a unique identifier for the connection as well as a factory that creates the connection.
+
+This example configuration defines connections to both a MySQL database and a H2 data store.
+
 [tabs]
 ====
 XML::
@@ -14,24 +18,22 @@ XML::
 [source,xml]
 ----
 <hazelcast>
-    ...
-    <external-data-store name="my-mysql-database">
-        <class-name>com.hazelcast.datastore.JdbcDataStoreFactory</class-name>
-        <properties>
-            <property name="jdbcUrl">jdbc:mysql://mysql.example.org:3306</property>
-            <property name="username">my_user</property>
-            <property name="password">my_password</property>
-        </properties>
-        <shared>true</shared>
-    </external-data-store>
-    <external-data-store name="my-other-database">
-        <class-name>com.hazelcast.datastore.JdbcDataStoreFactory</class-name>
-        <properties>
-            <property name="jdbcUrl">jdbc:h2:mem:my-other-database</property>
-        </properties>
-        <shared>true</shared>
-    </external-data-store>
-    ...
+  <external-data-store name="my-mysql-database">
+    <class-name>com.hazelcast.datastore.JdbcDataStoreFactory</class-name>
+    <properties>
+      <property name="jdbcUrl">jdbc:mysql://mysql.example.org:3306</property>
+      <property name="username">my_user</property>
+      <property name="password">my_password</property>
+    </properties>
+    <shared>true</shared>
+  </external-data-store>
+  <external-data-store name="my-other-database">
+    <class-name>com.hazelcast.datastore.JdbcDataStoreFactory</class-name>
+    <properties>
+      <property name="jdbcUrl">jdbc:h2:mem:my-other-database</property>
+    </properties>
+    <shared>true</shared>
+  </external-data-store>
 </hazelcast>
 ----
 --
@@ -64,34 +66,72 @@ Java::
 [source,java]
 ----
 config
-        .addExternalDataStoreConfig(
-                new ExternalDataStoreConfig("my-mysql-database")
-                        .setClassName(JdbcDataStoreFactory.class.getName())
-                        .setProperty("jdbcUrl", "jdbc:mysql://mysql.example.org:3306")
-                        .setProperty("user", "my_user")
-                        .setProperty("password", "my_password")
-                        .setShared(true)
-        )
-        .addExternalDataStoreConfig(
-                new ExternalDataStoreConfig("my-other-database")
-                        .setClassName(JdbcDataStoreFactory.class.getName())
-                        .setProperty("jdbcUrl", "jdbc:h2:mem:my-other-database")
-                        .setShared(true)
-        );
+  .addExternalDataStoreConfig(
+    new ExternalDataStoreConfig("my-mysql-database")
+      .setClassName(JdbcDataStoreFactory.class.getName())
+      .setProperty("jdbcUrl", "jdbc:mysql://mysql.example.org:3306")
+      .setProperty("user", "my_user")
+      .setProperty("password", "my_password")
+      .setShared(true)
+  )
+  .addExternalDataStoreConfig(
+    new ExternalDataStoreConfig("my-other-database")
+      .setClassName(JdbcDataStoreFactory.class.getName())
+      .setProperty("jdbcUrl", "jdbc:h2:mem:my-other-database")
+      .setShared(true)
+  );
 ----
 --
 ====
 
-The external data store has the following configuration elements:
+== Configuration Options for External Data Stores
 
-* `name` (required): The unique identifier for the external data store.
-* `class-name` (required): The name of the `com.hazelcast.datastore.ExternalDataStoreFactory` implementation that is used to create instances of the data store connection.
-* `properties`: The configuration properties for an implementation of the external data store factory. See <<built-in-data-store-factories, built-in data store factories>> for properties supported by specific implementations.
-* `shared`: Specifies whether the external data store factory returns reusable connections for different Jet jobs and MapStores. Specific behaviour depends on the implementation of the factory. The default value is `true`.
+The external data store has the following configuration options:
 
-== Built-in Data Store Factories
+If you are using Java to configure the Mapstore, use the link:https://javadoc.io/static/com.hazelcast/hazelcast/{full-version}/com/hazelcast/config/ExternalDataStoreConfig.html[`ExternalDataStoreConfig` object].
 
-* `com.hazelcast.datastore.JdbcDataStoreFactory` creates JDBC-based connections to external data stores. This implementation is based on link:https://github.com/brettwooldridge/HikariCP[HikariDataSource]. All properties are passed directly to `HikariConfig`. For available configuration properties see link:https://github.com/brettwooldridge/HikariCP#gear-configuration-knobs-baby[HikariCP configuration].
+.External data store configuration options
+[cols="1a,1a,1m,2a",options="header"]
+|===
+|Option|Description|Default|Example
+
+
+|`name` (required)
+|The unique identifier for the external data store.
+|
+|
+
+|`class-name` (required)
+|The name of a `com.hazelcast.datastore.ExternalDataStoreFactory` implementation that creates instances of an external data store connection.
+|
+|
+
+|`properties`
+|Any configuration properties that the factory in the `class-name` configuration expects to receive.
+|
+|
+
+|`shared`
+|Whether the factory in the `class-name` configuration returns reusable connections for use in different MapStores, jobs, and SQL mappings. The behaviour of this configuration depends on the implementation of the factory. The default value is `true`.
+|
+|
+
+|===
+
+== Pre-Built Factories
+
+Hazelcast comes with the following pre-built factories that you can configure in the `class-name` configuration:
+
+.Factories
+[cols="1a,1a,1a",options="header"]
+|===
+|Factory|Description|Properties
+
+|`com.hazelcast.datastore.JdbcDataStoreFactory`
+|Connect to a data store that supports JDBC.
+|For available configuration properties see link:https://github.com/brettwooldridge/HikariCP#gear-configuration-knobs-baby[HikariCP configuration]. This implementation is based on link:https://github.com/brettwooldridge/HikariCP[HikariDataSource]. All properties are passed directly to `HikariConfig`. 
+
+|===
 
 If there are more JDBC connections used on a single member from a single job, they will share the same data store and connection pool.
 
@@ -100,3 +140,11 @@ NOTE: If you use the slim distribution of Hazelcast with a built-in data store f
 == Related Resources
 
 You can also add new external data stores dynamically at runtime, see xref:configuration:dynamic-config.adoc[dynamic configuration].
+
+== Next Steps
+
+Use your configured connection:
+
+- Build a data pipeline with the xref:integrate:jdbc-connector.adoc[Pipeline API].
+- Query your data store, using a xref:sql:mapping-to-jdbc.adoc[SQL mapping].
+- Build a cache with a xref:mapstore:configuring-a-generic-mapstore.adoc[MapStore].

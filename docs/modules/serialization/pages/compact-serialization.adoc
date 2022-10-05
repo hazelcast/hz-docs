@@ -1,6 +1,7 @@
 = Compact Serialization
 
-As an enhancement to existing serialization methods, Hazelcast offers Compact Serialization, with the following main features.
+As an enhancement to existing serialization methods, Hazelcast offers Compact
+serialization, with the following main features:
 
 * Separates the schema from the data and stores it per type, not per object which
 results in less memory and bandwidth usage compared to other formats
@@ -9,12 +10,11 @@ the class in any way
 * Supports schema evolution which permits adding or removing fields, or changing
 the types of fields
 * Can work with no configuration or any kind of factory/serializer registration for
-Java classes and Java records
+Java classes, Java records, and .NET classes
 * Platform and language independent
-* Supports partial deserialization of fields, without deserializing the whole objects during
-queries or indexing
+* Supports partial deserialization of fields during queries or indexing
 
-Hazelcast achieves these features by having a well-known schema of objects and replicating
+Hazelcast achieves these features by having well-known schemas of objects and replicating
 them across the cluster which enables members and clients to fetch schemas they don't
 have in their local registries. Each serialized object carries just a schema identifier and
 relies on the schema distribution service or configuration to match identifiers with the
@@ -22,7 +22,7 @@ actual schema. Once the schemas are fetched, they are cached locally on the memb
 so that the next operations that use the schema do not incur extra costs.
 
 Schemas help Hazelcast to identify the locations of the fields on the serialized binary data.
-With this information, Hazelcast can deserialize individual fields of the data, without reading
+With this information, Hazelcast can deserialize individual fields of the data, without deserializing
 the whole binary. This results in a better query and indexing performance.
 
 Schemas can evolve freely by adding or removing fields. Even, the types of the fields can be changed.
@@ -35,33 +35,28 @@ a class to implement a particular interface. Serializers might be implemented an
 separately from the classes.
 
 It also supports zero-configuration use cases by automatically extracting schemas out of the
-classes and Java records using reflection, which is cached and reused later, with no extra cost.
+Java classes and records, and .NET classes which are cached and reused later, with no extra cost.
 
 The underlying format of the Compact serialized objects is platform and language independent.
 
-== Using Compact Serialization With Zero-Configuration
+NOTE: Compact serialization is promoted to the stable status in the 5.2 Hazelcast release.
+The older versions released under the BETA status are not compatible with stable the 5.2 version. +
+For future versions, the backward compatibility will be maintained, just like any other
+Hazelcast feature.
 
-Compact serialization can be used without a registering the serializer in the member or client
-configuration. Hazelcast tries
-to extract a schema out of the class, using reflection. If successful, it registers the
-reflective serializer associated with the extracted schema and uses it while
-serializing and deserializing instances of that class. If the automatic schema
-extraction fails, Hazelcast throws an exception.
+== Implementing CompactSerializer
 
-Currently, Hazelcast supports extracting schemas out of classes that have the following
-field types:
+Compact serialization can be used by implementing a `CompactSerializer` for a class
+and registering it in the configuration.
 
-* Primitive types: `boolean`, `byte`, `char`, `short`, `int`, `long`, `float`, and `double`
-* Wrapper classes of primitive types: `Boolean`, `Byte`, `Character`, `Short`, `Integer`, `Long`, `Float`, and `Double`
-* `String`
-* `java.time.LocalDate`, `java.time.LocalTime`, `java.time.LocalDateTime`, and `java.time.OffsetDateTime`
-* `java.math.BigDecimal`
-* Enums
-* Array, `List`, `ArrayList`, `Set`, `HashSet`, `Map`, `HashMap` of the types shown above
-* Nested classes that contain the fields above and arrays of them
+For example, assume that you have the following `Employee` class.
 
-Assume that you have the following `Employee` class.
+[tabs]
+====
 
+Java::
++
+--
 [source,java]
 ----
 public class Employee {
@@ -82,41 +77,66 @@ public class Employee {
     }
 }
 ----
+--
 
-If you don't perform any kind of configuration changes and use the instances of the class
-directly, no exceptions are thrown. Hazelcast will generate a schema out of the
-`Employee` class the first time you try to serialize an object, cache it, and reuse it
-for the subsequent serializations and deserializations.
-
-The same holds true for the Java records. Hazelcast supports serializing and deserializing
-Java records, without an extra configuration as well.
-
-Assuming the `Employee` class above were a Java record:
-
-[source,java]
-----
-public record Employee(long id, String name) {
-}
+.NET::
++
+--
+[source,cs]
 ----
 
-The following code would work for both of them.
-
-[source,java]
 ----
-HazelcastInstance client = HazelcastClient.newHazelcastClient();
-IMap<Long, Employee> map = client.getMap("employees");
-Employee employee = new Employee(1, "John Doe");
-map.set(1L, employee);
-Employee employeeFromMap = map.get(1L);
+--
+
+C++::
++
+--
+[source,cpp]
 ----
 
-== Implementing CompactSerializer
+----
+--
 
-Another way to use compact serialization is to implement the `CompactSerializer` interface for a class
-and register it in the configuration.
+Node.js::
++
+--
+[source,javascript]
+----
 
-For example, assume that you have the same `Employee` class. Then, a Compact serializer can be implemented as such.
+----
+--
 
+Python::
++
+--
+[source,python]
+----
+class Employee:
+    def __init__(self, id: int, name: str):
+        self.id = id
+        self.name = name
+----
+--
+
+Go::
++
+--
+[source,go]
+----
+
+----
+--
+
+====
+
+Then, a Compact serializer can be implemented as below.
+
+[tabs]
+====
+
+Java::
++
+--
 [source,java]
 ----
 public class EmployeeSerializer implements CompactSerializer<Employee> {
@@ -144,29 +164,162 @@ public class EmployeeSerializer implements CompactSerializer<Employee> {
     }
 }
 ----
+--
+
+.NET::
++
+--
+[source,cs]
+----
+
+----
+--
+
+C++::
++
+--
+[source,cpp]
+----
+
+----
+--
+
+Node.js::
++
+--
+[source,javascript]
+----
+
+----
+--
+
+Python::
++
+--
+[source,python]
+----
+class EmployeeSerializer(CompactSerializer[Employee]):
+    def read(self, reader: CompactReader):
+        id = reader.read_int64("id")
+        name = reader.read_string("name")
+        return Employee(id, name)
+
+    def write(self, writer: CompactWriter, employee: Employee):
+        writer.write_int64("id", employee.id)
+        writer.write_string("name", employee.name)
+
+    def get_type_name(self):
+        return "employee"
+
+    def get_class(self):
+        return Employee
+----
+--
+
+Go::
++
+--
+[source,go]
+----
+
+----
+--
+
+====
 
 The last step is to register the serializer in the member or client configuration.
 
 **Programmatic Configuration:**
 
+[tabs]
+====
+
+Java - Member::
++
+--
 [source,java]
 ----
-SerializationConfig serializationConfig = new SerializationConfig();
-serializationConfig.getCompactSerializationConfig()
+Config config = new Config();
+config.getSerializationConfig()
+        .getCompactSerializationConfig()
         .addSerializer(new EmployeeSerializer());
 ----
+--
+
+Java - Client::
++
+--
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+clientConfig.getSerializationConfig()
+        .getCompactSerializationConfig()
+        .addSerializer(new EmployeeSerializer());
+----
+--
+
+.NET::
++
+--
+[source,cs]
+----
+
+----
+--
+
+C++::
++
+--
+[source,cpp]
+----
+
+----
+--
+
+Node.js::
++
+--
+[source,javascript]
+----
+
+----
+--
+
+Python::
++
+--
+[source,python]
+----
+hazelcast.HazelcastClient(
+    compact_serializers=[
+        EmployeeSerializer(),
+    ],
+)
+----
+--
+
+Go::
++
+--
+[source,go]
+----
+
+----
+--
+
+====
 
 **Declarative Configuration:**
 
 [tabs]
 ====
-XML::
+
+Java - Member - XML::
 +
 --
 [source,xml]
 ----
 <hazelcast>
-    ...
     <serialization>
         <compact-serialization>
             <serializers>
@@ -176,13 +329,13 @@ XML::
             </serializers>
         </compact-serialization>
     </serialization>
-    ...
 </hazelcast>
 ----
 --
 
-YAML::
+Java - Member - YAML::
 +
+--
 [source,yaml]
 ----
 hazelcast:
@@ -191,12 +344,539 @@ hazelcast:
       serializers:
          - serializer: com.example.EmployeeSerializer
 ----
+--
+
+Java - Client - XML::
++
+--
+[source,xml]
+----
+<hazelcast-client>
+    <serialization>
+        <compact-serialization>
+            <serializers>
+                <serializer>
+                    com.example.EmployeeSerializer
+                </serializer>
+            </serializers>
+        </compact-serialization>
+    </serialization>
+</hazelcast-client>
+----
+--
+
+Java - Client - YAML::
++
+--
+[source,yaml]
+----
+hazelcast-client:
+  serialization:
+    compact-serialization:
+      serializers:
+         - serializer: com.example.EmployeeSerializer
+----
+--
+
 ====
 
 A schema will be created from the serializer, and a unique schema identifier will be
 assigned to it automatically.
 
-From now on, Hazelcast will serialize instances of the `Employee` class using the `EmployeeSerializer`.
+From now on, Hazelcast will serialize instances of the `Employee` class using the
+`EmployeeSerializer`.
+
+== Supported Types
+
+Compact serialization supports the following list as first class types. Any other type
+can be implemented on top of these, by using these types as building blocks.
+
+[cols="1m,1a,1a,1a,1a,1a,1a,1a]
+|===
+| Type | Java | .NET | C++ | Node.js | Python | Go | Description
+
+| BOOLEAN
+| boolean
+|
+|
+|
+| bool
+|
+| True or false represented by a single bit as either 1 or 0.
+Up to eight booleans are packed into a single byte.
+
+| ARRAY_OF_BOOLEAN
+| boolean[]
+|
+|
+|
+| Optional[list[bool]]
+|
+| Array of booleans or null. Up to eight boolean array items are packed into a single byte.
+
+| NULLABLE_BOOLEAN
+| Boolean
+|
+|
+|
+| Optional[bool]
+|
+| A boolean that can also be null.
+
+| ARRAY_OF_NULLABLE_BOOLEAN
+| Boolean[]
+|
+|
+|
+| Optional[list[Optional[bool]]]
+|
+| Array of nullable booleans or null.
+
+| INT8
+| byte
+|
+|
+|
+| int
+|
+| 8-bit two's complement signed integer.
+
+| ARRAY_OF_INT8
+| byte[]
+|
+|
+|
+| Optional[list[int]]
+|
+| Array of int8s or null..
+
+| NULLABLE_INT8
+| Byte
+|
+|
+|
+| Optional[int]
+|
+| An int8 that can also be null.
+
+| ARRAY_OF_NULLABLE_INT8
+| Byte[]
+|
+|
+|
+| Optional[list[Optional[int]]]
+|
+| Array of nullable int8s or null.
+
+| INT16
+| short
+|
+|
+|
+| int
+|
+| 16-bit two's complement signed integer.
+
+| ARRAY_OF_INT16
+| short[]
+|
+|
+|
+| Optional[list[int]]
+|
+| Array of int16s or null.
+
+| NULLABLE_INT16
+| Short
+|
+|
+|
+| Optional[int]
+|
+| An int16 that can also be null.
+
+| ARRAY_OF_NULLABLE_INT16
+| Short[]
+|
+|
+|
+| Optional[list[Optional[int]]]
+|
+| Array of nullable int16s or null.
+
+| INT32
+| int
+|
+|
+|
+| int
+|
+| 32-bit two's complement signed integer.
+
+| ARRAY_OF_INT32
+| int[]
+|
+|
+|
+| Optional[list[int]]
+|
+| Array of int32s or null.
+
+| NULLABLE_INT32
+| Integer
+|
+|
+|
+| Optional[int]
+|
+| An int32 that can also be null.
+
+| ARRAY_OF_NULLABLE_INT32
+| Integer[]
+|
+|
+|
+| Optional[list[Optional[int]]]
+|
+| Array of nullable int32s or null.
+
+| INT64
+| long
+|
+|
+|
+| int
+|
+| 64-bit two's complement signed integer.
+
+| ARRAY_OF_INT64
+| long[]
+|
+|
+|
+| Optional[list[int]]
+|
+| Array of int64s or null.
+
+| NULLABLE_INT64
+| Long
+|
+|
+|
+| Optional[int]
+|
+| An int64 that can also be null.
+
+| ARRAY_OF_NULLABLE_INT64
+| Long[]
+|
+|
+|
+| Optional[list[Optional[int]]]
+|
+| Array of nullable int64s or null.
+
+| FLOAT32
+| float
+|
+|
+|
+| float
+|
+| 32-bit IEEE 754 floating point number.
+
+| ARRAY_OF_FLOAT32
+| float[]
+|
+|
+|
+| Optional[list[float]]
+|
+| Array of float32s or null.
+
+| NULLABLE_FLOAT32
+| Float
+|
+|
+|
+| Optional[float]
+|
+| A float32 that can also be null.
+
+| ARRAY_OF_NULLABLE_FLOAT32
+| Float[]
+|
+|
+|
+| Optional[list[Optional[float]]]
+|
+| Array of nullable float32s or null.
+
+| FLOAT64
+| double
+|
+|
+|
+| float
+|
+| 64-bit IEEE 754 floating point number.
+
+| ARRAY_OF_FLOAT64
+| double[]
+|
+|
+|
+| Optional[list[float]]
+|
+| Array of float64s or null.
+
+| NULLABLE_FLOAT64
+| Double
+|
+|
+|
+| Optional[float]
+|
+| A float64 that can also be null.
+
+| ARRAY_OF_NULLABLE_FLOAT64
+| Double[]
+|
+|
+|
+| Optional[list[Optional[float]]]
+|
+| Array of nullable float64s or null.
+
+| STRING
+| String
+|
+|
+|
+| Optional[str]
+|
+| A UTF-8 encoded string or null.
+
+| ARRAY_OF_STRING
+| String[]
+|
+|
+|
+| Optional[list[Optional[str]]]
+|
+| Array of strings or null.
+
+| DECIMAL
+| BigDecimal
+|
+|
+|
+| Optional[decimal.Decimal]
+|
+| Arbitrary precision and scale floating point number or null.
+
+| ARRAY_OF_DECIMAL
+| BigDecimal[]
+|
+|
+|
+| Optional[list[decimal.Decimal]]
+|
+| Array of decimals or null.
+
+| TIME
+| LocalTime
+|
+|
+|
+| Optional[datetime.time]
+|
+| Time consisting of hours, minutes, seconds, and nanoseconds or null.
+
+| ARRAY_OF_TIME
+| LocalTime[]
+|
+|
+|
+| Optional[list[Optional[datetime.time]]]
+|
+| Array of times or null.
+
+| DATE
+| LocalDate
+|
+|
+|
+| Optional[datetime.date]
+|
+| Date consisting of year, month, and day of the month or null.
+
+| ARRAY_OF_DATE
+| LocalDate[]
+|
+|
+|
+| Optional[list[Optional[datetime.date]]]
+|
+| Array of dates or null.
+
+| TIMESTAMP
+| LocalDateTime
+|
+|
+|
+| Optional[datetime.datetime]
+|
+| Timestamp consisting of year, month, day of the month, hour, minutes, seconds,
+and nanoseconds or null.
+
+| ARRAY_OF_TIMESTAMP
+| LocalDateTime[]
+|
+|
+|
+| Optional[list[Optional[datetime.datetime]]]
+|
+| Array of timestamps or null.
+
+| TIMESTAMP_WITH_TIMEZONE
+| OffsetDateTime
+|
+|
+|
+| Optional[datetime.datetime]
+|
+| Timestamp with timezone consisting of year, month, day of the month, hour, minutes, seconds,
+nanoseconds, and offset seconds or null.
+
+| ARRAY_OF_TIMESTAMP_WITH_TIMEZONE
+| OffsetDateTime[]
+|
+|
+|
+| Optional[list[Optional[datetime.datetime]]]
+|
+| Array of timestamp with timezones or null.
+
+| COMPACT
+| Can be any type.
+| Can be any type.
+| Can be any type.
+| Can be any type.
+| Can be any type.
+| Can be any type.
+| A user defined nested Compact serializable object or null.
+
+| ARRAY_OF_COMPACT
+| Can be an array of any type.
+| Can be an array of any type.
+| Can be an array of any type.
+| Can be an array of any type.
+| Can be an array of any type.
+| Can be an array of any type.
+| Array of Compact serializable objects or null.
+
+|===
+
+NOTE: Compact serialization supports circularly-dependent types, provided that the cycle
+ends at some point on runtime by some null value.
+
+== Using Compact Serialization With Zero-Configuration
+
+NOTE: The ability to use Compact serialization with no configuration is only available in
+Java and .NET.
+
+Compact serialization can also be used without registering a serializer in the member
+or client configuration.
+
+When Hazelcast cannot associate a class with any other serialization mechanism, instead of
+throwing an exception directly, it tries to use zero-configuration Compact serialization
+as a last effort.
+
+Hazelcast tries to extract a schema out of the class. If successful, it registers the 
+zero-config serializer associated with the extracted schema and uses it while serializing 
+and deserializing instances of that class. If the automatic schema extraction fails,
+Hazelcast throws an exception.
+
+For example, assume that you have the same `Employee` class.
+
+If you don't perform any kind of configuration change and use the instances of the class
+directly, no exceptions will be thrown. Hazelcast will generate a schema out of the
+`Employee` class the first time you try to serialize an object, cache it, and reuse it
+for the subsequent serializations and deserializations.
+
+The same holds true for the Java records. Hazelcast supports serializing and deserializing
+Java records, without an extra configuration as well.
+
+Assuming the `Employee` class above were a Java record:
+
+[source,java]
+----
+public record Employee(long id, String name) {
+}
+----
+
+The following code would work for both of them.
+
+[tabs]
+====
+
+Java::
++
+--
+[source,java]
+----
+HazelcastInstance client = HazelcastClient.newHazelcastClient();
+IMap<Long, Employee> map = client.getMap("employees");
+Employee employee = new Employee(1L, "John Doe");
+map.set(1L, employee);
+Employee employeeFromMap = map.get(1L);
+----
+--
+
+.NET::
++
+--
+[source,cs]
+----
+
+----
+--
+
+====
+
+Currently, Hazelcast supports extracting schemas out of classes that have the field types shown
+above and some others, for user convenience.
+
+For Java, the zero-config serializer supports the following extra field types on top of the
+first class types:
+
+* `char`, represented as an `INT16`
+* `Character`, represented as a `NULLABLE_INT16`
+* Enum, represented as a `STRING`, using the names of the enum members.
+* Arrays of the types listed above, represented by their respective arrays.
+* `List` or `ArrayList` of the types listed above and first class types, represented by their
+respective arrays with the same field name.
+* `Set` or `HashSet` of the types listed above and first class types, represented by their
+respective arrays with the same field name.
+* `Map` or `HashMap` or the types listed above and first class types, represented by two arrays
+per field, one for keys and one for values, represented by their respective arrays for key and
+value types. The names of those arrays are of the form `fieldName + '!keys'` and
+`fieldName + '!values'`.
+
+For Java, zero-config Compact serializer uses reflection to read and write to fields of
+objects, regardless they are public or not. That results in hard error on JDK16 and onwards,
+as illegal reflective access is denied by default in JDK16 and that option is removed altogether
+in JDK17. The solution to these problems is to open your module that the class you are
+serializing with zero-config reflective serializer to Hazelcast. Or, you can write your
+own Compact serializer, as described above.
+
+[source,text]
+----
+module org.example.Foo {
+    opens org.example to com.hazelcast.core;
+}
+----
 
 == Schema Evolution
 
@@ -209,8 +889,8 @@ or serializers apart from the added, removed, or changed fields.
 
 Hazelcast achieves this by identifying each version of the class by a unique fingerprint. Any change
 in a class results in a different fingerprint. Hazelcast uses a 64-bit
-https://en.wikipedia.org/wiki/Rabin_fingerprint[Rabin Fingerprint] to assign identifiers to schemas, which
-has an extremely low collision rate.
+https://en.wikipedia.org/wiki/Rabin_fingerprint[Rabin Fingerprint] to assign identifiers to schemas,
+which has an extremely low collision rate.
 
 Different versions of the schema with different identifiers are replicated in the cluster and can be
 fetched by clients or members internally. That allows old readers to read fields of the classes they
@@ -219,90 +899,435 @@ fields of the classes available in the data, when they try to read data serializ
 
 Assume that the two versions of the following `Employee` class lives in the cluster.
 
+[tabs]
+====
+
+Java::
++
+--
 [source,java]
 ----
-class Employee {
-    long id;
-    String name;
+public class Employee {
+    private long id;
+    private String name;
 }
 ----
+--
 
+.NET::
++
+--
+[source,cs]
+----
+
+----
+--
+
+C++::
++
+--
+[source,cpp]
+----
+
+----
+--
+
+Node.js::
++
+--
+[source,javascript]
+----
+
+----
+--
+
+Python::
++
+--
+[source,python]
+----
+class Employee:
+    def __init__(self, id: int, name: str):
+        self.id = id
+        self.name = name
+----
+--
+
+Go::
++
+--
+[source,go]
+----
+
+----
+--
+
+====
+
+
+[tabs]
+====
+
+Java::
++
+--
 [source,java]
 ----
-class Employee {
+public class Employee {
     private long id;
     private String name;
     private int age; // Newly added field
 }
 ----
+--
+
+.NET::
++
+--
+[source,cs]
+----
+
+----
+--
+
+C++::
++
+--
+[source,cpp]
+----
+
+----
+--
+
+Node.js::
++
+--
+[source,javascript]
+----
+
+----
+--
+
+Python::
++
+--
+[source,python]
+----
+class Employee:
+    def __init__(self, id: int, name: str, age: int):
+        self.id = id
+        self.name = name
+        self.age = age # Newly added field
+----
+--
+
+Go::
++
+--
+[source,go]
+----
+
+----
+--
+
+====
 
 Then, when faced with binary data serialized by the new writer, old readers will be able to
 read the following fields.
 
+[tabs]
+====
+
+Java::
++
+--
 [source,java]
 ----
-public Employee read(CompactReader reader) {
-    long id = reader.readInt64("id");
-    String name = reader.readString("name");
-    // The new "age" field is there, but the old reader does not
-    // know anything about it. Hence, it will simply ignore that field.
-    return new Employee(id, name);
+public class EmployeeSerializer implements CompactSerializer<Employee> {
+    @Override
+    public Employee read(CompactReader reader) {
+        long id = reader.readInt64("id");
+        String name = reader.readString("name");
+        // The new "age" field is there, but the old reader does not
+        // know anything about it. Hence, it will simply ignore that field.
+        return new Employee(id, name);
+    }
+    ...
 }
 ----
+--
+
+.NET::
++
+--
+[source,cs]
+----
+
+----
+--
+
+C++::
++
+--
+[source,cpp]
+----
+
+----
+--
+
+Node.js::
++
+--
+[source,javascript]
+----
+
+----
+--
+
+Python::
++
+--
+[source,python]
+----
+class EmployeeSerializer(CompactSerializer[Employee]):
+    def read(self, reader: CompactReader):
+        id = reader.read_int64("id")
+        name = reader.read_string("name")
+        # The new "age" field is there, but the old reader does not
+        # know anything about it. Hence, it will simply ignore that field.
+        return Employee(id, name)
+    ...
+----
+--
+
+Go::
++
+--
+[source,go]
+----
+
+----
+--
+
+====
 
 Then, when faced with binary data serialized by the old writer, new readers will be able to
 read the following fields. Also, Hazelcast provides convenient APIs to check the
 existence of fields in the data when there is no such field.
 
+[tabs]
+====
+
+Java::
++
+--
 [source,java]
 ----
-public Employee read(CompactReader reader) {
-    long id = reader.readInt64("id");
-    String name = reader.readString("name");
-    // Read the "age" if it exists, or use the default value 0.
-    // reader.readInt32("age") would throw if the "age" field
-    // does not exist in data.
-    int age;
-    if (reader.getFieldKind("age") == FieldKind.INT32) {
-        age = reader.readInt32("age");
-    } else {
-        age = 0;
+public class EmployeeSerializer implements CompactSerializer<Employee> {
+    @Override
+    public Employee read(CompactReader reader) {
+        long id = reader.readInt64("id");
+        String name = reader.readString("name");
+        // Read the "age" if it exists, or use the default value 0.
+        // reader.readInt32("age") would throw if the "age" field
+        // does not exist in data.
+        int age;
+        if (reader.getFieldKind("age") == FieldKind.INT32) {
+            age = reader.readInt32("age");
+        } else {
+            age = 0;
+        }
+        return new Employee(id, name, age);
     }
-    return new Employee(id, name, age);
+    ...
 }
 ----
+--
+
+.NET::
++
+--
+[source,cs]
+----
+
+----
+--
+
+C++::
++
+--
+[source,cpp]
+----
+
+----
+--
+
+Node.js::
++
+--
+[source,javascript]
+----
+
+----
+--
+
+Python::
++
+--
+[source,python]
+----
+class EmployeeSerializer(CompactSerializer[Employee]):
+    def read(self, reader: CompactReader):
+        id = reader.read_int64("id")
+        name = reader.read_string("name")
+        # Read the "age" if it exists, or use the default value 0.
+        # reader.read_int32("age") would throw if the "age" field
+        # does not exist in data.
+        if reader.get_field_kind("age") == FieldKind.INT32:
+            age = reader.read_int32("age")
+        else:
+            age = 0
+        return Employee(id, name, age)
+    ...
+----
+--
+
+Go::
++
+--
+[source,go]
+----
+
+----
+--
+
+====
 
 Note that, when an old reader reads data written by an old writer, or a new reader reads a data
-written by a new writer, they will be able to read all fields.
+written by a new writer, they will be able to read all fields written.
 
-== CompactSerializationConfig
+One thing to be careful while evolving the class is to not have any conditional code
+in the `write` method. That method must write all the fields available in the current version
+of the class to the writer, with appropriate field names and types. Hazelcast uses the `write`
+method of the serializer to extract a schema out of the object, hence any conditional code
+that may or may not run depending on the object in that method might result in an undefined
+behavior.
+
+== Configuration
 
 The configuration can be used to register either
 
 - an explicit `CompactSerializer`
-- a reflective serializer for a class to override other serialization mechanisms.
+- a zero-config serializer for a class to override other serialization mechanisms,
+for languages that provide zero-config Compact serialization.
 
-In case of an explicit serializer, you have to supply a type name for the class
+In case of an explicit serializer, you have to supply a unique type name for the class
 in the serializer.
 
 Choosing a type name will associate that name with the schema and will make the
 polyglot use cases, where there are multiple clients from different languages,
-easier.
+possible. Serializers in different languages can work on the same data, provided
+that their read and write methods are compatible, and they have the same type name.
 
-When a class is serialized using the reflective serializer, Hazelcast will choose the
-fully qualified class name as the type name automatically.
+NOTE: If you evolve your class in the later versions of your application, by adding
+or removing fields, you should continue using the same type name for that class.
+
+When a class is serialized using the zero-config Compact serializer, Hazelcast will choose the
+fully qualified class name for Java as the type name automatically.
 
 Below is the way to register an explicit serializer for a certain class.
 
+**Programmatic Configuration:**
+
 [tabs]
 ====
-XML::
+
+Java - Member::
++
+--
+[source,java]
+----
+Config config = new Config();
+config.getSerializationConfig()
+        .getCompactSerializationConfig()
+        .addSerializer(new FooSerializer());
+----
+--
+
+Java - Client::
++
+--
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+clientConfig.getSerializationConfig()
+        .getCompactSerializationConfig()
+        .addSerializer(new FooSerializer());
+----
+--
+
+.NET::
++
+--
+[source,cs]
+----
+
+----
+--
+
+C++::
++
+--
+[source,cpp]
+----
+
+----
+--
+
+Node.js::
++
+--
+[source,javascript]
+----
+
+----
+--
+
+Python::
++
+--
+[source,python]
+----
+hazelcast.HazelcastClient(
+    compact_serializers=[
+        FooSerializer(),
+    ],
+)
+----
+--
+
+Go::
++
+--
+[source,go]
+----
+
+----
+--
+
+====
+
+**Declarative Configuration:**
+
+[tabs]
+====
+
+Java - Member - XML::
 +
 --
 [source,xml]
 ----
 <hazelcast>
-    ...
     <serialization>
         <compact-serialization>
             <serializers>
@@ -312,12 +1337,11 @@ XML::
             </serializers>
         </compact-serialization>
     </serialization>
-    ...
 </hazelcast>
 ----
 --
 
-YAML::
+Java - Member - YAML::
 +
 --
 [source,yaml]
@@ -329,46 +1353,112 @@ hazelcast:
         - serializer: com.example.FooSerializer
 ----
 --
-Java::
+
+Java - Client - XML::
++
+--
+[source,xml]
+----
+<hazelcast-client>
+    <serialization>
+        <compact-serialization>
+            <serializers>
+                <serializer>
+                    com.example.FooSerializer
+                </serializer>
+            </serializers>
+        </compact-serialization>
+    </serialization>
+</hazelcast-client>
+----
+--
+
+Java - Client - YAML::
++
+--
+[source,yaml]
+----
+hazelcast-client:
+  serialization:
+    compact-serialization:
+      serializers:
+        - serializer: com.example.FooSerializer
+----
+--
+
+====
+
+Lastly, the following is a sample configuration that registers zero-config
+serializer for a certain class, without implementing an explicit serializer.
+
+This way, one can override other serialization mechanisms for a certain class
+such as Java serializable, using zero-config serializer.
+
+**Programmatic Configuration:**
+
+[tabs]
+====
+
+Java - Member::
 +
 --
 [source,java]
 ----
-SerializationConfig serializationConfig = new SerializationConfig();
-serializationConfig.getCompactSerializationConfig()
-        .addSerializer(new FooSerializer());
+Config config = new Config();
+config.getSerializationConfig()
+        .getCompactSerializationConfig()
+        .addClass(Bar.class);
 ----
 --
+
+Java - Client::
++
+--
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+clientConfig.getSerializationConfig()
+        .getCompactSerializationConfig()
+        .addClass(Bar.class);
+----
+--
+
+.NET::
++
+--
+[source,cs]
+----
+
+----
+--
+
 ====
 
-Lastly, the following is a sample configuration that registers reflective
-serializer for a certain class, without implementing an explicit serializer.
-
-This way, one can override other serialization mechanisms for a certain class
-such as Java serializable.
+**Declarative Configuration:**
 
 [tabs]
 ====
-XML::
+
+Java - Member - XML::
 +
 --
 [source,xml]
 ----
 <hazelcast>
-    ...
     <serialization>
         <compact-serialization>
             <classes>
-                <class>com.example.Bar</class>
+                <class>
+                    com.example.Bar
+                </class>
             </classes>
         </compact-serialization>
     </serialization>
-    ...
 </hazelcast>
 ----
 --
 
-YAML::
+Java - Member - YAML::
 +
 --
 [source,yaml]
@@ -380,23 +1470,99 @@ hazelcast:
         - class: com.example.Bar
 ----
 --
-Java::
+
+Java - Client - XML::
 +
 --
-[source,java]
+[source,xml]
 ----
-SerializationConfig serializationConfig = new SerializationConfig();
-serializationConfig.getCompactSerializationConfig()
-        .addClass(Bar.class); // Uses the fully qualified class name as the type name
+<hazelcast-client>
+    <serialization>
+        <compact-serialization>
+            <classes>
+                <class>
+                    com.example.Bar
+                </class>
+            </classes>
+        </compact-serialization>
+    </serialization>
+</hazelcast-client>
 ----
 --
+
+Java - Client - YAML::
++
+--
+[source,yaml]
+----
+hazelcast-client:
+  serialization:
+    compact-serialization:
+      classes:
+        - class: com.example.Bar
+----
+--
+
 ====
 
 If you want to override the serialization mechanism used for `Serializable` or
 `Externalizable` classes and use Compact serialization without writing any
-serializer, you must add those classes to the configuration.
+serializer in Java, you must add those classes to the configuration as described above.
 
 == GenericRecord Representation
 
-Compact serialized objects
-can also be represented by a `GenericRecord`, without requiring the class in the classpath. See xref:clusters:accessing-domain-objects.adoc[].
+Compact serialized objects can also be represented by a `GenericRecord`, without requiring
+the class in the classpath. See xref:clusters:accessing-domain-objects.adoc[].
+
+== SQL Support
+
+Compact serialized objects can be used in SQL statements, provided that a mappings are created,
+similar to other serialization formats. See xref:sql:mapping-to-maps.adoc[], to learn more
+about Compact serialization mappings.
+
+== WAN Support
+
+Hazelcast supports WAN replication of the Compact serialized objects between different clusters.
+
+However, since the Compact serialization is promoted to the stable status in 5.2, and it is not
+compatible with the previous BETA versions, one has to make sure that the whole WAN cluster
+topology, including all senders and receivers, is at least as new as 5.2, before start replicating data structures containing Compact
+serialized objects.
+
+Since it has promoted to the stable status, it will be possible in the future releases to
+replicate Compact serialized objects between different WAN clusters of versions at least as
+new as 5.2.
+
+== Persistence Support
+
+Hazelcast supports persisting Compact serialized objects and reading the persisted data on startup.
+
+However, since the Compact serialization is promoted to the stable status in 5.2, and it is not
+compatible with the previous BETA versions, it is not possible to recover the Hazelcast members
+with the persisted data of Compact serialized objects of the previous Hazelcast versions, where
+this feature was in BETA.
+
+Since it has promoted to the stable status, it will be possible in the future releases to
+persist and recover Compact serialized objects of different Hazelcast versions, at least as
+new as 5.2.
+
+== Serialization Priority
+
+As described in the xref:serialization:serialization.adoc#steps[Serialization priority]
+section, Compact serialization has the highest priority in the serialization mechanisms supported
+by Hazelcast.
+
+That allows one to override other serialization mechanisms with Compact serialization.
+
+That is especially useful when an interface signature forces you to implement other serialization
+mechanisms in Java. For example, you can define the `Employee` class above as below
+
+[source,java]
+----
+public class Employee implements Serializable {
+    ...
+}
+----
+
+and still be able to use the Compact serializer you wrote for it, provided that you have registered
+it as described in the previous sections.

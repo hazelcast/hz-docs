@@ -808,7 +808,7 @@ for the subsequent serializations and deserializations.
 The same holds true for the Java records. Hazelcast supports serializing and deserializing
 Java records, without an extra configuration as well.
 
-Assuming the `Employee` class above were a Java record:
+Assuming the `Employee` class was a Java record:
 
 [source,java]
 ----
@@ -864,12 +864,10 @@ per field, one for keys and one for values, represented by their respective arra
 value types. The names of those arrays are of the form `fieldName + '!keys'` and
 `fieldName + '!values'`.
 
-For Java, zero-config Compact serializer uses reflection to read and write to fields of
-objects, regardless they are public or not. That results in hard error on JDK16 and onwards,
-as illegal reflective access is denied by default in JDK16 and that option is removed altogether
-in JDK17. The solution to these problems is to open your module that the class you are
-serializing with zero-config reflective serializer to Hazelcast. Or, you can write your
-own Compact serializer, as described above.
+For Java APIs, a zero-config Compact serializer uses reflection to read and write to fields of
+objects, regardless of whether those fields are public. If you use Java 9 onwards, you must
+enable reflective access for packages of your module by using the `opens` statement in the
+module declaration:
 
 [source,text]
 ----
@@ -1232,10 +1230,7 @@ that their read and write methods are compatible, and they have the same type na
 NOTE: If you evolve your class in the later versions of your application, by adding
 or removing fields, you should continue using the same type name for that class.
 
-When a class is serialized using the zero-config Compact serializer, Hazelcast will choose the
-fully qualified class name for Java as the type name automatically.
-
-Below is the way to register an explicit serializer for a certain class.
+To register an explicit serializer for a certain class, add the following configuration:
 
 **Programmatic Configuration:**
 
@@ -1394,6 +1389,9 @@ serializer for a certain class, without implementing an explicit serializer.
 This way, one can override other serialization mechanisms for a certain class
 such as Java serializable, using zero-config serializer.
 
+When a class is serialized using the zero-config Compact serializer, Hazelcast will choose the
+fully qualified class name for Java as the type name automatically.
+
 **Programmatic Configuration:**
 
 [tabs]
@@ -1507,7 +1505,7 @@ hazelcast-client:
 
 If you want to override the serialization mechanism used for `Serializable` or
 `Externalizable` classes and use Compact serialization without writing any
-serializer in Java, you must add those classes to the configuration as described above.
+serializer in Java, you must add those classes to the configuration.
 
 == GenericRecord Representation
 
@@ -1548,14 +1546,13 @@ new as 5.2.
 
 == Serialization Priority
 
-As described in the xref:serialization:serialization.adoc#steps[Serialization priority]
-section, Compact serialization has the highest priority in the serialization mechanisms supported
-by Hazelcast.
-
-That allows one to override other serialization mechanisms with Compact serialization.
+Compact serialization has the highest xref:serialization:serialization.adoc#steps[priority] of
+all serialization mechanisms that are supported by Hazelcast. As a result, you can override other serialization
+mechanisms with Compact serialization.
 
 That is especially useful when an interface signature forces you to implement other serialization
-mechanisms in Java. For example, you can define the `Employee` class above as below
+mechanisms in Java. For example, you can define the following `Employee` class and still use
+the Compact serializer that you registered in your configuration.
 
 [source,java]
 ----
@@ -1563,6 +1560,3 @@ public class Employee implements Serializable {
     ...
 }
 ----
-
-and still be able to use the Compact serializer you wrote for it, provided that you have registered
-it as described in the previous sections.

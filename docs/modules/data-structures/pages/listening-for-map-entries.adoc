@@ -47,35 +47,17 @@ struct Employee {
 
 ----
 --
-
-C Sharp:: 
-+
--- 
-[source,cs]
-----
-
-----
---
-
 Node.js:: 
 + 
--- 
-[source,javascript]
-----
-
-----
 --
-Python:: 
-+ 
--- 
-[source,python]
+[source,javascript]
 ----
 
 ----
 --
 Go:: 
 + 
--- 
+--
 [source,go]
 ----
 
@@ -119,60 +101,36 @@ int main() {
 }
 ----
 --
-
-C Sharp:: 
-+
--- 
-[source,cs]
-----
-public static async Task Main(params string[] args)
-{
-	var options = new HazelcastOptionsBuilder()
-		.With(args)
-		.WithConsoleLogger()
-		.Build();
-
-	// create an Hazelcast client and connect to a server running on localhost
-	await using var client = await HazelcastClientFactory.StartNewClientAsync(options);
-
-	// get the distributed map from the cluster
-	await using var map = await client.GetMapAsync<string, string>("listener-example");
-
-	// subscribe to events
-	var id = await map.SubscribeAsync(handle => handle
-		.EntryAdded((m, a) =>
-		{
-			Console.WriteLine("Added '{0}': '{1}'", a.Key, a.Value);
-		})
-		.EntryUpdated((m, a) =>
-		{
-			Console.WriteLine("Updated '{0}': '{1}' (was: '{2}')", a.Key, a.Value, a.OldValue);
-		})
-		.EntryRemoved((m, a) =>
-		{
-			Console.WriteLine("Removed '{0}': '{1}'", a.Key, a.OldValue);
-		}), Predicates.Sql("surname=smith"));
-
-	// unsubscribe
-	await map.UnsubscribeAsync(id);
-}
-----
---
-
 Node.js:: 
 + 
 -- 
 [source,javascript]
 ----
+const { Client, Predicates } = require('hazelcast-client');
 
-----
---
-Python:: 
-+ 
--- 
-[source,python]
-----
+async function main() {
+    const client = await Client.newHazelcastClient();
+    const map = await client.getMap('map');
+    const listener = {
+        added: (entryEvent) => {
+            console.log(`Entry added: ${entryEvent.key}, ${entryEvent.value}`);
+        },
+        removed: (entryEvent) => {
+            console.log(`Entry removed: ${entryEvent.key}, ${entryEvent.value}`);
+        },
+        updated: (entryEvent) => {
+            console.log(`Entry updated: ${entryEvent.key}, ${entryEvent.value}`);
+        }
+    };
+    await map.addEntryListenerWithPredicate(listener, new Predicates.sql('surname=smith'), undefined, true);
+    console.log('Entry listener registered');
+    await client.shutdown();
+}
 
+main().catch(err => {
+    console.error('Error occurred:', err);
+    process.exit(1);
+});
 ----
 --
 Go:: 
@@ -215,7 +173,6 @@ func main() {
 --
 ====
 
-
 NOTE: See xref:query:how-distributed-query-works.adoc[How Distributed Query Works] for more information about creating predicates. 
 
 When the listener is running, a change to any record with the name `smith` will display output similar to the one below. 
@@ -224,8 +181,7 @@ When the listener is running, a change to any record with the name `smith` will 
 entryAdded:EntryEvent {Address[192.168.178.10]:5702} key=1,oldValue=null,
 value=Person{name= smith }, event=ADDED, by Member [192.168.178.10]:5702
 ```
-
-In our example, we're sending an event log to the system output. You can replace this action with any code you want to run when the specified map event occurs. 
+In our example, we are sending an event log to the system output. You can replace this action with any code you want to run when the specified map event occurs. 
 
 NOTE: The default backwards-compatible event publishing strategy only publishes `UPDATED` events when map entries are updated to a value that matches the predicate with which the listener was registered. This implies that when using the default event publishing strategy, your listener is not notified about an entry whose value is updated from one that matches the predicate to a new value that does not match the predicate.
 

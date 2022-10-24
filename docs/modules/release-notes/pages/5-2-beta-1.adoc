@@ -1,0 +1,166 @@
+= 5.2-BETA-1 Release Notes
+
+== New Features
+
+* xref:sql:querying-streams.adoc#joins[*SQL stream-to-stream joins*]: You can now enrich the data
+of one stream with the data of another by
+joining them together.
+* xref:mapstore:configuring-a-generic-mapstore.adoc[*Generic MapStore*]: You no longer need to write Java code to get
+data from an external data store, such as a relational database, into Hazelcast by implementing the
+`MapStore` or `MapLoader` interfaces.
+* xref:sql:mapping-to-jdbc.adoc[*JDBC connector*]: You can now use SQL to connect to and query any database that supports the JDBC interface.
+
+== Enhancements
+
+=== SQL Engine
+
+* SQL storage now replicates data to the newly joined members in the cluster.
+https://github.com/hazelcast/hazelcast/issues/21632[#21632]
+* Added support of the `Calc` operator to merge `Project` and `Filter`.
+https://github.com/hazelcast/hazelcast/issues/17058[#17058]
+
+=== Distribution
+
+* The Kafka client library now uses version 2.8.1.
+https://github.com/hazelcast/hazelcast/pull/20938[#20938]
+
+=== Serialization
+
+* xref:serialization:compact-serialization.adoc[Compact serialization] is now stable and enabled by default. The `BETA` annotations have been removed from the related classes.
+https://github.com/hazelcast/hazelcast/pull/21997[#21997]
+* Added support of `List`, `ArrayList`, `Set`, `HashSet`, `Map`, and `HashMap` for the zero-config serializers.
+https://github.com/hazelcast/hazelcast/pull/21980[#21980]
+* Added a check to the array of `Compact` and `GenericRecord` object fields, that does not allow
+different item types and schemas in such fields.
+https://github.com/hazelcast/hazelcast/pull/21958[#21958]
+* Moved the `GenericRecord` and `GenericRecordBuilder` interfaces to the new `serialization.genericrecord` package.
+https://github.com/hazelcast/hazelcast/pull/21955[#21955]
+* In case there is a field type that is not supported by the
+reflective serializer, now Hazelcast fails with an exception;
+all JDK classes are now excluded from the zero-config serialization, meaning, they cannot be used as types,
+field types, or array component types in the reflective serializers.
+https://github.com/hazelcast/hazelcast/pull/21918[#21918]
+* Hazelcast now does not provide methods to read a default value
+in case of a missing field in the data. Instead, the following method
+has been introduced in `CompactReader` to check
+the existence of a field with its name and kind.
++
+[source,java]
+----
+FieldKind getFieldKind(String fieldName);
+----
++
+You can use this method for fields that have changed
+or have a potential to change in the future.
+https://github.com/hazelcast/hazelcast/pull/21876[#21876]
+* Moved the `type-name` and `class` configuration elements into the `compact-serialization` block.
+Removed the `registered-classes` element.
+https://github.com/hazelcast/hazelcast/pull/21861[#21861]
+* Renamed the `cloneWithBuilder()` method as `newBuilderWithClone()` in the `GenericRecord` class.
+https://github.com/hazelcast/hazelcast/pull/21730[#21730]
+* Added support for `char` fields in the compact serialization format. With this, `char`, `char[]`, `Character`, and `Character[]` fields are now supported
+in the reflective compact serializers.
+https://github.com/hazelcast/hazelcast/pull/21054[#21054]
+* Hazelcast now does not allow to create SQL mappings containing the compact format, when the compact serialization is not enabled, and
+provides a meaningful error; previously this situation was producing confusing errors.
+https://github.com/hazelcast/hazelcast/pull/20998[#20998]
+
+=== Configuration
+
+* Member discoveries in cloud environments (AWS, GCP, Azure, Kubernetes, Eureka) in Spring XML can be configured now using property placeholders.
+https://github.com/hazelcast/hazelcast/pull/21995[#21995]
+* Added configuration elements for external data stores used by map stores, and JDBC sinks and sources.
+https://github.com/hazelcast/hazelcast/pull/21716[#21716]
+* Added `offload` element to map store configuration. It is used to offload map store and loader operations for each map in the cluster.
+This way, a map store operation does not block the next operations by blocking a partition thread indefinitely.
+Partition threads are one of the most important shared resources in a cluster; this offloading enables faster completion of the operations in these threads.
+https://github.com/hazelcast/hazelcast/pull/21651[#21651]
+
+=== WAN Replication
+
+* Acknowledgements for WAN synchronization are now sent asynchronously. This makes the WAN synchronization progress more reliable and resilient by doing retries if something goes wrong in any phase.
+https://github.com/hazelcast/hazelcast/pull/21415[#21415]
+
+=== Other Enhancements
+
+* To ensure the availability of the CP subsystem, you can now xref:cp-subsystem:configuration.adoc#configuring-leadership-priority[transfer CP member leadership] to another member:
+There are cases when some CP members should not act as a leader. For example, a member with high load would not be a good leader, or, in a WAN deployment,
+members in a primary datacenter may be preferred in order to minimize the latency between the clients and leader.
+You can transfer the leadership using the `cp-member-priority` configuration element.
+https://github.com/hazelcast/hazelcast/pull/21941[#21941]
+* Improved the change data capture API:
+** Introduced two new methods, `newValue() `and `oldValue()`, to compare values before and after an update of a record.
+** Methods that are used to extract metadata are no longer doing on the fly parsing of the payload, meaning there won't be any `ParsingException` and
+you don't have to deal with those possible exceptions.
+** Expose the Debezium source method, which takes a class instance instead of `String` with class name, to make the code more strongly-typed.
++
+https://github.com/hazelcast/hazelcast/pull/21536[#21536]
+* While https://github.com/hazelcast/hazelcast#building-from-source[building Hazelcast] from the source,
+you can now use the boolean `hazelcast.disable.docker.tests` property to ignore the tests that require Docker
+to run (by setting it to `false`).
+https://github.com/hazelcast/hazelcast/pull/21087[#21087]
+* Improved connection handling.
+https://github.com/hazelcast/hazelcast/pull/21631[#21631]
+* Added support of dynamic update of IP addresses of cluster members. For this,
+a new REST endpoint (`hazelcast/rest/config/tcp-ip/member-list`) is introduced for getting and updating the member list at runtime.
+This improves the split-brain recovery under even certain corner cases and ensures that the
+cluster recovery from split-brain in every cluster setup can be initially formed.
+https://github.com/hazelcast/hazelcast/issues/20552[#20552]
+* Added support of nested fields for Hazelcast's Java classes.
+https://github.com/hazelcast/hazelcast/pull/19954[#19954] 
+
+== Fixes
+
+* Fixed an issue where an internal periodic task (with an interval of 1 second) was trying to connect a client to all cluster members, even if there is no connection to the cluster yet:
+** A client connects to the cluster (where smart routing is enabled by default)
+** Connection is lost due to a failure
+** When the cluster is up, the client retries to connect for the configured wait time between retries
+** During these reconnection attempts, the internal periodic task was outputting logs of connection failure for each second until the client connects to the cluster.
++
+https://github.com/hazelcast/hazelcast/pull/21705[#21705]
+* Fixed an issue where `NullPointerException` was thrown around the `CREATE JOB` statement which is using Kafka Sink connector when Kafka has no records yet.
+Now, it produces an appropriate log message.
+https://github.com/hazelcast/hazelcast/pull/21460[#21460]
+* Fixed an issue where a cluster could not be formed when security is enabled, various client permissions are set,
+and multiple members are started simultaneously.
+https://github.com/hazelcast/hazelcast/pull/21440[#21440]
+* Fixed an issue where data persistence and tiered storage configurations could not be added dynamically.
+https://github.com/hazelcast/hazelcast/pull/21432[#21432]
+* Fixed a data loss issue which was occurring with graceful shutdown with when a member (with zero backup) restarts on the same address.
+https://github.com/hazelcast/hazelcast/pull/21428[#21428]
+* Fixed an issue where a map remains empty after a put operation when the `max-idle-seconds` configuration has the value of `Integer.MAX_VALUE`.
+https://github.com/hazelcast/hazelcast/pull/21409[#21409]
+* Fixed an issue where the connections were dropping in an active-active WAN replication setup using
+advanced network configurations.
+https://github.com/hazelcast/hazelcast/pull/21219[#21219]
+* Fixed an issue where a cluster was unresponsive when you perform a health check to see the members are in the safe state;
+cluster members were hanging in the `REPLICA_NOT_SYNC` state during such health checks.
+https://github.com/hazelcast/hazelcast/pull/21145[#21145]
+* Fixed an issue where the statistics like puts and removals were not increasing when these operations are executed through Transactional interface.
+https://github.com/hazelcast/hazelcast/pull/21086[#21086]
+* Fixed an issue where a set time-to-live (TTL) duration for an entry was ignoring the split seconds.
+For example, when you set TTL as 1 seconds and put an entry at 01:01:5.99 AM , then the entry was already
+expired when you want to get this entry at 01:01:6.01 AM (should have been expired at 01:01:6.99 AM).
+https://github.com/hazelcast/hazelcast/pull/21018[#21018] 
+* Fixed a data race in `SingleProtocolEncoder`; while one method of this interface is called from the input thread,
+another one is called from the output thread which was causing the race.
+https://github.com/hazelcast/hazelcast/pull/20991[#20991]
+* Fixed an issue where the automatic module name in `hazelcast-5.x.jar` could not be detected using Gradle. The reason was
+`/META-INF/MANIFEST.MF` not being the first or second entry in the JAR file; now this manifest file is the second entry.
+https://github.com/hazelcast/hazelcast/pull/20969[#20969]
+* Fixed an issue where the list of members in the cluster was reset to an empty list when the UUID of a cluster changes after its restart:
+this was causing startup failures since Hazelcast could not manage the events due to the empty member list after a restart.
+https://github.com/hazelcast/hazelcast/pull/20818[#20818]
+* Fixed an issue where `JSON_QUERY` with expression filter in SQL was not producing a result when the data source contains internal array(s).
+https://github.com/hazelcast/hazelcast/issues/20761[#20761]
+* Fixed the mapping issue of Hazelcast map fields in SQL; when the value object contains a public getter of `java.util.Map`, the `CREATE MAPPING` statement was failing.
+https://github.com/hazelcast/hazelcast/pull/20256[#20256]
+* Fixed an issue where the cluster was not merging properly if the master member does not know other members' addresses and when the other members start before the master member.
+https://github.com/hazelcast/hazelcast/issues/18661[#18661]
+
+== Contributors
+
+We would like to thank the contributors from our open source community
+who worked on this release:
+
+* https://github.com/dreis2211[Christoph Dreis]

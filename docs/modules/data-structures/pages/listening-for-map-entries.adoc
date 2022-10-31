@@ -5,7 +5,7 @@
 
 == Listeners
 
-Hazelcast offers two methods for monitoring map activity. `MapListener` allows you to define actions that are triggered based on activity on any entry in the map. `EventListener` allows you to define actions based on activity taken on a specific map entry or set of map entries. You 'll use predicates to define the entries to be monitored for activity.
+Hazelcast offers two methods for monitoring map activity. `MapListener` allows you to define actions that are triggered based on activity on any entry in the map. `EventListener` allows you to define actions based on activity taken on a specific map entry or set of map entries. You'll use predicates to define the entries to be monitored for activity.
 
 
 == Listening to an Entire Map
@@ -52,7 +52,16 @@ Node.js::
 --
 [source,javascript]
 ----
+class Employee {
 
+    constructor(surname) {
+        this.surname = surname;
+    }
+
+    toString() {
+        return "Employee: " + this.surname;
+    }
+}
 ----
 --
 Go:: 
@@ -60,7 +69,13 @@ Go::
 --
 [source,go]
 ----
-
+func employee(name string, surname string) serialization.JSON {
+	text := fmt.Sprintf(`{
+		"name":"%s",
+		"surname": "%s"
+	}`, name, surname)
+	return serialization.JSON(text)
+}
 ----
 --
 ====
@@ -142,33 +157,18 @@ func main() {
 	// error handling is omitted for brevity
 	ctx := context.TODO()
 	client, _ := hazelcast.StartNewClient(ctx)
-	entryListenerConfig := hazelcast.MapEntryListenerConfig{
-		IncludeValue: true,
-		Predicate:    predicate.Equal("surname", "Smith"),
-	}
-	m, _ := client.GetMap(ctx, "somemap")
-	entryListenerConfig.NotifyEntryAdded(true)
-	entryListenerConfig.NotifyEntryRemoved(true)
-	entryListenerConfig.NotifyEntryUpdated(true)
-	entryListenerConfig.NotifyEntryEvicted(true)
-	entryListenerConfig.NotifyEntryLoaded(true)
-
-	m.AddEntryListener(ctx, entryListenerConfig, func(event *hazelcast.EntryNotified) {
-		switch event.EventType {
-		case hazelcast.EntryAdded:
-			fmt.Println("Entry Added:", event)
-		case hazelcast.EntryRemoved:
-			fmt.Println("Entry Removed:", event)
-		case hazelcast.EntryUpdated:
-			fmt.Println("Entry Updated:", event)
-		case hazelcast.EntryEvicted:
-			fmt.Println("Entry Remove:", event)
-		case hazelcast.EntryLoaded:
-			fmt.Println("Entry Loaded:", event)
-		}
-	})
-
-
+	m, _ := client.GetMap(ctx, "map")
+	subscriptionID, _ := m.AddListenerWithPredicate(ctx, hazelcast.MapListener{
+		EntryAdded: func(event *hazelcast.EntryNotified) {
+			fmt.Println("Entry Added:", event.Key)
+		},
+		EntryUpdated: func(event *hazelcast.EntryNotified) {
+			fmt.Println("Entry Updated:", event.Key)
+		},
+		EntryRemoved: func(event *hazelcast.EntryNotified) {
+			fmt.Println("Entry Removed:", event.Key)
+		},
+	}, predicate.Equal("surname", "smith"), true)
 ----
 --
 ====

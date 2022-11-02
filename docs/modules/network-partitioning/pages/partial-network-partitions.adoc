@@ -35,29 +35,26 @@ in graph theory. Hence we are using an implementation of the
 https://en.wikipedia.org/wiki/Bron%E2%80%93Kerbosch_algorithm[Bron–Kerbosch algorithm^]
 to find the maximum clique.
 
-Normally each Hazelcast member tracks the liveliness of other members using local failure detectors.
+Normally, each Hazelcast member tracks the status of other members using local failure detectors.
 But they don't share their failure detection knowledge with other cluster members. In order to
-execute the Bron–Kerbosch algorithm and figure out the largest set of fully-connected members,
-we need to gather those local failure detection data from all members. When partial network
+execute the Bron-Kerbosch algorithm and figure out the largest set of fully-connected members, this local failure detection data is gathered from all members. When partial network
 partitioning resolution mechanism is enabled, all members send their local failure detections
 (suspicions about other members) inside the usual heartbeat message.
 (See the xref:clusters:failure-detector-configuration.adoc[Failure Detector Configuration section]
-for more info about failure detectors.) The master (oldest) member in the cluster gathers all this
-information and executes the maximum clique algorithm and then decides the smallest set of Hazelcast members,
-if any, to kick from the cluster so that the remaining members are fully-connected to each other again.
+for more information about failure detectors.) The oldest member in the cluster gathers all this
+information and executes the maximum clique algorithm. It then decides the smallest set of Hazelcast members,
+if any, to evict from the cluster so that the remaining members are fully-connected to each other again.
 In a healthy cluster this set is empty.
 
 This process has two properties to configure:
 
-* `hazelcast.partial.member.disconnection.resolution.heartbeat.count`:  When the master receives
+* `hazelcast.partial.member.disconnection.resolution.heartbeat.count`:  When the oldest cluster member receives
 a heartbeat problem report from another member, it first waits for a number of heartbeat rounds
-to allow other members to report their problems if there is any. After that, it takes all reports
-received so far and checks if it can update the cluster member in a way that the minimum number of
-members will be kicked from the cluster and there won't be any heartbeat problem between the remaining members.
+to allow other members to report their problems, if there are any. After that, the oldest cluster member takes all reports
+received so far. It then checks the reports and updates the cluster members in a way that results in the minimum number of
+member evictions from the cluster that will leave the remaining cluster members free from heartbeat problems.
 +
-If this configuration option is set to `0`, this functionality is disabled. It is recommended to be
-set to at least `3` or `5` so that the master will wait long enough to collect heartbeat problem reports.
-Otherwise, the master member can make sub-optimal decisions. Default value is `0`.
+If this configuration option is set to `0`, this functionality is disabled. It is recommended that you set this configuration option to at least `3` or `5` so that the oldest cluster member waits long enough to collect heartbeat problem reports. Otherwise, the oldest cluster member can make sub-optimal decisions. The default value is `0`.
 * `hazelcast.partial.member.disconnection.resolution.algorithm.timeout.seconds`: The partial member
 disconnection resolution mechanism uses a graph algorithm that finds a maximum clique in non-polynomial time.
 Since it could take a lot of time to find a maximum clique in a large graph, i.e, in a large cluster with

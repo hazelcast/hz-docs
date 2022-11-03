@@ -1,7 +1,5 @@
-import java.io.Serializable;
-
 //tag::emp[]
-public class Employee implements Serializable {
+public class Employee {
 
     private final String surname;
 
@@ -9,11 +7,8 @@ public class Employee implements Serializable {
         this.surname = surname;
     }
 
-    @Override
-    public String toString() {
-        return "Employee{" +
-                "surname='" + surname + '\'' +
-                '}';
+    public HazelcastJsonValue toHazelcastJsonValue() {
+        return new HazelcastJsonValue("{ \"surname\": \"" + surname + "\" }");
     }
 }
 //end::emp[]

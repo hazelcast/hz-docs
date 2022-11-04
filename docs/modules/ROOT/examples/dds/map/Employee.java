@@ -7,7 +7,7 @@ public class Employee {
         this.surname = surname;
     }
 
-    public HazelcastJsonValue toHazelcastJsonValue() {
+    public static HazelcastJsonValue toHazelcastJsonValue(String surname) {
         return new HazelcastJsonValue("{ \"surname\": \"" + surname + "\" }");
     }
 }

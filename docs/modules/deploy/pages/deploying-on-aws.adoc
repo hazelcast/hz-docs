@@ -78,14 +78,14 @@ config.getNetworkConfig().getJoin().getAwsConfig().setEnabled(true)
 --
 ====
 
-The following optional properties can be configured:
+The following optional properties can be configured[[ec2_properties]]:
 
 * `access-key`, `secret-key`: access and secret keys of your AWS account; if not set, `iam-role` is used
 * `iam-role`: IAM Role attached to EC2 instance used to fetch credentials (if `access-key`/`secret-key` not specified); if not set, default IAM Role attached to EC2 instance is used
 * `region`: region where Hazelcast members are running; default is the current region
 * `host-header`: `ec2`, `ecs`, or the URL of a EC2/ECS API endpoint; automatically detected by default
 * `security-group-name`: filter to look only for EC2 instances with the given security group
-* `tag-key`, `tag-value`: filter to look only for EC2 Instances with the given `tag-key`/`tag-value`; multi values supported if comma-separated (e.g. `KeyA,KeyB`); comma-separated values behaves as AND conditions
+* `tag-key`, `tag-value`: filter to look only for EC2 Instances with the given `tag-key`/`tag-value`; comma-separated multiple values are supported, e.g., `KeyA,KeyB`; comma-separated values behave as AND conditions
 * `connection-timeout-seconds`, `read-timeout-seconds`: connection and read timeouts when making a call to AWS API; default to `10`
 * `connection-retries`: number of retries while connecting to AWS API; default to `3`
 * `hz-port`: a range of ports where the plugin looks for Hazelcast members; default is `5701-5708`
@@ -158,6 +158,9 @@ clientConfig.getNetworkConfig().getAwsConfig()
 --
 ====
 
+Hazelcast Client on EC2 can discover the members running in ECS cluster. For doing so you need specify the needed <<ecs_properties,ECS related properties>> (`cluster`, `family`, `service-name`) and make sure to set the <<ecs_permissions,required permissions>>.
+If none of the ECS or EC2 related properties are specified, the AWS discovery tries to discover the EC2 members. If none is found, then it tries to discover ECS members.
+
 == ECS/Fargate Configuration
 
 The plugin works both for *Hazelcast Member Discovery* (forming Hazelcast cluster) and *Hazelcast Client Discovery*.
@@ -166,7 +169,7 @@ NOTE: For the detailed description, check out link:https://guides.hazelcast.org/
 
 === ECS Hazelcast Member Discovery
 
-Make sure that your IAM Task Role has the following permissions:
+Make sure that your IAM Task Role has the following permissions[[ecs_permissions]]:
 
 * `ecs:ListTasks`
 * `ecs:DescribeTasks`
@@ -221,19 +224,22 @@ config.getNetworkConfig().getInterfaces().setEnabled(true).addInterface("10.0.*.
 --
 ====
 
-The following optional properties can be configured:
+The following optional properties can be configured[[ecs_properties]]:
 
 * `access-key`, `secret-key`: access and secret keys of AWS your account; if not set, IAM Task Role is used
 * `region`: region where Hazelcast members are running; default is the current region
 * `cluster`: ECS cluster short name or ARN; default is the current cluster
 * `family`: filter to look only for ECS tasks with the given family name; mutually exclusive with `service-name`
 * `service-name`: filter to look only for ECS tasks from the given service; mutually exclusive with `family`
+* `tag-key`, `tag-value`: filter to look only for ECS Tasks with the given `tag-key`/`tag-value`; comma-separated multiple values are supported, e.g., `KeyA,KeyB`; comma-separated values behave as AND conditions
 * `host-header`: `ecs` or the URL of a ECS API endpoint; automatically detected by default
 * `connection-timeout-seconds`, `read-timeout-seconds`: connection and read timeouts when making a call to AWS API; default to `10`
 * `connection-retries`: number of retries while connecting to AWS API; default to `3`
 * `hz-port`: a range of ports where the plugin looks for Hazelcast members; default is `5701-5708`
 
-Note that if you don't specify any of the properties, then the plugin discovers all Hazelcast members running in the current ECS cluster.
+NOTE: If you don't specify any of the properties, then the plugin discovers all Hazelcast members running in the current ECS cluster.
+
+NOTE: ECS discovery can use `IAM Role` assigned to the ECS Task instead of using `access-key`, `secret-key`.
 
 === ECS Hazelcast Client Configuration
 
@@ -247,7 +253,7 @@ If Hazelcast Client is run *outside ECS cluster*, then you need to always specif
 - `cluster` - it cannot be detected automatically
 - `use-public-ip` - must be set to `true`
 
-Note also that your ECS Tasks must have public IPs assigned and your IAM Task Role must have `ec2:DescribeNetworkInterfaces` permission.
+NOTE: Your ECS Tasks must have public IPs assigned and your IAM Task Role must have `ec2:DescribeNetworkInterfaces` permission.
 
 Following are example declarative and programmatic configuration snippets.
 
@@ -299,6 +305,9 @@ clientConfig.getNetworkConfig().getAwsConfig()
 ```
 --
 ====
+
+Hazelcast Client on ECS can discover the members running on EC2 instances. For this you need to specify the needed <<ec2_properties,EC2 related properties>> (`iam-role`, `security-group-name`) and make sure to set the `ec2:DescribeInstances` permission.
+If none of the ECS or EC2 related properties are specified, the AWS discovery tries to discover the ECS members. If none is found, then it tries to discover EC2 members.
 
 == ECS Environment with EC2 Discovery
 

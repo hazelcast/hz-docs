@@ -15,28 +15,28 @@ public class ListenerWithPredicate {
         Config config = new Config();
         config.setProperty("hazelcast.map.entry.filtering.natural.event.types", "true");
         HazelcastInstance hz = Hazelcast.newHazelcastInstance(config);
-        IMap<String, String> map = hz.getMap("map");
+        IMap<String, HazelcastJsonValue> map = hz.getMap("map");
         map.addEntryListener(new MyEntryListener(),
                 Predicates.sql("surname=smith"), true);
         System.out.println("Entry Listener registered");
     }
 
     static class MyEntryListener
-            implements EntryAddedListener<String, String>,
-            EntryUpdatedListener<String, String>,
-            EntryRemovedListener<String, String> {
+            implements EntryAddedListener<String, HazelcastJsonValue>,
+            EntryUpdatedListener<String, HazelcastJsonValue>,
+            EntryRemovedListener<String, HazelcastJsonValue> {
         @Override
-        public void entryAdded(EntryEvent<String, String> event) {
+        public void entryAdded(EntryEvent<String, HazelcastJsonValue> event) {
             System.out.println("Entry Added:" + event);
         }
 
         @Override
-        public void entryRemoved(EntryEvent<String, String> event) {
+        public void entryRemoved(EntryEvent<String, HazelcastJsonValue> event) {
             System.out.println("Entry Removed:" + event);
         }
 
         @Override
-        public void entryUpdated(EntryEvent<String, String> event) {
+        public void entryUpdated(EntryEvent<String, HazelcastJsonValue> event) {
             System.out.println("Entry Updated:" + event);
         }
     }

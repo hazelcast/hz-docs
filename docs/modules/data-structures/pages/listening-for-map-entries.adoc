@@ -19,7 +19,8 @@ If you want to listen to changes to all map entries, see xref:events:object-even
 
 
 
-The easiest way to explain this is through an example. We are going to listen for changes made to the map entry for an employee with the surname "smith". First, let's create the `Employee` class.
+The easiest way to explain this is through an example. We are going to listen for changes made to the map entry for an employee with the surname "smith".
+We will use JSON serialization. First, let's create the `Employee` class that we will use to create `HazelcastJsonValue` instances:
 
 [tabs] 
 ==== 
@@ -39,8 +40,7 @@ C++::
 #include <hazelcast/client/hazelcast_client.h>
 
 struct Employee {
-    std::string surname;
-    hazelcast::client::hazelcast_json_value to_json(){
+    static hazelcast::client::hazelcast_json_value as_json(std::string surname){
         return hazelcast::client::hazelcast_json_value("{ \"surname\": \"" + surname + "\" }");
     }
 };
@@ -53,13 +53,8 @@ Node.js::
 [source,javascript]
 ----
 class Employee {
-
-    constructor(surname) {
-        this.surname = surname;
-    }
-
-    toString() {
-        return "Employee: " + this.surname;
+    static asJson(surname) {
+        return new HazelcastJsonValue(JSON.stringify({surname: surname}));
     }
 }
 ----
@@ -69,11 +64,10 @@ Go::
 --
 [source,go]
 ----
-func employee(name string, surname string) serialization.JSON {
+func employee(surname string) serialization.JSON {
 	text := fmt.Sprintf(`{
-		"name":"%s",
 		"surname": "%s"
-	}`, name, surname)
+	}`, surname)
 	return serialization.JSON(text)
 }
 ----
@@ -139,7 +133,6 @@ async function main() {
     };
     await map.addEntryListenerWithPredicate(listener, new Predicates.sql('surname=smith'), undefined, true);
     console.log('Entry listener registered');
-    await client.shutdown();
 }
 
 main().catch(err => {
@@ -178,8 +171,7 @@ NOTE: See xref:query:how-distributed-query-works.adoc[How Distributed Query Work
 When the listener is running, a change to any record with the surname `smith` will display output similar to the one below.
 
 ```
-entryAdded:EntryEvent {Address[192.168.178.10]:5702} key=1,oldValue=null,
-value=Person{surname= smith }, event=ADDED, by Member [192.168.178.10]:5702
+Entry Added:EntryEvent{entryEventType=ADDED, member=Member [192.168.1.227]:5701 - 36e6eaf5-e267-4858-a5ea-6adc3be2f6ff this, name='map', key=1, oldValue=null, value={ "surname": "smith" }, mergingValue=null}
 ```
 In our example, we are sending an event log to the system output. You can replace this action with any code you want to run when the specified map event occurs. 
 

@@ -44,6 +44,303 @@ The older versions released under the BETA status are not compatible with stable
 For future versions, the backward compatibility will be maintained, just like any other
 Hazelcast feature.
 
+== Configuration
+
+The configuration can be used to register either
+
+- an explicit `CompactSerializer`
+- a zero-config serializer for a class to override other serialization mechanisms,
+for languages that provide zero-config Compact serialization.
+
+In case of an explicit serializer, you have to supply a unique type name for the class
+in the serializer.
+
+Choosing a type name will associate that name with the schema and will make the
+polyglot use cases, where there are multiple clients from different languages,
+possible. Serializers in different languages can work on the same data, provided
+that their read and write methods are compatible, and they have the same type name.
+
+NOTE: If you evolve your class in the later versions of your application, by adding
+or removing fields, you should continue using the same type name for that class.
+
+To register an explicit serializer for a certain class, add the following configuration:
+
+**Programmatic Configuration:**
+
+[tabs]
+====
+
+Java - Member::
++
+--
+[source,java]
+----
+Config config = new Config();
+config.getSerializationConfig()
+        .getCompactSerializationConfig()
+        .addSerializer(new FooSerializer());
+----
+--
+
+Java - Client::
++
+--
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+clientConfig.getSerializationConfig()
+        .getCompactSerializationConfig()
+        .addSerializer(new FooSerializer());
+----
+--
+
+.NET::
++
+--
+[source,cs]
+----
+
+----
+--
+
+C++::
++
+--
+[source,cpp]
+----
+
+----
+--
+
+Node.js::
++
+--
+[source,javascript]
+----
+
+----
+--
+
+Python::
++
+--
+[source,python]
+----
+hazelcast.HazelcastClient(
+    compact_serializers=[
+        FooSerializer(),
+    ],
+)
+----
+--
+
+Go::
++
+--
+[source,go]
+----
+
+----
+--
+
+====
+
+**Declarative Configuration:**
+
+[tabs]
+====
+
+Java - Member - XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+    <serialization>
+        <compact-serialization>
+            <serializers>
+                <serializer>
+                    com.example.FooSerializer
+                </serializer>
+            </serializers>
+        </compact-serialization>
+    </serialization>
+</hazelcast>
+----
+--
+
+Java - Member - YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  serialization:
+    compact-serialization:
+      serializers:
+        - serializer: com.example.FooSerializer
+----
+--
+
+Java - Client - XML::
++
+--
+[source,xml]
+----
+<hazelcast-client>
+    <serialization>
+        <compact-serialization>
+            <serializers>
+                <serializer>
+                    com.example.FooSerializer
+                </serializer>
+            </serializers>
+        </compact-serialization>
+    </serialization>
+</hazelcast-client>
+----
+--
+
+Java - Client - YAML::
++
+--
+[source,yaml]
+----
+hazelcast-client:
+  serialization:
+    compact-serialization:
+      serializers:
+        - serializer: com.example.FooSerializer
+----
+--
+
+====
+
+Lastly, the following is a sample configuration that registers zero-config
+serializer for a certain class, without implementing an explicit serializer.
+
+This way, one can override other the serializer of a certain class such as Java
+`Serializable` serializer with the zero-config serializer.
+
+When a class is serialized using the zero-config Compact serializer, Hazelcast will choose the
+fully qualified class name for Java as the type name automatically.
+
+**Programmatic Configuration:**
+
+[tabs]
+====
+
+Java - Member::
++
+--
+[source,java]
+----
+Config config = new Config();
+config.getSerializationConfig()
+        .getCompactSerializationConfig()
+        .addClass(Bar.class);
+----
+--
+
+Java - Client::
++
+--
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+clientConfig.getSerializationConfig()
+        .getCompactSerializationConfig()
+        .addClass(Bar.class);
+----
+--
+
+.NET::
++
+--
+[source,cs]
+----
+
+----
+--
+
+====
+
+**Declarative Configuration:**
+
+[tabs]
+====
+
+Java - Member - XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+    <serialization>
+        <compact-serialization>
+            <classes>
+                <class>
+                    com.example.Bar
+                </class>
+            </classes>
+        </compact-serialization>
+    </serialization>
+</hazelcast>
+----
+--
+
+Java - Member - YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  serialization:
+    compact-serialization:
+      classes:
+        - class: com.example.Bar
+----
+--
+
+Java - Client - XML::
++
+--
+[source,xml]
+----
+<hazelcast-client>
+    <serialization>
+        <compact-serialization>
+            <classes>
+                <class>
+                    com.example.Bar
+                </class>
+            </classes>
+        </compact-serialization>
+    </serialization>
+</hazelcast-client>
+----
+--
+
+Java - Client - YAML::
++
+--
+[source,yaml]
+----
+hazelcast-client:
+  serialization:
+    compact-serialization:
+      classes:
+        - class: com.example.Bar
+----
+--
+
+====
+
+If you want to override the serialization mechanism used for `Serializable` or
+`Externalizable` classes and use Compact serialization without writing any
+serializer in Java, you must add those classes to the configuration.
+
+
 == Implementing CompactSerializer
 
 Compact serialization can be used by implementing a `CompactSerializer` for a class
@@ -227,164 +524,14 @@ Go::
 
 ====
 
-The last step is to register the serializer in the member or client configuration.
+The last step is to register the serializer in the member or client configuration, as shown
+in the <<configuration>> section.
 
-**Programmatic Configuration:**
+Upon serialization, a schema will be created from the serializer, and a unique schema identifier
+will be assigned to it automatically.
 
-[tabs]
-====
-
-Java - Member::
-+
---
-[source,java]
-----
-Config config = new Config();
-config.getSerializationConfig()
-        .getCompactSerializationConfig()
-        .addSerializer(new EmployeeSerializer());
-----
---
-
-Java - Client::
-+
---
-[source,java]
-----
-ClientConfig clientConfig = new ClientConfig();
-clientConfig.getSerializationConfig()
-        .getCompactSerializationConfig()
-        .addSerializer(new EmployeeSerializer());
-----
---
-
-.NET::
-+
---
-[source,cs]
-----
-
-----
---
-
-C++::
-+
---
-[source,cpp]
-----
-
-----
---
-
-Node.js::
-+
---
-[source,javascript]
-----
-
-----
---
-
-Python::
-+
---
-[source,python]
-----
-hazelcast.HazelcastClient(
-    compact_serializers=[
-        EmployeeSerializer(),
-    ],
-)
-----
---
-
-Go::
-+
---
-[source,go]
-----
-
-----
---
-
-====
-
-**Declarative Configuration:**
-
-[tabs]
-====
-
-Java - Member - XML::
-+
---
-[source,xml]
-----
-<hazelcast>
-    <serialization>
-        <compact-serialization>
-            <serializers>
-                <serializer>
-                    com.example.EmployeeSerializer
-                </serializer>
-            </serializers>
-        </compact-serialization>
-    </serialization>
-</hazelcast>
-----
---
-
-Java - Member - YAML::
-+
---
-[source,yaml]
-----
-hazelcast:
-  serialization:
-    compact-serialization:
-      serializers:
-         - serializer: com.example.EmployeeSerializer
-----
---
-
-Java - Client - XML::
-+
---
-[source,xml]
-----
-<hazelcast-client>
-    <serialization>
-        <compact-serialization>
-            <serializers>
-                <serializer>
-                    com.example.EmployeeSerializer
-                </serializer>
-            </serializers>
-        </compact-serialization>
-    </serialization>
-</hazelcast-client>
-----
---
-
-Java - Client - YAML::
-+
---
-[source,yaml]
-----
-hazelcast-client:
-  serialization:
-    compact-serialization:
-      serializers:
-         - serializer: com.example.EmployeeSerializer
-----
---
-
-====
-
-A schema will be created from the serializer, and a unique schema identifier will be
-assigned to it automatically.
-
-From now on, Hazelcast will serialize instances of the `Employee` class using the
-`EmployeeSerializer`.
+After the configuration registration, Hazelcast will serialize instances of the `Employee`
+class using the `EmployeeSerializer`.
 
 == Supported Types
 
@@ -448,7 +595,7 @@ Up to eight booleans are packed into a single byte.
 |
 | Optional[list[int]]
 |
-| Array of int8s or null..
+| Array of int8s or null.
 
 | NULLABLE_INT8
 | Byte
@@ -759,22 +906,22 @@ nanoseconds, and offset seconds or null.
 | Array of timestamp with timezones or null.
 
 | COMPACT
-| Can be any type.
-| Can be any type.
-| Can be any type.
-| Can be any type.
-| Can be any type.
-| Can be any type.
+| Can be any user type.
+| Can be any user type.
+| Can be any user type.
+| Can be any user type.
+| Can be any user type.
+| Can be any user type.
 | A user defined nested Compact serializable object or null.
 
 | ARRAY_OF_COMPACT
-| Can be an array of any type.
-| Can be an array of any type.
-| Can be an array of any type.
-| Can be an array of any type.
-| Can be an array of any type.
-| Can be an array of any type.
-| Array of Compact serializable objects or null.
+| Can be an array of any user type.
+| Can be an array of any user type.
+| Can be an array of any user type.
+| Can be an array of any user type.
+| Can be an array of any user type.
+| Can be an array of any user type.
+| Array of user defined Compact serializable objects or null.
 
 |===
 
@@ -785,6 +932,11 @@ ends at some point on runtime by some null value.
 
 NOTE: The ability to use Compact serialization with no configuration is only available in
 Java and .NET.
+
+NOTE: Using zero-config Compact serialization is not recommended for performance-critical
+applications, as the feature relies heavily on reflection to read and write data. +
+It is recommended to use explicit Compact serializers in production for performance
+considerations.
 
 Compact serialization can also be used without registering a serializer in the member
 or client configuration.
@@ -854,15 +1006,22 @@ first class types:
 * `char`, represented as an `INT16`
 * `Character`, represented as a `NULLABLE_INT16`
 * Enum, represented as a `STRING`, using the names of the enum members.
-* Arrays of the types listed above, represented by their respective arrays.
+* Arrays of the types listed above, represented by their respective arrays. *
 * `List` or `ArrayList` of the types listed above and first class types, represented by their
-respective arrays with the same field name.
+respective arrays with the same field name. Fields of type `List` are deserialized as
+`ArrayList` upon reads. *
 * `Set` or `HashSet` of the types listed above and first class types, represented by their
-respective arrays with the same field name.
-* `Map` or `HashMap` or the types listed above and first class types, represented by two arrays
-per field, one for keys and one for values, represented by their respective arrays for key and
+respective arrays with the same field name. Fields of type `Set` are deserialized as
+`HashSet` upon reads. *
+* `Map` or `HashMap` or the types listed above and first class types, represented by two arrays,
+one for keys and one for values, represented by their respective arrays for key and
 value types. The names of those arrays are of the form `fieldName + '!keys'` and
-`fieldName + '!values'`.
+`fieldName + '!values'`. Fields of type `Map` are deserialized as `HashMap` upon reads. *
+
+NOTE: * Arrays of arrays, or collections of collections are not supported by default. An explicit
+serializer must be written to support such field types. In that serializer, the inner array
+type must be defined as a separate class which stores the array type as a field. Then, the
+array of array type can be serialized/deserialized as an array of that separate class.
 
 For Java APIs, a zero-config Compact serializer uses reflection to read and write to fields of
 objects, regardless of whether those fields are public. If you use Java 9 onwards, you must
@@ -1211,302 +1370,6 @@ method of the serializer to extract a schema out of the object, hence any condit
 that may or may not run depending on the object in that method might result in an undefined
 behavior.
 
-== Configuration
-
-The configuration can be used to register either
-
-- an explicit `CompactSerializer`
-- a zero-config serializer for a class to override other serialization mechanisms,
-for languages that provide zero-config Compact serialization.
-
-In case of an explicit serializer, you have to supply a unique type name for the class
-in the serializer.
-
-Choosing a type name will associate that name with the schema and will make the
-polyglot use cases, where there are multiple clients from different languages,
-possible. Serializers in different languages can work on the same data, provided
-that their read and write methods are compatible, and they have the same type name.
-
-NOTE: If you evolve your class in the later versions of your application, by adding
-or removing fields, you should continue using the same type name for that class.
-
-To register an explicit serializer for a certain class, add the following configuration:
-
-**Programmatic Configuration:**
-
-[tabs]
-====
-
-Java - Member::
-+
---
-[source,java]
-----
-Config config = new Config();
-config.getSerializationConfig()
-        .getCompactSerializationConfig()
-        .addSerializer(new FooSerializer());
-----
---
-
-Java - Client::
-+
---
-[source,java]
-----
-ClientConfig clientConfig = new ClientConfig();
-clientConfig.getSerializationConfig()
-        .getCompactSerializationConfig()
-        .addSerializer(new FooSerializer());
-----
---
-
-.NET::
-+
---
-[source,cs]
-----
-
-----
---
-
-C++::
-+
---
-[source,cpp]
-----
-
-----
---
-
-Node.js::
-+
---
-[source,javascript]
-----
-
-----
---
-
-Python::
-+
---
-[source,python]
-----
-hazelcast.HazelcastClient(
-    compact_serializers=[
-        FooSerializer(),
-    ],
-)
-----
---
-
-Go::
-+
---
-[source,go]
-----
-
-----
---
-
-====
-
-**Declarative Configuration:**
-
-[tabs]
-====
-
-Java - Member - XML::
-+
---
-[source,xml]
-----
-<hazelcast>
-    <serialization>
-        <compact-serialization>
-            <serializers>
-                <serializer>
-                    com.example.FooSerializer
-                </serializer>
-            </serializers>
-        </compact-serialization>
-    </serialization>
-</hazelcast>
-----
---
-
-Java - Member - YAML::
-+
---
-[source,yaml]
-----
-hazelcast:
-  serialization:
-    compact-serialization:
-      serializers:
-        - serializer: com.example.FooSerializer
-----
---
-
-Java - Client - XML::
-+
---
-[source,xml]
-----
-<hazelcast-client>
-    <serialization>
-        <compact-serialization>
-            <serializers>
-                <serializer>
-                    com.example.FooSerializer
-                </serializer>
-            </serializers>
-        </compact-serialization>
-    </serialization>
-</hazelcast-client>
-----
---
-
-Java - Client - YAML::
-+
---
-[source,yaml]
-----
-hazelcast-client:
-  serialization:
-    compact-serialization:
-      serializers:
-        - serializer: com.example.FooSerializer
-----
---
-
-====
-
-Lastly, the following is a sample configuration that registers zero-config
-serializer for a certain class, without implementing an explicit serializer.
-
-This way, one can override other serialization mechanisms for a certain class
-such as Java serializable, using zero-config serializer.
-
-When a class is serialized using the zero-config Compact serializer, Hazelcast will choose the
-fully qualified class name for Java as the type name automatically.
-
-**Programmatic Configuration:**
-
-[tabs]
-====
-
-Java - Member::
-+
---
-[source,java]
-----
-Config config = new Config();
-config.getSerializationConfig()
-        .getCompactSerializationConfig()
-        .addClass(Bar.class);
-----
---
-
-Java - Client::
-+
---
-[source,java]
-----
-ClientConfig clientConfig = new ClientConfig();
-clientConfig.getSerializationConfig()
-        .getCompactSerializationConfig()
-        .addClass(Bar.class);
-----
---
-
-.NET::
-+
---
-[source,cs]
-----
-
-----
---
-
-====
-
-**Declarative Configuration:**
-
-[tabs]
-====
-
-Java - Member - XML::
-+
---
-[source,xml]
-----
-<hazelcast>
-    <serialization>
-        <compact-serialization>
-            <classes>
-                <class>
-                    com.example.Bar
-                </class>
-            </classes>
-        </compact-serialization>
-    </serialization>
-</hazelcast>
-----
---
-
-Java - Member - YAML::
-+
---
-[source,yaml]
-----
-hazelcast:
-  serialization:
-    compact-serialization:
-      classes:
-        - class: com.example.Bar
-----
---
-
-Java - Client - XML::
-+
---
-[source,xml]
-----
-<hazelcast-client>
-    <serialization>
-        <compact-serialization>
-            <classes>
-                <class>
-                    com.example.Bar
-                </class>
-            </classes>
-        </compact-serialization>
-    </serialization>
-</hazelcast-client>
-----
---
-
-Java - Client - YAML::
-+
---
-[source,yaml]
-----
-hazelcast-client:
-  serialization:
-    compact-serialization:
-      classes:
-        - class: com.example.Bar
-----
---
-
-====
-
-If you want to override the serialization mechanism used for `Serializable` or
-`Externalizable` classes and use Compact serialization without writing any
-serializer in Java, you must add those classes to the configuration.
-
 == GenericRecord Representation
 
 Compact serialized objects can also be represented by a `GenericRecord`, without requiring
@@ -1515,8 +1378,8 @@ the class in the classpath. See xref:clusters:accessing-domain-objects.adoc[].
 == SQL Support
 
 Compact serialized objects can be used in SQL statements, provided that a mappings are created,
-similar to other serialization formats. See xref:sql:mapping-to-maps.adoc[], to learn more
-about Compact serialization mappings.
+similar to other serialization formats. See
+xref:sql:mapping-to-maps.adoc#compact-objects[Compact Object mappings] section to learn more.
 
 == WAN Support
 
@@ -1524,12 +1387,11 @@ Hazelcast supports WAN replication of the Compact serialized objects between dif
 
 However, since the Compact serialization is promoted to the stable status in 5.2, and it is not
 compatible with the previous BETA versions, one has to make sure that the whole WAN cluster
-topology, including all senders and receivers, is at least as new as 5.2, before start replicating data structures containing Compact
-serialized objects.
+topology members, including all senders and receivers, are at least as new as 5.2, before starting to
+replicate data structures containing Compact serialized objects.
 
-Since it has promoted to the stable status, it will be possible in the future releases to
-replicate Compact serialized objects between different WAN clusters of versions at least as
-new as 5.2.
+Since the Compact serialization has promoted to the stable status, it will be possible to
+replicate Compact serialized objects between different WAN clusters in the future releases.
 
 == Persistence Support
 

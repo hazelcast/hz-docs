@@ -108,7 +108,12 @@ Node.js::
 --
 [source,javascript]
 ----
-
+Client.newHazelcastClient(
+    compact: {
+        serializers: [
+            new FooSerializer()
+        ] 
+)
 ----
 --
 
@@ -394,7 +399,12 @@ Node.js::
 --
 [source,javascript]
 ----
-
+class Employee {
+    constructor(id, name) {
+        this.id = id;
+        this.name = name;
+    }
+};
 ----
 --
 
@@ -501,7 +511,26 @@ Node.js::
 --
 [source,javascript]
 ----
+class EmployeeSerializer extends CompactSerializer {
+    read(reader) {
+        const id = reader.readInt64('id');
+        const name = reader.readString('name');
+        return new Employee(id, name);
+    }
 
+    write(writer, employee) {
+        writer.writeInt64('id', employee.id);
+        writer.writeString('name', employee.name);
+    }
+
+    getClass() {
+        return Employee;
+    }
+
+    getTypeName() {
+        return 'employee';
+    }
+};
 ----
 --
 
@@ -1113,7 +1142,10 @@ Node.js::
 --
 [source,javascript]
 ----
-
+class Employee {
+    id;
+    name;
+};
 ----
 --
 
@@ -1185,7 +1217,11 @@ Node.js::
 --
 [source,javascript]
 ----
-
+class Employee {
+    id;
+    name;
+    age;
+};
 ----
 --
 
@@ -1275,7 +1311,13 @@ Node.js::
 --
 [source,javascript]
 ----
-
+class EmployeeSerializer extends CompactSerializer {
+    read(reader){
+        const id = reader.readInt64('id');
+        const name = reader.readString('name');
+        return new Employee(id, name);
+    }
+}
 ----
 --
 
@@ -1381,7 +1423,19 @@ Node.js::
 --
 [source,javascript]
 ----
-
+class EmployeeSerializer extends CompactSerializer {
+    read(reader){
+        const id = reader.readInt64('id');
+        const name = reader.readString('name');
+        let age;
+        if (reader.getFieldKind("age") == FieldKind.INT32) {
+            age = reader.readInt32("age");
+        } else {
+            age = 0;
+        }
+        return new Employee(id, name, age);
+    }
+}
 ----
 --
 

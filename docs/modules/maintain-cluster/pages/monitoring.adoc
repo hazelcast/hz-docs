@@ -62,8 +62,8 @@ can result in unexpected cluster partitioning behavior: After reaching `hazelcas
 partition table arrangement is initialized even though there’s no data. When used in large clusters (>100),
 this adds an unnecessary overhead of partition assignment on each member addition.
 * Check that you have configured an adequate backup count based on your SLAs.
-* When using distributed computing features such as executor service or entry processors,
-any change in the client application logic or in the implementation of these must also be applied on
+* When using distributed computing features, such as executor service or entry processors,
+any change in the client application logic or in the implementation of these must also be applied to
 the members. All the members must be restarted after the new code is deployed using the typical cluster
 re-deployment process: first shutdown the members, then deploy the new application JARs in the members' classpath,
 and start the members.
@@ -151,7 +151,7 @@ hazelcast:
 === Limiting Source Addresses
 
 By default, any instance of Management Center can connect to a cluster as long as it can be authenticated. To restrict access only to trusted instances of Management Center, you can define the trusted IP addresses in the `trusted-interfaces`
-configuration setting. This settings supports wildcards (`*`) and ranges (`-`).
+configuration setting. This setting supports wildcards (`*`) and ranges (`-`).
 
 [tabs] 
 ==== 
@@ -892,13 +892,19 @@ See the https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/exe
 
 == Health Check and Monitoring
 
-Hazelcast provides the HTTP-based Health Check endpoint, Health Check script and Health Monitoring utility.
+Hazelcast provides the following options for monitoring the health of your Hazelcast clusters:
 
-To be able to benefit from the Health Check endpoint and script,
-you must enable the Health Check using either one of the following configuration options:
+* HTTP-based health check endpoint
+* Health check script
+* Health monitoring utility
 
-Using the `network` configuration element:
+[[enable-hcheck]]
+=== Enabling the Health Check Endpoint and Script
 
+To use the health check endpoint and script, enable either of the following configuration options:
+
+* Using the `network` configuration element:
++
 [tabs] 
 ==== 
 XML:: 
@@ -932,8 +938,8 @@ hazelcast:
 ----
 ====
 
-Using the `advanced-network` configuration element:
-
+* Using the `advanced-network` configuration element:
++
 [tabs] 
 ==== 
 XML:: 
@@ -970,56 +976,54 @@ hazelcast:
 
 === Health Check
 
-This is Hazelcast's HTTP based health check implementation which provides
-basic information about your cluster and member (on which it is launched).
+You can use Hazelcast's HTTP-based health check implementation to get basic information about the cluster and member on which it is launched.
 
-First, you need to enable the health check as explained in the introduction of this section above.
+To use the HTTP-based health check:
 
-Now you retrieve information about your cluster's health status (member state,
-cluster state, cluster size, etc.) by launching `+http://<your member's host IP>:5701/hazelcast/health+` on your preferred browser.
-
-The following is the output with example values:
-
+. Enable the <<enable-hcheck, health check endpoint>>. 
+. Launch the health check from your preferred browser: `+http://<host IP of your member>:5701/hazelcast/health+`.
++
+The health check retrieves information about your cluster's health status, such as member state,
+cluster state, cluster size, etc. For example:
++
 ```
 {
   "nodeState": "ACTIVE",
   "clusterState": "ACTIVE",
-  "clusterSafe": true,
+  "clusterSafe": false,
   "migrationQueueSize": 0,
   "clusterSize": 3
 }
 ```
 
-`nodeState`: Specifies the state of member on which the health check is launched;
-see the xref:management:cluster-utilities.adoc#cluster-member-states[Member States section]
-to learn about the states of cluster members.
-`clusterState`: Specifies the state of cluster which the health checked member belongs to;
-see the xref:management:cluster-utilities.adoc#cluster-states[Cluster States section]
-to learn about the states of clusters.
-`clusterSafe`: Specifies whether the cluster is safe, i.e., there are no active partition
-migrations and all backups are in sync for each partition in the cluster;
-see the xref:management:cluster-utilities.adoc#safety-checking-cluster-members[Safety Checking section]
-to learn about the safety of clusters.
-`migrationQueueSize`: Specifies the count of remaining migration tasks while the cluster data
-is being repartitioned. See the xref:overview:data-partitioning.adoc[Data Partitioning section]
+* `nodeState`: State of the member on which the health check is launched. See xref:cluster-member-states.adoc#member-states[Cluster and Member States] to learn more about the states of cluster members.
+* `clusterState`: State of cluster that the health-checked member belongs to. See xref:cluster-member-states.adoc#cluster-states[Cluster and Member States] to learn more about cluster states.
+* `clusterSafe`: Whether the cluster is safe, i.e., there are no active partition
+migrations and all backups are in sync for each partition in the cluster. See xref:shutdown.adoc#ensuring-members-and-clusters-are-in-a-safe-state[Shutting Down Members and Clusters] to learn how to check the safety of active clusters.
++
+NOTE: The `clusterSafe` indicator is useful when your cluster is in a passive state. If the cluster is in an active state, the indicator value continually changes due to the dynamic state of the cluster. Also, checking the cluster safety triggers additional operations for each partition and replica. Frequent safety checks of a cluster under load may impact cluster performance.
+
+* `migrationQueueSize`: A count of the remaining migration tasks while the cluster data
+is being repartitioned. See xref:overview:data-partitioning.adoc[Data Partitioning]
 to learn about Hazelcast's partitioning mechanism.
-`clusterSize`: Specifies the cluster member count.
+* `clusterSize`: A count of the cluster member count.
 
 [[health-check-script]]
 === Using the hz-healthcheck Script
 
 The `hz-healthcheck` script comes with the Hazelcast package. Internally, it uses
-the HTTP-based Health Check endpoint. You will need to enable the endpoint by using the
-`advanced-network` or the `network` configuration element.
-See the <<health-check-monitoring, Health Check and Monitoring section>>.
+the HTTP-based health check endpoint. 
 
-You can use the script to check health parameters in the following manner:
+To run the `hz-healthcheck` script:
 
+. Enable the <<enable-hcheck, health check endpoint>>. 
+. Run the `hz-healthcheck` script with parameters using the following format: 
++
 ```
 ./hz-healthcheck <parameters>
 ```
 
-The following parameters can be used:
+You can use the following parameters to perform checks and operations on your Hazelcast clusters:
 
 [cols="a,a,a"]
 |===
@@ -1029,6 +1033,8 @@ The following parameters can be used:
 |`get-state`
 |Health check operation. It can be `all`, `node-state`,
 `cluster-state`, `cluster-safe`, `migration-queue-size` and `cluster-size`.
+
+NOTE: The `cluster-safe` option is useful when your cluster is in a passive state. If the cluster is in an active state, the indicator value continually changes due to the dynamic state of the cluster. Also, checking the cluster safety triggers additional operations for each partition and replica. Frequent safety checks of a cluster under load may impact cluster performance.
 
 |`-a` or `--address`
 |`127.0.0.1`
@@ -1069,20 +1075,19 @@ you should use this parameter to provide the IP address of a member to this scri
 |===
 
 
-*_Example 1: Checking Member State of a Healthy Cluster:_*
+*_Example 1: Checking the State of Members in a Healthy Cluster:_*
 
-Assuming the member is deployed under the address `127.0.0.1:5701` and
+If the member is deployed under the address `127.0.0.1:5701` and
 it is in the healthy state, the following output is expected:
-
 
 ```
 ./hz-healthcheck -a 127.0.0.1 -p 5701 -o node-state
 ACTIVE
 ```
 
-*_Example 2: Checking Safety of a Non-Existing Cluster:_*
+*_Example 2: Checking the Safety of a Non-Existent Cluster:_*
 
-Assuming there is no member running under the address `127.0.0.1:5701`, the following output is expected:
+If the cluster has no members running under the address `127.0.0.1:5701`, the following output is expected:
 
 ```
 ./hz-healthcheck -a 127.0.0.1 -p 5701 -o cluster-safe
@@ -1092,7 +1097,7 @@ Please check that cluster is running and that health check is enabled in REST AP
 
 === Health Monitor
 
-Health monitor periodically prints logs in your console to provide information about your member's state.
+The health monitor periodically prints logs in your console to provide information about your member's state.
 By default, it is enabled when you start your cluster.
 
 You can set the interval of health monitoring using

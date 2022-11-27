@@ -99,6 +99,34 @@ Default count is the number of cores multiplied by 1.
 |Maximum number of threads to process non-partition-aware client requests, like `map.size()`, executor tasks, etc.
 Default count is the number of cores multiplied by 20.
 
+|`hazelcast.cluster.shutdown.timeout.seconds`
+|900
+|int
+|Once a member initiates a cluster shutdown, it waits for all members to leave the cluster before shutting itself down.
+This parameter defines a timeout after which there may still be some members in the cluster but the initiator will give up and shut itself down regardless.
+
+|`hazelcast.cluster.version.auto.upgrade.enabled`
+| false
+| bool
+| Specifies whether the automatic cluster version upgrading is enabled.
+
+|`hazelcast.cluster.version.auto.upgrade.min.cluster.size`
+| 1
+| int
+| When set to a value greater than 1, automatic upgrading waits to reach that cluster size to proceed.
+
+|`hazelcast.concurrent.window.ms`
+|100
+|int
+|Property needed for concurrency detection so that write through can be done correctly.
+This property sets the time window, in milliseconds, between the concurrency detection
+and its notification. Normally in a concurrent system, the window
+keeps sliding forward so it always remains concurrent.
+Setting it too high effectively disables the optimization because once
+a concurrency is detected it will keep that way. Setting it too low
+could lead to suboptimal performance because the system
+will try write through and other optimizations even though the system is concurrent.
+
 |`hazelcast.config.instance.tracking.file`
 |
 |string
@@ -120,15 +148,10 @@ It can then be used to verify the name and location of this file. See xref:maint
 | int
 | Maximum I/O error count before disconnecting from a member.
 
-|`hazelcast.cluster.version.auto.upgrade.enabled`
-| false
-| bool
-| Specifies whether the automatic cluster version upgrading is enabled.
-
-|`hazelcast.cluster.version.auto.upgrade.min.cluster.size`
-| 1
-| int
-| When set to a value greater than 1, automatic upgrading waits to reach that cluster size to proceed.
+|`hazelcast.data.search.dynamic.config.first.enabled`
+|false
+|bool
+|Enables performing search for the data structures within the dynamic configurations first. Default behavior is searching within the static configurations.
 
 |`hazelcast.diagnostics.directory`
 |`user.dir`
@@ -137,18 +160,6 @@ It can then be used to verify the name and location of this file. See xref:maint
 
 NOTE: For detailed information about the diagnostic tool,
 along with this and the following diagnostic related system properties, see the xref:maintain-cluster:monitoring.adoc#diagnostics[Diagnostics section].
-
-|`hazelcast.concurrent.window.ms`
-|100
-|int
-|Property needed for concurrency detection so that write through can be done correctly.
-This property sets the time window, in milliseconds, between the concurrency detection
-and its notification. Normally in a concurrent system, the window
-keeps sliding forward so it always remains concurrent.
-Setting it too high effectively disables the optimization because once
-a concurrency is detected it will keep that way. Setting it too low
-could lead to suboptimal performance because the system
-will try write through and other optimizations even though the system is concurrent.
 
 |`hazelcast.diagnostics.enabled`
 |false
@@ -219,6 +230,11 @@ will try write through and other optimizations even though the system is concurr
 |long
 |Period, in seconds, for which the PendingInvocations plugin of the diagnostics tool runs.
 0 means this plugin is disabled.
+
+|`hazelcast.diagnostics.stdout`
+|`FILE`
+|string
+|Configures the output for the diagnostics. Available values are `FILE`, `STDOUT`, and `LOGGER`.
 
 |`hazelcast.diagnostics.slowoperations.period.seconds`
 |60
@@ -472,6 +488,55 @@ conditions are right. This can reduce the latency and increase the performance f
 | bool
 | Enable xref:maintain-cluster:monitoring.adoc#monitoring-with-jmx[JMX] agent.
 
+|`hazelcast.jet.custom.lib.dir`
+|`custom-lib`
+|string
+|The directory containing the JAR files, that can be used to specify custom classpath for a stage in a pipeline.
+
+|`hazelcast.jet.idle.cooperative.min.microseconds`
+|25
+|int
+|The minimum time in microseconds the cooperative worker threads will sleep if none of the tasklets made any progress. Lower values increase
+idle CPU usage but may result in decreased latency. Higher values will increase latency, and very high values (>10000µs) will also limit throughput.
+
+|`hazelcast.jet.idle.cooperative.max.microseconds`
+|500
+|int
+|The maximum time in microseconds the cooperative worker threads will sleep if none of the tasklets made any progress. Lower values increase
+idle CPU usage but may result in decreased latency. Higher values will increase latency, and very high values (>10000µs) will also limit the throughput.
+
+|`hazelcast.jet.idle.noncooperative.min.microseconds`
+|25
+|int
+|The minimum time in microseconds the non-cooperative worker threads will sleep if none of the tasklets made any progress. Lower values increase
+idle CPU usage but may result in decreased latency. Higher values will increase latency, and very high values (>10000µs) will also limit the throughput.
+
+|`hazelcast.jet.idle.noncooperative.max.microseconds`
+|5000
+|int
+|The maximum time in microseconds the non-cooperative worker threads will sleep if none of the tasklets made any progress. Lower values increase
+idle CPU usage but may result in decreased latency. Higher values will increase latency, and very high values (>10000µs) will also limit the throughput.
+
+|`hazelcast.jet.job.results.max.size`
+|1000
+|int
+|Maximum number of job results to keep in the cluster; the oldest results will be automatically deleted after this size is reached.
+
+|`hazelcast.jet.job.results.ttl.seconds`
+|604800
+|int
+|Maximum number of time in seconds the job results are kept in the cluster. They will be automatically deleted after this period is reached.
+
+|`hazelcast.jet.job.scan.period`
+|5000
+|int
+|The Jet engine periodically checks for new jobs to start and perform cleanup of the unused resources. This property configures how often this check and cleanup is done, in milliseconds.
+
+|`hazelcast.jmx.update.interval.seconds`
+|5
+|int
+|Some JMX MBeans are cached  to reduce the overhead of calculating statistics. This parameter determines for how long the MBeans can go stale.
+
 |`hazelcast.local.localAddress`
 |
 | string
@@ -495,6 +560,11 @@ When you want to set an explicit lease time for your locks, you cannot set it to
 |Specifies whether the cluster name, IP and version should be included in
 all log messages.
 
+|`hazelcast.logging.emoji.enabled`
+|false
+|bool
+|Specifies whether cluster emojis can be used in log messages. This is just a hint for components calling the logging.
+
 |`hazelcast.logging.type`
 | jdk
 | enum
@@ -505,14 +575,6 @@ all log messages.
 | bool
 | Notify xref:data-structures:listening-for-map-entries.adoc[entry listeners with predicates] on map entry updates with
 events that match entry, update or exit from predicate value space.
-
-|`hazelcast.map.expiry.delay.seconds`
-|10
-|int
-|Delays expiration of backup map entries by the defined amount.
-This may be useful to prevent some cases where an entry might be observed
-on the primary replica (partition owner) but not on the backup replica.
-For instance, when running an entry processor on both primary and backup replicas.
 
 |`hazelcast.map.eviction.batch.size`
 |1
@@ -530,6 +592,14 @@ situation more than just a single entry should be evicted.
 | Count of the IMap entries in the entry set formed by
 random samplings from which Hazelcast chooses to remove the optimal entry
 during an IMap eviction.
+
+|`hazelcast.map.expiry.delay.seconds`
+|10
+|int
+|Delays expiration of backup map entries by the defined amount.
+This may be useful to prevent some cases where an entry might be observed
+on the primary replica (partition owner) but not on the backup replica.
+For instance, when running an entry processor on both primary and backup replicas.
 
 |`hazelcast.map.invalidation.batchfrequency.seconds`
 | 10
@@ -571,6 +641,11 @@ multiple maps are tried to load concurrently from the same member.
 Its maximum value is `Integer.MAX_VALUE`.
 The value of this property is taken into account only if the `write-coalescing` element of the
 Map Store configuration is `false`. See xref:mapstore:configuration-guide.adoc[] for the description of the `write-coalescing` element.
+
+|`hazelcast.mastership.claim.timeout.seconds`
+|120
+|int
+|The timeout for which the master member candidate gives up waiting for a response to its mastership claim. After timeout happens, non-responding member will be removed from the member list.
 
 |`hazelcast.max.join.merge.target.seconds`
 |20
@@ -677,6 +752,18 @@ the preferred way for controlling this setting is xref:maintain-cluster:monitori
 | bool
 | Enables exposing the collected xref:maintain-cluster:monitoring.adoc#metrics[metrics] over JMX if set to `true`, disables it otherwise. Note that
 the preferred way for controlling this setting is xref:maintain-cluster:monitoring.adoc#metrics#metrics-configuration[Metrics Configuration].
+
+|`hazelcast.multicast.group`
+|N/A
+|long
+|IP address of a multicast group. If not set, then the configuration is read from the xref:clusters:network-configuration.adoc#multicast-element[multicast configuration].
+
+|`hazelcast.multicast.socket.set.interface`
+|N/A
+|long
+|Allows explicit control if the `setInterface()` method is called in the Hazelcast multicast discovery service.
+This configuration may affect the multicast behavior on some platforms. The default value is not specified here, and, in such case, Hazelcast multicast service itself
+decides if `setInterface()` should be called.
 
 |`hazelcast.network.stats.refresh.interval.seconds`
 |3
@@ -795,14 +882,6 @@ When a partition backup ownership changes or a backup inconsistency is detected,
 This parameter limits the maximum running replication operations in parallel.
 The default value, which is the value of `hazelcast.partition.max.parallel.migrations`, is fine for most of the setups.
 
-|`hazelcast.partition.migration.fragments.enabled`
-| true
-| bool
-| When enabled, which is the default behavior, partitions are migrated/replicated in small fragments instead of one big chunk.
-Migrating partitions in fragments reduces pressure on the memory and network
-since smaller packets are created in the memory and sent through the network.
-Note that it can increase the migration time to complete.
-
 |`hazelcast.partition.migration.chunks.enabled`
 | true
 | bool
@@ -816,6 +895,14 @@ Note that it can increase the migration time to complete.
   partition migration operation. If you have parallel migrations,
   the total size of migration data in MB is limited to the
   number of parallel migrations multiplied by this value.
+
+|`hazelcast.partition.migration.fragments.enabled`
+| true
+| bool
+| When enabled, which is the default behavior, partitions are migrated/replicated in small fragments instead of one big chunk.
+Migrating partitions in fragments reduces pressure on the memory and network
+since smaller packets are created in the memory and sent through the network.
+Note that it can increase the migration time to complete.
 
 |`hazelcast.partition.migration.interval`
 | 0
@@ -844,6 +931,17 @@ Its default value is "false", meaning that stale reads are allowed.
 |
 |string
 |Class name implementing `com.hazelcast.core.PartitioningStrategy`, which defines key to partition mapping.
+
+|`hazelcast.persistence.auto.cluster.state`
+| true
+| bool
+| Enables/disables xref:deploy:configuring-kubernetes.adoc#running-hazelcast-enterprise-with-persistence-under-kubernetes[automatic state management] of clusters in Kubernetes Statefulset, which are configured with persistence enabled.
+When enabled, Hazelcast monitors the runtime environment to detect the intent of shutdown and automates the cluster state management decisions.
+
+|`hazelcast.persistence.auto.cluster.state.strategy`
+| string
+| `NO_MIGRATION`
+| Selects the xref:deploy:configuring-kubernetes.adoc#configuration[cluster state] to be used when members are temporarily missing from a cluster in Kubernetes Statefulset which is configured with persistence enabled. Valid values are `NO_MIGRATION` and `FROZEN`.
 
 |`hazelcast.phone.home.enabled`
 | true
@@ -882,6 +980,11 @@ Set to `true` if you are using slow predicates or have > 100,000s entries per me
 This value defines the maximum number of returned elements for a single query result.
 If a query exceeds this number of elements, a QueryResultSizeExceededException is thrown.
 Its default value is -1, meaning it is disabled.
+
+|`hazelcast.security.recommendations`
+|null
+|string
+|When set to any non-null value, security recommendations are logged at the `INFO` level during the member startup.
 
 |`hazelcast.serialization.version`
 |
@@ -959,6 +1062,11 @@ When set to `false`, client socket is not bound to any interface.
 | bool
 | Bind client-sockets to any local interface. If not set, `hazelcast.socket.bind.any` is used as the default.
 
+|`hazelcast.socket.client.buffer.direct`
+|false
+|bool
+|Specifies whether the byte buffers used in the socket, when connecting to a client, should be direct or a regular one.
+
 |`hazelcast.socket.client.receive.buffer.size`
 |-1
 |int
@@ -983,17 +1091,17 @@ Default is 10 seconds, 0 means infinite.
 |`hazelcast.socket.keep.alive`
 | true
 | bool
-| Socket set keep alive (`SO_KEEPALIVE`).
+| Sets a socket to be in the `SO_KEEPALIVE` option.
 
 |`hazelcast.socket.linger.seconds`
 |0
 |int
-|Set socket `SO_LINGER` option.
+|Sets the linger value (timeout) for a socket in the `SO_LINGER` option.
 
 |`hazelcast.socket.no.delay`
 | true
 | bool
-| Socket set TCP no delay.
+| Specifies whether the delay of sending successive small packets on the network is disabled.
 
 |`hazelcast.socket.receive.buffer.size`
 | 128
@@ -1018,6 +1126,12 @@ Use this property and the next one below tune the size.
 |The number of incremental ports, starting with the port number defined in the network configuration,
 that is used to connect to a host (which is defined without a port in TCP/IP member list while a member is searching for a cluster).
 
+|`hazelcast.tcp.join.previously.joined.member.address.retention.seconds`
+|14400
+|int
+|Specifies how long the address of a member that has previously joined the cluster will be retained/remembered in the TCP/IP joiner, after it leaves the cluster. In a split-brain scenario, this member addresses
+is used to discover the other cluster by the split-brain handler.
+
 |`hazelcast.wait.seconds.before.join`
 | 5
 | int
@@ -1028,5 +1142,32 @@ elapses since the last first-timer join request (i.e., where the member hasn't
 made any previous join request), or the pre-join phase has lasted for
 `hazelcast.max.wait.seconds.before.join` seconds, the phase ends and the
 master starts forming the cluster.
+
+|`hazelcast.wan.consumer.ack.delay.backoff.init`
+|1
+|int
+|Defines the initial backoff delay for the WAN implementation's consumer. It is used if the <<ack-delay, acknowledgment delaying>> feature is enabled.
+
+|`hazelcast.wan.consumer.ack.delay.backoff.max`
+|100
+|int
+|Defines the maximum backoff delay for the WAN implementation's consumer. It is used if the <<ack-delay, acknowledgment delaying>> feature is enabled.
+
+|`hazelcast.wan.consumer.ack.delay.backoff.multiplier`
+|1.5D
+|string
+|Defines the multiplier (the speed of the function) for the backoff delay for the WAN implementation's consumer. It is used if the <<ack-delay, acknowledgment delaying>> feature is enabled
+
+|`hazelcast.wan.consumer.invocation.threshold`[[ack-delay]]
+|50000
+|int
+|Defines the pending invocation threshold for the WAN replication implementation. Exceeding this threshold on a WAN consumer member makes the member to delay the WAN acknowledgment,
+thus slowing down the WAN publishers on the source side that send WAN events to the given WAN consumer. Setting this value to negative disables the acknowledgement delaying feature.
+
+|`tcp.channels.per.connection`
+| 1
+| int
+| Number of parallel connections between members. Not having more connections than IO threads is recommended.
+
 
 |===

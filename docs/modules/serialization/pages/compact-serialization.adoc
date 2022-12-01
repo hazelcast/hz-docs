@@ -99,7 +99,11 @@ clientConfig.getSerializationConfig()
 --
 [source,cs]
 ----
-
+HazelcastOptions options = ...;
+options
+    .Serialization
+    .Compact
+    .AddSerializer(new FooSerializer());
 ----
 --
 
@@ -255,7 +259,11 @@ clientConfig.getSerializationConfig()
 --
 [source,cs]
 ----
-
+HazelcastOptions options = ...;
+options
+    .Serialization
+    .Compact
+    .AddType<Bar>();
 ----
 --
 
@@ -377,7 +385,7 @@ public class Employee {
 --
 [source,cs]
 ----
-
+public record Employee(long Id, string Name);
 ----
 --
 
@@ -473,7 +481,23 @@ public class EmployeeSerializer implements CompactSerializer<Employee> {
 --
 [source,cs]
 ----
+public class EmployeeSerializer : ICompactSerializer<Employee>
+{
+    public string TypeName => "employee";
 
+    public Employee Read(ICompactReader reader)
+    {
+        var id = reader.ReadInt64("id");
+        var name = reader.ReadString("name");
+        return new Employee(id, name);
+    }
+
+    public void Write(ICompactWriter writer, Employee value)
+    {
+        writer.WriteInt64("id", value.Id);
+        writer.WriteString("name", value.Name);
+    }
+}
 ----
 --
 
@@ -1035,7 +1059,12 @@ Employee employeeFromMap = map.get(1L);
 --
 [source,cs]
 ----
-
+HazelcastOptions options = ...;
+var client = await HazelcastClientFactory.StartNewClientAsync(options);
+var map = await client.GetMap<long, Employee>("employees");
+var employee = new Employee(1, "John Doe");
+await map.SetAsync(1, employee);
+var employeeFromMap = await map.GetAsync(1);
 ----
 --
 
@@ -1120,7 +1149,7 @@ public class Employee {
 --
 [source,cs]
 ----
-
+public record Employee(long Id, string Name);
 ----
 --
 
@@ -1194,7 +1223,11 @@ public class Employee {
 --
 [source,cs]
 ----
-
+public record Employee(
+    long Id, 
+    string Name,
+    int Age // newly-added field
+);
 ----
 --
 
@@ -1279,7 +1312,19 @@ public class EmployeeSerializer implements CompactSerializer<Employee> {
 --
 [source,cs]
 ----
+public class EmployeeSerializer : ICompactSerializer<Employee>
+{
+    public Employee Read(ICompactReader reader)
+    {
+        var id = reader.ReadInt64("id");
+        var name = reader.ReadString("name");
+        // the new 'age' field is there, but the old reader does not 
+        // know anything about it, and ignores the field.
+        return new Employee(id, name);
+    }
 
+    // ...
+}
 ----
 --
 
@@ -1388,7 +1433,23 @@ public class EmployeeSerializer implements CompactSerializer<Employee> {
 --
 [source,cs]
 ----
+public class EmployeeSerializer : ICompactSerializer<Employee>
+{
+    public Employee Read(ICompactReader reader)
+    {
+        var id = reader.ReadInt64("id");
+        var name = reader.ReadString("name");
+        // read the "age" field if it exists, else use the default value 0
+        // reader.readInt32("age") would throw if the "age" field
+        // does not exist in data.
+        var age = reader.GetFieldKind("age") == FieldKind.Int32
+            ? reader.ReadInt32("age")
+            : 0;
+        return new Employee(id, name, age);
+    }
 
+    // ...
+}
 ----
 --
 

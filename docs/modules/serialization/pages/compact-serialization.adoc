@@ -139,7 +139,8 @@ Go::
 --
 [source,go]
 ----
-
+var cfg hazelcast.Config
+cfg.Serialization.Compact.SetSerializers(&FooSerializer{})
 ----
 --
 
@@ -433,7 +434,10 @@ Go::
 --
 [source,go]
 ----
-
+type Employee struct {
+    ID int64
+    Name *string
+}
 ----
 --
 
@@ -586,7 +590,26 @@ Go::
 --
 [source,go]
 ----
+func (em EmployeeSerializer) Read(reader serialization.CompactReader) any {
+    id := reader.ReadInt64("id")
+    name := reader.ReadString("name")
+    return &Employee{ID: id, Name: name}
+}
 
+func (em EmployeeSerializer) Write(writer serialization.CompactWriter, value any) {
+    employee := value.(*Employee)
+    writer.WriteInt64(employee.ID)
+    writer.WriteString(employee.Name)
+}
+
+func (em EmployeeSerializer) TypeName() string {
+    return "employee"
+}
+
+func (em EmployeeSerializer) Type() reflect.Type {
+    var e *Employee
+    return reflect.TypeOf(e)
+}
 ----
 --
 
@@ -616,7 +639,7 @@ can be implemented on top of these, by using these types as building blocks.
 | bool
 | boolean
 | bool
-|
+| bool
 | True or false represented by a single bit as either 1 or 0.
 Up to eight booleans are packed into a single byte.
 
@@ -626,7 +649,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<bool>>
 | boolean[] \| null
 | Optional[list[bool]]
-|
+| []bool
 | Array of booleans or null. Up to eight boolean array items are packed into a single byte.
 
 | NULLABLE_BOOLEAN
@@ -635,7 +658,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<bool>
 | boolean \| null
 | Optional[bool]
-|
+| *bool
 | A boolean that can also be null.
 
 | ARRAY_OF_NULLABLE_BOOLEAN
@@ -644,7 +667,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<boost::optional<bool>>>
 | (boolean \| null)[] \| null
 | Optional[list[Optional[bool]]]
-|
+| []*bool
 | Array of nullable booleans or null.
 
 | INT8
@@ -653,7 +676,7 @@ Up to eight booleans are packed into a single byte.
 | int8_t
 | number
 | int
-|
+| int8
 | 8-bit two's complement signed integer.
 
 | ARRAY_OF_INT8
@@ -662,7 +685,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<int8_t>>
 | Buffer \| null
 | Optional[list[int]]
-|
+| []int8
 | Array of int8s or null.
 
 | NULLABLE_INT8
@@ -671,7 +694,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<int8_t>
 | number \| null
 | Optional[int]
-|
+| *int8
 | An int8 that can also be null.
 
 | ARRAY_OF_NULLABLE_INT8
@@ -680,7 +703,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<boost::optional<int8_t>>>
 | (number \| null)[] \| null
 | Optional[list[Optional[int]]]
-|
+| []*int8
 | Array of nullable int8s or null.
 
 | INT16
@@ -689,7 +712,7 @@ Up to eight booleans are packed into a single byte.
 | int16_t
 | number
 | int
-|
+| int16
 | 16-bit two's complement signed integer.
 
 | ARRAY_OF_INT16
@@ -698,7 +721,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<int16_t>>
 | number[] \| null
 | Optional[list[int]]
-|
+| []int16
 | Array of int16s or null.
 
 | NULLABLE_INT16
@@ -707,7 +730,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<int16_t>
 | number \| null
 | Optional[int]
-|
+| *int16
 | An int16 that can also be null.
 
 | ARRAY_OF_NULLABLE_INT16
@@ -716,7 +739,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<boost::optional<int16_t>>>
 | (number \| null)[] \| null
 | Optional[list[Optional[int]]]
-|
+| []*int16
 | Array of nullable int16s or null.
 
 | INT32
@@ -725,7 +748,7 @@ Up to eight booleans are packed into a single byte.
 | int32_t
 | number
 | int
-|
+| int32
 | 32-bit two's complement signed integer.
 
 | ARRAY_OF_INT32
@@ -734,7 +757,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<int32_t>>
 | number[] \| null
 | Optional[list[int]]
-|
+| []int32
 | Array of int32s or null.
 
 | NULLABLE_INT32
@@ -743,7 +766,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<int32_t>
 | number \| null
 | Optional[int]
-|
+| *int32
 | An int32 that can also be null.
 
 | ARRAY_OF_NULLABLE_INT32
@@ -752,7 +775,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<boost::optional<int32_t>>>
 | (number \| null)[] \| null
 | Optional[list[Optional[int]]]
-|
+| []*int32
 | Array of nullable int32s or null.
 
 | INT64
@@ -761,7 +784,7 @@ Up to eight booleans are packed into a single byte.
 | int64_t
 | Long
 | int
-|
+| int64
 | 64-bit two's complement signed integer.
 
 | ARRAY_OF_INT64
@@ -770,7 +793,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<int64_t>>
 | Long[] \| null
 | Optional[list[int]]
-|
+| []int64
 | Array of int64s or null.
 
 | NULLABLE_INT64
@@ -779,7 +802,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<int64_t>
 | Long \| null
 | Optional[int]
-|
+| *int64
 | An int64 that can also be null.
 
 | ARRAY_OF_NULLABLE_INT64
@@ -788,7 +811,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<boost::optional<int64_t>>>
 | (Long \| null)[] \| null
 | Optional[list[Optional[int]]]
-|
+| []*int64
 | Array of nullable int64s or null.
 
 | FLOAT32
@@ -797,7 +820,7 @@ Up to eight booleans are packed into a single byte.
 | float
 | number
 | float
-|
+| float32
 | 32-bit IEEE 754 floating point number.
 
 | ARRAY_OF_FLOAT32
@@ -806,7 +829,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<float>>
 | number[] \| null
 | Optional[list[float]]
-|
+| []float32
 | Array of float32s or null.
 
 | NULLABLE_FLOAT32
@@ -815,7 +838,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<float>
 | number \| null
 | Optional[float]
-|
+| *float32
 | A float32 that can also be null.
 
 | ARRAY_OF_NULLABLE_FLOAT32
@@ -824,7 +847,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<boost::optional<float>>>
 | (number \| null)[] \| null
 | Optional[list[Optional[float]]]
-|
+| []*float32
 | Array of nullable float32s or null.
 
 | FLOAT64
@@ -833,7 +856,7 @@ Up to eight booleans are packed into a single byte.
 | double
 | number
 | float
-|
+| float64
 | 64-bit IEEE 754 floating point number.
 
 | ARRAY_OF_FLOAT64
@@ -842,7 +865,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<double>>
 | number[] \| null
 | Optional[list[float]]
-|
+| []float64
 | Array of float64s or null.
 
 | NULLABLE_FLOAT64
@@ -851,7 +874,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<double>
 | number \| null
 | Optional[float]
-|
+| *float64
 | A float64 that can also be null.
 
 | ARRAY_OF_NULLABLE_FLOAT64
@@ -860,7 +883,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<boost::optional<double>>>
 | (number \| null)[] \| null
 | Optional[list[Optional[float]]]
-|
+| []*float64
 | Array of nullable float64s or null.
 
 | STRING
@@ -869,7 +892,7 @@ Up to eight booleans are packed into a single byte.
 | std::string
 | string \| null
 | Optional[str]
-|
+| *string
 | A UTF-8 encoded string or null.
 
 | ARRAY_OF_STRING
@@ -878,7 +901,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<std::string>>
 | (string \| null)[] \| null
 | Optional[list[Optional[str]]]
-|
+| []*string
 | Array of strings or null.
 
 | DECIMAL
@@ -887,7 +910,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<hazelcast::client::big_decimal>
 | BigDecimal \| null
 | Optional[decimal.Decimal]
-|
+| *types.Decimal
 | Arbitrary precision and scale floating point number or null.
 
 | ARRAY_OF_DECIMAL
@@ -896,7 +919,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<boost::optional<hazelcast::client::big_decimal>>>
 | (BigDecimal \| null)[] \| null
 | Optional[list[decimal.Decimal]]
-|
+| []*types.Decimal
 | Array of decimals or null.
 
 | TIME
@@ -905,7 +928,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<hazelcast::client::local_time>
 | LocalTime \| null
 | Optional[datetime.time]
-|
+| *types.LocalTime
 | Time consisting of hours, minutes, seconds, and nanoseconds or null.
 
 | ARRAY_OF_TIME
@@ -914,7 +937,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<boost::optional<local_time>>>
 | (LocalTime \| null)[] \| null
 | Optional[list[Optional[datetime.time]]]
-|
+| []*types.LocalTime
 | Array of times or null.
 
 | DATE
@@ -923,7 +946,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<hazelcast::client::local_date>
 | LocalDate \| null
 | Optional[datetime.date]
-|
+| *types.LocalDate
 | Date consisting of year, month, and day of the month or null.
 
 | ARRAY_OF_DATE
@@ -932,7 +955,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<std::vector<boost::optional<local_date>>>
 | (LocalDate \| null)[] \| null
 | Optional[list[Optional[datetime.date]]]
-|
+| []*types.LocalDate
 | Array of dates or null.
 
 | TIMESTAMP
@@ -941,7 +964,7 @@ Up to eight booleans are packed into a single byte.
 | boost::optional<hazelcast::client::local_date_time>
 | LocalDateTime \| null
 | Optional[datetime.datetime]
-|
+| *types.LocalDateTime
 | Timestamp consisting of year, month, day of the month, hour, minutes, seconds,
 and nanoseconds or null.
 
@@ -951,16 +974,16 @@ and nanoseconds or null.
 | boost::optional<std::vector<boost::optional<hazelcast::client::local_date_time>>>
 | (LocalDateTime \| null)[] \| null
 | Optional[list[Optional[datetime.datetime]]]
-|
+| []*types.LocalDateTime
 | Array of timestamps or null.
 
 | TIMESTAMP_WITH_TIMEZONE
 | OffsetDateTime
 | HOffsetDateTime
-| 
+|
 | OffsetDateTime \| null
 | Optional[datetime.datetime]
-|
+| *types.OffsetDateTime
 | Timestamp with timezone consisting of year, month, day of the month, hour, minutes, seconds,
 nanoseconds, and offset seconds or null.
 
@@ -970,7 +993,7 @@ nanoseconds, and offset seconds or null.
 |
 | (OffsetDateTime \| null)[] \| null
 | Optional[list[Optional[datetime.datetime]]]
-|
+| []*types.OffsetDateTime
 | Array of timestamp with timezones or null.
 
 | COMPACT
@@ -979,7 +1002,7 @@ nanoseconds, and offset seconds or null.
 | Can be any user type.
 | Can be any user type.
 | Can be any user type.
-| Can be any user type.
+| any
 | A user defined nested Compact serializable object or null.
 
 | ARRAY_OF_COMPACT
@@ -988,7 +1011,7 @@ nanoseconds, and offset seconds or null.
 | Can be an array of any user type.
 | Can be an array of any user type.
 | Can be an array of any user type.
-| Can be an array of any user type.
+| []any
 | Array of user defined Compact serializable objects or null.
 
 |===
@@ -1195,7 +1218,10 @@ Go::
 --
 [source,go]
 ----
-
+type Employee struct {
+    ID int64
+    Name *string
+}
 ----
 --
 
@@ -1276,6 +1302,11 @@ Go::
 --
 [source,go]
 ----
+type Employee struct {
+    ID int64
+    Name *string
+    Age int32 // Newly added field
+}
 
 ----
 --
@@ -1389,7 +1420,13 @@ Go::
 --
 [source,go]
 ----
-
+func (em EmployeeSerializer) Read(reader serialization.CompactReader) any {
+    id := reader.ReadInt64("id")
+    name := reader.ReadString("name")
+    // The new "age" field is there, but the old reader does not
+    // know anything about it. Hence, it will simply ignore that field.
+    return &Employee{ID: id, Name: name}
+}
 ----
 --
 
@@ -1531,6 +1568,18 @@ Go::
 --
 [source,go]
 ----
+func (em EmployeeSerializer) Read(reader serialization.CompactReader) any {
+    id := reader.ReadInt64("id")
+    name := reader.ReadString("name")
+    // Read the "age" if it exists, or use the default value 0.
+    // reader.ReadInt32("age") would panic if the "age" field
+    // does not exist in data.
+    var age int32
+    if reader.getFieldKind("age") == serialization.FieldKindInt32 {
+        age = reader.ReadInt32("age")
+    }
+    return &Employee{ID: id, Name: name, Age: age}
+}
 
 ----
 --

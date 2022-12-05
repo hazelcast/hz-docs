@@ -980,7 +980,7 @@ and nanoseconds or null.
 | TIMESTAMP_WITH_TIMEZONE
 | OffsetDateTime
 | HOffsetDateTime
-|
+| boost::optional<hazelcast::client::offset_date_time>
 | OffsetDateTime \| null
 | Optional[datetime.datetime]
 | *types.OffsetDateTime
@@ -990,7 +990,7 @@ nanoseconds, and offset seconds or null.
 | ARRAY_OF_TIMESTAMP_WITH_TIMEZONE
 | OffsetDateTime[]
 | HOffsetDateTime[]
-|
+| boost::optional<std::vector<boost::optional<offset_date_time>>>
 | (OffsetDateTime \| null)[] \| null
 | Optional[list[Optional[datetime.datetime]]]
 | []*types.OffsetDateTime
@@ -1266,7 +1266,7 @@ struct employee
 {
     int64_t id;
     std::string name;
-    int32_t age;
+    int32_t age; // Newly added field
 };
 ----
 --
@@ -1373,7 +1373,8 @@ struct hz_serializer<employee> : compact_serializer
         
         e.id = reader.read_int32("id");
         e.name = reader.read_string("name");
-        
+        // The new "age" field is there, but the old reader does not
+        // know anything about it. Hence, it will simply ignore that field.
         return e;
     }
     
@@ -1505,11 +1506,14 @@ struct hz_serializer<employee> : compact_serializer
         e.id = reader.read_int64("id");
         e.name = reader.read_string("name");
         
+        // read the "age" field if it exists, else use the default value 0
+        // reader.read_int32("age") would throw if the "age" field
+        // does not exist in data.
         if (reader.get_field_kind("age") == field_kind::INT32)
         {
-            age = reader.read_int32("age");
+            e.age = reader.read_int32("age");
         } else {
-            age = 0;
+            e.age = 0;
         }
         
         return e;

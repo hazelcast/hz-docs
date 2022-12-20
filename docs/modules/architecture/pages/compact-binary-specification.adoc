@@ -1,0 +1,411 @@
+= Compact Serialization Binary Specification
+:description: This document describes the binary specification of compact serialization. You will learn how serialized data look like in binary.
+
+{description}
+
+== Introduction
+
+Every serialized user object consists of a header and a data. There is also a schema that is separate from the serialized object. Schemas and  serialized user objects are linked using the schema id written in the data section.
+
+== Data Types
+
+The table below shows the data types that are be supported by compact serialization.
+
+Endianness for primitives are configurable and by default they are written in BIG_ENDIAN. This configuration is applied to user datatypes and also all the primitives used on the format. These include size of the arrays, number of items, length of the data, schema-id, offsets etc. The endianness is inherited from the existing endianness configuration, a new endianness config isn't introduced for compact.
+
+[cols="1,1,1,1,1,1,1,1,1,1,3"]
+|===
+| Type |FieldKind id |Fixed-Size |SQL |Java |C# |C++ |Python |Node.js |Go |Description
+|boolean |0 |yes |BOOLEAN |boolean |bool (System.Boolean) |bool |bool |boolean |bool |true or false represented by 1 bit as either 1 or 0. Up to 8 booleans packed into a single byte
+|boolean[] |1 |no | |boolean[] | | |list[bool] |boolean[] | |Array of booleans
+|nullable-boolean |32 |no | |Boolean | | |Optional[bool] |boolean or null | |<<nullable-values,null>> or +
+int8 1 for true +
+int8 0 for false
+|nullable-boolean[] |33 |no | |Boolean[] | | |list[Optional[bool]] |number | |Array of nullable booleans
+|int8 |2 |yes |TINYINT |byte |sbyte (System.SByte, signed) |hazelcast::byte |int |number |byte |8 bit two's complement signed integer
+|int8[] |3 |no | |byte[] | | |list[int] |number[] | |Array of int8s
+|nullable-int8 |34 |no | |Byte | | |Optional[int] |null or number | |An int8 that can also be null
+|nullable-int8[] |35 |no | |Byte[] | | |list[Optional[int]] |(null or number)[] | |Array of nullable int8s
+|int16 |6 |yes |SMALLINT |short |short (System.Int16, signed) |int16_t |int |number |int16 |16-bit two's-complement signed integer
+|int16[] |7 |no | |short[] | | |list[int] |number[] | |Array of int16s
+|nullable-int16 |36 |no | |Short | | |Optional[int] |number or null | |An iint16 that can also be null
+|nullable-int16[] |37 |no | |Short[] | | |list[Optional[int]] |(number or null)[] | |Array of nullable i1int6s
+|int32 |8 |yes |INTEGER |int |int (System.Int32, signed) |int32_t |int |number |int32 |32-bit two's-complement signed integer
+|int32[] |9 |no | |int[] | | |list[int] |number[] | |Array of int32s
+|nullable-int32 |38 |no | |Integer | | |Optional[int] |number or null | |An int32 that can also be null
+|nullable-int32[] |39 |no | |Integer[] | | |list[Optional[int]] |(number or null)[] | |Array of nullable int32s
+|int64 |10 |yes |BIGINT |long |long (System.Int64, signed) |int64_t |int |Long (from long.js) |int64 |64-bit two's-complement signed integer
+|iint64[] |11 |no | |long[] | | |list[int] |Long[] (from long.js) | |Array of int64s
+|nullable-int64 |40 |no | |Long | | |Optional[int] |Long or null | |An int64 that can also be null
+|nullable-int64[] |41 |no | |Long[] | | |list[Optional[int]] |(Long or null)[] | |Array of nullable int64s
+|float32 |12 |yes |REAL |float |float (System.Single) |float |float |number |float32 |32-bit IEEE 754 floating-point number
+|float32[] |13 |no | |float[] | | | |number[] | |Array of float32s
+|nullable-float32 |42 |no | |Float | | |Optional[float] |number or null | |A float32 that can also be null
+|nullable-floa32t[] |43 |no | |Float[] | | |list[Optional[float]] |(number or null)[] | |Array of nullable float32s
+|float64 |14 |yes |DOUBLE |double |double (System.Double) |double |float |number |float64 |64-bit IEEE 754 floating-point number
+|float64[] |15 |no | |double[] | | |list[float] |number[] | |Array of float64s
+|nullable-float64 |44 |no | |Double | | |Optional[float] |number or null | |A double that can also be null
+|nullable-float64[] |45 |no | |Double[] | | |list[Optional[float]] |(number or null)[] | |Array of nullable float64
+|string |16 |no |STRING |String |string (System.String) |std::string |str |string |string |<<nullable-values,null>> or number of bytes in the string(iint32) + UTF-8 string https://tools.ietf.org/html/rfc3629
+|string[] |17 |no | |String[] | | | |string[] | |Array of strings
+|decimal | +
+18 |no |DECIMAL |java.math.BigDecimal |decimal (System.Decimal) |std::string |decimal.Decimal |
+BigDecimal
+
+(a wrapper in client code)
+
+|big.decimal |
+<<nullable-values,null>> or +
+Arbitrary precision and scale floating-point number: represented as unscaledValue x 10 ^ -scale
+
+unscaledValue: Array of int8 (byte array containing the two's-complement binary representation in big-endian byte-order: the most significant byte is in the zeroth element.)
+
+scale : single int32 for scale
+
+|decimal[] |19 |no | |java.math.BigDecimal[] | | | |BigDecimal[] | |Array of Decimals
+|time | +
+20 |no(since it is nullable) |TIME |java.time.LocalTime |System.TimeStamp |std::string |datetime.time |
+LocalTime
+
+(a wrapper in client code)
+
+|time |
+<<nullable-values,null>> or +
+HH-MI-SS-NN
+
+int8: hour
+
+int8: minute
+
+int8: seconds
+
+int32: nanoseconds
+
+|time[] |21 |no | |java.time.LocalTime[] | | | |LocalTime[] | |Array of Times
+|date | +
+22 |no(since it is nullable) |DATE |java.time.LocalDate |System.DateTime |std::string |datetime.date |
+LocalDate
+
+(a wrapper in client code)
+
+|time |
+<<nullable-values,null>> or +
+YYYY-MM-DD from -999999999-01-1 to 999999999-12-31
+
+int32: year
+
+int8: month
+
+int8: dayOfMonth
+
+|date[] |23 |no | |java.time.LocalDate[] | | | |LocalDate[] | |Array of Dates
+|timestamp | +
+24 |no(since it is nullable) |TIMESTAMP |java.time.LocalDateTime |System.DateTime |std::string |datetime.datetime |
+LocalDateTime
+
+(a wrapper in client code)
+
+|time |
+<<nullable-values,null>> or +
+YYYY-MM-DD-HH-MI-SS-NN
+
+int32: year
+
+int8: month
+
+int8: dayOfMonth
+
+int8 : hour
+
+int8: minute
+
+int8: seconds
+
+iint32: nanoseconds
+
+|timestamp[] |25 |no | |java.time.LocalDateTime[] | | | |LocalDateTime[] | |Array of Timestamps
+|timestampWithTimeZone |26 |no(since it is nullable) |TIMESTAMP W/ TZ |java.time.OffsetDateTime |System.DateTimeOffset |std::string |datetime.datetime (with datetime.tzinfo) |
+OffsetDateTime
+
+(a wrapper in client code)
+
+|time.Date |
+<<nullable-values,null>> or +
+YYYY-MM-DD-HH-MI-SS-MM Zone
+
+int32: year
+
+int8: month
+
+int8:dayOfMonth
+
+int8 : hour
+
+int8: minute
+
+int8: seconds
+
+int32: nanoseconds
+
+int32 : offsetSeconds.
+
+offsetSeconds is range between +/-18:00:00 hour
+
+|timestampWithTimeZone[] |27 |no | |java.time.OffsetDateTime[] | | | |OffsetDateTime[] | |Array of TimestampWithTimeZones
+|compact |28 |no |OBJECT |java.lang.Object | | | |any | |A user defined compact
+|compact[] |29 |no | |java.lang.Object[] | | | |any | |Array of compacts
+|===
+
+
+=== Type Ids
+
+Each type supported in the wire format have its own type id. The type ids are used while constructing the schemas, performing type checks for user access to fields, and are exposed to the user as a public API.
+
+To distinguish different types supported in the wire-level, a new enum called `FieldKind` is introduced which has different ids for different types compared to the `FieldType` enum.
+
+`FieldType` enum has different ways to represent ids for types and their arrays and has some unfortunate public methods which would not fit the new format. (for example `FieldType#DATE` returns `getTypeSize` wrong for the new format). It is desired to have a new enum that does not have those problems and is more open to type additions in the future.
+
+Note that, the new `FieldKind` enum with those new ids will be used in the `GenericRecord` API for both `Portable` and the new format. `FieldType` and `Portable` will be deprecated in the future.
+
+=== Unsigned Integers
+
+There is support for unsigned integer types. The representation of unsigned integers is done with the smallest signed integer type that can represent it (except for u64, since there is no such type). So, basically,
+
+* u8 is represented by → i16
+* u16 is represented by → i32
+* u32 is represented by → i64
+* u64 is represented by → BigInteger
+
+=== Enums
+
+There is no support for enums in the wire-level format. The representation of enums is left to the user. 
+
+=== Nullable Primitives
+
+There is support for nullable primitive types as they can be useful in SQL and might play nicely with languages that have a concept to represent them. For example, a C# user might use `Nullable<PrimitiveType>`, or Java users might use the class representation of primitive types.
+
+They are implemented as variable-sized types. The `null` values of such types are represented exactly as `null` variable-sized fields, with the offset of `-1` and no data.
+
+== Header
+
+The partition hash and the type id are common for all serialization methods supported by Hazelcast. Therefore, the new format is no exception and every serialized object has a header + payload on the wire.
+
+[cols="1,1,1"]
+|===
+|Name |Type |Description
+|Partition hash |i32 |`BIG_ENDIAN` integer, used for key objects. Not applicable to value objects.
+|Type id |i32 |`BIG_ENDIAN` integer that determines the serializer to be used. -55 for compact.
+|===
+
+== Var-Size Objects
+
+In this section, how a user-defined type is represented at the wire level is described. Consists of `Header`, `Data` and `Offsets` sections in this order.
+
+=== Header Section
+
+[cols="1,1,1"]
+|===
+|Name |Type |Description
+|Schema id |i64 |	
+Hash of the schema.
+|Data length |i32 |Length of the DATA SECTION below.
+|===
+
+=== Data Section
+
+[cols="1,1"]
+|===
+|Name |Description
+|Fixed-size Fields | Offsets of these fields will be deduced from the schema
+|Variable-size Fields | 
+|===
+
+=== Offsets Section
+
+[cols="1,1,1"]
+|===
+|Name |Type |Description
+|Variable-Size FieldOffset index 0 |u8/u16/i32 |The index of a field offset is written in the Schema. Offsets of variable length fields. -1 for null
+|Variable-Size FieldOffset index 1 |u8/u16/i32 | 
+|Variable-Size FieldOffset index n |u8/u16/i32 | 
+|===
+
+Note that if the composed data does not include any variable-size field in the schema, `Variable-Size FieldOffset` and `DataLength` will not exist on the wire.
+
+Similarly, if there is no fixed-size field in the schema, `Fixed-Size Field`s will not exist on the wire.
+
+Variable-Size FieldOffsets are calculated from the beginning of the DATA SECTION shown in the table above.
+
+Variable-Size FieldOffset sizes vary depending on the Data Length.
+
+* Data Length <= `254`, offsets are u8 (`255` is reserved for `NULL`)
+* Data Length <= `65534` , offsets are u16 (`65535` is reserved for `NULL`)
+* Otherwise, offsets are i32.
+
+Length is written before offsets so that the binary can be skipped even when the schema cannot be found.
+
+A Variable-Size FieldOffset is `-1` if a Variable-Size field is `null`.
+
+Fixed-Size Fields cannot be `null`.
+
+== Fixed-Size Fields
+
+The fixed-size fields are written right after the `Length` field consecutively. They are accessed via `offset` written in the Schema.
+
+On the schema, the offset for a fixed-size field is determined as follows:
+
+* The first field always starts from offset 0.
+* Fields are ordered by their size in descending order.
+* When sizes are the same the fields are ordered by field name.
+* Each offset is calculated by adding the size of the last field to the last offset.
+
+The only exception to the above rule is boolean fields. Since up to 8 booleans can be packed into a single byte, they are treated specially, and extra information is stored in the schema (nothing extra on the data) for the bit index of the boolean fields. Boolean fields are written at the end of the fixed-size fields.
+
+== Variable-Size Fields
+
+The offsets of variable-size fields are written at the end in the alphabetical order of the field names. To read a variable-size field from the data, one should read the index of the offset from the Schema. Then read the related index is read from the end of the data to get the offset. The variable-size field can be read from this offset.
+
+On the schema, the index for a variable-size field is determined as follows:
+
+* The fields are given the index incrementally according to the order of the field names starting from 0.
+
+Based on the length of the serialized data, the offsets of the variable-size fields might be represented by 1, 2, or 4 bytes. Note that, this does not mean that offsets will be represented by variable-size integers. It simply means that all variable-size field offsets will either be 1, 2, or 4 bytes per serialized object, depending on its size.
+
+== Schema
+
+[cols="1,1"]
+|===
+|Name |Type
+|type name |string
+|number of fields |i32
+|name of field 0 |string
+|typeid of field 0 |i32
+|name of field 1 |string
+|typeid of field 1 |i32
+|... |...
+|name of field n |string
+|typeid of field n |i32
+|===
+
+When writing a schema to the wire, fields will be ordered according to their name so that the same structure will result in the same byte representation and produce the same schema id.
+
+The offsets and indexes are also decided on the ordered fields. The smaller-sized fields come first. The order is by name within the same size fields.
+
+In the Schema class, each field will either
+
+* have a positive offset, if it is a fixed-size field
+* have a positive index if it is a variable-size field
+* have a positive bit offset if it is a boolean field. This bit offset is the offset within the byte given by the normal offset
+
+== Schema ID
+
+We are using 64bit https://en.wikipedia.org/wiki/Rabin_fingerprint[Rabin fingerprint] to create [.inline-comment-marker]#a schema id#.
+
+Rabin fingerprint is chosen mostly because it is recommended in Avro’s documents as follows +
+https://avro.apache.org/docs/current/spec.html#schema_primitive
+
+[source,text]
+----
+At the opposite extreme, the smallest fingerprint recommended is a 64-bit Rabin fingerprint. Below, there is a provided pseudo-code for this algorithm that can be easily translated into any programming language. 64-bit fingerprints should guarantee uniqueness for schema caches of up to a million entries (for such a cache, the chance of a collision is 3E-8). It is not recommended to use shorter fingerprints, as the chances of collisions is too high (for example, with 32-bit fingerprints, a cache with as few as 100,000 schemas has a 50% chance of having a collision).
+----
+
+The schema id is calculated from the byte array representation of the schema described above.
+
+The implementation that is used is as follows:
+
+[source,java,linenums]
+----
+long fingerprint64(byte[] buf) {
+  if (FP_TABLE == null) initFPTable();
+  long fp = EMPTY;
+  for (int i = 0; i < buf.length; i++)
+    fp = (fp >>> 8) ^ FP_TABLE[(int)(fp ^ buf[i]) & 0xff];
+  return fp;
+}
+
+static long EMPTY = 0xc15d213aa4d7a795L;
+static long[] FP_TABLE = null;
+
+void initFPTable() {
+  FP_TABLE = new long[256];
+  for (int i = 0; i < 256; i++) {
+    long fp = i;
+    for (int j = 0; j < 8; j++)
+      fp = (fp >>> 1) ^ (EMPTY & -(fp & 1L));
+    FP_TABLE[i] = fp;
+  }
+}
+----
+
+== Arrays
+
+Arrays of fix-sized items can not have `null` items. On the other hand, arrays of variable-size items may contain `null` items.
+
+=== Array of Fixed-size Items
+
+[cols=",",options="header",]
+|===
+|Name |Type
+|Number of items |i32
+|item 0 |item type
+|item 1 |item type
+|item 2 |item type
+|item n |item type
+|===
+
+=== Array of Variable-size Items
+
+Consists of `Header`, `Data` and `Offsets` sections in this order.
+
+=== Header Section
+
+[cols="1,1"]
+|===
+|Name |Type
+|Data length |i32
+|Number of items |i32
+|===
+
+=== Data Section
+
+[cols="1,1"]
+|===
+|Name |Type
+|Item 0 | item type
+|Item 1 | item type
+|... | ...
+|Item n | item type
+|===
+
+=== Offsets Section
+
+[cols="1,1"]
+|===
+|Name |Type
+|Item 0 offset | u8/u16/i32
+|Item 1 offset | u8/u16/i32
+|... | ...
+|Item n offset | u8/u16/i32
+|===
+
+
+---
+
+An array can contain only single type of items.
+In the case of Compact[] all the items must have the same schema, i.e their schema id must be equal. If an array of different items is provided, related APIs throw HazelcastSerializationException.
+
+Offsets are calculated from the beginning of the DATA SECTION shown in the table above.
+
+Data Length is the length of the DATA SECTION shown in table above.
+
+Offset sizes vary depending on the Data Length.
+
+* Data Length <= `254`, offsets are u8 (`255` is reserved for `NULL`)
+* Data Length <= `65534` , offsets are u16 (`65535` is reserved for `NULL`)
+* Otherwise, offsets are i32.
+
+Items can be `null`. The corresponding offset will be set to `-1` in that case.
+
+== Nullable Values
+
+Fixed-size fields will always be on the binary and take up space. On the other hand, when variable-size fields are set to `null`, their offset will be set to `-1` in the binary, and no further data will be written.

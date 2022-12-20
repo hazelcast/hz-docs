@@ -1,17 +1,17 @@
 = Compact Serialization Binary Specification
-:description: This document describes the binary specification of compact serialization. You will learn how serialized data look like in binary.
+:description: This document describes the binary specification of compact serialization. You will learn what serialized data look like in binary.
 
 {description}
 
 == Introduction
 
-Every serialized user object consists of a header and a data. There is also a schema that is separate from the serialized object. Schemas and  serialized user objects are linked using the schema id written in the data section.
+Every serialized user object consists of a header and data. There is also a schema that is separate from the serialized object. Schemas and serialized user objects are linked using the schema id written in the data section.
 
 == Data Types
 
-The table below shows the data types that are be supported by compact serialization.
+The table below shows the data types that are supported by compact serialization.
 
-Endianness for primitives are configurable and by default they are written in BIG_ENDIAN. This configuration is applied to user datatypes and also all the primitives used on the format. These include size of the arrays, number of items, length of the data, schema-id, offsets etc. The endianness is inherited from the existing endianness configuration, a new endianness config isn't introduced for compact.
+Endianness for primitives is configurable and by default, they are written in BIG_ENDIAN. This configuration is applied to user types and also all the primitives used in the format. These include the size of the arrays, number of items, length of the data, schema-id, offsets, etc. The endianness is inherited from the existing endianness configuration, a new endianness config isn't introduced for compact.
 
 [cols="1,1,1,1,1,1,1,1,1,1,3"]
 |===
@@ -159,11 +159,11 @@ offsetSeconds is range between +/-18:00:00 hour
 
 === Type Ids
 
-Each type supported in the wire format have its own type id. The type ids are used while constructing the schemas, performing type checks for user access to fields, and are exposed to the user as a public API.
+Each type supported in the wire format has its type id. The type ids are used while constructing the schemas, performing type checks for user access to fields, and are exposed to the user as a public API.
 
-To distinguish different types supported in the wire-level, a new enum called `FieldKind` is introduced which has different ids for different types compared to the `FieldType` enum.
+To distinguish different types supported in the wire-level format, a new enum called `FieldKind` is introduced which has different ids for different types compared to the `FieldType` enum.
 
-`FieldType` enum has different ways to represent ids for types and their arrays and has some unfortunate public methods which would not fit the new format. (for example `FieldType#DATE` returns `getTypeSize` wrong for the new format). It is desired to have a new enum that does not have those problems and is more open to type additions in the future.
+The `FieldType` enum has different ways to represent ids for types and their arrays and has some unfortunate public methods which would not fit the new format. (for example `FieldType#DATE` returns `getTypeSize` wrong for the new format). It is desired to have a new enum that does not have those problems and is more open to type additions in the future.
 
 Note that, the new `FieldKind` enum with those new ids will be used in the `GenericRecord` API for both `Portable` and the new format. `FieldType` and `Portable` will be deprecated in the future.
 
@@ -188,7 +188,7 @@ They are implemented as variable-sized types. The `null` values of such types ar
 
 == Header
 
-The partition hash and the type id are common for all serialization methods supported by Hazelcast. Therefore, the new format is no exception and every serialized object has a header in addition to payload on the wire.
+The partition hash and the type id are common for all serialization methods supported by Hazelcast. Therefore, the new format is no exception and every serialized object has a header in addition to the payload on the wire.
 
 [cols="1,1,1"]
 |===
@@ -199,7 +199,7 @@ The partition hash and the type id are common for all serialization methods supp
 
 == Var-Size Objects
 
-In this section, how a user-defined type is represented at the wire level is described. Consists of `Header`, `Data` and `Offsets` sections in this order.
+In this section, how a user-defined type is represented at the wire level is described. Consists of `Header`, `Data`, and `Offsets` sections in this order.
 
 === Header Section
 
@@ -240,7 +240,7 @@ Similarly, if there is no fixed-size field in the schema, `Fixed-Size Fields` wi
 `Variable-Size FieldOffset` sizes vary depending on the Data Length.
 
 * Data Length <= `254`, offsets are `u8` (`255` is reserved for `null`)
-* Data Length <= `65534` , offsets are `u16` (`65535` is reserved for `null`)
+* Data Length <= `65534`, offsets are `u16` (`65535` is reserved for `null`)
 * Otherwise, offsets are `i32`.
 
 Length is written before offsets so that the binary can be skipped even when the schema cannot be found.
@@ -307,7 +307,7 @@ https://avro.apache.org/docs/current/spec.html#schema_primitive
 
 [source,text]
 ----
-At the opposite extreme, the smallest fingerprint recommended is a 64-bit Rabin fingerprint. Below, there is a provided pseudo-code for this algorithm that can be easily translated into any programming language. 64-bit fingerprints should guarantee uniqueness for schema caches of up to a million entries (for such a cache, the chance of a collision is 3E-8). It is not recommended to use shorter fingerprints, as the chances of collisions is too high (for example, with 32-bit fingerprints, a cache with as few as 100,000 schemas has a 50% chance of having a collision).
+At the opposite extreme, the smallest fingerprint recommended is a 64-bit Rabin fingerprint. Below, there is a provided pseudo-code for this algorithm that can be easily translated into any programming language. 64-bit fingerprints should guarantee uniqueness for schema caches of up to a million entries (for such a cache, the chance of a collision is 3E-8). It is not recommended to use shorter fingerprints, as the chances of collisions are too high (for example, with 32-bit fingerprints, a cache with as few as 100,000 schemas has a 50% chance of having a collision).
 ----
 
 The schema id is calculated from the byte array representation of the schema described above.
@@ -356,7 +356,7 @@ Arrays of fix-sized items can not have `null` items. On the other hand, arrays o
 
 === Array of Variable-size Items
 
-Consists of `Header`, `Data` and `Offsets` sections in this order.
+Consists of `Header`, `Data`, and `Offsets` sections in this order.
 
 === Header Section
 
@@ -392,17 +392,17 @@ Consists of `Header`, `Data` and `Offsets` sections in this order.
 
 ---
 
-An array can contain only single type of items.
+An array can contain only a single type of item.
 In the case of `Compact[]` all the items must have the same schema, i.e their schema id must be equal. 
 
 Offsets are calculated from the beginning of the `DATA SECTION` shown in the table above.
 
-`Data Length` is the length of the `DATA SECTION` shown in table above.
+`Data Length` is the length of the `DATA SECTION` shown in the table above.
 
 Offset sizes vary depending on the Data Length.
 
 * Data Length <= `254`, offsets are `u8` (`255` is reserved for `null`)
-* Data Length <= `65534` , offsets are `u16` (`65535` is reserved for `null`)
+* Data Length <= `65534`, offsets are `u16` (`65535` is reserved for `null`)
 * Otherwise, offsets are `i32`.
 
 Items can be `null`. The corresponding offset will be set to `-1` in that case.

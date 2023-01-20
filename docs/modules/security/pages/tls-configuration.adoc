@@ -11,8 +11,56 @@ Management Center documentation.
 
 === Updating Certificates in the Running Cluster
 
-Hazelcast allows updating TLS certificates on the members
-without fully stopping the cluster. You can stop the cluster members
+Hazelcast allows updating TLS certificates on the members.
+Depending on the property `keyMaterialDuration`, you might or might not need
+to restart cluster members.
+
+When a non-negative `keyMaterialDuration` value is used:
+
+*1. If new certificates are not trusted by the members*
+
+This is usually a case when self-signed certificates are used on the members.
+
+Before we can deploy new member certificates, we have to update the list of trusted certificates on all members:
+
+* Import all new certificates to every member trustStore, so it contains both old and new ones.
+* Wait at least for the time specified in the `keyMaterialDuration` parameter.
+* After completing the above steps, follow the steps described in the next section (certificates trusted).
+
+*2. When new certificates are already trusted by the members*
+
+Switch certificates/keys on all members:
+
+* Replace the private key and certificate in every member keyStore.
+
+At the latest, after the specified duration, all new connections will use the new key material.
+
+*3. If the old certificates need to be removed*
+
+When the mutual TLS authentication is enabled, and there is a key leakage,
+or the old certificates are not allowed to be used anymore for any reason,
+the trustStores have to be updated once more.
+
+It uses the same approach as point 1 above, just instead of adding new certificates, 
+the old ones are removed from the updated truststores.
+
+At the latest, after the specified duration, new connections
+with old certificates (used for mutual authentication) won't be allowed.
+
+NOTE: When changing the key material, make sure your new configuration
+is valid and will allow others to connect. When the TLS key material
+is replaced, no changes are made to the existing connections. New material
+is only used for new connections. As a result, you might not realize any misconfigurations, if any, 
+until a new connection is established. You can use the standard
+tools in your system to verify the connection TLS settings, e.g., `openssl s_client ...`.
+Or you can also start a new client or a light member with
+the new TLS configuration.
+
+'''
+
+Even with a non-expiring key material configuration, i.e.,  
+`keyMaterialDuration` is either negative or not configured, it's possible
+to update the material without fully stopping the cluster. You can stop the cluster members
 one by one and replace the certificates gradually. We can
 distinguish two cases based on the fact if the new certificate
 is already trusted:

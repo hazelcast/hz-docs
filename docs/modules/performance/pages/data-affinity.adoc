@@ -173,7 +173,8 @@ The following are the benefits of doing the same operation with distributed `Exe
 * less lock duration, i.e., higher concurrency, for the `Customer` entry since
 lock/update/unlock cycle is done locally (local to the customer data)
 
-== PartitioningStrategy
+[[partitioningstrategy]]
+== Partitioning Strategies
 
 Another way of storing the related data on the same location is using/implementing
 the class `PartitioningStrategy`. Normally (if no partitioning strategy is defined),
@@ -192,9 +193,18 @@ both `ordergroup1` and `customergroup1` fall into the partition where `region1` 
 If the key implements `PartitionAware`, it works like the `DefaultPartitioningStrategy`.
 If it is a string key, it works like the `StringPartitioningStrategy`.
 
-Following are the example configuration snippets. Note that these strategy configurations are **per map**.
+You can configure the partitioning strategies:
 
-**Declarative Configuration:**
+* for each map, or
+* globally (applied to all of the data structures in your cluster).
+
+NOTE: The per map and global partitioning strategies are supported on the member side.
+Hazelcast Java clients only support the global strategy.
+
+=== Per Map Partitioning Strategy Configuration
+
+The following shows example configurations. For the declarative configurations (XML, YAML), you use the `partition-strategy` element.
+For the programmatic approach, you use the `setPartitioningStrategyClass()` method.
 
 [tabs] 
 ==== 
@@ -205,9 +215,11 @@ XML::
 ----
 <hazelcast>
     ...
-    <map name="name-of-the-map">
+    <map name="myMap">
         <partition-strategy>
              com.hazelcast.partition.strategy.StringAndPartitionAwarePartitioningStrategy
+             ///OR
+             ///YourCustomPartitioningStrategyClass <1>
         </partition-strategy>
     </map>
     ...
@@ -221,36 +233,37 @@ YAML::
 ----
 hazelcast:
   map:
-    name-of-the-map:
+    myMap:
       partition-strategy: com.hazelcast.partition.strategy.StringAndPartitionAwarePartitioningStrategy
+      # OR
+      # partition-strategy: YourCustomPartitioningStrategyClass <1>
 ----
-====
 
-**Programmatic Configuration:**
-
+Java Member API::
++
 [source,java]
 ----
 Config config = new Config();
-MapConfig mapConfig = config.getMapConfig("name-of-the-map");
+MapConfig mapConfig = config.getMapConfig("myMap");
 PartitioningStrategyConfig psConfig = mapConfig.getPartitioningStrategyConfig();
 psConfig.setPartitioningStrategyClass( "StringAndPartitionAwarePartitioningStrategy" );
 
 // OR
-psConfig.setPartitioningStrategy(YourCustomPartitioningStrategy);
+psConfig.setPartitioningStrategy(YourCustomPartitioningStrategy); <1>
 ...
 ----
-
-You can also define your own partition strategy by implementing the class `PartitioningStrategy`.
-To enable your implementation, add the full class name to your Hazelcast configuration using either
+====
+<1> You can define your own partition strategy by implementing the class https://docs.hazelcast.org/docs/{page-component-version}/javadoc/com/hazelcast/partition/PartitioningStrategy.html[`PartitioningStrategy`]. To enable your implementation, add the full class name to your Hazelcast configuration using either
 the declarative or programmatic approach, as exemplified above.
 
-The examples above show how to define a partitioning strategy per map.
-Note that all the members of your cluster must have the same
-partitioning strategy configurations.
+NOTE: All the cluster members must have the same partitioning strategy configurations.
 
-You can also change a global strategy which is applied to all the data structures in your cluster.
-This can be done by defining the `hazelcast.partitioning.strategy.class` system property.
-An example declarative way of configuring this property is shown below:
+=== Global Partitioning Strategy Configuration
+
+You can also set a global strategy which is applied to all the data structures in your cluster.
+This can be done by setting the `hazelcast.partitioning.strategy.class` property.
+
+The following shows example configurations.
 
 [tabs] 
 ==== 
@@ -279,6 +292,14 @@ hazelcast:
   properties:
     hazelcast.partitioning.strategy.class: com.hazelcast.partition.strategy.StringAndPartitionAwarePartitioningStrategy
 ----
+
+Java Member/Client API::
++
+[source,java]
+----
+Config config = new Config();
+config.setProperty( "hazelcast.partitioning.strategy.class", "com.hazelcast.partition.strategy.StringAndPartitionAwarePartitioningStrategy" );
+----
 ====
 
 You can specify the aforementioned out-of-the-box strategies or your custom
@@ -286,7 +307,3 @@ partitioning strategy.
 
 You can also use other system property configuring options as explained in the
 xref:configuration:configuring-with-system-properties.adoc[Configuring with System Properties section].
-
-The per map and global (cluster) partitioning strategies are supported on the member side.
-Hazelcast Java clients only support the global strategy and it is configured
-via the same system property used in the members (`hazelcast.partitioning.strategy.class `).

@@ -1,17 +1,31 @@
 = Compact Serialization Binary Specification
-:description: This topic describes the binary specification of Compact serialization, showing how serialized data look like in binary format.
+:description: The Compact Serialization Binary Specification defines the binary format of the Compact Serialization, the supported types, and the Compact Schema.
 
-{description} See xref:serialization:compact-serialization.adoc[Compact Serialization] on implementing and using this Hazelcast-specific serialization option.
+{description} 
+
+The supported data types include:
+
+* Fixed-size types like boolean, int8, int16, int32, int64, float32, and float64
+* Nullable versions of the fixed-size types
+* Variable-size types like string, decimal, time, date, timestamp, and timestamp with timezone
+* Arrays of the types listed above, and
+* Nested Compact serializable objects containing the types listed above, and arrays of them.
+
+*Note*: With the exception of fixed-size types, all other types are considered variable-size.
+
+See xref:serialization:compact-serialization.adoc[Compact Serialization] on implementing and using this Hazelcast-specific serialization option.
 
 == Introduction
 
-Every serialized user object consists of a header and data. There is also a schema that is separate from the serialized object. Schemas and serialized user objects are linked using the schema ID written in the data section.
+Every serialized user object consists of a header and data. Compact Serialization includes a schema that describes the serialized data and a schema ID, represented by an 8-byte long fingerprint, that uniquely identifies the schema. The schema and the data are separate entities that are connected by the schema ID.
 
 == Data Types
 
-The table below shows the data types that are supported by the Compact serialization.
+The table below shows the data types that are supported by the Compact Serialization.
 
-You can configure the endianness for primitives; they are written in `BIG_ENDIAN` by default. This configuration is applied to user types and all the primitives used in the format. These include the size of arrays, number of items, length of data, schema ID and offsets. A new endianness configuration does not exist for Compact serialization; it is inherited from the xref:serialization:serialization-configuration.adoc#configuration-options[existing configuration].
+All primitive types, user types, array size, number of items, length of data, schema ID, and offsets are configured in Compact Serialization with a default endianness of `BIG_ENDIAN`.
+
+You cannot redefine the endianness in Compact Serialization; it is inherited from xref:serialization:serialization-configuration.adoc#configuration-options[existing configuration].
 
 [cols="1,1,1,1,1,1,1,1,3,1"]
 |===
@@ -474,15 +488,15 @@ int8 0 for false
 
 === Type IDs
 
-Each type supported in the wire format has its type ID. The type IDs are used while constructing the schemas, performing type checks when accessing to fields, and are exposed as a public API.
+Each type supported in the wire format has its type ID. The type IDs are used while constructing the schemas, performing type checks when accessing fields, and are exposed in a https://github.com/hazelcast/hazelcast/blob/v5.2.1/hazelcast/src/main/java/com/hazelcast/nio/serialization/FieldKind.java#L31[public API].
 
 === Nullable Primitives
 
-They are implemented as variable-sized types. The `null` values of such types are represented exactly as `null` variable-sized fields, with the offset of `-1` and no data.
+Nullable primitives are implemented as variable-sized types. The `null` values of nullable primitives are represented like `null` variable-sized fields, with the offset of `-1` and no data.
 
 == Header
 
-The partition hash and the type ID are common for all serialization methods supported by Hazelcast. Therefore, the new format is no exception and every serialized object has a header in addition to the payload on the wire.
+The partition hash and the type ID are common for all serialization methods supported by Hazelcast, including Compact Serialization. Every serialized object has a header and the payload on the wire.
 
 [cols="1,1,3"]
 |===
@@ -491,45 +505,43 @@ The partition hash and the type ID are common for all serialization methods supp
 |Type ID |i32 |`BIG_ENDIAN` integer that determines the serializer to be used. -55 for compact.
 |===
 
-== Var-Size Objects
+== Var-size Objects
 
-In this section, how a user-defined type is represented at the wire level is described. The binary consists of `Header`, `Data`, and `Offsets` sections in this order.
+Var-size objects are user-defined objects whose binary representation consists of Header, Data, and Offsets sections, given in this order.
 
-=== Header Section
+=== Header
 
 [cols="1,1,1"]
 |===
 |Name |Type |Description
-|Schema ID |i64 |	
-Hash of the schema.
-|Data length |i32 |Length of the DATA SECTION below.
+|Schema ID |i64 |Schema Hash.
+|Data length |i32 |Length of the Data Section.
 |===
 
-=== Data Section
+=== Data
 
 [cols="1,1"]
 |===
 |Name |Description
-|Fixed-size Fields | Offsets of these fields will be deduced from the schema.
+|Fixed-size Fields | Fixed-size field offsets are deduced from the <<schema>>. 
 |Variable-size Fields | 
 |===
 
-=== Offsets Section
+=== Offsets
 
 [cols="1,1,3"]
 |===
 |Name |Type |Description
-|Variable-Size FieldOffset index 0 |u8/u16/i32 |The index of a field offset is written in the Schema. Offsets of variable length fields. -1 for null
-|Variable-Size FieldOffset index 1 |u8/u16/i32 |The index of a field offset is written in the Schema. Offsets of variable length fields. -1 for null
+|Variable-Size FieldOffset index 0 |u8/u16/i32 |The index of a field offset is written in the schema. Offsets of variable length fields. -1 for null
+|Variable-Size FieldOffset index 1 |u8/u16/i32 |The index of a field offset is written in the schema. Offsets of variable length fields. -1 for null
 |... |... | 
-|Variable-Size FieldOffset index n |u8/u16/i32 |The index of a field offset is written in the Schema. Offsets of variable length fields. -1 for null
+|Variable-Size FieldOffset index n |u8/u16/i32 |The index of a field offset is written in the schema. Offsets of variable length fields. -1 for null
 |===
 
-Note that if the composed data does not include any variable-size field in the schema, `Variable-Size FieldOffset` and `DataLength` will not exist on the wire.
-
+*Note*: If the composed data does not include any variable-size field in the schema, `Variable-Size FieldOffset` and `DataLength` will not exist on the wire.
 Similarly, if there is no fixed-size field in the schema, `Fixed-Size Fields` will not exist on the wire.
 
-`Variable-Size FieldOffsets` are calculated from the beginning of the `DATA SECTION` shown in the table above.
+`Variable-Size FieldOffset`s are calculated from the beginning of the `DATA SECTION` shown in the table above.
 
 `Variable-Size FieldOffset` sizes vary depending on the Data Length.
 
@@ -545,18 +557,19 @@ Fixed-Size Fields cannot be `null`.
 
 == Fixed-Size Fields
 
-The fixed-size fields are written right after the `Length` field consecutively. They are accessed via `offset` written in the Schema.
+The fixed-size fields are written after the `Length` field, consecutively. Fixed-size fields are accessed via their offsets calculated from the schema.
 
 On the schema, the offset for a fixed-size field is determined as follows:
 
 * The first field always starts from offset 0.
 * Fields are ordered by their size in descending order.
-* When sizes are the same the fields are ordered by field name.
+* When field sizes are the same, fields are ordered by the field name.
 * Each offset is calculated by adding the size of the last field to the last offset.
 
-The only exception to the above rule is boolean fields. Since up to 8 booleans can be packed into a single byte, they are treated specially, and extra information is stored in the schema (nothing extra on the data) for the bit index of the boolean fields. Boolean fields are written at the end of the fixed-size fields.
+The only exception to the above rule is boolean fields. Size of a boolean is a byte, but 8 booleans can be packed into a single byte and these booleans can share the same offset and byte.
+To achieve that, an extra information is stored in the schema (nothing extra on the data) for the bit index of the boolean fields. Boolean fields are written at the end of the fixed-size fields.
 
-== Variable-Size Fields
+== Variable-size Fields
 
 The offsets of variable-size fields are written at the end in the alphabetical order of the field names. To read a variable-size field from the data, one should read the index of the offset from the schema. Then, the related index is read from the end of the data to get the offset. The variable-size field can be read using this offset.
 
@@ -566,7 +579,7 @@ On the schema, the index for a variable-size field is determined as follows:
 
 Based on the length of the serialized data, the offsets of the variable-size fields might be represented by 1, 2, or 4 bytes. Note that this does not mean that offsets will be represented by variable-size integers. It simply means that all variable-size field offsets will be either 1, 2, or 4 bytes per serialized object, depending on its size.
 
-== Schema
+== Schema [[schema]]
 
 [cols="1,1"]
 |===

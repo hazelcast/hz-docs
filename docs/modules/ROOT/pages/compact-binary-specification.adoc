@@ -11,7 +11,7 @@ The supported data types include:
 * Arrays of the types listed above, and
 * Nested Compact serializable objects containing the types listed above, and arrays of them.
 
-*Note*: With the exception of fixed-size types, all other types are considered variable-size.
+*Note*: Except fixed-size types, all other types are considered variable-size.
 
 See xref:serialization:compact-serialization.adoc[Compact Serialization] on implementing and using this Hazelcast-specific serialization option.
 
@@ -555,9 +555,9 @@ A Variable-Size FieldOffset is `-1` if a Variable-Size field is `null`.
 
 Fixed-Size Fields cannot be `null`.
 
-== Fixed-Size Fields
+== Fixed-Size Fields [[fixed-size-fields]]
 
-The fixed-size fields are written after the `Length` field, consecutively. Fixed-size fields are accessed via their offsets calculated from the schema.
+The fixed-size fields are written after the `Length` field, consecutively. Fixed-size fields are accessed via their offsets that are calculated from the schema.
 
 On the schema, the offset for a fixed-size field is determined as follows:
 
@@ -566,18 +566,18 @@ On the schema, the offset for a fixed-size field is determined as follows:
 * When field sizes are the same, fields are ordered by the field name.
 * Each offset is calculated by adding the size of the last field to the last offset.
 
-The only exception to the above rule is boolean fields. Size of a boolean is a byte, but 8 booleans can be packed into a single byte and these booleans can share the same offset and byte.
-To achieve that, an extra information is stored in the schema (nothing extra on the data) for the bit index of the boolean fields. Boolean fields are written at the end of the fixed-size fields.
+The only exception to the above rule is boolean fields. The size of a boolean is a byte, but 8 booleans can be packed into a single byte and these booleans can share the same offset and byte.
+To achieve that, extra information is stored in the schema (nothing extra on the data) for the bit index of the boolean fields. Boolean fields are written at the end of the fixed-size fields.
 
-== Variable-size Fields
+== Variable-size Fields [[variable-size-fields]]
 
-The offsets of variable-size fields are written at the end in the alphabetical order of the field names. To read a variable-size field from the data, one should read the index of the offset from the schema. Then, the related index is read from the end of the data to get the offset. The variable-size field can be read using this offset.
+The offsets of variable-size fields are written at the end in the alphabetical order of the field names. Each variable-size field offset has an index, starting from 0, written in the schema. To read a variable-size field from the data, one should read the index of the offset from the schema. Then, the offset associated with the related index is read from the end of the data. The variable-size field can be read using this offset.
 
 On the schema, the index for a variable-size field is determined as follows:
 
-* The fields are given the index incrementally according to the order of the field names starting from 0.
+* The fields are given the index incrementally, according to the order of the field names, starting from 0.
 
-Based on the length of the serialized data, the offsets of the variable-size fields might be represented by 1, 2, or 4 bytes. Note that this does not mean that offsets will be represented by variable-size integers. It simply means that all variable-size field offsets will be either 1, 2, or 4 bytes per serialized object, depending on its size.
+Based on the length of the serialized data, the offsets of the variable-size fields might be represented by 1, 2, or 4 bytes. That is, all variable-size field offsets are either 1, 2, or 4 bytes per serialized object, depending on the field size.
 
 == Schema [[schema]]
 
@@ -595,15 +595,22 @@ Based on the length of the serialized data, the offsets of the variable-size fie
 |type ID of field n |i32
 |===
 
-When writing a schema to the wire, fields are ordered according to their names so that the same structure results in the same byte representation and produces the same schema ID.
+A schema keeps the type name of the Compact type and some fields. A schema represents the structure of a Compact serialized data and allows reading the data.
+The type name is used to differentiate the user types which have the same number of fields with the same types. 
 
-The offsets and indexes are also decided on the ordered fields. The smaller-sized fields come first. The order is by name within the same size fields.
+Only schema ID is written to serialized data, however, schemas need to be exchanged between a client and a member to be able to serialize that data. A schema orders
+its fields by field name during initialization, so that the schema in both the client and the member produces the same schema ID.
 
-In the schema class, each field will either
+During initialization, field offsets and indexes are assigned as well. Offsets are pointers to the locations of the fields in the serialized data. Indexes are for enumerating
+variable-size fields' offsets. Variable-size fields' offsets are written in the serialized data. 
+For details on how fixed-size field offsets are assigned, see <<fixed-size-fields, Fixed-Size Fields>>. 
+For details on how variable-size field indexes and offsets are assigned, see <<variable-size-fields, Variable-size Fields>>.
+
+In the schema class, each field will either:
 
 * have a positive offset, if it is a fixed-size field
 * have a positive index if it is a variable-size field
-* have a positive bit offset if it is a boolean field, which is the offset within the byte given by the normal offset
+* have a positive bit offset if it is a boolean field, which is the offset within the byte given by the normal offset.
 
 == Schema ID
 
@@ -616,6 +623,8 @@ https://avro.apache.org/docs/1.11.1/specification/_print/#schema-fingerprints[do
 ----
 At the opposite extreme, the smallest fingerprint recommended is a 64-bit Rabin fingerprint. Below, there is a provided pseudo-code for this algorithm that can be easily translated into any programming language. 64-bit fingerprints should guarantee uniqueness for schema caches of up to a million entries (for such a cache, the chance of a collision is 3E-8). It is not recommended to use shorter fingerprints, as the chances of collisions are too high (for example, with 32-bit fingerprints, a cache with as few as 100,000 schemas has a 50% chance of having a collision).
 ----
+
+According to the quote, even with a schema cache with a million entries, the chance of a collision is very low. Therefore, there should not be a need to the change number of bits of the hashing algorithm soon. 
 
 The schema ID is calculated from the byte array representation of the schema described above.
 
@@ -647,7 +656,7 @@ void initFPTable() {
 
 == Arrays
 
-Arrays of fix-sized items can not have `null` items. On the other hand, arrays of variable-size items may contain `null` items.
+Arrays of fixed-size items can not have `null` items. On the other hand, arrays of variable-size items may contain `null` items.
 
 === Array of Fixed-size Items
 
@@ -665,7 +674,7 @@ Arrays of fix-sized items can not have `null` items. On the other hand, arrays o
 
 Consists of `Header`, `Data`, and `Offsets` sections in this order.
 
-=== Header Section
+=== Header
 
 [cols="1,1"]
 |===
@@ -674,7 +683,7 @@ Consists of `Header`, `Data`, and `Offsets` sections in this order.
 |Number of items |i32
 |===
 
-=== Data Section
+=== Data
 
 [cols="1,1"]
 |===
@@ -685,7 +694,7 @@ Consists of `Header`, `Data`, and `Offsets` sections in this order.
 |Item n | item type
 |===
 
-=== Offsets Section
+=== Offsets
 
 [cols="1,1"]
 |===
@@ -700,20 +709,23 @@ Consists of `Header`, `Data`, and `Offsets` sections in this order.
 ---
 
 An array can contain only a single type of item.
-In the case of Compact[], all the items must have the same schema, i.e, their schema ID must be equal.
+In the case of Compact[], all the items must have the same schema, that is, their schema ID must be equal.
 
-Offsets are calculated from the beginning of the `DATA SECTION` shown in the table above.
+Offsets are calculated from the beginning of the Data section.
 
-`Data Length` is the length of the `DATA SECTION` shown in the table above.
+`Data Length` is the length of the Data section.
 
 Offset sizes vary depending on the Data Length.
 
-* Data Length <= `254`, offsets are `u8` (`255` is reserved for `null`)
-* Data Length <= `65534`, offsets are `u16` (`65535` is reserved for `null`)
-* Otherwise, offsets are `i32`.
+* For Data Length <= `254`, offsets are `u8` (`255` is reserved for `null`)
+* For `255` < Data Length <= `65534`, offsets are `u16` (`65535` is reserved for `null`)
+* For Data Length > 65535, offsets are `i32`.
 
-Items can be `null`. The corresponding offset will be set to `-1` in that case.
+Variable-size items can be `null`. The corresponding offset will be set to `-1` in that case.
 
 == Nullable Values
 
-Fixed-size fields will be always on the binary and take up space. On the other hand, when variable-size fields are set to `null`, their offset will be set to `-1` in the binary, and no further data will be written.
+Nullable fields can be `null`. The `null` values are represented with `-1` offset in the binary, and no more data is written. On the other hand, non-nullable fields always 
+take up space in the binary.
+
+Fixed-size fields are non-nullable. Variable-size fields are nullable.

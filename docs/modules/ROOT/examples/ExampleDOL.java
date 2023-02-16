@@ -28,8 +28,8 @@ public class ExampleDOL implements DistributedObjectListener {
 
     @Override
     public void distributedObjectDestroyed(DistributedObjectEvent event) {
-        DistributedObject instance = event.getDistributedObject();
-        System.out.println("Destroyed " + instance.getName());
+        Object objectName = event.getObjectName();
+        System.out.println("Destroyed " + objectName);
     }
 }
 //end::sampledol[]

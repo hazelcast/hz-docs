@@ -207,7 +207,7 @@ Consider the following scenario:
 
 If member B restarts within the rebalance delay, all its persisted data will be restored from disk, and *the cluster will not repartition its data*. Any in-memory data in member B's partitions will be lost, and member B will still be listed as the owner of those partitions. So, even if the cluster has backups of in-memory data in maps, requests for that data will go to member B (unless the members have xref:data-structures:backing-up-maps.adoc#enabling-in-memory-backup-reads-embedded-mode[backup reads enabled]).
 
-NOTE: If members have backup reads enabled, some in-memory data may appear to have been kept. However, eventually the backups will be xref:consistency-and-replication:replication-algorithm.adoc#best-effort-consistency[synchronized with the primary partition] (member B).
+NOTE: If members have backup reads enabled, some in-memory data may appear to have been kept. However, eventually the backups will be xref:architecture:data-partitioning.adoc#best-effort-consistency[synchronized with the primary partition] (member B).
 
 While the member is down, operations on partitions that are owned by that member will be retried until they either time out or the member restarts and executes the requested operation. As a result, this option is best when you prefer a latency spike rather than migrating data over the network.
 
@@ -849,7 +849,7 @@ You can configure members to store your master encryption keys in a Java KeyStor
 * `polling-interval`: The polling interval (in seconds) for checking for changes in the KeyStore.
 Disabled by default.
 
-NOTE: Sensitive configuration values such as passwords should be protected using xref:configuration:variable-replacers.adoc[variable replacers].
+NOTE: Sensitive configuration values such as passwords should be protected using xref:configuration:configuring-declaratively.adoc[variable replacers].
 
 The Java KeyStore treats all `KeyStore.SecretKeyEntry` entries stored in the KeyStore as
 encryption keys. It expects that these entries use the same protection password as the KeyStore. Entries of other types (private key entries, certificate entries) are ignored. If the
@@ -928,7 +928,7 @@ by default.
 * `ssl`: The TLS/SSL configuration for HTTPS support. See the xref:security:tls-ssl.adoc[TLS/SSL section] for more
 information about how to use the `ssl` element.
 
-NOTE: Sensitive configuration properties such as `token` should be protected using xref:configuration:variable-replacers.adoc[variable replacers].
+NOTE: Sensitive configuration properties such as `token` should be protected using xref:configuration:configuring-declaratively.adoc[variable replacers].
 
 The HashiCorp Vault secure store implementation uses the official REST API to integrate with
 HashiCorp Vault. Only for the https://www.vaultproject.io/docs/secrets/kv/index.html[KV secrets engine^],
@@ -1023,6 +1023,14 @@ include::ROOT:example$/storage/SampleEncryptionAtRestConfiguration.java[tag=vaul
 == Data Structure Options
 
 Use the following options to configure persistence for xref:data-structures:map.adoc[map] and xref:jcache:overview.adoc[JCache] data structures.
+
+[NOTE]
+====
+You cannot persist a map if its name contains either of the following. Otherwise, Hazelcast throws an exception.
+
+* 255+ characters
+* Special characters (`*``:``"``'``|``<````,``>``?``/`)
+====
 
 [tabs] 
 ==== 

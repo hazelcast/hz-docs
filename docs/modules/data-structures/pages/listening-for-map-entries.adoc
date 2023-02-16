@@ -5,7 +5,7 @@
 
 == Listeners
 
-Hazelcast offers two methods for monitoring map activity. `MapListener` allows you to define actions that are triggered based on activity on any entry in the map. `EventListener` allows you to define actions based on activity taken on a specific map entry or set of map entries. You 'll use predicates to define the entries to be monitored for activity.
+Hazelcast offers two methods for monitoring map activity. `MapListener` allows you to define actions that are triggered based on activity on any entry in the map. `EventListener` allows you to define actions based on activity taken on a specific map entry or set of map entries. You'll use predicates to define the entries to be monitored for activity.
 
 
 == Listening to an Entire Map
@@ -19,7 +19,8 @@ If you want to listen to changes to all map entries, see xref:events:object-even
 
 
 
-The easiest way to explain this is through an example. We are going to listen for changes made to the map entry for an employee with the surname "smith". First, let's create the `Employee` class.
+The easiest way to explain this is through an example. We are going to listen for changes made to the map entry for an employee with the surname "smith".
+We will use JSON serialization. First, let's create the `Employee` class that we will use to create `HazelcastJsonValue` instances:
 
 [tabs] 
 ==== 
@@ -36,42 +37,39 @@ C++::
 --
 [source,cpp]
 ----
+#include <hazelcast/client/hazelcast_client.h>
 
-
-----
---
-
-C Sharp:: 
-+
--- 
-[source,cs]
-----
+struct Employee {
+    static hazelcast::client::hazelcast_json_value as_json(std::string surname){
+        return hazelcast::client::hazelcast_json_value("{ \"surname\": \"" + surname + "\" }");
+    }
+};
 
 ----
 --
-
 Node.js:: 
 + 
--- 
+--
 [source,javascript]
 ----
-
-----
---
-Python:: 
-+ 
--- 
-[source,python]
-----
-
+class Employee {
+    static asJson(surname) {
+        return new HazelcastJsonValue(JSON.stringify({surname: surname}));
+    }
+}
 ----
 --
 Go:: 
 + 
--- 
+--
 [source,go]
 ----
-
+func employee(surname string) serialization.JSON {
+	text := fmt.Sprintf(`{
+		"surname": "%s"
+	}`, surname)
+	return serialization.JSON(text)
+}
 ----
 --
 ====
@@ -95,33 +93,52 @@ C++::
 [source,cpp]
 ----
 
-
+int main() {
+    hazelcast::client::client_config config;
+    auto hz = hazelcast::new_client(std::move(config)).get();
+    auto map = hz.get_map("map").get();
+    hazelcast::client::query::sql_predicate sqlPredicate(hz,"surname=smith");
+    map->add_entry_listener(
+            hazelcast::client::entry_listener().on_added([](hazelcast::client::entry_event &&event) {
+                std::cout << "Entry Added:" << event << std::endl;
+            }).on_removed([](hazelcast::client::entry_event &&event) {
+                std::cout << "Entry Removed:" << event << std::endl;
+            }).on_updated([](hazelcast::client::entry_event &&event) {
+                std::cout << "Entry Updated:" << event  << std::endl;
+            }), sqlPredicate, true).get();
+    std::cout << "Entry Listener registered" << std::endl;
+}
 ----
 --
-
-C Sharp:: 
-+
--- 
-[source,cs]
-----
-
-----
---
-
 Node.js:: 
 + 
 -- 
 [source,javascript]
 ----
+const { Client, Predicates } = require('hazelcast-client');
 
-----
---
-Python:: 
-+ 
--- 
-[source,python]
-----
+async function main() {
+    const client = await Client.newHazelcastClient();
+    const map = await client.getMap('map');
+    const listener = {
+        added: (entryEvent) => {
+            console.log(`Entry added: ${entryEvent.key}, ${entryEvent.value}`);
+        },
+        removed: (entryEvent) => {
+            console.log(`Entry removed: ${entryEvent.key}, ${entryEvent.value}`);
+        },
+        updated: (entryEvent) => {
+            console.log(`Entry updated: ${entryEvent.key}, ${entryEvent.value}`);
+        }
+    };
+    await map.addEntryListenerWithPredicate(listener, new Predicates.sql('surname=smith'), undefined, true);
+    console.log('Entry listener registered');
+}
 
+main().catch(err => {
+    console.error('Error occurred:', err);
+    process.exit(1);
+});
 ----
 --
 Go:: 
@@ -133,48 +150,30 @@ func main() {
 	// error handling is omitted for brevity
 	ctx := context.TODO()
 	client, _ := hazelcast.StartNewClient(ctx)
-	entryListenerConfig := hazelcast.MapEntryListenerConfig{
-		IncludeValue: true,
-		Predicate:    predicate.Equal("surname", "Smith"),
-	}
-	m, _ := client.GetMap(ctx, "somemap")
-	entryListenerConfig.NotifyEntryAdded(true)
-	entryListenerConfig.NotifyEntryRemoved(true)
-	entryListenerConfig.NotifyEntryUpdated(true)
-	entryListenerConfig.NotifyEntryEvicted(true)
-	entryListenerConfig.NotifyEntryLoaded(true)
-
-	m.AddEntryListener(ctx, entryListenerConfig, func(event *hazelcast.EntryNotified) {
-		switch event.EventType {
-		case hazelcast.EntryAdded:
-			fmt.Println("Entry Added:", event)
-		case hazelcast.EntryRemoved:
-			fmt.Println("Entry Removed:", event)
-		case hazelcast.EntryUpdated:
-			fmt.Println("Entry Updated:", event)
-		case hazelcast.EntryEvicted:
-			fmt.Println("Entry Remove:", event)
-		case hazelcast.EntryLoaded:
-			fmt.Println("Entry Loaded:", event)
-		}
-	})
-
-
+	m, _ := client.GetMap(ctx, "map")
+	subscriptionID, _ := m.AddListenerWithPredicate(ctx, hazelcast.MapListener{
+		EntryAdded: func(event *hazelcast.EntryNotified) {
+			fmt.Println("Entry Added:", event.Key)
+		},
+		EntryUpdated: func(event *hazelcast.EntryNotified) {
+			fmt.Println("Entry Updated:", event.Key)
+		},
+		EntryRemoved: func(event *hazelcast.EntryNotified) {
+			fmt.Println("Entry Removed:", event.Key)
+		},
+	}, predicate.Equal("surname", "smith"), true)
 ----
 --
 ====
-
 
 NOTE: See xref:query:how-distributed-query-works.adoc[How Distributed Query Works] for more information about creating predicates. 
 
 When the listener is running, a change to any record with the name `smith` will display output similar to the one below. 
 
 ```
-entryAdded:EntryEvent {Address[192.168.178.10]:5702} key=1,oldValue=null,
-value=Person{name= smith }, event=ADDED, by Member [192.168.178.10]:5702
+Entry Added:EntryEvent{entryEventType=ADDED, member=Member [192.168.1.227]:5701 - 36e6eaf5-e267-4858-a5ea-6adc3be2f6ff this, name='map', key=1, oldValue=null, value={ "surname": "smith" }, mergingValue=null}
 ```
-
-In our example, we're sending an event log to the system output. You can replace this action with any code you want to run when the specified map event occurs. 
+In our example, we are sending an event log to the system output. You can replace this action with any code you want to run when the specified map event occurs. 
 
 NOTE: The default backwards-compatible event publishing strategy only publishes `UPDATED` events when map entries are updated to a value that matches the predicate with which the listener was registered. This implies that when using the default event publishing strategy, your listener is not notified about an entry whose value is updated from one that matches the predicate to a new value that does not match the predicate.
 
@@ -219,7 +218,7 @@ to learn about the methods used to intercept the changes in a map.
 
 Methods available within the `MapInterceptor` interface:
 
-[cols="1,1"]
+[cols="a,a"]
 |===
 
 |`interceptGet`

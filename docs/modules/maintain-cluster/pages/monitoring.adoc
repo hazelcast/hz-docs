@@ -62,8 +62,8 @@ can result in unexpected cluster partitioning behavior: After reaching `hazelcas
 partition table arrangement is initialized even though there’s no data. When used in large clusters (>100),
 this adds an unnecessary overhead of partition assignment on each member addition.
 * Check that you have configured an adequate backup count based on your SLAs.
-* When using distributed computing features such as executor service or entry processors,
-any change in the client application logic or in the implementation of these must also be applied on
+* When using distributed computing features, such as executor service or entry processors,
+any change in the client application logic or in the implementation of these must also be applied to
 the members. All the members must be restarted after the new code is deployed using the typical cluster
 re-deployment process: first shutdown the members, then deploy the new application JARs in the members' classpath,
 and start the members.
@@ -182,7 +182,7 @@ hazelcast:
 === Limiting Source Addresses
 
 By default, any instance of Management Center can connect to a cluster as long as it can be authenticated. To restrict access only to trusted instances of Management Center, you can define the trusted IP addresses in the `trusted-interfaces`
-configuration setting. This settings supports wildcards (`*`) and ranges (`-`).
+configuration setting. This setting supports wildcards (`*`) and ranges (`-`).
 
 [tabs] 
 ==== 
@@ -923,13 +923,19 @@ See the https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/exe
 
 == Health Check and Monitoring
 
-Hazelcast provides the HTTP-based Health Check endpoint, Health Check script and Health Monitoring utility.
+Hazelcast provides the following options for monitoring the health of your Hazelcast clusters:
 
-To be able to benefit from the Health Check endpoint and script,
-you must enable the Health Check using either one of the following configuration options:
+* HTTP-based health check endpoint
+* Health check script
+* Health monitoring utility
 
-Using the `network` configuration element:
+[[enable-hcheck]]
+=== Enabling the Health Check Endpoint and Script
 
+To use the health check endpoint and script, enable either of the following configuration options:
+
+* Using the `network` configuration element:
++
 [tabs] 
 ==== 
 XML:: 
@@ -963,8 +969,8 @@ hazelcast:
 ----
 ====
 
-Using the `advanced-network` configuration element:
-
+* Using the `advanced-network` configuration element:
++
 [tabs] 
 ==== 
 XML:: 
@@ -1001,58 +1007,56 @@ hazelcast:
 
 === Health Check
 
-This is Hazelcast's HTTP based health check implementation which provides
-basic information about your cluster and member (on which it is launched).
+You can use Hazelcast's HTTP-based health check implementation to get basic information about the cluster and member on which it is launched.
 
-First, you need to enable the health check as explained in the introduction of this section above.
+To use the HTTP-based health check:
 
-Now you retrieve information about your cluster's health status (member state,
-cluster state, cluster size, etc.) by launching `+http://<your member's host IP>:5701/hazelcast/health+` on your preferred browser.
-
-The following is the output with example values:
-
+. Enable the <<enable-hcheck, health check endpoint>>. 
+. Launch the health check from your preferred browser: `+http://<host IP of your member>:5701/hazelcast/health+`.
++
+The health check retrieves information about your cluster's health status, such as member state,
+cluster state, cluster size, etc. For example:
++
 ```
 {
   "nodeState": "ACTIVE",
   "clusterState": "ACTIVE",
-  "clusterSafe": true,
+  "clusterSafe": false,
   "migrationQueueSize": 0,
   "clusterSize": 3
 }
 ```
 
-`nodeState`: Specifies the state of member on which the health check is launched;
-see the xref:management:cluster-utilities.adoc#cluster-member-states[Member States section]
-to learn about the states of cluster members.
-`clusterState`: Specifies the state of cluster which the health checked member belongs to;
-see the xref:management:cluster-utilities.adoc#cluster-states[Cluster States section]
-to learn about the states of clusters.
-`clusterSafe`: Specifies whether the cluster is safe, i.e., there are no active partition
-migrations and all backups are in sync for each partition in the cluster;
-see the xref:management:cluster-utilities.adoc#safety-checking-cluster-members[Safety Checking section]
-to learn about the safety of clusters.
-`migrationQueueSize`: Specifies the count of remaining migration tasks while the cluster data
-is being repartitioned. See the xref:overview:data-partitioning.adoc[Data Partitioning section]
+* `nodeState`: State of the member on which the health check is launched. See xref:cluster-member-states.adoc#member-states[Cluster and Member States] to learn more about the states of cluster members.
+* `clusterState`: State of cluster that the health-checked member belongs to. See xref:cluster-member-states.adoc#cluster-states[Cluster and Member States] to learn more about cluster states.
+* `clusterSafe`: Whether the cluster is safe, i.e., there are no active partition
+migrations and all backups are in sync for each partition in the cluster. See xref:shutdown.adoc#ensuring-members-and-clusters-are-in-a-safe-state[Shutting Down Members and Clusters] to learn how to check the safety of active clusters.
++
+NOTE: The `clusterSafe` indicator is useful when your cluster is in a passive state. If the cluster is in an active state, the indicator value continually changes due to the dynamic state of the cluster. Also, checking the cluster safety triggers additional operations for each partition and replica. Frequent safety checks of a cluster under load may impact cluster performance.
+
+* `migrationQueueSize`: A count of the remaining migration tasks while the cluster data
+is being repartitioned. See xref:overview:data-partitioning.adoc[Data Partitioning]
 to learn about Hazelcast's partitioning mechanism.
-`clusterSize`: Specifies the cluster member count.
+* `clusterSize`: A count of the cluster member count.
 
 [[health-check-script]]
 === Using the hz-healthcheck Script
 
 The `hz-healthcheck` script comes with the Hazelcast package. Internally, it uses
-the HTTP-based Health Check endpoint. You will need to enable the endpoint by using the
-`advanced-network` or the `network` configuration element.
-See the <<health-check-monitoring, Health Check and Monitoring section>>.
+the HTTP-based health check endpoint. 
 
-You can use the script to check health parameters in the following manner:
+To run the `hz-healthcheck` script:
 
+. Enable the <<enable-hcheck, health check endpoint>>. 
+. Run the `hz-healthcheck` script with parameters using the following format: 
++
 ```
 ./hz-healthcheck <parameters>
 ```
 
-The following parameters can be used:
+You can use the following parameters to perform checks and operations on your Hazelcast clusters:
 
-[cols="2,2,5a"]
+[cols="a,a,a"]
 |===
 |Parameter | Default Value | Description
 
@@ -1060,6 +1064,8 @@ The following parameters can be used:
 |`get-state`
 |Health check operation. It can be `all`, `node-state`,
 `cluster-state`, `cluster-safe`, `migration-queue-size` and `cluster-size`.
+
+NOTE: The `cluster-safe` option is useful when your cluster is in a passive state. If the cluster is in an active state, the indicator value continually changes due to the dynamic state of the cluster. Also, checking the cluster safety triggers additional operations for each partition and replica. Frequent safety checks of a cluster under load may impact cluster performance.
 
 |`-a` or `--address`
 |`127.0.0.1`
@@ -1100,20 +1106,19 @@ you should use this parameter to provide the IP address of a member to this scri
 |===
 
 
-*_Example 1: Checking Member State of a Healthy Cluster:_*
+*_Example 1: Checking the State of Members in a Healthy Cluster:_*
 
-Assuming the member is deployed under the address `127.0.0.1:5701` and
+If the member is deployed under the address `127.0.0.1:5701` and
 it is in the healthy state, the following output is expected:
-
 
 ```
 ./hz-healthcheck -a 127.0.0.1 -p 5701 -o node-state
 ACTIVE
 ```
 
-*_Example 2: Checking Safety of a Non-Existing Cluster:_*
+*_Example 2: Checking the Safety of a Non-Existent Cluster:_*
 
-Assuming there is no member running under the address `127.0.0.1:5701`, the following output is expected:
+If the cluster has no members running under the address `127.0.0.1:5701`, the following output is expected:
 
 ```
 ./hz-healthcheck -a 127.0.0.1 -p 5701 -o cluster-safe
@@ -1123,7 +1128,7 @@ Please check that cluster is running and that health check is enabled in REST AP
 
 === Health Monitor
 
-Health monitor periodically prints logs in your console to provide information about your member's state.
+The health monitor periodically prints logs in your console to provide information about your member's state.
 By default, it is enabled when you start your cluster.
 
 You can set the interval of health monitoring using
@@ -1245,29 +1250,146 @@ prevent taking up too much disk space.
 
 To enable diagnostics logging, you should specify the following properties on the member side:
 
-```
--Dhazelcast.diagnostics.enabled=true
--Dhazelcast.diagnostics.metric.level=info
--Dhazelcast.diagnostics.invocation.sample.period.seconds=30
--Dhazelcast.diagnostics.pending.invocations.period.seconds=30
--Dhazelcast.diagnostics.slowoperations.period.seconds=30
--Dhazelcast.diagnostics.storeLatency.period.seconds=60
-```
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <properties>
+        <property name="hazelcast.diagnostics.enabled">true</property>
+        <property name="hazelcast.diagnostics.metric.level">info</property>
+        <property name="hazelcast.diagnostics.invocation.sample.period.seconds">30</property>
+        <property name="hazelcast.diagnostics.pending.invocations.period.seconds">30</property>
+        <property name="hazelcast.diagnostics.slowoperations.period.seconds">30</property>
+        <property name="hazelcast.diagnostics.storeLatency.period.seconds">60</property>
+    </properties>
+    ...
+</hazelcast>
+----
+--
 
-On the client side, you should specify the following properties:
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+    ...
+    properties:
+      hazelcast.diagnostics.enabled=true
+      hazelcast.diagnostics.metric.level=info
+      hazelcast.diagnostics.invocation.sample.period.seconds=30
+      hazelcast.diagnostics.pending.invocations.period.seconds=30
+      hazelcast.diagnostics.slowoperations.period.seconds=30
+      hazelcast.diagnostics.storeLatency.period.seconds=60
+    ...
+----
+--
 
-```
--Dhazelcast.diagnostics.enabled=true
--Dhazelcast.diagnostics.metric.level=info
-```
+Java::
++
+--
+[source,java]
+----
+Config config = new Config();
+config.setProperty( "hazelcast.diagnostics.enabled", "true" );
+      .setProperty( "hazelcast.diagnostics.metric.level", "info" );
+      .setProperty( "hazelcast.diagnostics.invocation.sample.period.seconds", "30" );
+      .setProperty( "hazelcast.diagnostics.pending.invocations.period.seconds", "30" );
+      .setProperty( "hazelcast.diagnostics.slowoperations.period.seconds", "30" );
+      .setProperty( "hazelcast.diagnostics.storeLatency.period.seconds", "60" );
+----
+--
+JVM::
++
+--
+.Java command
+[source,shell]
+----
+java -Dhazelcast.diagnostics.enabled=true
+     -Dhazelcast.diagnostics.metric.level=info
+     -Dhazelcast.diagnostics.invocation.sample.period.seconds=30
+     -Dhazelcast.diagnostics.pending.invocations.period.seconds=30
+     -Dhazelcast.diagnostics.slowoperations.period.seconds=30
+     -Dhazelcast.diagnostics.storeLatency.period.seconds=60
+----
+
+.JAVA_OPTS
+[source,shell]
+----
+JAVA_OPTS="-Dhazelcast.diagnostics.enabled=true -Dhazelcast.diagnostics.metric.level=info -Dhazelcast.diagnostics.invocation.sample.period.seconds=30 -Dhazelcast.diagnostics.pending.invocations.period.seconds=30 -Dhazelcast.diagnostics.slowoperations.period.seconds=30 -Dhazelcast.diagnostics.storeLatency.period.seconds=60"
+----
+--
+====
+
+On the Java client side, it is enough to set the following properties:
+
+* `hazelcast.diagnostics.enabled=true`
+* `hazelcast.diagnostics.metric.level=info`
 
 === Diagnostics Log File
 
 You can use the following property to specify the location of the diagnostics log file:
 
-```
--Dhazelcast.diagnostics.directory=/your/log/directory
-```
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <properties>
+        <property name="hazelcast.diagnostics.directory">/your/log/directory</property>
+    </properties>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+    ...
+    properties:
+      hazelcast.diagnostics.directory=/your/log/directory
+    ...
+----
+--
+
+Java::
++
+--
+[source,java]
+----
+Config config = new Config();
+config.setProperty( "hazelcast.diagnostics.directory", "/your/log/directory" );
+----
+--
+JVM::
++
+--
+.Java command
+[source,shell]
+----
+java -Dhazelcast.diagnostics.directory=/your/log/directory
+----
+
+.JAVA_OPTS
+[source,shell]
+----
+JAVA_OPTS="-Dhazelcast.diagnostics.directory=/your/log/directory"
+----
+--
+====
 
 The name of the log file has the following format:
 
@@ -1275,11 +1397,63 @@ The name of the log file has the following format:
 diagnostics-<host IP>#<port>-<unique ID>.log
 ```
 
-The name of the log file can be prefixed with a custom string as shown below:
+You can set a custom string prefix for the name of log file using the following property.
 
-```
--Dhazelcast.diagnostics.filename.prefix=foobar
-```
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <properties>
+        <property name="hazelcast.diagnostics.filename.prefix">foobar</property>
+    </properties>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+    ...
+    properties:
+      hazelcast.diagnostics.filename.prefix=foobar
+    ...
+----
+--
+
+Java::
++
+--
+[source,java]
+----
+Config config = new Config();
+config.setProperty( "hazelcast.diagnostics.filename.prefix", "foobar" );
+----
+--
+JVM::
++
+--
+.Java command
+[source,shell]
+----
+java -Dhazelcast.diagnostics.filename.prefix=foobar
+----
+
+.JAVA_OPTS
+[source,shell]
+----
+JAVA_OPTS="-Dhazelcast.diagnostics.filename.prefix=foobar"
+----
+--
+====
 
 The content format of the diagnostics log file is depicted below:
 
@@ -1302,17 +1476,212 @@ The content format of the diagnostics log file is depicted below:
 ```
 
 A rolling file approach is used to prevent creating too much data. By default 10 files of 50MB each are allowed
-to exist. The size of the file can be changed using the following property:
+to exist. You can set the size of each file and number of files using the following properties.
 
-```
--Dhazelcast.diagnostics.max.rolled.file.size.mb=100
-```
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <properties>
+        <property name="hazelcast.diagnostics.max.rolled.file.size.mb">100</property>
+        <property name="hazelcast.diagnostics.max.rolled.file.count">5</property>
+    </properties>
+    ...
+</hazelcast>
+----
+--
 
-You can also set the number of files using the following property:
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+    ...
+    properties:
+      hazelcast.diagnostics.max.rolled.file.size.mb=100
+      hazelcast.diagnostics.max.rolled.file.count=5
+    ...
+----
+--
 
-```
--Dhazelcast.diagnostics.max.rolled.file.count=5
-```
+Java::
++
+--
+[source,java]
+----
+Config config = new Config();
+config.setProperty( "hazelcast.diagnostics.max.rolled.file.size.mb", "100" );
+      .setProperty( "hazelcast.diagnostics.max.rolled.file.count", "5" );
+----
+--
+JVM::
++
+--
+.Java command
+[source,shell]
+----
+java -Dhazelcast.diagnostics.max.rolled.file.size.mb=100
+     -Dhazelcast.diagnostics.max.rolled.file.count=5
+----
+
+.JAVA_OPTS
+[source,shell]
+----
+JAVA_OPTS="-Dhazelcast.diagnostics.max.rolled.file.size.mb=100 -Dhazelcast.diagnostics.max.rolled.file.count=5"
+----
+--
+====
+
+=== Diagnostics Output Options
+
+You can use the following property to specify the output type of diagnostics.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <properties>
+        <property name="hazelcast.diagnostics.stdout">FILE|STDOUT|LOGGER</property>
+    </properties>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+    ...
+    properties:
+      hazelcast.diagnostics.stdout=FILE|STDOUT|LOGGER
+    ...
+----
+--
+
+Java::
++
+--
+[source,java]
+----
+Config config = new Config();
+config.setProperty( "hazelcast.diagnostics.stdout", "FILE|STDOUT|LOGGER" );
+----
+--
+JVM::
++
+--
+.Java command
+[source,shell]
+----
+java -Dhazelcast.diagnostics.stdout=FILE|STDOUT|LOGGER
+----
+
+.JAVA_OPTS
+[source,shell]
+----
+JAVA_OPTS="-Dhazelcast.diagnostics.stdout=FILE|STDOUT|LOGGER"
+----
+--
+====
+
+Available types:
+
+* `FILE`: Outputs the diagnostics to a <<diagnostics-log-file, set of files>> managed by Hazelcast. This is the default type.
+* `STDOUT`: Outputs the diagnostics to the standard output.
+* `LOGGER`: Outputs the diagnostics to the Hazelcast logger; by this way you can use the xref:maintain-cluster:logging.adoc[logging configuration]
+to forward the diagnostics to any output supported by the logging framework and apply additional configurations. You can see an example in the next section below.
++
+NOTE: Using the logging framework introduces a slight overhead in comparison to using other output types but allows for greater flexibility.
+
+=== Diagnostics using Logging Frameworks
+
+Hazelcast does not enforce any logging framework. You can always use your logging framework to configure the diagnostics.
+You can forward the logs to a logging framework by setting the `hazelcast.diagnostics.stdout` property to `LOGGER`:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <properties>
+        <property name="hazelcast.diagnostics.stdout">LOGGER</property>
+    </properties>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+    ...
+    properties:
+      hazelcast.diagnostics.stdout=LOGGER
+    ...
+----
+--
+
+Java::
++
+--
+[source,java]
+----
+Config config = new Config();
+config.setProperty( "hazelcast.diagnostics.stdout", "LOGGER" );
+----
+--
+JVM::
++
+--
+.Java command
+[source,shell]
+----
+java -Dhazelcast.diagnostics.stdout=LOGGER
+----
+
+.JAVA_OPTS
+[source,shell]
+----
+JAVA_OPTS="-Dhazelcast.diagnostics.stdout=LOGGER"
+----
+--
+====
+
+Above configuration forwards the logs to the `com.hazelcast.diagnostics` logger so you can write them to a
+file by referencing one of the configured appenders. The following is an example for Log4j2.
+
+[source,xml]
+----
+<Logger name="com.hazelcast.diagnostics" level="debug" additivity="false">
+    <AppenderRef ref="LogToRollingFile"/>
+</Logger>
+----
+
+By configuring https://logging.apache.org/log4j/2.x/manual/configuration.html[TimeBasedTriggeringPolicy] and
+https://logging.apache.org/log4j/2.x/manual/configuration.html[SizeBasedTriggeringPolicy] for the appender, you can control the size and rolling behavior as you want.
+
+NOTE: The diagnostic logs have the `DEBUG` level by default; if you don't want to see them in the member logs while they are running in the `DEBUG` mode for the root level appender, you need to change the level to `INFO` for the `com.hazelcast.diagnostics` logger. For Log4j2, see the https://logging.apache.org/log4j/2.x/manual/configuration.html[configuration documentation] for more details.
 
 === Diagnostics Plugins
 

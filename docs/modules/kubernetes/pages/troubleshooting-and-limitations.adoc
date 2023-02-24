@@ -1,9 +1,15 @@
-= Troubleshooting in Kubernetes Environments
+= Troubleshooting and Limitations in Kubernetes Environments
 :description: Find advice for troubleshooting issues you might face while deploying Hazelcast via Helm.
 
 {description}
 
-== Why is Management Center EXTERNAL-IP not assigned?
+== Limitations
+
+Hazelcast CP Subsystem can be used safely in Kubernetes only if xref:cp-subsystem:configuration.adoc#cp-subsystem-configuration[CP Subsystem Persistence] is enabled (Enterprise Feature). Otherwise, a CP Subsystem Group may not recover after scaling the cluster or a rolling upgrade.
+
+== Troubleshooting with Helm Installation
+
+=== Why is Management Center EXTERNAL-IP not assigned?
 
 link:https://github.com/kubernetes/minikube[Minikube^] is a tool that makes it easy to run Kubernetes locally. However, It does not come with LoadBalancer so Management Center can't be accessible with external IP.
 
@@ -20,7 +26,7 @@ service/littering-pig-hazelcast-enterprise-mancenter   LoadBalancer   10.104.97.
 
 However, you can still reach Hazelcast Management Center with the http://MINIKUBE_IP:30145 for the case above. `$(minikube ip)` is the command to retrieve minikube IP address.
 
-== "cluster-admin" not found
+=== "cluster-admin" not found
 
 In some Kubernetes Clusters, RBAC might not be enabled by default so you might end up seeing RBAC related error while helm install.
 
@@ -31,7 +37,7 @@ Error: release funky-woodpecker failed: roles.rbac.authorization.k8s.io “funky
 
 In that case, you need either enable debug or pass `--set rbac.create=false` into your `helm install` command.
 
-== Why is Management Center Pod in Pending state?
+=== Why is Management Center Pod in Pending state?
 
 [source,shell]
 ----
@@ -61,12 +67,12 @@ mouthy-alpaca-hazelcast-enterprise-mancenter   Bound     pvc-7f4baaff-a63d-11e8-
 
 You can see they are bound as above. If they are not, this is the list of potential problems you might be having.
 
-=== Creating Storage Class
-
+. Creating Storage Class
++
 Some Kubernetes Providers do not offer default storage class so you have to create one and pass it to helm installation.
-
++
 Create `storage.yaml` file and apply via `kubectl apply -f storage.yaml`
-
++
 [source,yaml]
 ----
 kind: StorageClass
@@ -78,19 +84,19 @@ parameters:
   type: gp2
   zones: us-west-2a, us-west-2b, us-west-2c
 ----
-
++
 Use storage class name defined in the storage.yaml file in helm installation.
-
++
 [source,shell]
 ----
 helm install my-release --set mancenter.persistence.storageClass=standard hazelcast/<chart>
 ----
 
-=== Persistent Volume Availability Zone
-
+. Persistent Volume Availability Zone
++
 link:https://aws.amazon.com/eks/[AWS EKS^] requires your volume to be in the same Availability Zone as Kubernetes Nodes that Management Center Pod is running.
 Otherwise, Management Center Pod will be stuck in pending state. You can check `failure-domain.beta.kubernetes.io/zone` labels on the Kubernetes Nodes and Persistent Volume and see PersistentVolume is in one of the node's Availability Zone.
-
++
 [source,shell]
 ----
 kubectl get no --show-labels
@@ -98,44 +104,44 @@ NAME                                            STATUS    ROLES     AGE       VE
 ip-192-168-101-236.us-west-2.compute.internal   Ready     <none>    42m       v1.10.3   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/instance-type=t2.medium,beta.kubernetes.io/os=linux,failure-domain.beta.kubernetes.io/region=us-west-2,failure-domain.beta.kubernetes.io/zone=us-west-2a,kubernetes.io/hostname=ip-192-168-101-236.us-west-2.compute.internal
 ip-192-168-245-179.us-west-2.compute.internal   Ready     <none>    42m       v1.10.3   beta.kubernetes.io/arch=amd64,beta.kubernetes.io/instance-type=t2.medium,beta.kubernetes.io/os=linux,failure-domain.beta.kubernetes.io/region=us-west-2,failure-domain.beta.kubernetes.io/zone=us-west-2c,kubernetes.io/hostname=ip-192-168-245-179.us-west-2.compute.internal
 ----
-
++
 [source,shell]
 ----
 kubectl get pv --show-labels
 NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS    CLAIM                                                  STORAGECLASS   REASON    AGE       LABELS
 pvc-539749c4-9f31-11e8-b9d0-0af5b0ce3266   8Gi        RWO            Delete           Bound     default/dining-serval-hazelcast-enterprise-mancenter   standard                 30s       failure-domain.beta.kubernetes.io/region=us-west-2,failure-domain.beta.kubernetes.io/zone=us-west-2c
 ----
-
++
 You need to reinstall hazelcast helm chart until you have both PersistentVolume and Kubernetes Node in the same Availability Zone.
 
-=== Persistent Volume Creation Time
-
+. Persistent Volume Creation Time
++
 Creating Persistent Volume in some Kubernetes Environments take up to 5 minutes so you can wait for sometime to see if Persistent Volume is created.
-
++
 [source,shell]
 ----
 kubectl get pv --watch
 ----
-
++
 If you see Persistent Volume created, your Management Center Pod will be turning `Running` state soon.
 
-=== Persistence Volume Claim Clean Up
-
+. Persistence Volume Claim Clean Up
++
 Deleting the helm release of Hazelcast chart will not automatically delete the PVCs. To see the the PVCs run:
-
++
 [source,shell]
 ----
 kubectl get pvc
 ----
-
++
 To delete them run:
-
++
 [source,shell]
 ----
 kubectl delete pvc <name-of-the-pvc>
 ----
 
-== "65534: must be in the ranges: [x, y]" or "65534 is not an allowed group"
+=== "65534: must be in the ranges: [x, y]" or "65534 is not an allowed group"
 
 In OpenShift (and IBM Cloud) environments, the projects/namespaces may be limited to the certain range of user and group ids. Then, installing Hazelcast helm charts with default values results in the following error:
 
@@ -151,7 +157,7 @@ When you face such an issue, you must pick the user and group ids between the al
 helm install my-release --set securityContext.runAsUser=1000560000,securityContext.runAsGroup=1000560000,securityContext.fsGroup=1000560000 hazelcast/<chart>
 ----
 
-== Jet engine is disabled via external ConfigMap but it did not work
+=== Jet engine is disabled via external ConfigMap but it did not work
 
 In that case, you also need to turn off JET engine via chart parameter(`jet.enabled`):
 

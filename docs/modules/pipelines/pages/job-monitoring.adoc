@@ -13,16 +13,32 @@ The `JobStatusListener` has several advantages over polling for the job status.
 
 - You can write custom code for execution on status change. For example, triggering an alert or writing the changed status to a dashboard.
 
-- You can also identify jobs in an error state. By default, xref:troubleshoot:error-handling.adoc#processing-guarantees[all streaming jobs are suspended on failure]. When a job moves to the suspended status, the listener is passed a suspension cause; either an error or user canceled. Use the suspension cause to filter out all jobs canceled by a user. 
+- You can also identify jobs in an error state. By default, xref:troubleshoot:error-handling.adoc#processing-guarantees[all streaming jobs are suspended on failure]. When a job moves to the suspended status, the listener is passed a suspension cause; either an error description or requested by a user. 
 
-NOTE: The suspension cause is also displayed on the Jobs page in Management Center.
+NOTE: The reason for the job suspension is also displayed on the Jobs page in Management Center.
 
 === Adding a JobStatusListener
 
 To register the listener for a job, add the following to your client code:
 
 ```java
-addStatusListener(JobStatusListener)
+myJob.addStatusListener(JobStatusListener)
+```
+The following example creates a new job, registers the `JobStatusListener`, and uses a lambda expression to print out status changes to the stdout console, including whether they were requested by a user.
+
+```java
+JetService jet1 = hz1.getJet();
+JobConfig jobConfig = new JobConfig();
+String jobName = "sampleJob";
+jobConfig.setName(jobName);
+Job job = jet1.newJob(p, jobConfig);
+
+job.addStatusListener(event ->
+        System.out.printf("Job status changed: %s -> %s. User requested? %b%n",
+                event.getPreviousStatus(),
+                event.getNewStatus(),
+                event.isUserRequested())
+);
 ```
 
 === Removing a JobStatusListener
@@ -30,5 +46,5 @@ addStatusListener(JobStatusListener)
 To de-register the listener from a job, add the following to your client code:
 
 ```java
-removeStatusListener(JobStatusListener)
+myJob.removeStatusListener(JobStatusListener)
 ```

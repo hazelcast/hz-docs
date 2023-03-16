@@ -500,19 +500,18 @@ ICompletableFuture<Map<String, Integer>> future = job
 
 [source,java,options="nowrap"]
 ----
-JobTracker t = hz.getJobTracker("word-count");
-IMap<Long, String> documents = hz.getMap("documents");
-LongSumAggregation<String, String> aggr = new LongSumAggregation<>();
-Map<String, Long> counts =
-        t.newJob(KeyValueSource.fromMap(documents))
-         .mapper((Long x, String document, Context<String, Long> ctx) ->
-                 Stream.of(document.toLowerCase().split("\\W+"))
-                       .filter(w -> !w.isEmpty())
-                       .forEach(w -> ctx.emit(w, 1L)))
-         .combiner(aggr.getCombinerFactory())
-         .reducer(aggr.getReducerFactory())
-         .submit()
-         .get();
+Pattern delimiter = Pattern.compile("\\W+");
+Pipeline p = Pipeline.create();
+p.readFrom(Sources.<String, String>map(MAP_NAME))
+    .flatMap(e -> Traversers.traverseArray(delimiter.split(e.getValue().toLowerCase())))
+    .filter(word -> !word.isEmpty())
+    .groupingKey(Functions.wholeItem())
+    .aggregate(AggregateOperations.counting())
+    .writeTo(Sinks.map(COUNTS));
+
+hazelcastInstance.getJet().newJob(p).join();
+
+printResults(hz.getMap(COUNTS));
 ----
 |===
 

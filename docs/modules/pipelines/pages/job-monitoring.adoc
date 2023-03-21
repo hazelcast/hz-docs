@@ -1,0 +1,58 @@
+= Monitoring Jobs
+:description: To ensure the reliability of streaming jobs and their workloads, try implementing some basic monitoring. With Hazelcast, you can monitor the status of streaming jobs to quickly identify job failures for troubleshooting.
+
+{description}
+
+== Monitoring for Status Changes
+
+There are two ways to monitor for job status changes. You can either poll the `Job.getStatus()` method separately for each job or add a `JobStatusListener` to your jobs. In both cases, you can write custom code for execution on status change. For example, triggering an alert or writing the changed status to a dashboard. 
+
+== Using a JobStatusListener
+
+The `JobStatusListener` has several advantages over polling for the job status. 
+
+- The listener is notified immediately when a status change occurs. To achieve a similar result with polling, you might increase the polling frequency, which would decrease performance.
+
+- You can identify jobs in an error state. By default, xref:troubleshoot:error-handling.adoc#processing-guarantees[all streaming jobs are suspended on failure]. When a job moves to the suspended status, the listener is passed a suspension cause; either an error description or requested by a user. 
+
+NOTE: The reasons for job suspensions and failures are also displayed on the Jobs page in Management Center.
+
+NOTE: The listener may be attached to a job after it starts. For this reason, you cannot use the `JobStatusListener` to wait for a job to move to the `RUNNING` status. To cope with this situation, use `assertJobStatusEventually(Job, JobStatus)`. See xref:test:testing.adoc#waiting-for-a-job-to-be-in-a-desired-state[Waiting for a Job to be in a Desired State] for more details.
+
+=== Adding a JobStatusListener
+
+To register the listener for a job, add the following to your client code:
+
+```java
+statusListenerId = myJob.addStatusListener(JobStatusListener)
+```
+The following example creates a new job, registers the `JobStatusListener`, and uses a lambda expression to print out status changes to the stdout console, including whether they were requested by a user.
+
+```java
+JetService jet1 = hz1.getJet();
+JobConfig jobConfig = new JobConfig();
+String jobName = "sampleJob";
+jobConfig.setName(jobName);
+Job job = jet1.newJob(pipeline, jobConfig);
+
+job.addStatusListener(event ->
+        System.out.printf("Job status changed: %s -> %s. User requested? %b%n",
+                event.getPreviousStatus(),
+                event.getNewStatus(),
+                event.isUserRequested())
+);
+```
+
+=== Removing a JobStatusListener
+
+To de-register the listener from a job, add the following to your client code:
+
+```java
+myJob.removeStatusListener(statusListenerId)
+```
+
+== Monitoring for Canceled Jobs
+
+A job with `FAILED` status may have been canceled by a user. To monitor for canceled jobs, use the `Job.isUserCancelled()` method, which returns `true` if a user stopped the job.
+
+

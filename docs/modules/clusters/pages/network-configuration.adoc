@@ -19,8 +19,6 @@ It is optional to set and useful when you have a private cloud.
 Note that, the value for this element should be given in the format *`host IP address:port number`*.
 See the following examples.
 
-**Declarative Configuration:**
-
 [tabs] 
 ==== 
 XML:: 
@@ -46,24 +44,23 @@ hazelcast:
   network:
     public-address: 11.22.33.44:5555
 ----
-====
 
-**Programmatic Configuration:**
-
+Java::
++
 [source,java]
 ----
 Config config = new Config();
 config.getNetworkConfig()
     .setPublicAddress( "11.22.33.44:5555" );
 ----
+====
+
 
 [[port]]
 == Port
 
 You can specify the ports that Hazelcast uses to communicate between cluster members.
-Its default value is `5701`. A port number of `0` will let the system pick up an ephemeral port.  The following are example configurations.
-
-**Declarative Configuration:**
+Its default value is `5701`. A port number of `0` will let the system pick up an ephemeral port. The following are example configurations.
 
 [tabs] 
 ==== 
@@ -93,16 +90,16 @@ hazelcast:
       port-count: 20
       port: 5701
 ----
-====
 
-**Programmatic Configuration:**
-
-[source,java]
+Java::
++
+[source,yaml]
 ----
 Config config = new Config();
 config.getNetworkConfig().setPort( 5701 )
     .setPortAutoIncrement( true ).setPortCount( 20 );
 ----
+====
 
 According to the above example, Hazelcast tries to find free ports between 5701 and 5720.
 
@@ -1017,6 +1014,58 @@ hazelcast:
           enabled: true
 ----
 ====
+
+=== Setting up Heartbeats for WAN Replication
+
+You can specify heartbeats to prevent the connections over WAN to be dropped due to inactivity.
+This may be caused by the firewalls blocking the idle connections after some time.
+To keep these connections alive, you can set up the following socket options under the advanced network configuration.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <advanced-network enabled="true">
+        <member-server-socket-endpoint-config>
+            <socket-options>
+                ...
+                <keep-alive>true</keep-alive> <1>
+                <keep-idle-seconds>600</keep-idle-seconds> <2>
+                <keep-count>10</keep-count> <3>
+                <keep-interval-seconds>15</keep-interval-seconds> <4>
+            </socket-options>
+        </member-server-socket-endpoint-config>
+    </advanced-network>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  advanced-network:
+    enabled: true
+    member-server-socket-endpoint-config:
+      socket-options:
+        ...
+        keep-alive: true <1>
+        keep-idle-seconds: 600 <2>
+        keep-count: 10 <3>
+        keep-interval-seconds: 15 <4>
+----
+====
+<1> Specifies whether https://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html[TCP keep-alive^] should be enabled. The default value is true.
+<2> The number of unacknowledged TCP keep-alive probes to be sent before declaring a connection dead. Configuration is valid when `keep-alive` is `true.`
+<3> The duration, in seconds, to wait after the last packet was sent before sending a TCP keep-alive probe. Configuration is valid when `keep-alive` is `true.`
+<4> The duration, in seconds, to wait between the TCP keep-alive probes. Configuration is valid when `keep-alive` is `true.`
 
 === Setting Up WAN Endpoints Configuration
 

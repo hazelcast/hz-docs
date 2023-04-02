@@ -1015,15 +1015,23 @@ hazelcast:
 ----
 ====
 
-=== Setting up Heartbeats for WAN Replication
+=== Configuring TCP Keep-Alive
 
-You can specify heartbeats to prevent the connections over WAN to be dropped due to inactivity.
-This may be caused by the firewalls blocking the idle connections after some time.
-To keep these connections alive, you can set up the following socket options under the advanced network configuration.
+You can specify TCP keep-alive options for each socket for use cases such as preventing the connections over WAN to be dropped due to inactivity.
+
+These options:
+
+* work with JDK 11 or newer, and recent JDK 8 distributions based on OpenJDK
+* generally supported by macOS and Linux systems (not Windows OS).
+
+NOTE: TCP keep-alive feature may not be supported on specific builds of the above systems as there is no official JDK documentation guaranteeing such.
+In this case, Hazelcast logs a warning suggesting to upgrade to the latest JDK. If upgrading does not work either, you should check with your JDK vendor.
+
+You can set up the following keep-alive socket options.
 
 [tabs] 
 ==== 
-XML:: 
+XML (Advanced Network Configuration):: 
 + 
 -- 
 [source,xml]
@@ -1035,8 +1043,8 @@ XML::
             <socket-options>
                 ...
                 <keep-alive>true</keep-alive> <1>
-                <keep-idle-seconds>600</keep-idle-seconds> <2>
-                <keep-count>10</keep-count> <3>
+                <keep-count>10</keep-count> <2>
+                <keep-idle-seconds>600</keep-idle-seconds> <3>
                 <keep-interval-seconds>15</keep-interval-seconds> <4>
             </socket-options>
         </member-server-socket-endpoint-config>
@@ -1046,7 +1054,7 @@ XML::
 ----
 --
 
-YAML::
+YAML (Advanced Network Configuration)::
 +
 [source,yaml]
 ----
@@ -1057,15 +1065,42 @@ hazelcast:
       socket-options:
         ...
         keep-alive: true <1>
-        keep-idle-seconds: 600 <2>
-        keep-count: 10 <3>
+        keep-count: 10 <2>
+        keep-idle-seconds: 600 <3>
         keep-interval-seconds: 15 <4>
 ----
+
+System Properties::
++
+You can use this configuration approach when you don't need or want to use the advanced network configuration.
+See xref:configuration:configuring-with-system-properties[Configuring with System Properties] to see the alternative options.
++
+[source,xml]
+----
+<hazelcast>
+    ...
+    <properties>
+        <property name="hazelcast.socket.keep.alive">true</property> <1>
+        <property name="hazelcast.socket.keep.count">10</property> <2>
+        <property name="hazelcast.socket.keep.idle">600</property> <3>
+        <property name="hazelcast.socket.keep.interval">15</property> <4>
+    </properties>
+    ...
+</hazelcast>
+----
 ====
-<1> Specifies whether https://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html[TCP keep-alive^] should be enabled. The default value is true.
+<1> Specifies whether https://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html[TCP keep-alive^] should be enabled. The default value is `true`.
 <2> The number of unacknowledged TCP keep-alive probes to be sent before declaring a connection dead. Configuration is valid when `keep-alive` is `true.`
 <3> The duration, in seconds, to wait after the last packet was sent before sending a TCP keep-alive probe. Configuration is valid when `keep-alive` is `true.`
 <4> The duration, in seconds, to wait between the TCP keep-alive probes. Configuration is valid when `keep-alive` is `true.`
+
+[NOTE]
+====
+See xref:wan:defining-wan-replication.adoc#keeping-wan-connections-alive-across-firewalls[Keeping WAN Connections Alive Across Firewalls] on how to set the keep-alive options for your WAN replicated clusters.
+
+The keep-alive options are defined under the `member-server-socket-endpoint-config` parent element in the above examples. The same options also exist under the
+`wan-server-socket-endpoint-config` and `wan-endpoint-config` parent elements in case you want to configure TCP keep-alive for WAN replication.
+====
 
 === Setting Up WAN Endpoints Configuration
 

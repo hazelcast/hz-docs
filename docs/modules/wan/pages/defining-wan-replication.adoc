@@ -20,13 +20,17 @@ This implementation meets most of your WAN replication needs and is configured u
 to build your own implementation; see the xref:advanced-features.adoc#defining-custom-wr[Advanced Features section]
 for details in case you need more custom configurations.
 
-Please see also the xref:clusters:network-configuration.adoc#setting-up-wan-endpoints-configuration[Setting Up WAN Endpoints Configuration section]
-for the examples that use advanced network configuration to set up, for example, security features such as
-TLS and mutual authentication for your WAN replicated clusters.
-
 The default settings for WAN Replication configuration suit most use cases. If, however, you have specific needs or if you
 would like to fine-tune the behavior of WAN Replication for your application, see the
 xref:tuning.adoc[Fine-Tuning WAN Replication section].
+
+See also
+
+* xref:clusters:network-configuration.adoc#setting-up-wan-endpoints-configuration[Setting Up WAN Endpoints Configuration]
+for the examples that use advanced network configuration to set up, for example, security features such as
+TLS and mutual authentication for your WAN replicated clusters
+* <<keeping-wan-connections-alive-across-firewalls, Keeping WAN Connections Alive Across Firewalls>>
+to see the options on how to keep a connection between WAN replicated clusters alive in certain cases such as having a strict firewall.
 
 Let's see how we configure a simple WAN replication using the static endpoints and Discovery SPI, and
 then let's see the configuration details of Hazelcast's built-in WAN replication implementation.
@@ -445,3 +449,119 @@ You can achieve various WAN topologies using different configurations on differe
 if the New York and London cluster configurations contain the `wan-replication` element and the Tokyo cluster
 does not, it might mean that the New York and London clusters are active endpoints and Tokyo is a passive endpoint.
 
+== Keeping WAN Connections Alive Across Firewalls
+
+You can specify keep-alive socket options to prevent the connections over WAN to be dropped due to inactivity.
+This may be caused by the firewalls blocking the idle connections after some time.
+
+To keep the connections alive in these cases, you should set up the socket options **either** in the source **or** target cluster, as depicted below.
+
+[tabs] 
+==== 
+XML (Advanced Network Configuration):: 
++
+--
+_At all members on the WAN target cluster (the one that opens a WAN server socket and expects incoming WAN connections):_
+
+[source,xml]
+----
+<hazelcast>
+    ...
+    <advanced-network enabled="true">
+        <wan-server-socket-endpoint-config>
+            <socket-options>
+                ...
+                <keep-alive>true</keep-alive>
+                <keep-count>10</keep-count>
+                <keep-idle-seconds>600</keep-idle-seconds>
+                <keep-interval-seconds>15</keep-interval-seconds>
+            </socket-options>
+        </wan-server-socket-endpoint-config>
+    </advanced-network>
+    ...
+</hazelcast>
+----
+
+_At all members on the WAN source cluster (the one that owns the data to be replicated and creates a connection to the target cluster):_
+
+[source,xml]
+----
+<hazelcast>
+    ...
+    <advanced-network enabled="true">
+        <wan-endpoint-config>
+            <socket-options>
+                ...
+                <keep-alive>true</keep-alive>
+                <keep-count>10</keep-count>
+                <keep-idle-seconds>600</keep-idle-seconds>
+                <keep-interval-seconds>15</keep-interval-seconds>
+            </socket-options>
+        </wan-endpoint-config>
+    </advanced-network>
+    ...
+</hazelcast>
+----
+--
+
+YAML (Advanced Network Configuration)::
++
+--
+_At all members on the WAN target cluster (the one that opens a WAN server socket and expects incoming WAN connections):_
+
+[source,yaml]
+----
+hazelcast:
+  advanced-network:
+    enabled: true
+    wan-server-socket-endpoint-config:
+      socket-options:
+        ...
+        keep-alive: true 
+        keep-count: 10
+        keep-idle-seconds: 600
+        keep-interval-seconds: 15
+----
+
+_At all members on the WAN source cluster (the members on the source cluster that own the data to be replicated, who are the ones creating a connection to the target cluster):_
+
+[source,yaml]
+----
+hazelcast:
+  advanced-network:
+    enabled: true
+    wan-endpoint-config:
+      socket-options:
+        ...
+        keep-alive: true
+        keep-count: 10
+        keep-idle-seconds: 600
+        keep-interval-seconds: 15
+----
+--
+
+System Properties::
++
+--
+You can use this configuration approach when you don't need or want to use the advanced network configuration.
+See xref:configuration:configuring-with-system-properties[Configuring with System Properties] to see the alternative options.
+
+_At all members either on the WAN target or source cluster:_
+
+[source,xml]
+----
+<hazelcast>
+    ...
+    <properties>
+        <property name="hazelcast.socket.keep.alive">true</property>
+        <property name="hazelcast.socket.keep.count">10</property>
+        <property name="hazelcast.socket.keep.idle">600</property>
+        <property name="hazelcast.socket.keep.interval">15</property>
+    </properties>
+    ...
+</hazelcast>
+----
+--
+====
+
+See xref:clusters:network-configuration.adoc#configuring-tcp-keep-alive[Configuring TCP Keep-Alive] for the descriptions of the above socket options.

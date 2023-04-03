@@ -392,21 +392,26 @@ go get github.com/hazelcast/hazelcast-go-client
 +
 [source,go]
 ----
-import "github.com/hazelcast/hazelcast-go-client"
+import (
+	"context"
+	"github.com/hazelcast/hazelcast-go-client"
+)
 
 func mapSampleRun() {
-  cb := hazelcast.NewConfigBuilder()
+  // error handling is omitted for brevity
+  config := hazelcast.Config{}
 
-  cb.Cluster().SetName("hello-world") <1>
+  config.Cluster.Name = "hello-world" <1>
 
-  client, err := hazelcast.StartNewClientWithConfig(cb) <2>
+  ctx := context.TODO()
+  client, _ := hazelcast.StartNewClientWithConfig(ctx, config) <2>
 
-	mp, _ := client.GetMap("my-distributed-map") <3>
+  mp, _ := client.GetMap(ctx, "my-distributed-map") <3>
 
   <4>
-	mp.Put("1", "John")
-	mp.Put("2", "Mary")
-	mp.Put("3", "Jane")
+  mp.Put(ctx, "1", "John")
+  mp.Put(ctx, "2", "Mary")
+  mp.Put(ctx, "3", "Jane")
 
 } 
 ----
@@ -634,21 +639,28 @@ Go::
 
 [source,go]
 ----
-import "github.com/hazelcast/hazelcast-go-client"
+import (
+	"context"
+	"fmt"
+	"github.com/hazelcast/hazelcast-go-client"
+)
 
 func mapSampleRun() {
-  cb := hazelcast.NewConfigBuilder()
+  config := hazelcast.Config{}
 
-  cb.Cluster().SetName("hello-world")
+  config.Cluster.Name = "hello-world"
 
-  client, err := hazelcast.StartNewClientWithConfig(cb) 
+  ctx := context.TODO()
+  client, err := hazelcast.StartNewClientWithConfig(ctx, config)
 
   <1>
-  ctx := context.TODO()
   myMap, err := client.GetMap(ctx, "my-distributed-map")
   if err != nil {
-    // handle the error
+    panic(err)
   }
+  myMap.Put(ctx, "1", "John")
+  myMap.Put(ctx, "2", "Mary")
+  myMap.Put(ctx, "3", "Jane")
   entries, err := myMap.GetEntrySet(ctx)
   if err != nil {
     // handle the error
@@ -657,8 +669,7 @@ func mapSampleRun() {
     fmt.Println(key, value)
   }
 
-  hz.Shutdown() <2>
-
+  _ = client.Shutdown(ctx) <2>
 } 
 ----
 <1> Request all data in the map and print it to the console.

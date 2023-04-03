@@ -1,5 +1,5 @@
 = Implementing a Custom MapStore
-:description: pass:q[You can use the Java `MapStore` and `MapLoader` interfaces to implement a custom MapStore with your own logic, such as for database connections, loading data from a data store, and writing data back to a data store.]
+:description: pass:q[You can use the Java `MapStore` and `MapLoader` interfaces to implement a custom MapStore with your own logic, such as for database connections, loading data from an external system, and writing data back to the external system.]
 
 {description}
 
@@ -14,18 +14,18 @@ If you only want to load data from external systems into a map, use the `MapLoad
 |Interface| Description
 
 |MapLoader
-|The methods on the `MapLoader` interface are invoked when the application requests a value from the map. If the requested value does not exist in memory, the `MapLoader.load()` method tries to load it from the data store. Once loaded into memory, the map entry remains until it is changed, moved, or evicted.
+|The methods on the `MapLoader` interface are invoked when the application requests a value from the map. If the requested value does not exist in memory, the `MapLoader.load()` method tries to load it from the external system. Once loaded into memory, the map entry remains until it is changed, moved, or evicted.
 
 |MapStore
-|Additionally, the methods on the `MapStore` interface replicate updates made to a map to the data store. This replication can be implemented as a blocking (write-through) or non-blocking (write-behind) operation.
+|Additionally, the methods on the `MapStore` interface replicate updates made to a map to the external system. This replication can be implemented as a blocking (write-through) or non-blocking (write-behind) operation.
 |===
 
 [[managing-the-lifecycle-of-a-mapLoader]]
-== Connecting to an External Data Store
+== Connecting to an External System
 
-To connect to an external data store, you must configure a connection to it, using either a third-party library or a JDBC driver in the `init()`  method of the link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/MapLoaderLifecycleSupport.html[`MapLoaderlifeCycleSupport`] implementation.
+To connect to an external system, you must configure a connection to it, using either a third-party library or a JDBC driver in the `init()`  method of the link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/MapLoaderLifecycleSupport.html[`MapLoaderlifeCycleSupport`] implementation.
 
-The data store that you choose must be a centralized system that is accessible to all Hazelcast members. Persistence to a local file system is not supported.
+The external system that you choose must be a centralized system that is accessible to all Hazelcast members. Persistence to a local file system is not supported.
 
 The `init()` method initializes the MapStore. Hazelcast calls this method when the map is first created on a Hazelcast member. The MapStore can initialize the required resources such as reading a configuration file, creating a database connection, or accessing a Hazelcast instance.
 
@@ -91,9 +91,9 @@ See a https://github.com/hazelcast/hazelcast-code-samples/tree/master/hazelcast-
 [[init]]
 == Populating a New Map
 
-The first time you create a map that is configured with a MapStore, the map is empty. As a result, the Hazelcast cluster must request data from the external data store. Depending on the amount of data Hazelcast needs to request, the map may take a long time to be populated with entries from the data store. The fastest way to retrieve entries from the data store is to use the `MapLoader.loadAllKeys()` method. When you implement this method, each Hazelcast member connects to the database in parallel to request entries in its owned partitions.
+The first time you create a map that is configured with a MapStore, the map is empty. As a result, the Hazelcast cluster must request data from the external system. Depending on the amount of data Hazelcast needs to request, the map may take a long time to be populated with entries from the external system. The fastest way to retrieve entries from the external system is to use the `MapLoader.loadAllKeys()` method. When you implement this method, each Hazelcast member connects to the database in parallel to request entries in its owned partitions.
 
-The `MapLoader.loadAllKeys()` method can return all, some, or none of the keys. For example, you can specify a range of keys to be loaded, then rely on read-through to load the remaining keys on demand. Or, you can return a `null` value so that no data is loaded from the data store. 
+The `MapLoader.loadAllKeys()` method can return all, some, or none of the keys. For example, you can specify a range of keys to be loaded, then rely on read-through to load the remaining keys on demand. Or, you can return a `null` value so that no data is loaded from the external system. 
 
 [[loading-keys-incrementally]]
 If the number of keys to load is large, it is more efficient to load them incrementally rather than loading them all at once. To support
@@ -110,19 +110,19 @@ Hazelcast clusters populate new maps following this process:
 
 If you xref:configuration-guide.adoc[configure] your MapStore to use the write-behind caching pattern, you can do the following:
 
-- Apply batch updates to the data store to reduce requests to the data store.
-- Edit entries in the map without writing those changes back to the data store.
+- Apply batch updates to the external system to reduce requests to the data store.
+- Edit entries in the map without writing those changes back to the external system.
 
 === Batch Updates
 
 Batch operations are only allowed in write-behind mode. If your application performs a batch update or batch delete from a map, Hazelcast calls the `MapStore.storeAll(map)` and `MapStore.deleteAll(collection)` methods defined in your `MapStore` class to make all writes in a single call.
 
 [[post-processing-objects-in-map-store]]
-=== Editing Entries in a Map Without Writing Back to the Data Store
+=== Editing Entries in a Map Without Writing Back to the External System
 
-You can edit an entry in a map after it's already been written to the external data store. For example, you may want to get an autogenerated ID from the data store then edit the in-memory entry for local use without writing the change back to the external store.
+You can edit an entry in a map after it's already been written to your external system. For example, you may want to get an autogenerated ID from the data store then edit the in-memory entry for local use without writing the change back to the external system.
 
-To edit a map entry without writing it back to the data store, implement the `PostProcessingMapStore` interface. This interface triggers an extra step of serialization, so use it only when needed.
+To edit a map entry without writing it back to the external system, implement the `PostProcessingMapStore` interface. This interface triggers an extra step of serialization, so use it only when needed.
 
 Here is an example of post processing:
 
@@ -157,7 +157,7 @@ NOTE: These interfaces extend the `MapLoader` and `MapStore` interfaces. Therefo
 `MapStore` implementations are also available on the `EntryLoader` and `EntryStore` implementations.
 
 `EntryLoader` allows you to set time-to-live values per key before handing the values to Hazelcast. Therefore, you can store and load
-key-specific time-to-live values in the external storage.
+key-specific time-to-live values in the external system.
 
 Similar to `EntryLoader`, in order to store custom expiration times associated with the entries, you may use `EntryStore`. `EntryStore` allows you to retrieve associated expiration date for each entry. The expiration date is an offset from an epoch in milliseconds. Epoch is January 1, 1970 UTC which is used by `System.currentTimeMillis()`.
 

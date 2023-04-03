@@ -1,0 +1,155 @@
+[[configuring-connections-to-external-data-stores]]
+= Configuring Data Connections to External Systems
+:description: A data connection contains the metadata that Hazelcast needs to connect an external system. You can define a data connection in your members' configuration files or with the Java member API and reuse the same connection details in the Pipeline API, SQL mappings, and MapStores.   
+:page-beta: true
+:page-aliases: external-data-stores:external-data-stores.adoc
+
+{description}
+
+== Quickstart Configuration
+
+To configure a data connection to an external system, you must do the following:
+
+* Provide a unique identifier (`name`) for the data connection.
+* Choose the correct type of connector for your external system. 
+
+This example configuration shows data connections to both a MySQL database and a H2 data store. Both data connections use a JDBC connector.
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+  <data-connection name="my-mysql-database">
+    <type>jdbc</type>
+    <properties>
+      <property name="jdbcUrl">jdbc:mysql://mysql.example.org:3306</property>
+      <property name="username">my_user</property>
+      <property name="password">my_password</property>
+    </properties>
+    <shared>true</shared>
+  </data-connection>
+  <data-connection name="my-other-database">
+    <type>jdbc</type>
+    <properties>
+      <property name="jdbcUrl">jdbc:h2:mem:my-other-database</property>
+    </properties>
+    <shared>true</shared>
+  </data-connection>
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  data-connection:
+    my-mysql-database:
+      type: jdbc
+      properties:
+        jdbcUrl: jdbc:mysql://mysql.example.org:3306
+        username: my_user
+        password: my_password
+      shared: true
+    my-other-database:
+      type: jdbc
+      properties:
+        jdbcUrl: jdbc:h2:mem:my-other-database
+      shared: true
+----
+--
+
+Java::
++
+--
+[source,java]
+----
+config
+  .addDataConnectionConfig(
+    new DataConnectionConfig("my-mysql-database")
+      .setType("jdbc")
+      .setProperty("jdbcUrl", "jdbc:mysql://mysql.example.org:3306")
+      .setProperty("username", "my_user")
+      .setProperty("password", "my_password")
+      .setShared(true)
+  )
+  .addDataConnectionConfig(
+    new DataConnectionConfig("my-other-database")
+      .setType("jdbc")
+      .setProperty("jdbcUrl", "jdbc:h2:mem:my-other-database")
+      .setShared(true)
+  );
+----
+--
+====
+
+== Configuration Options for Data Connections
+
+Data connections have the following configuration options.
+
+NOTE: If you are using Java to configure the Mapstore, use the link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/config/DataConnectionConfig.html[`DataConnectionConfig` object].
+
+.Data Connection configuration options
+[cols="1a,1a",options="header"]
+|===
+|Option|Description|Default|Example
+
+
+|`name` (required)
+|The unique identifier for the data connection.
+
+|`type` (required)
+|The type of connector required for your external system. The following types of connector are supported: `jdbc`, `Kafka`,`MongDB`.  
+
+|`properties`
+|Any configuration properties that the data connection expects to receive.
+
+|`shared`
+|Whether the data connection is reusable in different MapStores, jobs, and SQL mappings. The behavior depends on the implementation of the specific data connector. The default value is `true`.
+
+|===
+
+[[connectors]]
+== Pre-built Data Connectors
+
+Hazelcast comes with the following pre-built data connectors, which you can configure in the `type` option of your data connection. 
+
+[cols="1a,1a,1a",options="header"]
+|===
+|Type|Description|Properties
+
+|`jdbc`
+|Connect to external systems that support JDBC, including MySQL, PostgreSQL, and H2.
+|For available configuration properties see link:https://github.com/brettwooldridge/HikariCP#gear-configuration-knobs-baby[HikariCP configuration]. This implementation is based on link:https://github.com/brettwooldridge/HikariCP[HikariDataSource]. All properties are passed directly to `HikariConfig`. 
+
+If there is more than on JDBC connection used on a single member from a single job, they will share the same data store and connection pool.
+
+|`Kafka`
+|Connect to a Kafka data source.
+|For available configuration options, see xref:sql:mapping-to-kafka.adoc#creating-a-kafka-mapping[Create a Kafka Mapping].
+
+|`MongoDB`
+|Connect to a MongoDB data base.
+|For available configuration options, see xref:integrate:mongodb-connector.adoc[]. 
+
+|===
+
+NOTE: If you use the slim distribution of Hazelcast with a built-in data connector, make sure that you have an appropriate driver on your cluster's classpath.
+
+== Related Resources
+
+You can also add new data connections dynamically at runtime, see xref:configuration:dynamic-config.adoc[dynamic configuration].
+
+== Next Steps
+
+Use your configured connection:
+
+- Build a data pipeline with the xref:integrate:jdbc-connector.adoc[Pipeline API].
+- Query your data connection, using a xref:sql:mapping-to-jdbc.adoc[SQL mapping].
+- Build a cache with a xref:mapstore:configuring-a-generic-mapstore.adoc[MapStore].

@@ -1,0 +1,124 @@
+= CREATE DATA CONNECTION
+:description: pass:q[The `CREATE DATA CONNECTION` statement stores the metadata required to connect to an external system for later use.]
+
+{description}
+
+Include data connections in mapping statements to allow the SQL service to connect to, read from, write to, or query data from your external systems. To simplify setup, you can use the same data connection in multiple SQL mappings.
+
+== Syntax Summary
+
+This code block is a quick reference with all the <<parameters, parameters>> that you can use with the `CREATE DATA CONNECTION` statement.
+
+See some <<examples, practical examples>>.
+
+[source,sql]
+----
+CREATE [OR REPLACE] DATA CONNECTION [IF NOT EXISTS] data_connection_name
+TYPE connector_type
+[[NOT] SHARED]
+OPTIONS ('option_name' = 'option_value' [, ...] );
+----
+
+== Parameters
+
+The `CREATE DATA CONNECTION` statement accepts the following parameters.
+
+You must provide the following:
+
+- `data_connection_name`
+- `connector_type`
+
+[cols="1a,2a"]
+|===
+|Parameter | Description 
+
+|`OR REPLACE`
+|Overwrite an existing data connection of the same name, if it exists.
+
+|`IF NOT EXISTS`
+|Create a new data connection only if a connection of the same name does not already exist.
+
+|`data_connection_name`
+|Unique name for the data connection.
+
+|`connector_type`
+|The type of connector required to make a connection to the external system. The following types of connector are supported: `JDBC`, `Kafka`,`MongDB`.
+
+|`NOT SHARED`
+|A single-use data connection. For example, a data connection that is used only in a specific SQL mapping.
+
+|`SHARED` (default)
+|A reusable data connection. 
+
+|`OPTIONS`
+|Configuration options for the chosen `connector_type`. See <<examples, examples>> for valid parameters for specific connectors.
+|===
+
+== Dependency Management
+Dropping or overwriting a data connection will not affect any of the active mappings or queries that use it. Only newly-created mappings or queries will be affected by the changes.
+
+== Permissions
+[.enterprise]*Enterprise*
+
+If xref:security:enabling-jaas.adoc[security] is enabled, you can grant or deny permission for certain clients to use this statement. See xref:security:native-client-security.adoc#sql-permission[SQL Permissions].
+
+[[examples]]
+== Examples
+
+[[Kafka]]
+=== Create a Kafka Data Connection
+
+[source,sql]
+----
+CREATE DATA CONNECTION IF NOT EXISTS myKafkaSource
+TYPE Kafka
+SHARED
+OPTIONS (
+    'bootstrap.servers' = '127.0.0.1:9092');
+----
+
+
+[[JDBC]]
+=== Create a JDBC Data Connection
+
+[source,sql]
+----
+CREATE DATA CONNECTION IF NOT EXISTS myDatabase
+TYPE JDBC
+SHARED
+OPTIONS (
+  'jdbcUrl'='jdbc:mysql://dummy:3306',
+  'username'='xyz',
+  'password'='xyz');
+----
+
+For a full list of configuration options, see link:https://github.com/brettwooldridge/HikariCP#gear-configuration-knobs-baby[HikariCP configuration].
+
+[[MongoDB]]
+=== Create a MongoDB Data Connection
+
+[source,sql]
+----
+CREATE DATA CONNECTION myMongoDBSource
+SHARED
+TYPE MongoDB
+OPTIONS (
+    'connectionString'='mongodb://mongodb0.example.com:27017',
+    'database'='myDatabaseName');
+----
+
+=== Update a Data Connection
+
+If you want to overwrite an existing data connection, use the `CREATE OR REPLACE DATA CONNECTION` statement.
+
+[source,sql]
+----
+CREATE OR REPLACE DATA CONNECTION myDatabase
+TYPE JDBC
+SHARED
+OPTIONS (
+  'jdbcUrl'='jdbc:mysql://dummy:3306',
+  'username'='xyz',
+  'password'='xyz');
+----
+

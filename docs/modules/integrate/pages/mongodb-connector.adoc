@@ -1,3 +1,129 @@
 = MongoDB Connector
 
-This connector is currently under incubation. For more information and examples, please visit the link:https://github.com/hazelcast/hazelcast-jet-contrib/tree/master/mongodb[GitHub repository].
+MongoDB is a well known document-oriented NoSQL database. Hazelcast is able to connect to MongoDB to read and write data.
+
+== MongoDB source
+
+MongoDB source works in two modes: batch or streaming.
+
+=== Batch
+The batch mode means that data will be read only once. Simple batch usage:
+
+```java
+BatchSource<Document> batchSource =
+MongoSources.batch(
+        dataConnectionRef("mongoDb"),
+        "myDatabase",
+        "myCollection",
+        new Document("age", new Document("$gt", 10)),
+        new Document("age", 1)
+);
+Pipeline p = Pipeline.create();
+BatchStage<Document> srcStage = p.readFrom(batchSource);
+```
+
+You can also use other `MongoSources` method, that allows builder-like, more complex source creation:
+
+```java
+BatchSource<MyDTO> batchSource =
+    MongoSources.batch(dataConnectionRef("mongo")) <1>
+            .database("myDatabase") <2>
+            .collection("myCollection", MyDTO.class) <3>
+            .filter(Filters.gt("age", 10), <4>
+            .projection(Projections.include("age")) <5>
+    );
+Pipeline p = Pipeline.create();
+BatchStage<Document> srcStage = p.readFrom(batchSource);
+```
+
+<1> reference to the Mongo Data Connection or `MongoClient` supplier
+<2> name of the database from which items will be read
+<3> name of the collection from which items will be read and type to which the elements will be
+parsed. Second argument is optional and if not provided, source will emit objects of type `org.bson.Document`
+<4> (optional) filters that will be used when reading the data. Is it good for performance to include here every possible filter user needs, instead of following `readFrom` with immediate `filter` operation.
+<5> (optional) projection specification, so infomation which properties will be read. In case of large documents having projection may significantly increase performance.
+
+=== Stream
+The streaming source creation is very similar, you have to swap `batch`  method name to `stream`. Additionally, it's recommended to use `startAtOperationTime` function when creating streaming source with a builder.
+Example stream source creation:
+
+```java
+StreamSource<Document> streamSource =
+    MongoSources.stream("batch-source", () -> MongoClients.create("mongodb://127.0.0.1:27017"))
+        .database("myDatabase")
+        .collection("myCollection")
+        .filter(Filters.gt("fullDocument.age", 10)), <1>
+        .projection(Projections.include("fullDocument.age")) <1>
+        .startAtOperationTime(System.currentTimeMillis()) <2>
+     );
+Pipeline p = Pipeline.create();
+StreamStage<Document> srcStage = p.readFrom(streamSource);
+```
+
+
+<1> Same as in batch, except the `fullDocument.` prefix, used to get properties of document which changes had been seen.
+<2> Place in the Mongo's oplog from which the changes will be read.
+
+=== Note on parallelization
+
+By default the connector adds 3 additional aggregation steps, one of which uses server side JavaScript to calculate if given document belongs to given partition. This allows parallel reading from multiple nodes also in streaming mode, where simple division by `_id` range would not be sufficient.
+
+However, user have to have in mind that server-side JavaScript must be enabled. If you cannot enable it, please set your parallelism to `1` and read from one instance only (so the total parallelism will be 1).
+
+== MongoDB sink
+
+MongoDB sink is a simple yet powerful way to write documents to MongoDB.
+
+Simple example:
+```java
+Sink<Document> mongoSink =
+         MongoSinks.mongodb(
+                 "mongodb://127.0.0.1:27017",
+                 "myDatabase",
+                 "myCollection"
+         );
+
+Pipeline p = Pipeline.create();
+(...)
+someStage.writeTo(mongoSink);
+```
+
+You can also use sink builder syntax:
+```java
+Sink<Document> mongoSink =
+         MongoSinks.builder(
+                     Document.class, <1>
+                     () -> MongoClients.create("mongodb://127.0.0.1:27017") <2>
+                 )
+                 .into("myDatabase", "myCollection") <3>
+                 .identifyDocumentBy("_id", doc -> doc.get("_id")) <4>
+                 .build()
+         );
+
+Pipeline p = Pipeline.create();
+(...)
+someStage.writeTo(mongoSink);
+```
+
+<1> Class of the document, that will be inserted. Can be Document, BsonDocument or any user defined POJO.
+<2> Supplier that creates mongo client or a `dataConnectionRef`
+<3> Destination database and collection to which items will be saved. In this case it's a constant value. You can also use overloaded method, that have 2 functions as arguments to specify target database and collection for every item separately (so in theory every item can land in different collection).
+<4> Specification of how the documents will be identified by the sink. This is required to distinguish two documents and know if we should perform insert or update. By default, if the class of the inserted document is `org.bson.Document`, the connector will distinguish two documents by their `_id` fields.
+
+Some other builder methods worth mentioning:
+
+1. `commitRetryStrategy` - how often a commit should be retried in case of transient errors. Used only with exactly once processing guarantee. Note that commit interval depends on the snapshot interval (more on this in <<Fault Tolerance>> section below), so commit interval in the Retry Strategy is a "minimum time", not exact value.
+2. `transactionOptions` - specifies Mongo's transaction options - read concern, write concern, read preference, etc.  Used only with exactly once processing guarantee.
+3. `writeMode` - `INSERT_ONLY`, `UPDATE_ONLY`, `UPSERT` or `REPLACE` - which operation will be used to put documents into Mongo. Default value is `REPLACE` (but inserts will be still performed if field got from `identifyDocumentBy` returns null).
+4. `throwOnNonExisting` - if true, connector will throw an exception if the database or collection does not exist prior to job execution.
+5. `withCustomReplaceOptions` - allows user to customize replace operations, like adding validation bypass or disabling upserts.
+
+By default sink puts the documents in parallel on all nodes.
+
+=== Fault Tolerance
+
+The Mongo sink supports exactly-once guarantee. It uses MongoDB's transactions if such guarantee is requested by the user. In case of transient errors, the transaction will be automatically retried as configured by `commitRetryStrategy` option. The documents are committed with the last snapshot; have in mind, that this increases latency.
+
+The commit interval is determined by the snapshot interval and retry strategy. Retry strategy defines minimum interval between commits (if it's smaller than snapshot interval) and how many times transaction will be retried before an exception will be thrown.
+
+Inserted documents will be visible to others after snapshot is made and transaction is committed.

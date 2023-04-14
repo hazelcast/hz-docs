@@ -1,49 +1,51 @@
 = Building a Cache with MapStore
-:description: MapStore is an API for building a cache on top of Hazelcast. The MapStore interface includes methods that are triggered when operations are invoked on a map. MapStores connect to a data store, load data from it, and write data back to it. For example, you can use a MapStore to load data into your cluster from a MongoDB, MySQL, or PostgreSQL database.
+:description: MapStore is an API for building a cache on top of Hazelcast. To build a cache, you can either use a pre-built component, which requires little or no coding. Or, you can use a custom option that allows you to write the interface yourself.
 :page-aliases: data-structures:working-with-external-data.adoc
 
 {description}
 
-Hazelcast comes with a <<low-code,generic MapStore>> that requires little to no Java code as well as a <<custom,custom option>> that allows you to write the implementation yourself.
+== MapLoader or MapStore
+
+You can use either the `MapLoader` or `Mapstore` interfaces to set up a cache, depending on your use case.
+
+MapLoader allows you to connect to an external system to load data into your cluster. For example, you can use a MapLoader to load data from a MongoDB, MySQL, PostgreSQL database or a Kafka data stream into your cluster. MapLoader supports read-through caching only.
+
+MapStore extends this functionality. It loads data but also writes data back to your external system to keep it synchronized with data on your cluster. MapStore supports all of the following caching patterns: read-through, write-through, write-behind.
 
 image:ROOT:externalData.png[Working with External Data]
 
+Both interfaces include methods that are triggered when operations are invoked on a map.
+
 == Supported Caching Patterns
 
-MapStore supports the following caching patterns:
+- Read-through (always): If an entry does not exist in memory when an application asks for it, Hazelcast asks the MapLoader/MapStore implementation to load that entry from the external system. If the entry exists, the MapLoader/MapStore implementation requests it from the external system and Hazelcast puts it into memory.
 
-- Read-through (always): If an entry does not exist in memory when an application asks for it, Hazelcast asks the MapStore implementation to load that entry from the data store. If the entry exists, the MapStore implementation requests it from the data store and Hazelcast puts it into memory.
+- Write-through (default): When new entries are added to a map, those entries are added to the external system synchronously.
 
-- Write-through (default): When new entries are added to a map, those entries are added to the data store synchronously.
-
-- Write-behind (requires xref:configuration-guide.adoc#write-behind[configuration]): When new entries are added to a map, those entries are added to the data store asynchronously, after a configured delay.
+- Write-behind (requires xref:configuration-guide.adoc#write-behind[configuration]): When new entries are added to a map, those entries are added to the external system asynchronously, after a configured delay.
 
 [[options]]
 == Options for Building a MapStore
 
-To build a cache using a MapStore, you need an implementation of the `MapStore` or `MapLoader` interface. Hazelcast comes with a generic MapStore that requires little to no Java code as well as a custom option that allows you to write the implementation yourself.
+To build a cache, you can use a pre-built, generic MapLoader or MapStore that comes with Hazelcast. This option requires you to write little to no Java code. Or, you can write a custom implementation using the `MapLoader` or `MapStore` interfaces.
 
 [[low-code]]
-=== Generic MapStore
+=== Generic MapLoader or MapStore
 
-The generic MapStore is a pre-built implementation that connects to an external data store, using the xref:external-data-stores:external-data-stores.adoc[`external-data-store` configuration].
+The xref:mapstore:configuring-a-generic-maploader.adoc[generic MapLoader] and xref:mapstore:configuring-a-generic-mapstore.adoc[generic MapStore] use a xref:external-data-stores:external-data-stores.adoc[data connection] to access your data held in an external system. The data connection contains the metadata that Hazelcast needs to establish a connection. For example, a database name, username, and password.
 
-The generic MapStore is called _low-code_ because it requires you to write little to no Java code:
-
-- If Hazelcast provides a built-in xref:external-data-stores:external-data-stores.adoc#factories[data store factory] for your data store, you can configure your cluster to use it, without writing any Java code.
-- If Hazelcast doesn't provide a built-in data store factory for your data store, you can write your own in Java to allow the pre-built MapStore to connect to your data store.
+- If Hazelcast provides a pre-built xref:external-data-stores:external-data-stores.adoc#factories[data connector] for your external system, you can configure your cluster to use it, without writing any Java code.
+- If a pre-built data connector is not available, you can write your own data connection in Java.
 
 [[custom]]
 === Custom MapStore
 
-If you need full control over how your MapStore works, you can implement your own in Java. The connection to the data store is handled in your MapStore implementation.
+If you need full control over how your cache works, xref:mapstore:implement-a-mapstore.adoc[implement your own in Java]. The connection to your external system is handled in your MapStore implementation.
 
 == Next Steps
+
+xref:configuring-a-generic-maploader.adoc[]
 
 xref:configuring-a-generic-mapstore.adoc[]
 
 xref:implement-a-mapstore.adoc[]
-
-
-
-

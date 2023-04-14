@@ -1,7 +1,7 @@
 = CREATE MAPPING
-:description: pass:q[The CREATE MAPPING statement creates a table that stores essential metadata about a source's data model, data connection, and serialization formats so that the SQL service can connect to the data source and query it.]
+:description: pass:q[The CREATE MAPPING statement creates a table that stores essential metadata about a source's data model, data connection or connection parameters, and serialization formats so that the SQL service can connect to the data source and query it.]
 
-The `CREATE MAPPING` statement creates a table that stores essential metadata about a source's data model, connection parameters, and serialization formats so that the SQL service can connect to the data source and query it.
+{description}
 
 == Syntax Summary
 
@@ -12,9 +12,9 @@ See some <<examples, practical examples>>.
 [source,sql]
 ----
 CREATE [OR REPLACE] MAPPING [IF NOT EXISTS] mapping_name
-[EXTERNAL NAME resource_name]
+[EXTERNAL NAME external_name]
 [ ( column_name column_type [EXTERNAL NAME external_column_name] [, ...] ) ]
-[DATA CONNECTION data_connection_name] [OBJECT TYPE resource_type]
+{TYPE type_identifier | DATA CONNECTION data_connection_name [OBJECT TYPE resource-type]}
 [ OPTIONS ( 'option_name' = 'option_value' [, ...] ) ]
 ----
 
@@ -22,8 +22,9 @@ CREATE [OR REPLACE] MAPPING [IF NOT EXISTS] mapping_name
 
 The `CREATE MAPPING` statement accepts the following parameters.
 
-You must provide the following:`mapping_name`
-- `type_identifier`
+You must provide the following:
+- `mapping_name`
+- `type_identifier` or `data_connection_name`
 
 [cols="1a,2a,2a"]
 |===
@@ -59,8 +60,8 @@ TYPE IMap
 OPTIONS ('keyFormat'='varchar','valueFormat'='int');
 ----
 
-|`resource_name`
-|An optional name that identifies the resource in the external system. For example, for a Kafka connector, the identifier is the topic name. For a JDBC connector, the identifier may be the name of a table, view, or other data structure. By default, this parameter is equal to the mapping name.
+|`external_name`
+|An optional name that identifies the object or resource in the external system. For example, for a Kafka connector, the identifier is the topic name. For a JDBC connector, the identifier may be the name of a table, view, or other data structure. By default, this parameter is equal to the mapping name.
 |-
 
 |`column_name`, `column_type`
@@ -77,7 +78,7 @@ OPTIONS ('keyFormat'='varchar','valueFormat'='json-flat');
 ----
 
 |`external_column_name`
-|An optional name of a column. If omitted, Hazelcast assumes this name is equal to the `column_name` parameter. For key-value connectors (Kafka, IMap), the key's and value's fields are prefixed by `__key` and `this`.
+|An optional name of a column, which is useful when loading data from an external system. If omitted, Hazelcast assumes this name is equal to the `column_name` parameter. For key-value connectors (Kafka, IMap), the key's and value's fields are prefixed by `__key` and `this`.
 |
 
 |`type_identifier`
@@ -90,6 +91,18 @@ TYPE IMap
 OPTIONS (
     'keyFormat'='varchar',
     'valueFormat'='int');
+----
+
+|`data_connection_name`
+|The connector to use to map the data. For example, if you use the `IMap` type, data is mapped to a Hazelcast map.
+|
+[source,sql]
+----
+CREATE MAPPING mytransactions
+DATA CONNECTION mydbconnection
+OPTIONS (
+    'keyFormat'='varchar',
+    'valueFormat'='varchar');
 ----
 
 |`'option_name'`, `'option_value'`

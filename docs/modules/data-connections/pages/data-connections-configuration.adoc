@@ -13,6 +13,10 @@ To configure a data connection to an external system, you must do the following:
 * Provide a unique identifier (`name`) for the data connection.
 * Choose the correct type of data connection for your external system. 
 
+See examples for other <<configuration-options, connection properties>> for each data connection type.
+
+=== Example JDBC Data Connection
+
 This example configuration shows data connections to both a MySQL database and a H2 data store. Both data connections use a JDBC connection.
 
 [tabs]
@@ -26,8 +30,8 @@ XML::
   <data-connection name="my-mysql-database">
     <type>JDBC</type>
     <properties>
-      <property name="jdbcUrl">jdbc:mysql://mysql.example.org:3306</property>
-      <property name="username">my_user</property>
+      <property name="jdbcUrl">jdbc:mysql://mysql.example.org:3306</property> <1>
+      <property name="username">my_user</property> <2>
       <property name="password">my_password</property>
     </properties>
     <shared>true</shared>
@@ -35,12 +39,14 @@ XML::
   <data-connection name="my-other-database">
     <type>JDBC</type>
     <properties>
-      <property name="jdbcUrl">jdbc:h2:mem:my-other-database</property>
+      <property name="jdbcUrl">jdbc:h2:mem:my-other-database</property> <1>
     </properties>
     <shared>true</shared>
   </data-connection>
 </hazelcast>
 ----
+<1> (Required) JDBC URL for establishing a connection to the MySQL or H2 database
+<2> (Optional) Separate user credentials for authentication
 --
 
 YAML::
@@ -53,16 +59,18 @@ hazelcast:
     my-mysql-database:
       type: JDBC
       properties:
-        jdbcUrl: jdbc:mysql://mysql.example.org:3306
-        username: my_user
+        jdbcUrl: jdbc:mysql://mysql.example.org:3306 <1>
+        username: my_user <2>
         password: my_password
       shared: true
     my-other-database:
       type: JDBC
       properties:
-        jdbcUrl: jdbc:h2:mem:my-other-database
+        jdbcUrl: jdbc:h2:mem:my-other-database <1>
       shared: true
 ----
+<1> (Required) JDBC URL for establishing a connection to the MySQL or H2 database
+<2> (Optional) Separate user credentials for authentication
 --
 
 Java::
@@ -74,21 +82,203 @@ config
   .addDataConnectionConfig(
     new DataConnectionConfig("my-mysql-database")
       .setType("JDBC")
-      .setProperty("jdbcUrl", "jdbc:mysql://mysql.example.org:3306")
-      .setProperty("username", "my_user")
+      .setProperty("jdbcUrl", "jdbc:mysql://mysql.example.org:3306") <1>
+      .setProperty("username", "my_user") <2>
       .setProperty("password", "my_password")
       .setShared(true)
   )
   .addDataConnectionConfig(
     new DataConnectionConfig("my-other-database")
       .setType("JDBC")
-      .setProperty("jdbcUrl", "jdbc:h2:mem:my-other-database")
+      .setProperty("jdbcUrl", "jdbc:h2:mem:my-other-database") <1>
       .setShared(true)
   );
 ----
+<1> (Required) JDBC URL for establishing a connection to the MySQL or H2 database
+<2> (Optional) Separate user credentials for authentication
 --
 ====
 
+[[kafka]]
+=== Example Kafka Data Connection
+
+This example shows the configuration of a data connection to a single Kafka data source.
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+  <data-connection name="my-kafka-source">
+    <type>Kafka</type>
+    <properties>
+      <property name="bootstrap.servers">127.0.0.1:9092</property> <1>
+      <property name="key.deserializer">org.apache.kafka.common.serialization.IntegerDeserializer</property> <2>
+      <property name="key.serializer">org.apache.kafka.common.serialization.IntegerSerializer</property>
+      <property name="value.serializer">org.apache.kafka.common.serialization.StringSerializer</property>
+      <property name="value.deserializer">org.apache.kafka.common.serialization.StringDeserializer</property>
+      <property name="auto.offset.reset">earliest</property> <3>
+    </properties>
+    <shared>true</shared>
+  </data-connection>
+</hazelcast>
+----
+<1> (Required) Address of the Kafka consumer/producer  
+<2> (Optional) Automatic serializers/deserializers for keys and values in Kafka messages 
+<3> (Optional) Consumer behavior if the connection is interrupted
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  data-connection:
+    my-kafka-source:
+      type: Kafka
+      properties:
+        bootstrap.servers: 127.0.0.1:9092 <1>
+        key.deserializer: org.apache.kafka.common.serialization.IntegerDeserialize <2> 
+        key.serializer: org.apache.kafka.common.serialization.IntegerSerializer
+        value.serializer: org.apache.kafka.common.serialization.StringSerializer
+        auto.offset.reset: earliest <3>
+      shared: true
+----
+<1> (Required) Address of the Kafka consumer/producer  
+<2> (Optional) Automatic serializers/deserializers for keys and values in Kafka messages 
+<3> (Optional) Consumer behavior if the connection is interrupted
+--
+
+Java::
++
+--
+[source,java]
+----
+config
+  .addDataConnectionConfig(
+    new DataConnectionConfig("my-kafka-source")
+      .setType("Kafka")
+      .setProperty("bootstrap.servers", "127.0.0.1:9092") <1>
+      .setProperty("key.deserializer", "org.apache.kafka.common.serialization.IntegerDeserialize") <2>
+      .setProperty("key.serializer", "org.apache.kafka.common.serialization.IntegerSerializer")
+      .setProperty("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
+      .setProperty("auto.offset.reset", "earliest") <3>
+      .setShared(true)
+  );
+----
+<1> (Required) Address of the Kafka consumer/producer  
+<2> (Optional) Automatic serializers/deserializers for keys and values in Kafka messages 
+<3> (Optional) Consumer behavior if the connection is interrupted
+--
+====
+
+[[Mongo]]
+=== Example MongoDB Data Connection
+
+This example configuration shows data connections to two MongoDB databases. 
+
+As in the example, you can supply authentication credentials to a MongoDB instance as part of the connection string, or separately. 
+
+Supply the database name if you intend to use the data connection in a Generic MapLoader/MapStore or pipeline, and the connection details give access to multiple databases.
+    
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+  <data-connection name="my-mongodb">
+    <type>Mongo</type>
+    <properties>
+      <property name="connectionString">mongodb://my_user:my_password%some-host:27017</property> <1>
+      <property name="database">my_database</property> <2>
+    </properties>
+    <shared>true</shared>
+  </data-connection>
+  <data-connection name="my-other-mongodb">
+    <type>Mongo</type>
+    <properties>
+      <property name="host">some_host</property> <3>
+      <property name="username">my_user</property> <4>
+      <property name="password">my_password</property>
+      <property name="database">my_other_database</property> <2>
+    </properties>
+    <shared>true</shared>
+  </data-connection>
+</hazelcast>
+----
+<1> (Required) Connection string of the MongoDB instance, including user credentials  
+<2> (Optional) Name of the database to connect to 
+<3> (Optional) Host details of the MongoDB instance, excluding user credentials
+<4> (Optional) User credentials for the MongoDB instance
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  data-connection:
+    my-mongodb:
+      type: Mongo
+      properties:
+        connectionString: mongodb://my_user:my_password%some-host:27017 <1>
+        database: my_database <2>
+      shared: true
+    my-other-mongodb:
+      type: Mongo
+      properties:
+        host: some_host <3>
+        username: my_user <4>
+        password: my_password
+        database: my_other_database <2>
+      shared: true
+----
+<1> (Required) Connection string of the MongoDB instance, including user credentials  
+<2> (Optional) Name of the database to connect to 
+<3> (Optional) Host details of the MongoDB instance, excluding user credentials
+<4> (Optional) User credentials for the MongoDB instance
+--
+
+Java::
++
+--
+[source,java]
+----
+config
+  .addDataConnectionConfig(
+    new DataConnectionConfig("my-mongodb")
+      .setType("Mongo")
+      .setProperty("connectionString", "mongodb://my_user:my_password%some-host:27017") <1>
+      .setProperty("database", "my_database") <2>
+      .setShared(true)
+  )
+  .addDataConnectionConfig(
+    new DataConnectionConfig("my-other-mongo")
+      .setType("JDBC")
+      .setProperty("host", "some-host") <3>
+      .setProperty("username", "my_user") <4>
+      .setProperty("password", "my_password")
+      .setProperty("database", "my_other_database") <2>
+      .setShared(true)
+  );
+----
+<1> (Required) Connection string of the MongoDB instance, including user credentials  
+<2> (Optional) Name of the database to connect to 
+<3> (Optional) Host details of the MongoDB instance, excluding user credentials
+<4> (Optional) User credentials for the MongoDB instance
+--
+====
+
+[[configuration-options]]
 == Configuration Options for Data Connections
 
 Data connections have the following configuration options.
@@ -132,11 +322,15 @@ If there is more than one JDBC connection used on a single member from a single 
 
 |`Kafka`
 |Connect to a Kafka data source.
-|For available configuration options, see xref:sql:mapping-to-kafka.adoc#creating-a-kafka-mapping[Create a Kafka Mapping].
+|See <<kafka, example>> and xref:sql:mapping-to-kafka.adoc#creating-a-kafka-mapping[Create a Kafka Mapping].
+
+
+
+
 
 |`Mongo`
 |Connect to a MongoDB database.
-|For available configuration options, see xref:integrate:mongodb-connector.adoc[]. 
+|See example.
 
 |===
 

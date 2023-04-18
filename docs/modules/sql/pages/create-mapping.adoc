@@ -14,7 +14,7 @@ See some <<examples, practical examples>>.
 CREATE [OR REPLACE] MAPPING [IF NOT EXISTS] mapping_name
 [EXTERNAL NAME external_name]
 [ ( column_name column_type [EXTERNAL NAME external_column_name] [, ...] ) ]
-{TYPE type_identifier | DATA CONNECTION data_connection_name [OBJECT TYPE resource-type]}
+{TYPE type_identifier | DATA CONNECTION data_connection_name [OBJECT TYPE resource_type]}
 [ OPTIONS ( 'option_name' = 'option_value' [, ...] ) ]
 ----
 
@@ -23,6 +23,7 @@ CREATE [OR REPLACE] MAPPING [IF NOT EXISTS] mapping_name
 The `CREATE MAPPING` statement accepts the following parameters.
 
 You must provide the following:
+
 - `mapping_name`
 - `type_identifier` or `data_connection_name`
 
@@ -61,8 +62,8 @@ OPTIONS ('keyFormat'='varchar','valueFormat'='int');
 ----
 
 |`external_name`
-|An optional name that identifies the object or resource in the external system. For example, for a Kafka connector, the identifier is the topic name. For a JDBC connector, the identifier may be the name of a table, view, or other data structure. By default, this parameter is equal to the mapping name.
-|-
+|An optional name that identifies the object or resource in the external system for which the mapping is created. For example, for a Kafka connector, the identifier is the topic name. For a JDBC connector, the identifier may be the name of a table, view, or other data structure. By default, this parameter is equal to the mapping name.
+|
 
 |`column_name`, `column_type`
 |The name and data type of the column.
@@ -78,7 +79,7 @@ OPTIONS ('keyFormat'='varchar','valueFormat'='json-flat');
 ----
 
 |`external_column_name`
-|An optional name of a column, which is useful when loading data from an external system. If omitted, Hazelcast assumes this name is equal to the `column_name` parameter. For key-value connectors (Kafka, IMap), the key's and value's fields are prefixed by `__key` and `this`.
+|An optional name of a column. If omitted, Hazelcast assumes this name is equal to the `column_name` parameter. For key-value connectors (Kafka, IMap), the key's and value's fields are prefixed by `__key` and `this`.
 |
 
 |`type_identifier`
@@ -94,19 +95,36 @@ OPTIONS (
 ----
 
 |`data_connection_name`
-|The connector to use to map the data. For example, if you use the `IMap` type, data is mapped to a Hazelcast map.
+|An existing data connection that is used to connect to the external system. 
 |
 [source,sql]
 ----
 CREATE MAPPING mytransactions
-DATA CONNECTION mydbconnection
+DATA CONNECTION myJDBCconnection
+OPTIONS (
+    'keyFormat'='varchar',
+    'valueFormat'='varchar');
+
+----
+
+|`resource_type`
+|An optional name of the resource in the external system. For a JDBC connector, the resource may be the name of a table, view, or other data structure.
+|
+[source,sql]
+----
+CREATE MAPPING mytransactions (
+    transactiontype VARCHAR,
+    amount INT
+    id INT)
+DATA CONNECTION myJDBCconnection
+OBJECT TYPE table
 OPTIONS (
     'keyFormat'='varchar',
     'valueFormat'='varchar');
 ----
 
 |`'option_name'`, `'option_value'`
-|Connector parameters. Check the xref:integrate:connectors.adoc[reference page] for your connector to find out what values you can use. These parameters must be enclosed in single quotes (a SQL `VARCHAR` literal).
+|Data connection or connector parameters. Check the xref:integrate:connectors.adoc[reference page] for your connector to find out what values you can use. These parameters must be enclosed in single quotes (a SQL `VARCHAR` literal).
 |
 ```sql
 CREATE MAPPING my_topic(

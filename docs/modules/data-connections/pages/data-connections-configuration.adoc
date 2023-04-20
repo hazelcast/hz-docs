@@ -1,6 +1,6 @@
 [[configuring-connections-to-external-data-stores]]
 = Configuring Data Connections to External Systems
-:description: A data connection contains the metadata that Hazelcast needs to connect an external system. You can define a data connection in your members' configuration files or with the Java member API and reuse the same connection details in the Pipeline API, SQL mappings, and MapStores.   
+:description: A data connection contains the metadata that Hazelcast needs to connect an external system. You can define a data connection in your members' configuration files, in the Java member API, or in SQL, and reuse the same connection details in the Pipeline API, SQL mappings, and MapStores.   
 :page-beta: true
 :page-aliases: external-data-stores:external-data-stores.adoc, data-links:configuring-connections.adoc
 
@@ -17,7 +17,7 @@ See examples for other <<configuration-options, connection properties>> for each
 
 === Example JDBC Data Connection
 
-This example configuration shows data connections to both a MySQL database and a H2 data store. Both data connections use a JDBC connection.
+This example configuration shows a data connection to a MySQL database using a JDBC connection.
 
 [tabs]
 ====
@@ -36,17 +36,10 @@ XML::
     </properties>
     <shared>true</shared>
   </data-connection>
-  <data-connection name="my-other-database">
-    <type>JDBC</type>
-    <properties>
-      <property name="jdbcUrl">jdbc:h2:mem:my-other-database</property> <1>
-    </properties>
-    <shared>true</shared>
-  </data-connection>
 </hazelcast>
 ----
-<1> (Required) JDBC URL for establishing a connection to the MySQL or H2 database
-<2> (Optional) Separate user credentials for authentication
+<1> (Required) JDBC URL for establishing a connection to the MySQL database
+<2> (Optional) Separate user credentials for authentication. Alternatively, you can include the user credentials in the JDBC URL. 
 --
 
 YAML::
@@ -63,14 +56,9 @@ hazelcast:
         username: my_user <2>
         password: my_password
       shared: true
-    my-other-database:
-      type: JDBC
-      properties:
-        jdbcUrl: jdbc:h2:mem:my-other-database <1>
-      shared: true
 ----
-<1> (Required) JDBC URL for establishing a connection to the MySQL or H2 database
-<2> (Optional) Separate user credentials for authentication
+<1> (Required) JDBC URL for establishing a connection to the MySQL database
+<2> (Optional) Separate user credentials for authentication. Alternatively, you can include the user credentials in the JDBC URL.
 --
 
 Java::
@@ -86,23 +74,39 @@ config
       .setProperty("username", "my_user") <2>
       .setProperty("password", "my_password")
       .setShared(true)
-  )
-  .addDataConnectionConfig(
-    new DataConnectionConfig("my-other-database")
-      .setType("JDBC")
-      .setProperty("jdbcUrl", "jdbc:h2:mem:my-other-database") <1>
-      .setShared(true)
   );
 ----
-<1> (Required) JDBC URL for establishing a connection to the MySQL or H2 database
-<2> (Optional) Separate user credentials for authentication
+<1> (Required) JDBC URL for establishing a connection to the MySQL database
+<2> (Optional) Separate user credentials for authentication. Alternatively, you can include the user credentials in the JDBC URL.
+--
+
+SQL::
++
+--
+Data connections created in SQL behave differently to those defined in members' configuration files or in Java.
+
+- You cannot persist SQL metadata on disk. This means that when a cluster restarts, data connections are not retained.
+- You can update or drop a data connection using SQL commands.
+
+[source,sql]
+----
+CREATE DATA CONNECTION my-mysql-database
+TYPE JDBC
+SHARED
+OPTIONS (
+    'jdbcUrl'='jdbc:mysql://mysql.example.org:3306', <1>
+    'username'='my_user', <2>
+    'password'='my_password');
+----
+<1> (Required) JDBC URL for establishing a connection to the MySQL database
+<2> (Optional) Separate user credentials for authentication. Alternatively, you can include the user credentials in the JDBC URL.
 --
 ====
 
 [[kafka]]
 === Example Kafka Data Connection
 
-This example shows the configuration of a data connection to a single Kafka data source.
+This example shows the configuration of a data connection to a single Kafka broker.
 
 [tabs]
 ====
@@ -174,6 +178,30 @@ config
 <2> (Optional) Automatic serializers/deserializers for keys and values in Kafka messages 
 <3> (Optional) Consumer behavior if the connection is interrupted
 --
+SQL::
++
+--
+Data connections created in SQL behave differently to those defined in members' configuration files or in Java.
+
+- You cannot persist SQL metadata on disk. This means that when a cluster restarts, data connections are not retained.
+- You can update or drop a data connection using SQL commands.
+
+[source,sql]
+----
+CREATE DATA CONNECTION my-kafka-source
+TYPE Kafka
+SHARED
+OPTIONS (
+    'bootstrap.servers'='127.0.0.1:9092', <1>
+    'key.deserializer'='org.apache.kafka.common.serialization.IntegerDeserialize', <2>
+    'key.serializer'='org.apache.kafka.common.serialization.IntegerSerializer',
+    'value.serializer'='org.apache.kafka.common.serialization.StringSerializer',
+    'auto.offset.reset'='earliest'); <3>
+----
+<1> (Required) Address of the Kafka consumer/producer  
+<2> (Optional) Automatic serializers/deserializers for keys and values in Kafka messages 
+<3> (Optional) Consumer behavior if the connection is interrupted
+--
 ====
 
 [[Mongo]]
@@ -182,9 +210,6 @@ config
 This example configuration shows data connections to two MongoDB databases. 
 
 As in the example, you can supply authentication credentials to a MongoDB instance as part of the connection string, or separately. 
-
-Supply the database name if you intend to use the data connection in a Generic MapLoader/MapStore or pipeline, and the connection details give access to multiple databases.
-    
 
 [tabs]
 ====
@@ -263,7 +288,7 @@ config
   )
   .addDataConnectionConfig(
     new DataConnectionConfig("my-other-mongo")
-      .setType("JDBC")
+      .setType("Mongo")
       .setProperty("host", "some-host") <3>
       .setProperty("username", "my_user") <4>
       .setProperty("password", "my_password")
@@ -273,8 +298,42 @@ config
 ----
 <1> (Required) Connection string of the MongoDB instance, including user credentials  
 <2> (Optional) Name of the database to connect to 
-<3> (Optional) Host details of the MongoDB instance, excluding user credentials
+<3> (Required) Host details of the MongoDB instance, excluding user credentials
 <4> (Optional) User credentials for the MongoDB instance
+--
+SQL::
++
+--
+Data connections created in SQL behave differently to those defined in members' configuration files or in Java.
+
+- You cannot persist SQL metadata on disk. This means that when a cluster restarts, data connections are not retained.
+- You can update or drop a data connection using SQL commands.
+
+[source,SQL]
+----
+CREATE DATA CONNECTION my-mongodb
+TYPE Mongo
+SHARED
+OPTIONS (
+    'connectionString'='mongodb://my_user:my_password%some-host:27017', <1>
+    'database'='my_database'); <2>
+----
+<1> (Required) Connection string of the MongoDB instance, including user credentials  
+<2> (Optional) Name of the database to connect to 
+
+[source,SQL]
+----
+CREATE DATA CONNECTION my-mongodb
+TYPE Mongo
+SHARED
+OPTIONS (
+    'host'='some-host', <1>
+    'username'='my_user', <2>
+    'password'='my_password'
+    'database'='my_other_database');
+----
+<1> (Required) Host details of the MongoDB instance, excluding user credentials
+<2> (Optional) User credentials for the MongoDB instance
 --
 ====
 
@@ -290,7 +349,6 @@ NOTE: If you are using Java to configure the Mapstore, use the link:https://docs
 |===
 |Option|Description|Default|Example
 
-
 |`name` (required)
 |The unique identifier for the data connection.
 
@@ -301,7 +359,7 @@ NOTE: If you are using Java to configure the Mapstore, use the link:https://docs
 |Any configuration properties that the data connection expects to receive.
 
 |`shared`
-|Whether the data connection instance is reusable in different MapStores, jobs, and SQL mappings. This behavior depends on the implementation of the specific data connection. The default value is `true`.
+|Whether the data connection instance is reusable in different MapStores, jobs, and SQL mappings. This behavior depends on the implementation of the specific data connection. The default value is `true`. See the implementation of each data connection type for full details of reusability: link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/dataconnection/HazelcastDataConnection.html[`HazelcastDataConnection`], link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/kafka/KafkaDataConnection.html[`KafkaDataConnection`], link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/mongodb/dataconnection/MongoDataConnection.html[`MongoDataConnection`].
 
 |===
 
@@ -315,7 +373,7 @@ The following types of data connection are available for use.
 |Type|Description|Properties
 
 |`JDBC`
-|Connect to external systems that support JDBC, including MySQL, PostgreSQL, and H2.
+|Connect to external systems that support JDBC, including MySQL and PostgreSQL.
 |For available configuration properties see link:https://github.com/brettwooldridge/HikariCP#gear-configuration-knobs-baby[HikariCP configuration]. This implementation is based on link:https://github.com/brettwooldridge/HikariCP[HikariDataSource]. All properties are passed directly to `HikariConfig`. 
 
 If there is more than one JDBC connection used on a single member from a single job, they will share the same data store and connection pool.
@@ -324,13 +382,9 @@ If there is more than one JDBC connection used on a single member from a single 
 |Connect to a Kafka data source.
 |See <<kafka, example>> and xref:sql:mapping-to-kafka.adoc#creating-a-kafka-mapping[Create a Kafka Mapping].
 
-
-
-
-
 |`Mongo`
 |Connect to a MongoDB database.
-|See example.
+|See <<Mongo, example>>.
 
 |===
 

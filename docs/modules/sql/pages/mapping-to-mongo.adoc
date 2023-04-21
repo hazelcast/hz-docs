@@ -1,0 +1,154 @@
+= Mapping to MongoDB
+:description: To query MongoDB data connections, you can create a mapping to them with the Mongo connector.
+:page-beta: true
+
+{description}
+
+== What is the Mongo Connector
+
+The Mongo connector allows you to read from/write to a MongoDB database, and to execute SQL queries on Mongo collections directly from Hazelcast.
+
+== Supported SQL Statements
+
+For the xref:integrate:mongodb-connector.adoc#batch[batch mode]:
+
+- xref:select.adoc[`SELECT`]
+- xref:update.adoc[`UPDATE`]
+- xref:sink-into.adoc[`INSERT INTO/SINK INTO`]
+
+For the xref:integrate:mongodb-connector.adoc#stream[streaming mode]:
+
+- xref:select.adoc[`SELECT`]
+
+== Installing the Connector
+
+The Mongo Connector artifacts are published on the Maven repositories.
+Add the following lines to your `pom.xml` to include it as a dependency to your project:
+
+[source,xml,subs="attributes+"]
+----
+<dependency>
+    <groupId>com.hazelcast.jet</groupId>
+    <artifactId>hazelcast-jet-mongodb</artifactId>
+    <version>${full-version}</version>
+</dependency>
+----
+
+or if you are using Gradle:
+
+[source,plain,subs="attributes+"]
+----
+compile group: 'com.hazelcast.jet, name: hazelcast-jet-'mongodb', version: ${full-version}.
+----
+
+NOTE: To be able to use SQL over MongoDB, you have to include `hazelcast-sql` as well, as a dependency.
+
+== Permissions
+[.enterprise]*Enterprise*
+
+The Mongo connector does not yet support permissions.
+
+== Before you Begin
+
+Before you can create a mapping to a MongoDB, you must have the following:
+
+* A `$jsonSchema` validation in the collection (see the https://www.mongodb.com/docs/manual/reference/operator/query/jsonSchema/[schema documentation]), or you have to have at least one element in the collection you want to create mapping for (for property type validation).
+* Enabled operations log (oplog) if you want to use streaming mappings.
+
+== Creating a MongoDB Mapping
+
+The following example creates a mapping to a MongoDB database.
+
+. In a MongoDB database, create a `people` collection. For example in Java, you would run the following command.
++
+[source,java]
+----
+CreateCollectionOptions options = new CreateCollectionOptions();
+ValidationOptions validationOptions = new ValidationOptions();
+validationOptions.validator(BsonDocument.parse(
+       "{\n" +
+               "    $jsonSchema: {\n" +
+               "      bsonType: \"object\",\n" +
+               "      title: \"Object Validation\",\n" +
+               "      properties: {" +
+               "        \"personId\": { \"bsonType\": \"int\" },\n" +
+               "        \"name\": { \"bsonType\": \"string\" }\n" +
+               "      }\n" +
+               "    }\n" +
+               "  }\n"
+));
+options.validationOptions(validationOptions);
+database.createCollection(collectionName, options);
+----
+The `ValidationOptions` are not required, but recommended.
+. Configure the data connection so that the client can be reused by multiple mappings.
++
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <data-connection name="myMongo">
+        <type>Mongo</type>
+        <properties>
+            <property name="connectionString">stringForMongo</property> <1>
+        </properties>
+        <shared>false</shared> <2>
+    </data-connection>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+data-connection:
+  name: myMongo
+  type: Mongo
+  properties:
+    connectionString: stringforMongo
+  shared: false
+----
+====
+<1> Your connection string.
+<2> Set to `true` if the connection is reusable.
++
+Instead of providing a single `connectionString` parameter, you may also want to provide host, username, password and (optionally) `authDb`.
++
+Instead of providing the configuration in YAML or XML, you can also run the following SQL query.
++
+[source,xml]
+----
+CREATE DATA CONNECTION myMongo type Mongo SHARED 
+OPTIONS (
+	‘connectionString’ = ‘<your connection string>’
+)
+----
++
+. Create the mapping.
++
+[source,sql]
+----
+CREATE MAPPING people
+TYPE MONGO <1>
+DATA CONNECTION myMongo; <2>
+----
+<1> The type of the connector.
+<2> The name of the data connection configuration on your members (see Step 2 above).
++
+In the above case, automatic schema inference will be used. You may also want to provide the schema explicitly as shown below.
++
+[source,sql]
+----
+CREATE MAPPING people (
+    firstName VARCHAR(100),
+    lastName VARCHAR(100),
+    age INT
+)
+DATA CONNECTION myMongo
+----
+Notice that there is mention of `TYPE MONGO` this time; it’s automatically assumed by the SQL engine when you provide MongoDB data connection.

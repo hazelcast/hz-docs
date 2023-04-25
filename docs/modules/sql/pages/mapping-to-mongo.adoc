@@ -152,3 +152,122 @@ CREATE MAPPING people (
 DATA CONNECTION myMongo
 ----
 Notice that there is mention of `TYPE MONGO` this time; it’s automatically assumed by the SQL engine when you provide MongoDB data connection.
+
+== Type Mapping
+
+The type system in MongoDB and SQL is not exactly the same. That leads to potential confusions and the need of type coercion.
+
+.MongoDB Type Conversion
+[cols="1,1,1"]
+|===
+| BSON Type | SQL Type | Java Type
+
+|`DOUBLE`
+|`DOUBLE`
+|`DOUBLE`
+
+|`STRING`
+|`VARCHAR`
+|`STRING`
+
+|`OBJECT`
+|`OBJECT`
+|`org.bson.Document`
+
+|`ARRAY`
+|`OBJECT`
+|`LIST`
+
+|`BINDATA`
+| -
+| -
+
+|`UNDEFINED`
+| -
+| -
+
+|`OBJECTID`
+|`OBJECT`
+|`org.bson.ObjectId`
+
+|`BOOL`
+|`BOOLEAN`
+|`BOOLEAN`
+
+|`DATE`
+
+This represents seconds from Unix epoch in UTC timezone. Therefore, it's not mapped to pure `DATE` SQL type nor `LOCALDATE` in Java (nor any formats with timezones).
+|`DATE_TIME` or `TIMESTAMP`
+|`LOCALDATETIME`
+
+|`TIMESTAMP`
+|`DATE_TIME` or `TIMESTAMP`
+|`LOCALDATETIME`
+
+|`NULL`
+| -
+| -
+
+|`REGEX`
+|`OBJECT`
+|`org.bson.BsonRegularExpression`
+
+|`DBPOINTER`
+| -
+| -
+
+|`JAVASCRIPT`
+|`VARCHAR`
+|`STRING`
+
+|`JAVASCRIPTWITHSCOPE`
+|`OBJECT`
+|`org.bson.CodeWithScope`
+
+|`SYMBOL`
+| -
+| -
+
+|`INT (32 BIT)`
+|`INT`
+|`INT`
+
+|`LONG (64 BIT)`
+|`BIGINT`
+|`LONG`
+
+|`DECIMAL (128 BIT)`
+|`DECIMAL`
+|`BIGDECIMAL`
+
+|`MINKEY`
+|`OBJECT`
+|`org.bson.MinKey`
+
+|`MAXKEY`
+|`OBJECT`
+|`org.bson.MaxKey`
+|===
+
+The **Java Type** column represents an object returned by the SQL query if the object put into the collection is of given BSON type.
+
+Note that, while Hazelcast is able to convert MongoDB type to the requested SQL type in the projection, the argument binding will not always work the same due to technical limitations. For example, you can have an object with the type `TIMESTAMP` represented as `DATE_TIME`, that in `SELECT` it will give you `LOCALDATETIME`. However, binding `LOCALDATETIME` as an argument will not work, as only native MongoDB types will work for arguments. Same applies to, for example, having BSON column of type `STRING` mapped to `INTEGER` in SQL.
+
+=== Type Coercion
+
+The following table shows the possible and supported type coercions. All the default mappings from the previous section are always valid.
+
+.MongoDB Type Conversion
+[cols="m,m"]
+|===
+| Type of Provided Argument | Resolved Insertion Type
+
+|`LOCALDATETIME`
+|`BSONDATETIME`
+
+|`OFFSETDATETIME`
+|`BSONDATETIME`
+
+|`HazelcastJsonValue` (JSON column)
+|`DOCUMENT`
+|===

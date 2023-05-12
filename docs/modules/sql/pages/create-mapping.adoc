@@ -1,7 +1,7 @@
 = CREATE MAPPING
-:description: The CREATE MAPPING statement creates a table that stores essential metadata about a source's data model, connection parameters, and serialization formats so that the SQL service can connect to the data source and query it.
+:description: pass:q[The CREATE MAPPING statement creates a table that stores essential metadata about a source's data model, data connection or connection parameters, and serialization formats so that the SQL service can connect to the data source and query it.]
 
-The `CREATE MAPPING` statement creates a table that stores essential metadata about a source's data model, connection parameters, and serialization formats so that the SQL service can connect to the data source and query it.
+{description}
 
 == Syntax Summary
 
@@ -14,7 +14,7 @@ See some <<examples, practical examples>>.
 CREATE [OR REPLACE] MAPPING [IF NOT EXISTS] mapping_name
 [EXTERNAL NAME external_name]
 [ ( column_name column_type [EXTERNAL NAME external_column_name] [, ...] ) ]
-TYPE type_identifier
+{TYPE type_identifier | DATA CONNECTION data_connection_name [OBJECT TYPE resource_type]}
 [ OPTIONS ( 'option_name' = 'option_value' [, ...] ) ]
 ----
 
@@ -25,9 +25,9 @@ The `CREATE MAPPING` statement accepts the following parameters.
 You must provide the following:
 
 - `mapping_name`
-- `type_identifier`
+- `type_identifier` or `data_connection_name`
 
-[cols="1a,2a,2a"]
+[cols="1a,2a,3a"]
 |===
 |Parameter | Description | Example
 
@@ -38,7 +38,9 @@ You must provide the following:
 ----
 CREATE OR REPLACE MAPPING myMap
 TYPE IMap
-OPTIONS ('keyFormat'='varchar','valueFormat'='int');
+OPTIONS (
+    'keyFormat'='varchar',
+    'valueFormat'='int');
 ----
 
 |`IF NOT EXISTS`
@@ -48,7 +50,9 @@ OPTIONS ('keyFormat'='varchar','valueFormat'='int');
 ----
 CREATE MAPPING IF NOT EXISTS myMap
 TYPE IMap
-OPTIONS ('keyFormat'='varchar','valueFormat'='int');
+OPTIONS (
+    'keyFormat'='varchar',
+    'valueFormat'='int');
 ----
 
 |`mapping_name`
@@ -58,12 +62,14 @@ OPTIONS ('keyFormat'='varchar','valueFormat'='int');
 ----
 CREATE MAPPING myMappingName
 TYPE IMap
-OPTIONS ('keyFormat'='varchar','valueFormat'='int');
+OPTIONS (
+    'keyFormat'='varchar',
+    'valueFormat'='int');
 ----
 
 |`external_name`
-|An optional name that identifies the object in the external system. For example, for a Kafka connector, the identifier is the topic name. By default, this parameter is equal to the mapping name.
-|-
+|An optional name that identifies the object or resource in the external system for which the mapping is created. For example, for a Kafka connector, the identifier is the topic name. For a JDBC connector, the identifier may be the name of a table, view, or other relation. By default, this parameter is equal to the mapping name.
+|
 
 |`column_name`, `column_type`
 |The name and data type of the column.
@@ -75,7 +81,9 @@ CREATE MAPPING myMap (
     id INT
 )
 TYPE IMap
-OPTIONS ('keyFormat'='varchar','valueFormat'='json-flat');
+OPTIONS (
+    'keyFormat'='varchar',
+    'valueFormat'='json-flat');
 ----
 
 |`external_column_name`
@@ -94,8 +102,36 @@ OPTIONS (
     'valueFormat'='int');
 ----
 
+|`data_connection_name`
+|An existing data connection that is used to connect to the external system. 
+|
+[source,sql]
+----
+CREATE MAPPING my_transactions_topic
+DATA CONNECTION myKafkaConnection
+OPTIONS (
+    'keyFormat' = 'bigint',
+    'valueFormat' = 'json-flat');
+----
+
+|`resource_type`
+|An optional name of the type of resource in the external system. For a JDBC connector, the resource may be a table, view, or other data structure. For a Kafka connector, the resource is a topic.
+|
+[source,sql]
+----
+CREATE MAPPING my_transactions_topic (
+    __key BIGINT
+    transactionType VARCHAR,
+    amount INT)
+DATA CONNECTION myKafkaConnection
+OBJECT TYPE topic
+OPTIONS (
+    'keyFormat' = 'bigint',
+    'valueFormat' = 'json-flat');
+----
+
 |`'option_name'`, `'option_value'`
-|Connector parameters. Check the xref:integrate:connectors.adoc[reference page] for your connector to find out what values you can use. These parameters must be enclosed in single quotes (a SQL `VARCHAR` literal).
+|Data connection or connector parameters. Check the xref:integrate:connectors.adoc[reference page] for your connector to find out what values you can use. These parameters must be enclosed in single quotes (a SQL `VARCHAR` literal).
 |
 ```sql
 CREATE MAPPING my_topic(

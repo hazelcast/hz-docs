@@ -1,0 +1,132 @@
+= CREATE DATA CONNECTION
+:description: pass:q[The `CREATE DATA CONNECTION` statement creates the metadata required to connect to an external system for later use.]
+
+{description}
+
+Include data connections in mapping statements to allow the SQL service to connect to, read from, write to, or query data from your external systems. To simplify setup, you can use the same data connection in multiple SQL mappings.
+
+NOTE: You can also configure data connections xref:data-links:configuring-connections.adoc[programmatically or in the configuration files of Hazelcast members].
+
+== Syntax Summary
+
+This code block is a quick reference with all the <<parameters, parameters>> that you can use with the `CREATE DATA CONNECTION` statement.
+
+See some <<examples, practical examples>>.
+
+[source,sql]
+----
+CREATE [OR REPLACE] DATA CONNECTION [IF NOT EXISTS] data_connection_name
+TYPE connection_type
+[[NOT] SHARED]
+OPTIONS ('option_name' = 'option_value' [, ...] );
+----
+
+== Parameters
+
+The `CREATE DATA CONNECTION` statement accepts the following parameters.
+
+You must provide the following:
+
+- `data_connection_name`
+- `connection_type`
+
+[cols="1a,2a"]
+|===
+|Parameter | Description 
+
+|`OR REPLACE`
+|
+Overwrite an existing data connection of the same name, if it exists. +
+
+If a data connection of the same name has been configured programmatically or in the configuration files of Hazelcast members, then the data connection will not be overwritten. Configured data connections always take precedence.
+
+|`IF NOT EXISTS`
+|Create a new data connection only if a connection of the same name does not already exist.
+
+|`data_connection_name`
+|Unique name for the data connection.
+
+|`TYPE` `connection_type`
+|The type of data connection required to connect to the external system. The following types of connection are supported: `JDBC`, `Kafka`, `Mongo` (Beta), `HZ`. All connection types are case insensitive.
+
+|`NOT SHARED`
+|Every time you issue a query against a SQL mapping, a new physical connection to the external system is created.
+
+|`SHARED` (default)
+|A reusable data connection. See the implementation of each data connection type for full details of reusability: link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/dataconnection/HazelcastDataConnection.html[`HazelcastDataConnection`], link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/kafka/KafkaDataConnection.html[`KafkaDataConnection`], link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/mongodb/dataconnection/MongoDataConnection.html[`MongoDataConnection`]. 
+
+|`OPTIONS`
+|Configuration options for the chosen `connection_type`. See <<examples, examples>> and xref:external-data-stores:external-data-stores.adoc[Configuring Data Connections to External Systems] for valid parameters for specific connections.
+|===
+
+== Dependency Management
+Replacing a data connection will not affect any queries that are already running. Only the following queries or jobs are affected by the changes:
+
+- New queries on existing mappings
+- Queries or jobs that are restarted after a data connection is updated  
+
+== Permissions
+[.enterprise]*Enterprise*
+
+If xref:security:enabling-jaas.adoc[security] is enabled, you can grant or deny permission for certain clients to use this statement. See xref:security:native-client-security.adoc#sql-permission[SQL Permissions].
+
+[[examples]]
+== Examples
+
+[[Kafka]]
+=== Create a Kafka Data Connection
+
+[source,sql]
+----
+CREATE DATA CONNECTION IF NOT EXISTS myKafkaSource
+TYPE Kafka
+SHARED
+OPTIONS (
+    'bootstrap.servers' = '127.0.0.1:9092');
+----
+
+
+[[JDBC]]
+=== Create a JDBC Data Connection
+
+[source,sql]
+----
+CREATE DATA CONNECTION IF NOT EXISTS myDatabase
+TYPE JDBC
+SHARED
+OPTIONS (
+  'jdbcUrl'='jdbc:mysql://dummy:3306',
+  'username'='xyz',
+  'password'='xyz');
+----
+
+For a full list of configuration options, see link:https://github.com/brettwooldridge/HikariCP#gear-configuration-knobs-baby[HikariCP configuration].
+
+[[MongoDB]]
+=== Create a MongoDB Data Connection
+
+[source,sql]
+----
+CREATE DATA CONNECTION myMongoDBSource
+TYPE Mongo
+SHARED
+OPTIONS (
+    'connectionString'='mongodb://mongodb0.example.com:27017',
+    'database'='myDatabaseName');
+----
+
+=== Update a Data Connection
+
+If you want to overwrite an existing data connection, use the `CREATE OR REPLACE DATA CONNECTION` statement.
+
+[source,sql]
+----
+CREATE OR REPLACE DATA CONNECTION myDatabase
+TYPE JDBC
+SHARED
+OPTIONS (
+  'jdbcUrl'='jdbc:mysql://dummy:3306',
+  'username'='xyz',
+  'password'='xyz');
+----
+

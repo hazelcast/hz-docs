@@ -116,12 +116,14 @@ Suspending and resuming jobs can be useful for example when you need to
 perform maintenance on a data source or sink without disrupting a
 running job.
 
+In SQL, you can also update the configuration of a suspended job and resume it.
+
 When a job is suspended, all the metadata about the job is kept in
 the cluster. A snapshot of the job's computational state is taken during a
 suspend operation and then once resumed, the job is gracefully started
 from the same snapshot.
 
-NOTE: To suspend and resume a job, it must be configured with a processing guarantee. To learn more about setting a processing guarantee, see xref:submitting-jobs.adoc#setting-processing-guarantees[Submitting Jobs].
+NOTE: To suspend and resume a job, it must be configured with a processing guarantee. To learn more about setting a processing guarantee, see xref:configuring-jobs.adoc#setting-processing-guarantees[Configuring Jobs].
 
 [tabs] 
 ==== 
@@ -155,14 +157,14 @@ Resuming job id=0401-9f77-b9c0-0001, name=hello-world, submissionTime=2020-03-07
 Job resumed.
 ```
 
-For fault tolerance, streaming jobs are automatically suspended on failure. For more details, see xref:troubleshoot:error-handling.adoc#processing-guarantees[]
+For fault tolerance, streaming jobs are automatically suspended on failure. For more details, see xref:troubleshoot:error-handling.adoc#processing-guarantees[Processing Guarantees].
 
 --
 SQL:: 
 + 
 --
 
-Use the ALTER JOB statement to suspend and resume jobs:
+With the ALTER JOB statement, you can suspend and resume a job that is running on a cluster. 
 
 [source,sql]
 ----
@@ -179,6 +181,15 @@ OK
 ----
 ALTER JOB hello-world RESUME;
 ----
+
+Currently, Jet processors implement basic memory management by limiting the number of objects individual processors store. When this number is exceeded, the job fails. To recover the failed job, try updating the job configuration to increase the processor limit, and resume the job. 
+
+[source,sql]
+----
+ALTER JOB hello-world OPTIONS ('maxProcessorAccumulatedRecords'='100') RESUME;
+----
+
+You might also consider increasing the number of records that each processor can accumulate, if SQL operations such as grouping, sorting, or joining end in errors.
 
 For more details about this statement, see the xref:sql:alter-job.adoc[SQL reference documentation].
 --

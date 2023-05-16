@@ -15,6 +15,7 @@ To configure a data connection to an external system, you must do the following:
 
 See examples for other <<configuration-options, connection properties>> for each data connection type.
 
+[[JDBC]]
 === Example JDBC Data Connection
 
 This example configuration shows a data connection to a MySQL database using a JDBC connection.
@@ -103,6 +104,48 @@ OPTIONS (
 <2> (Optional) Separate user credentials for authentication. Alternatively, you can include the user credentials in the JDBC URL.
 --
 ====
+
+For `shared` connections, the following optional properties allow you to control how the JDBC connection pool behaves. All other properties are passed directly to the JDBC driver.
+
+Default values are in milliseconds except for where indicated.
+
+[cols="1a,1a,3a",options="header"]
+|===
+|Property|Default Value|Description
+
+|`connectionTimeout`
+|`30000` (30 seconds)
+|Maximum time that Hazelcast waits for a connection from the pool when attempting to connect to the external system, typically a database. A SQL exception is thrown when the `connectionTimeout` is exceeded before a connection becomes available. 
+
+|`idleTimeout`
+|`600000` (10 minutes)
+| Maximum time that the JDBC connection component allows a connection to sit idle in the connection pool. After the `idleTimeout` is exceeded, there may be a time lag of up to +30 seconds before the connection is retired. Although, the average time lag is +15 seconds. 
+
+* Only applies when `minimumIdle` is less than `maximumPoolSize`.
+* A value of `0` means that idle connections are never removed from the pool.
+* The minimum allowed value is `1000` ms (10 seconds)
+
+|`keepaliveTime`
+|`0` (Disabled)
+|How frequently the JDBC connection component attempts to keep an idle connection alive. When the `keepaliveTime` is reached, the idle connection is removed from the connection pool, pinged, and then returned to the pool. The minimum allowed `keepaliveTime` value is 30000 ms (30 seconds), but a value in the range of minutes is recommended. 
+
+|`maxLifetime`
+|`1800000` (30 minutes)
+|Maximum lifetime of a connection in the pool. Only closed connections are removed. A value of `0` indicates an infinite lifetime, unless an `idleTimeout` value is set and reached. The minimum allowed `maxLifetime` value is 30000 ms (30 seconds). 
+
+* We recommend setting this value, and it should be several seconds shorter than any database or infrastructure imposed connection time limit.
+
+|`minimumIdle`
+|Same as `maximumPoolSize`
+|Minimum number of idle connections that the JDBC connection component attempts to maintain in the connection pool. When the number of idle connections dips below the `minimumIdle`, and the total connections are less than `maximumPoolSize`, the connection component attempts to add more connections. 
+
+* For maximum performance and responsive we do not recommend setting this value, instead use a fixed size connection pool.
+
+|`maximumPoolSize`
+|`10` (connections)
+|Maximum size of the connection pool, which includes both idle and active connections. The `maximumPoolSize` sets the maximum number of connections to the external system. When the pool reaches this size, and no more idle connections are available, calls to get a new connection are blocked for up to the `connectionTimeout` before timing out.  
+
+|===
 
 [[kafka]]
 === Example Kafka Data Connection
@@ -354,7 +397,7 @@ NOTE: If you are using Java to configure the Mapstore, use the link:https://docs
 |The unique identifier for the data connection.
 
 |`type` (required)
-|The type of data connection required for your external system. The following types of connection are supported: `JDBC`, `Kafka`,`Mongo`(case-insensitive).
+|The type of data connection required for your external system. The following types of connection are supported: `HZ`, `JDBC`, `Kafka`, `Mongo`(case-insensitive).
 
 |`properties`
 |Any configuration properties that the data connection expects to receive.
@@ -375,9 +418,7 @@ The following types of data connection are available for use.
 
 |`JDBC`
 |Connect to external systems that support JDBC, including MySQL and PostgreSQL.
-|For available configuration properties see link:https://github.com/brettwooldridge/HikariCP#gear-configuration-knobs-baby[HikariCP configuration]. This implementation is based on link:https://github.com/brettwooldridge/HikariCP[HikariDataSource]. All properties are passed directly to `HikariConfig`. 
-
-If there is more than one JDBC connection used on a single member from a single job, they will share the same data store and connection pool.
+|See <<JDBC, example>>. If there is more than one JDBC connection used on a single member from a single job, they will share the same data store and connection pool.
 
 |`Kafka`
 |Connect to a Kafka data source.

@@ -30,10 +30,7 @@ public class SamplePersistenceConfiguration {
         cacheConfig.getMerkleTreeConfig().setDepth(12);
         config.addCacheConfig(cacheConfig);
 
-        MapConfig mapConfig = config.getMapConfig("__sql.catalog");
-        mapConfig.getDataPersistenceConfig().setEnabled(true);
-        mapConfig.getSqlConfig().setEnabled(true);
-        config.addMapConfig(mapConfig);
+        config.getSqlConfig().setCatalogPersistenceEnabled(true);
 
         config.getJetConfig().setLosslessRestartEnabled(true);
         //end::hrconf[]

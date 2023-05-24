@@ -1,6 +1,6 @@
 [[configuring-connections-to-external-data-stores]]
 = Configuring Data Connections to External Systems
-:description: A data connection contains the metadata that Hazelcast needs to connect an external system. You can define a data connection in your members' configuration files or with the Java member API and reuse the same connection details in the Pipeline API, SQL mappings, and MapStores.   
+:description: A data connection contains the metadata that Hazelcast needs to connect an external system. You can define a data connection in your members' configuration files, in the Java member API, or in SQL, and reuse the same connection details in the Pipeline API, SQL mappings, and MapStores.   
 :page-beta: true
 :page-aliases: external-data-stores:external-data-stores.adoc, data-links:configuring-connections.adoc
 
@@ -13,7 +13,12 @@ To configure a data connection to an external system, you must do the following:
 * Provide a unique identifier (`name`) for the data connection.
 * Choose the correct type of data connection for your external system. 
 
-This example configuration shows data connections to both a MySQL database and a H2 data store. Both data connections use a JDBC connection.
+See examples for other <<configuration-options, connection properties>> for each data connection type.
+
+[[JDBC]]
+=== Example JDBC Data Connection
+
+This example configuration shows a data connection to a MySQL database using a JDBC connection.
 
 [tabs]
 ====
@@ -26,21 +31,16 @@ XML::
   <data-connection name="my-mysql-database">
     <type>JDBC</type>
     <properties>
-      <property name="jdbcUrl">jdbc:mysql://mysql.example.org:3306</property>
-      <property name="username">my_user</property>
+      <property name="jdbcUrl">jdbc:mysql://mysql.example.org:3306</property> <1>
+      <property name="user">my_user</property> <2>
       <property name="password">my_password</property>
-    </properties>
-    <shared>true</shared>
-  </data-connection>
-  <data-connection name="my-other-database">
-    <type>JDBC</type>
-    <properties>
-      <property name="jdbcUrl">jdbc:h2:mem:my-other-database</property>
     </properties>
     <shared>true</shared>
   </data-connection>
 </hazelcast>
 ----
+<1> (Required) JDBC URL for establishing a connection to the MySQL database
+<2> (Optional) Separate user credentials for authentication. Alternatively, you can include the user credentials in the JDBC URL. 
 --
 
 YAML::
@@ -53,16 +53,13 @@ hazelcast:
     my-mysql-database:
       type: JDBC
       properties:
-        jdbcUrl: jdbc:mysql://mysql.example.org:3306
-        username: my_user
+        jdbcUrl: jdbc:mysql://mysql.example.org:3306 <1>
+        user: my_user <2>
         password: my_password
       shared: true
-    my-other-database:
-      type: JDBC
-      properties:
-        jdbcUrl: jdbc:h2:mem:my-other-database
-      shared: true
 ----
+<1> (Required) JDBC URL for establishing a connection to the MySQL database
+<2> (Optional) Separate user credentials for authentication. Alternatively, you can include the user credentials in the JDBC URL.
 --
 
 Java::
@@ -74,21 +71,317 @@ config
   .addDataConnectionConfig(
     new DataConnectionConfig("my-mysql-database")
       .setType("JDBC")
-      .setProperty("jdbcUrl", "jdbc:mysql://mysql.example.org:3306")
-      .setProperty("username", "my_user")
+      .setProperty("jdbcUrl", "jdbc:mysql://mysql.example.org:3306") <1>
+      .setProperty("user", "my_user") <2>
       .setProperty("password", "my_password")
-      .setShared(true)
-  )
-  .addDataConnectionConfig(
-    new DataConnectionConfig("my-other-database")
-      .setType("JDBC")
-      .setProperty("jdbcUrl", "jdbc:h2:mem:my-other-database")
       .setShared(true)
   );
 ----
+<1> (Required) JDBC URL for establishing a connection to the MySQL database
+<2> (Optional) Separate user credentials for authentication. Alternatively, you can include the user credentials in the JDBC URL.
+--
+
+SQL::
++
+--
+
+Data connections created in SQL behave differently to those defined in members' configuration files or in Java.
+
+- To retain SQL-defined data connections after a cluster restart, you must enable SQL catalog persistence. This feature is available in the Enterprise Edition.
+- You can create or drop a data connection using SQL commands. To update a data connection, you need to drop and then recreate it. 
+
+[source,sql]
+----
+CREATE DATA CONNECTION my_mysql_database
+TYPE JDBC
+SHARED
+OPTIONS (
+    'jdbcUrl'='jdbc:mysql://mysql.example.org:3306', <1>
+    'user'='my_user', <2>
+    'password'='my_password');
+----
+<1> (Required) JDBC URL for establishing a connection to the MySQL database
+<2> (Optional) Separate user credentials for authentication. Alternatively, you can include the user credentials in the JDBC URL.
 --
 ====
 
+For `shared` connections, the following optional properties allow you to control how the JDBC connection pool behaves. All other properties are passed directly to the JDBC driver.
+
+Default values are in milliseconds except for where indicated.
+
+[cols="1a,1a,3a",options="header"]
+|===
+|Property|Default Value|Description
+
+|`connectionTimeout`
+|`30000` (30 seconds)
+|Maximum time that Hazelcast waits for a connection from the pool when attempting to connect to the external system, typically a database. A SQL exception is thrown when the `connectionTimeout` is exceeded before a connection becomes available. 
+
+|`idleTimeout`
+|`600000` (10 minutes)
+| Maximum time that the JDBC connection component allows a connection to sit idle in the connection pool. After the `idleTimeout` is exceeded, there may be a time lag of up to +30 seconds before the connection is retired. Although, the average time lag is +15 seconds. 
+
+* Only applies when `minimumIdle` is less than `maximumPoolSize`.
+* A value of `0` means that idle connections are never removed from the pool.
+* The minimum allowed value is `1000` ms (10 seconds)
+
+|`keepaliveTime`
+|`0` (Disabled)
+|How frequently the JDBC connection component attempts to keep an idle connection alive. When the `keepaliveTime` is reached, the idle connection is removed from the connection pool, pinged, and then returned to the pool. The minimum allowed `keepaliveTime` value is 30000 ms (30 seconds), but a value in the range of minutes is recommended. 
+
+|`maxLifetime`
+|`1800000` (30 minutes)
+|Maximum lifetime of a connection in the pool. Only closed connections are removed. A value of `0` indicates an infinite lifetime, unless an `idleTimeout` value is set and reached. The minimum allowed `maxLifetime` value is 30000 ms (30 seconds). 
+
+* We recommend setting this value, and it should be several seconds shorter than any database or infrastructure imposed connection time limit.
+
+|`minimumIdle`
+|Same as `maximumPoolSize`
+|Minimum number of idle connections that the JDBC connection component attempts to maintain in the connection pool. When the number of idle connections dips below the `minimumIdle`, and the total connections are less than `maximumPoolSize`, the connection component attempts to add more connections. 
+
+* For maximum performance and responsive we do not recommend setting this value, instead use a fixed size connection pool.
+
+|`maximumPoolSize`
+|`10` (connections)
+|Maximum size of the connection pool, which includes both idle and active connections. The `maximumPoolSize` sets the maximum number of connections to the external system. When the pool reaches this size, and no more idle connections are available, calls to get a new connection are blocked for up to the `connectionTimeout` before timing out.  
+
+|===
+
+[[kafka]]
+=== Example Kafka Data Connection
+
+This example shows the configuration of a data connection to a single Kafka broker.
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+  <data-connection name="my-kafka">
+    <type>Kafka</type>
+    <properties>
+      <property name="bootstrap.servers">127.0.0.1:9092</property> <1>
+      <property name="key.deserializer">org.apache.kafka.common.serialization.IntegerDeserializer</property> <2>
+      <property name="key.serializer">org.apache.kafka.common.serialization.IntegerSerializer</property>
+      <property name="value.serializer">org.apache.kafka.common.serialization.StringSerializer</property>
+      <property name="value.deserializer">org.apache.kafka.common.serialization.StringDeserializer</property>
+      <property name="auto.offset.reset">earliest</property> <3>
+    </properties>
+    <shared>true</shared>
+  </data-connection>
+</hazelcast>
+----
+<1> (Required) Address of the Kafka consumer/producer  
+<2> (Optional) Automatic serializers/deserializers for keys and values in Kafka messages 
+<3> (Optional) Consumer behavior if the connection is interrupted
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  data-connection:
+    my-kafka:
+      type: Kafka
+      properties:
+        bootstrap.servers: 127.0.0.1:9092 <1>
+        key.deserializer: org.apache.kafka.common.serialization.IntegerDeserialize <2> 
+        key.serializer: org.apache.kafka.common.serialization.IntegerSerializer
+        value.serializer: org.apache.kafka.common.serialization.StringSerializer
+        auto.offset.reset: earliest <3>
+      shared: true
+----
+<1> (Required) Address of the Kafka consumer/producer  
+<2> (Optional) Automatic serializers/deserializers for keys and values in Kafka messages 
+<3> (Optional) Consumer behavior if the connection is interrupted
+--
+
+Java::
++
+--
+[source,java]
+----
+config
+  .addDataConnectionConfig(
+    new DataConnectionConfig("my-kafka")
+      .setType("Kafka")
+      .setProperty("bootstrap.servers", "127.0.0.1:9092") <1>
+      .setProperty("key.deserializer", "org.apache.kafka.common.serialization.IntegerDeserialize") <2>
+      .setProperty("key.serializer", "org.apache.kafka.common.serialization.IntegerSerializer")
+      .setProperty("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
+      .setProperty("auto.offset.reset", "earliest") <3>
+      .setShared(true)
+  );
+----
+<1> (Required) Address of the Kafka consumer/producer  
+<2> (Optional) Automatic serializers/deserializers for keys and values in Kafka messages 
+<3> (Optional) Consumer behavior if the connection is interrupted
+--
+SQL::
++
+--
+Data connections created in SQL behave differently to those defined in members' configuration files or in Java.
+
+- To retain SQL-defined data connections after a cluster restart, you must enable SQL catalog persistence. This feature is available in the Enterprise Edition.
+- You can create or drop a data connection using SQL commands. To update a data connection, you need to drop and then recreate it. 
+
+[source,sql]
+----
+CREATE DATA CONNECTION my_kafka
+TYPE Kafka
+SHARED
+OPTIONS (
+    'bootstrap.servers'='127.0.0.1:9092', <1>
+    'key.deserializer'='org.apache.kafka.common.serialization.IntegerDeserialize', <2>
+    'key.serializer'='org.apache.kafka.common.serialization.IntegerSerializer',
+    'value.serializer'='org.apache.kafka.common.serialization.StringSerializer',
+    'auto.offset.reset'='earliest'); <3>
+----
+<1> (Required) Address of the Kafka consumer/producer  
+<2> (Optional) Automatic serializers/deserializers for keys and values in Kafka messages 
+<3> (Optional) Consumer behavior if the connection is interrupted
+--
+====
+
+[[Mongo]]
+=== Example MongoDB Data Connection
+
+This example configuration shows data connections to two MongoDB databases. 
+
+As in the example, you can supply authentication credentials to a MongoDB instance as part of the connection string, or separately. 
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+  <data-connection name="my-mongodb">
+    <type>Mongo</type>
+    <properties>
+      <property name="connectionString">mongodb://my_user:my_password@some-host:27017</property> <1>
+      <property name="database">my_database</property> <2>
+    </properties>
+    <shared>true</shared>
+  </data-connection>
+  <data-connection name="my-other-mongodb">
+    <type>Mongo</type>
+    <properties>
+      <property name="host">some_host</property> <3>
+      <property name="username">my_user</property> <4>
+      <property name="password">my_password</property>
+      <property name="database">my_other_database</property> <2>
+    </properties>
+    <shared>true</shared>
+  </data-connection>
+</hazelcast>
+----
+<1> (Required) Connection string of the MongoDB instance, including user credentials  
+<2> (Optional) Name of the database to connect to 
+<3> (Optional) Host details of the MongoDB instance, excluding user credentials
+<4> (Optional) User credentials for the MongoDB instance
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  data-connection:
+    my-mongodb:
+      type: Mongo
+      properties:
+        connectionString: mongodb://my_user:my_password@some-host:27017 <1>
+        database: my_database <2>
+      shared: true
+    my-other-mongodb:
+      type: Mongo
+      properties:
+        host: some_host <3>
+        username: my_user <4>
+        password: my_password
+        database: my_other_database <2>
+      shared: true
+----
+<1> (Required) Connection string of the MongoDB instance, including user credentials  
+<2> (Optional) Name of the database to connect to 
+<3> (Optional) Host details of the MongoDB instance, excluding user credentials
+<4> (Optional) User credentials for the MongoDB instance
+--
+
+Java::
++
+--
+[source,java]
+----
+config
+  .addDataConnectionConfig(
+    new DataConnectionConfig("my-mongodb")
+      .setType("Mongo")
+      .setProperty("connectionString", "mongodb://my_user:my_password@some-host:27017") <1>
+      .setProperty("database", "my_database") <2>
+      .setShared(true)
+  )
+  .addDataConnectionConfig(
+    new DataConnectionConfig("my-other-mongo")
+      .setType("Mongo")
+      .setProperty("host", "some-host") <3>
+      .setProperty("username", "my_user") <4>
+      .setProperty("password", "my_password")
+      .setProperty("database", "my_other_database") <2>
+      .setShared(true)
+  );
+----
+<1> (Required) Connection string of the MongoDB instance, including user credentials  
+<2> (Optional) Name of the database to connect to 
+<3> (Required) Host details of the MongoDB instance, excluding user credentials
+<4> (Optional) User credentials for the MongoDB instance
+--
+SQL::
++
+--
+Data connections created in SQL behave differently to those defined in members' configuration files or in Java.
+
+- To retain SQL-defined data connections after a cluster restart, you must enable SQL catalog persistence. This feature is available in the Enterprise Edition.
+- You can create or drop a data connection using SQL commands. To update a data connection, you need to drop and then recreate it. 
+
+[source,SQL]
+----
+CREATE DATA CONNECTION my_mongodb
+TYPE Mongo
+SHARED
+OPTIONS (
+    'connectionString'='mongodb://my_user:my_password@some-host:27017', <1>
+    'database'='my_database'); <2>
+----
+<1> (Required) Connection string of the MongoDB instance, including user credentials  
+<2> (Optional) Name of the database to connect to 
+
+[source,SQL]
+----
+CREATE DATA CONNECTION my_mongodb
+TYPE Mongo
+SHARED
+OPTIONS (
+    'host'='some-host', <1>
+    'username'='my_user', <2>
+    'password'='my_password'
+    'database'='my_other_database');
+----
+<1> (Required) Host details of the MongoDB instance, excluding user credentials
+<2> (Optional) User credentials for the MongoDB instance
+--
+====
+
+[[configuration-options]]
 == Configuration Options for Data Connections
 
 Data connections have the following configuration options.
@@ -100,18 +393,17 @@ NOTE: If you are using Java to configure the Mapstore, use the link:https://docs
 |===
 |Option|Description|Default|Example
 
-
 |`name` (required)
 |The unique identifier for the data connection.
 
 |`type` (required)
-|The type of data connection required for your external system. The following types of connection are supported: `JDBC`, `Kafka`,`Mongo`(case-insensitive).
+|The type of data connection required for your external system. The following types of connection are supported: `JDBC`, `Kafka`, `Mongo`(case-insensitive).
 
 |`properties`
 |Any configuration properties that the data connection expects to receive.
 
 |`shared`
-|Whether the data connection instance is reusable in different MapStores, jobs, and SQL mappings. This behavior depends on the implementation of the specific data connection. The default value is `true`.
+|Whether the data connection instance is reusable in different MapStores, jobs, and SQL mappings. This behavior depends on the implementation of the specific data connection. The default value is `true`. See the implementation of each data connection type for full details of reusability: link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/kafka/KafkaDataConnection.html[`KafkaDataConnection`], link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/mongodb/dataconnection/MongoDataConnection.html[`MongoDataConnection`].
 
 |===
 
@@ -125,26 +417,20 @@ The following types of data connection are available for use.
 |Type|Description|Properties
 
 |`JDBC`
-|Connect to external systems that support JDBC, including MySQL, PostgreSQL, and H2.
-|For available configuration properties see link:https://github.com/brettwooldridge/HikariCP#gear-configuration-knobs-baby[HikariCP configuration]. This implementation is based on link:https://github.com/brettwooldridge/HikariCP[HikariDataSource]. All properties are passed directly to `HikariConfig`. 
-
-If there is more than one JDBC connection used on a single member from a single job, they will share the same data store and connection pool.
+|Connect to external systems that support JDBC, including MySQL and PostgreSQL.
+|See <<JDBC, example>>. If there is more than one JDBC connection used on a single member from a single job, they will share the same data store and connection pool.
 
 |`Kafka`
 |Connect to a Kafka data source.
-|For available configuration options, see xref:sql:mapping-to-kafka.adoc#creating-a-kafka-mapping[Create a Kafka Mapping].
+|See <<kafka, example>> and xref:sql:mapping-to-kafka.adoc#creating-a-kafka-mapping[Create a Kafka Mapping].
 
 |`Mongo`
 |Connect to a MongoDB database.
-|For available configuration options, see xref:integrate:mongodb-connector.adoc[]. 
+|See <<Mongo, example>>.
 
 |===
 
 NOTE: If you use the slim distribution of Hazelcast with a built-in data connector, make sure that you have an appropriate driver on your cluster's classpath.
-
-== Related Resources
-
-You can also add new data connections dynamically at runtime, see xref:configuration:dynamic-config.adoc[dynamic configuration].
 
 == Next Steps
 

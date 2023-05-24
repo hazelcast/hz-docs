@@ -1,5 +1,5 @@
 = Configuring Persistence
-:description: You can configure clusters to persist data structures and job snapshots on disk as well as fine-tune many other options such as backups, encryption, and auto-recovery.
+:description: You can configure clusters to persist data structures, job snapshots, and SQL metadata on disk as well as fine-tune many other options such as backups, encryption, and auto-recovery.
 :page-aliases: encryption-at-rest.adoc, enabling-persistence.adoc, recover-single-member.adoc
 :page-enterprise: true
 
@@ -71,7 +71,7 @@ config.setPersistenceConfig(PersistenceConfig);
 --
 ====
 
-Even after enabling Persistence, your members won't start persisting any data until you configure <<data-structures, data structures>>, or <<job, job snapshots>> to be persisted.
+Even after enabling Persistence, your members won't start persisting any data until you configure <<data-structures, data structures>>, <<job, job snapshots>>, or <<sql, SQL metadata>> to be persisted.
 
 This example configures a member to persist entries on disk for a map called `test-map`.
 
@@ -1261,6 +1261,55 @@ config.addMapConfig(mapConfig);
 ====
 |===
 
+[[sql]]
+== SQL Metadata Options
+
+Use the following configuration to enable the cluster-wide persistence of SQL metadata to disk. With persistence enabled, SQL mappings, data connections, and views are retained after the cluster restarts.
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <map name="__sql.catalog">
+    <data-persistence enabled="true"/>
+  </map>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+  __sql.catalog:
+    data-persistence:
+      enabled: true
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+
+MapConfig mapConfig = config.getMapConfig("__sql.catalog");
+mapConfig.getDataPersistenceConfig().setEnabled(true);
+mapConfig.getSqlConfig().setEnabled(true);
+
+config.addMapConfig(mapConfig);
+----
+--
+====
+
+NOTE: When implementing permissions for the SQL catalog IMap (`__sql.catalog`), we do not recommend using wildcards (*).  
+
 [[job]]
 == Job Snapshots Options
 
@@ -1358,6 +1407,10 @@ XML::
       </data-persistence>
     </cache>
     ...
+    <map name="__sql.catalog">
+    <data-persistence enabled="true"/>
+    </map>
+    ...
     <jet>
       <instance>
         <lossless-restart-enabled>true</lossless-restart-enabled>
@@ -1389,7 +1442,7 @@ hazelcast:
         depth: 12
       data-persistence:
         enabled: true
-        fsync: false
+        fsync: false  
   cache:
     test-cache:
       merkle-tree:
@@ -1398,6 +1451,10 @@ hazelcast:
       data-persistence:
         enabled: true
         fsync: false
+  map:
+    __sql.catalog:
+      data-persistence:
+        enabled: true
   jet:
     instance:
       lossless-restart-enabled: true

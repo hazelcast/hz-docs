@@ -1,5 +1,5 @@
 = Configuring Persistence
-:description: You can configure clusters to persist data structures and job snapshots on disk as well as fine-tune many other options such as backups, encryption, and auto-recovery.
+:description: You can configure clusters to persist data structures, job snapshots, and SQL metadata on disk. You can also implement configuration options to fine-tune backups, encryption, and auto-recovery.
 :page-aliases: encryption-at-rest.adoc, enabling-persistence.adoc, recover-single-member.adoc
 :page-enterprise: true
 
@@ -71,7 +71,7 @@ config.setPersistenceConfig(PersistenceConfig);
 --
 ====
 
-Even after enabling Persistence, your members won't start persisting any data until you configure <<data-structures, data structures>>, or <<job, job snapshots>> to be persisted.
+Even after enabling Persistence, your members won't start persisting any data until you configure <<data-structures, data structures>>, <<job, job snapshots>>, or <<sql, SQL metadata>> to be persisted.
 
 This example configures a member to persist entries on disk for a map called `test-map`.
 
@@ -1261,6 +1261,50 @@ config.addMapConfig(mapConfig);
 ====
 |===
 
+[[sql]]
+== SQL Metadata Options
+
+Use the following configuration to enable the cluster-wide persistence of SQL metadata to disk. With persistence enabled, SQL mappings, data connections, and views are retained after cluster restarts.
+
+[tabs] 
+==== 
+XML:: 
++ 
+--
+[source,xml]
+----
+<hazelcast>
+  <sql>
+    <catalog-persistence-enabled>
+    true
+    </catalog-persistence-enabled>
+  </sql>
+</hazelcast>
+----
+--
+YAML:: 
++ 
+--
+[source,yaml]
+----
+hazelcast:
+  sql:
+    catalog-persistence-enabled: true
+----
+--
+Java:: 
++ 
+--
+[source,java]
+----
+Config config = new Config();
+config.getSqlConfig().setCatalogPersistenceEnabled(true);
+----
+--
+====  
+
+NOTE: For clusters with over six members, it may take some time for metadata stored in the SQL catalog to become available to all members after a restart. This may impact the hot restart of jobs that are dependant on entities in the SQL catalog, such as jobs that use data connections. 
+
 [[job]]
 == Job Snapshots Options
 
@@ -1320,7 +1364,7 @@ the data.
 
 == Full Example of Persistence Configuration
 
-The following are example configuration settings for a map instance, a JCache instance, and job snapshots.
+The following are example configuration settings for a map instance, a JCache instance, SQL metadata persistence, and job snapshots.
 
 [tabs] 
 ==== 
@@ -1358,6 +1402,10 @@ XML::
       </data-persistence>
     </cache>
     ...
+    <sql>
+      <catalog-persistence-enabled>true</catalog-persistence-enabled>
+    </sql>
+    ...
     <jet>
       <instance>
         <lossless-restart-enabled>true</lossless-restart-enabled>
@@ -1389,7 +1437,7 @@ hazelcast:
         depth: 12
       data-persistence:
         enabled: true
-        fsync: false
+        fsync: false  
   cache:
     test-cache:
       merkle-tree:
@@ -1398,6 +1446,8 @@ hazelcast:
       data-persistence:
         enabled: true
         fsync: false
+  sql:
+    catalog-persistence-enabled: true
   jet:
     instance:
       lossless-restart-enabled: true

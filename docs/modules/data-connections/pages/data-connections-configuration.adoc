@@ -381,6 +381,143 @@ OPTIONS (
 --
 ====
 
+[[Hazelcast]]
+=== Example Hazelcast Data Connection
+
+This example configuration shows a data connection to a remote Hazelcast cluster.
+You can use a Hazelcast data connection from the Pipeline API in link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/pipeline/Sources.html#remoteMapJournal-java.lang.String-com.hazelcast.jet.pipeline.DataConnectionRef-com.hazelcast.jet.pipeline.JournalInitialPosition-com.hazelcast.function.FunctionEx-com.hazelcast.function.PredicateEx-[Sources#remoteMapJournal] source.
+
+NOTE: Currently, no SQL connector is available for Hazelcast data connections. This means that although you can xref:sql:create-data-connection.adoc[create a data connection in SQL], you cannot yet use it in SQL, for example, in a mapping statement. 
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+  <data-connection name="my-remote-hazelcast">
+    <type>Hz</type>
+    <properties>
+      <property name="client_xml"> <1>
+        <![CDATA[ <2>
+          <?xml version="1.0" encoding="UTF-8"?>
+          <hazelcast-client xmlns="http://www.hazelcast.com/schema/client-config"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://www.hazelcast.com/schema/client-config
+              http://www.hazelcast.com/schema/client-config/hazelcast-client-config-5.3.xsd">
+
+            <cluster-name>dev</cluster-name>
+              <network>
+                <cluster-members>
+                  <address>172.17.0.2:5701</address>
+                </cluster-members>
+              </network>
+          </hazelcast-client>
+        ]]>
+      </property>
+    </properties>
+    <shared>true</shared>
+  </data-connection>
+</hazelcast>
+----
+<1> (Required) Specify exactly one of `client_xml`, `client_yml`, `client_xml_path`, `client_yml_path`.
+<2> Hazelcast client configuration to connect to a remote cluster. See xref:clients:java.adoc#configuring-java-client[Configuring Java Client].
+You can specify an external file with the `client_xml_path` property instead of using an embedded configuration file.
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  data-connection:
+    my-remote-hazelcast:
+      type: Hz
+      properties:
+        client_yml: | <1>
+          hazelcast-client: <2>
+            cluster-name: dev
+            network:
+              cluster-members:
+                - 172.17.0.2:5701
+      shared: true
+----
+<1> (Required) Specify exactly one of `client_xml`, `client_yml`, `client_xml_path`, `client_yml_path`.
+<2> Hazelcast client configuration to connect to a remote cluster. See xref:clients:java.adoc#configuring-java-client[Configuring Java Client].
+You can specify an external file with the `client_yml_path` property instead of using an embedded configuration file.
+--
+
+Java::
++
+--
+[source,java]
+----
+config
+  .addDataConnectionConfig(
+    new DataConnectionConfig()
+      .setName("my-remote-hazelcast")
+      .setType("Hz")
+      .setProperty(
+              "client_xml", <1>
+              "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" + <2>
+              "<hazelcast-client xmlns=\"http://www.hazelcast.com/schema/client-config\"" +
+              "      xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"" +
+              "      xsi:schemaLocation=\"http://www.hazelcast.com/schema/client-config" +
+              "      http://www.hazelcast.com/schema/client-config/hazelcast-client-config-5.3.xsd\">" +
+              "    " +
+              "    <cluster-name>dev</cluster-name>" +
+              "    <network>" +
+              "        <cluster-members>" +
+              "            <address>172.17.0.2:5701</address>" +
+              "        </cluster-members>" +
+              "    </network>" +
+              "</hazelcast-client>")
+      .setShared(true)
+  );
+----
+<1> (Required) Specify exactly one of `client_xml`, `client_yml`, `client_xml_path`, `client_yml_path`.
+<2> Hazelcast client configuration to connect to a remote cluster. See xref:clients:java.adoc#configuring-java-client[Configuring Java Client].
+You can specify an external file with the `client_xml_path` or `client_yml_path` property instead of using an embedded configuration file.
+--
+SQL::
++
+--
+Data connections created in SQL behave differently to those defined in members' configuration files or in Java.
+
+- To retain SQL-defined data connections after a cluster restart, you must enable xref:storage:configuring-persistence.adoc#sql[SQL metadata persistence]. This feature is available in the Enterprise Edition.
+- You can create or drop a data connection using SQL commands. To update a data connection, you need to drop and then recreate it.
+
+[source,SQL]
+----
+CREATE DATA CONNECTION "my-hazelcast-cluster"
+TYPE Hz
+SHARED
+OPTIONS (
+    'client_xml'= <1>
+    '<?xml version="1.0" encoding="UTF-8"?> <2>
+     <hazelcast-client xmlns="http://www.hazelcast.com/schema/client-config"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://www.hazelcast.com/schema/client-config
+         http://www.hazelcast.com/schema/client-config/hazelcast-client-config-5.3.xsd">
+
+       <cluster-name>dev</cluster-name>
+       <network>
+         <cluster-members>
+	   <address>172.17.0.2:5701</address>
+         </cluster-members>
+       </network>
+      </hazelcast-client>'
+);
+----
+<1> (Required) Specify exactly one of `client_xml`, `client_yml`, `client_xml_path`, `client_yml_path`.
+<2> Hazelcast client configuration to connect to a remote cluster. See xref:clients:java.adoc#configuring-java-client[Configuring Java Client].
+You can specify an external file with the `client_xml_path` or `client_yml_path` property instead of using an embedded configuration file.
+--
+====
+
 [[configuration-options]]
 == Configuration Options for Data Connections
 
@@ -397,13 +534,13 @@ NOTE: If you are using Java to configure the Mapstore, use the link:https://docs
 |The unique identifier for the data connection.
 
 |`type` (required)
-|The type of data connection required for your external system. The following types of connection are supported: `JDBC`, `Kafka`, `Mongo`(case-insensitive).
+|The type of data connection required for your external system. The following types of connection are supported: `JDBC`, `Kafka`, `Mongo`, `Hz` (case-insensitive).
 
 |`properties`
 |Any configuration properties that the data connection expects to receive.
 
 |`shared`
-|Whether the data connection instance is reusable in different MapStores, jobs, and SQL mappings. This behavior depends on the implementation of the specific data connection. The default value is `true`. See the implementation of each data connection type for full details of reusability: link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/kafka/KafkaDataConnection.html[`KafkaDataConnection`], link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/mongodb/dataconnection/MongoDataConnection.html[`MongoDataConnection`].
+|Whether the data connection instance is reusable in different MapStores, jobs, and SQL mappings. This behavior depends on the implementation of the specific data connection. The default value is `true`. See the implementation of each data connection type for full details of reusability: link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/kafka/KafkaDataConnection.html[`KafkaDataConnection`], link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/mongodb/dataconnection/MongoDataConnection.html[`MongoDataConnection`], link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/dataconnection/HazelcastDataConnection.html[`HazelcastDataConnection`].
 
 |===
 
@@ -429,6 +566,10 @@ The following types of data connection are available for use.
 |`Mongo`
 |Connect to a MongoDB database.
 |See <<Mongo, example>>.
+
+|`Hz`
+|Connect to a remote Hazelcast cluster.
+|See <<Hazelcast, example>>.
 
 |===
 

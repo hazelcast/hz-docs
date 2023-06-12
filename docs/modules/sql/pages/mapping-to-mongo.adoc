@@ -169,6 +169,58 @@ Notice that there is no mention of `TYPE MONGO` this time; it’s automatically 
  - add `OPTIONS ('database' = 'myDatabase')` in CREATE MAPPING
  - use full external name, e.g. `CREATE MAPPING people EXTERNAL NAME myDatabase.people (...)`
 
+== Supported Object Types
+
+For given connector there may be 1 or more object types. For Mongo SQL Connector we have 2 object types:
+
+ - `Collection` - represents batch raeding from given collection. This is the default object type.
+ - `ChangeStream` - represents reading a stream of events.
+
+To change object type you want to use, you have to append `OBJECT TYPE X` after `DATA CONNECTION` / `TYPE`, for example:
+
+[tabs]
+====
+Using Data Connection::
+[source,sql]
+----
+CREATE MAPPING people (
+    firstName VARCHAR(100),
+    lastName VARCHAR(100),
+    age INT
+)
+DATA CONNECTION myMongo
+OBJECT TYPE ChangeStream
+OPTIONS (...)
+----
+
+Using TYPE::
+[source,sql]
+----
+CREATE MAPPING people (
+firstName VARCHAR(100),
+lastName VARCHAR(100),
+age INT
+)
+TYPE Mongo
+OBJECT TYPE ChangeStream
+OPTIONS (...)
+----
+====
+
+== Field mappings
+
+Object type `Collection` reads columns to be the same as properties in Mongo collection.
+
+For `ChangeStream` it's more complicated: the ChangeStream objects have Mongo collection's properties prefixed with `fullDocument.`,
+There are also some predefined, top-level (without `fullDocument.` prefix) columns
+
+ - `operationType STRING` - operation that triggered this Change event, e.g. `insert`
+- `resumeToken STRING` - resume token associated with given change stream event.
+- `wallTime DATE_TIME` - wall time of the event.
+- `ts TIMESTAMP` - Timestamp of when the even occurred, either equal to wall time or to current time on the Hazelcast node,
+  if no wall time was provided.
+- `clusterTime TIMESTAMP` - cluster time on which this even occurred.
+
 == Type Mapping
 
 The type system in MongoDB and SQL is not exactly the same. That leads to potential confusions and the need of type coercion.

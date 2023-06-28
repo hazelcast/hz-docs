@@ -84,26 +84,41 @@ the sender can overrun the receiver such that the sending host is
 faster than the receiving host, which causes the receiver to drop packets
 and the TCP congestion window to shut down.
 
-Hazelcast, by default, configures I/O buffers to 128KB; you can change these
-using the following properties:
-
-* `hazelcast.socket.receive.buffer.size`
-* `hazelcast.socket.send.buffer.size`
-
-Typically, you can determing the throughput by the following formulae: 
+Typically, you can determine the throughput by the following formulae:
 
 * Transaction per second = buffer size / latency
 * Buffer size = Round trip time * network bandwidth
 
-To increase the TCP maximum buffer size in Linux, use the following properties:
+Hazelcast, by default, configures I/O buffers to 128KB; you can change these
+using the following Hazelcast properties:
 
-* `net.core.rmem.max`
-* `net.core.wmem.max`
+* `hazelcast.socket.receive.buffer.size`
+* `hazelcast.socket.send.buffer.size`
 
-To increase TCP auto-tuning by Linux, see the following properties:
+The operating system has separate configuration for minimum, default and maximum socket buffer sizes, so it is not guaranteed that the socket buffers allocated to Hazelcast sockets will match the requested buffer size.
 
-* `net.ipv4.tcp.rmem`
-* `net.ipv4.tcp.wmem`
+On Linux, the following kernel parameters can be used to configure socket buffer sizes:
+
+* `net.core.rmem_max`: maximum socket receive buffer size in bytes
+* `net.core.wmem_max`: maximum socket send buffer size in bytes
+* `net.ipv4.tcp_rmem`: minimum, default and maximum receive buffer size per TCP socket
+* `net.ipv4.tcp_wmem`: minimum, default and maximum send buffer size per TCP socket
+
+To make a temporary change to one of these values, use `sysctl`:
+```
+$ sysctl net.core.rmem_max=2097152
+$ sysctl net.ipv4.tcp_rmem="8192 131072 6291456"
+```
+
+To apply changes permanently, edit file `/etc/sysctl.conf` e.g.:
+
+```
+$ vi /etc/sysctl.conf
+net.core.rmem_max = 2097152
+net.ipv4.tcp_rmem = 8192 131072 6291456
+```
+
+Check your Linux distribution's documentation for more information about configuring kernel parameters.
 
 == Virtual Machine Tuning
 

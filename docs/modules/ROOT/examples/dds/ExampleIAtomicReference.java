@@ -14,6 +14,7 @@ public class ExampleIAtomicReference {
         ref.set("foo");
         System.out.println(ref.get());
         System.exit(0);
+        ref.destroy();
         //end::iar[]
     }
 }

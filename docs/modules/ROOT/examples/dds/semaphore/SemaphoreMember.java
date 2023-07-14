@@ -23,6 +23,8 @@ public class SemaphoreMember {
             }
         }
         System.out.println("Finished");
+        semaphore.destroy();
+        resource.destroy();
         //end::sm[]
     }
 }

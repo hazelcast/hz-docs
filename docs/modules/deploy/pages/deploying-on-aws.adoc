@@ -9,28 +9,28 @@ Before deploying Hazelcast on AWS, you must have the following:
 
 * Linux Kernel 3.19+
 +
-TCP connections may get stuck when used with older Kernel versions, resulting in undefined timeouts.
+WARNING: TCP connections may get stuck when used with older Kernel versions, resulting in undefined timeouts.
 
 == Discovering Members Automatically
 
 To make it easier to set up clusters on Amazon AWS, Hazelcast allows members to discover each other automatically, using discovery strategies.
 
-When a member starts on AWS, it fetches a list of all running instances filtered by the member's AWS configuration settings. Then, each instance is checked one-by-one with its IP and each of the ports defined in the `hz-port` property. When a member is discovered under `IP:PORT`, then it joins the cluster.
+When a member starts on AWS, it fetches a list of all running instances filtered by the member's AWS configuration settings. Then, each instance is checked one-by-one with its IP and each of the ports defined in the `hz-port` property (see the example configurations in this section for the property's description). When a member is discovered under `IP:PORT`, then it joins the cluster.
 
 Choose from one of the following environments to configure a discovery strategy:
 
-- EC2
-- ECS/Fargate
-- ECS/EC2
-- AWS Elastic Beanstalk
+- <<ec2-configuration, EC2>>
+- <ecsfargate-configuration, ECS/Fargate>>
+- <<ecs-environment-with-ec2-discovery, ECS/EC2>>
+- <<aws-elastic-beanstalk, AWS Elastic Beanstalk>>
 
-== EC2 Configuration
+== Configuring Hazelcast for EC2
 
-You can configure both Hazelcast members and Hazelcast clients to discover clusters automatically.
+You can configure both Hazelcast members and Hazelcast clients to automatically discover clusters deployed in Amazon EC2.
 
 === EC2 Hazelcast Member Discovery
 
-You can configure Hazelcast in one of the following manners.
+The following is an example AWS EC2 configuration snippet in a member, to enable automatic member discoveries in EC2. Each member of your cluster should have the same configuration.
 
 [tabs] 
 ==== 
@@ -41,10 +41,10 @@ XML::
 <hazelcast>
   <network>
     <join>
-      <multicast enabled="false"/>
-      <aws enabled="true">
-        <tag-key>my-ec2-instance-tag-key</tag-key>
-        <tag-value>my-ec2-instance-tag-value</tag-value>
+      <multicast enabled="false"/> <1>
+      <aws enabled="true"> <2>
+        <tag-key>my-ec2-instance-tag-key</tag-key> <3>
+        <tag-value>my-ec2-instance-tag-value</tag-value> <4>
       </aws>
     </join>
   </network>
@@ -59,48 +59,52 @@ hazelcast:
   network:
     join:
       multicast:
-        enabled: false
+        enabled: false <1>
       aws:
-        enabled: true
-        tag-key: my-ec2-instance-tag-key
-        tag-value: my-ec2-instance-tag-value
+        enabled: true <2>
+        tag-key: my-ec2-instance-tag-key <3>
+        tag-value: my-ec2-instance-tag-value <4>
 ```
 --
 Java:: 
 + 
 -- 
 ```java
-config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false);
-config.getNetworkConfig().getJoin().getAwsConfig().setEnabled(true)
-      .setProperty("tag-key", "my-ec2-instance-tag-key")
-      .setProperty("tag-value", "my-ec2-instance-tag-value");
+config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false); <1>
+config.getNetworkConfig().getJoin().getAwsConfig().setEnabled(true) <2>
+      .setProperty("tag-key", "my-ec2-instance-tag-key") <3>
+      .setProperty("tag-value", "my-ec2-instance-tag-value"); <4>
 ```
 --
 ====
+<1> Multicast discovery strategy must be disabled. It is mandatory to set.
+<2> AWS discovery strategy must be enabled. It is mandatory to set.
+<3>, <4> Filter to look only for EC2 Instances with the given `tag-key`/`tag-value`; comma-separated multiple values are supported, e.g., `KeyA,KeyB`; comma-separated values behave as `AND` conditions. These two properties are also mandatory to set.
 
-The following optional properties can be configured[[ec2_properties]]:
 
-* `access-key`, `secret-key`: access and secret keys of your AWS account; if not set, `iam-role` is used
-* `iam-role`: IAM Role attached to EC2 instance used to fetch credentials (if `access-key`/`secret-key` not specified); if not set, default IAM Role attached to EC2 instance is used
-* `region`: region where Hazelcast members are running; default is the current region
-* `host-header`: `ec2`, `ecs`, or the URL of a EC2/ECS API endpoint; automatically detected by default
-* `security-group-name`: filter to look only for EC2 instances with the given security group
-* `tag-key`, `tag-value`: filter to look only for EC2 Instances with the given `tag-key`/`tag-value`; comma-separated multiple values are supported, e.g., `KeyA,KeyB`; comma-separated values behave as AND conditions
-* `connection-timeout-seconds`, `read-timeout-seconds`: connection and read timeouts when making a call to AWS API; default to `10`
-* `connection-retries`: number of retries while connecting to AWS API; default to `3`
-* `hz-port`: a range of ports where the plugin looks for Hazelcast members; default is `5701-5708`
+The following are the optional properties to be configured[[ec2_properties]]:
 
-Note that if you don't specify any of the properties, then Hazelcast uses the IAM Role assigned to the EC2 Instance to form a cluster from all Hazelcast members running in same region.
+* `access-key`, `secret-key`: Access and secret keys of your AWS account; if not set, `iam-role` is used.
+* `iam-role`: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html[IAM Role^] attached to the EC2 instance used to fetch credentials (if `access-key`/`secret-key` are not specified); if not set, the default IAM Role attached to the EC2 instance is used.
+* `region`: Region where the Hazelcast members are running; default is the current region.
+* `host-header`: `ec2`, `ecs`, or the URL of a EC2/ECS API endpoint; automatically detected by default.
+* `security-group-name`: Filter to look only for the EC2 instances with the given security group.
+* `connection-timeout-seconds`, `read-timeout-seconds`: Connection and read timeouts when making a call to the AWS API; its default is `10` seconds.
+* `connection-retries`: Number of retries while connecting to AWS API; its default is `3`.
+* `hz-port`: Range of ports where the discovery strategy looks for Hazelcast members; its default is `5701-5708`.
+
+Note that if you don't specify any of the optional properties, then Hazelcast uses the IAM Role assigned to the EC2 Instance to form a cluster from all Hazelcast members running in the same region.
 
 === Client Discovery of EC2 Hazelcast Cluster
 
-Hazelcast Client can automatically discover the Hazelcast cluster running in EC2 environment.
+Hazelcast clients can automatically discover the Hazelcast cluster running in EC2 environment.
+This section is for the Hazelcast Java clients. See https://github.com/hazelcast/hazelcast-cpp-client/blob/v5.3.0/Reference_Manual.md#57-enabling-hazelcast-aws-discovery[C++ client] and https://github.com/hazelcast/hazelcast-go-client-discovery[Go client] documentations to learn how to configure Hazelcast C++ and Go clients to automatically discover members running in EC2 environment.
 
 - *Client running in EC2:*
 
-To discover the Hazelcast Cluster running on EC2 using the client running on the EC2, use the same discovery parameters as mentioned above.
+To discover the Hazelcast cluster running on EC2 using the client running on EC2, you can use the same discovery parameters as mentioned in the previous section.
 
-Following are example declarative and programmatic configuration snippets.
+The following is an example configuration snippet in a Java client. Each client should have the same configuration.
 
 [tabs] 
 ==== 
@@ -143,10 +147,10 @@ config.getNetworkConfig().getAwsConfig().setEnabled(true)
 
 - *Client running in ECS:*
 
-Hazelcast Client on ECS can discover the members running on EC2 instances. For this you need to specify the needed <<ec2_properties,EC2 related properties>> (`iam-role`, `security-group-name`) and make sure to set the `ec2:DescribeInstances` permission.
-If none of the ECS or EC2 related properties are specified, the AWS discovery tries to discover the ECS members. If none is found, then it tries to discover EC2 members.
+To discover the Hazelcast cluster running on EC2 using the client running on ECS, you need to specify the needed <<ec2_properties,EC2 related properties>> (`iam-role`, `security-group-name`) and to set the `ec2:DescribeInstances` permission.
+If none of the ECS or EC2 related properties are specified, the AWS discovery strategy tries to discover the ECS members. If none is found, then it tries to discover EC2 members.
 
-Following are example declarative and programmatic configuration snippets.
+The following is an example configuration snippet in a Java client. Each client should have the same configuration.
 
 [tabs] 
 ==== 
@@ -195,15 +199,15 @@ config.getNetworkConfig().getAwsConfig().setEnabled(true)
 
 * *Client running outside AWS:*
 
-If Hazelcast Client is run *outside AWS*, then you need to always specify the following parameters:
+For the Java clients running *outside AWS*, you always need to specify the following parameters:
 
-- `access-key`, `secret-key` - IAM role cannot be used from outside AWS
-- `region` - it cannot be detected automatically
-- `use-public-ip` - must be set to `true`
+- `access-key`, `secret-key` - IAM role cannot be used from outside AWS.
+- `region` - it cannot be detected automatically.
+- `use-public-ip` - must be set to `true`.
 
-Note also that your EC2 instances must have public IP assigned.
+Note also that your EC2 instances must have a public IP assigned.
 
-Following are example declarative and programmatic configuration snippets.
+The following is an example configuration snippet.
 
 [tabs] 
 ==== 

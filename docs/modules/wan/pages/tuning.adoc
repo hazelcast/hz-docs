@@ -754,3 +754,49 @@ hazelcast:
         use-endpoint-private-address: true
 ----
 ====
+
+== Replicating `IMap`/`ICache` Evictions
+
+The replication of eviction events can be useful for maintaining stronger data consistency between clusters. However,
+you should use it with caution; source clusters with eviction enabled should replicate to target clusters which **do
+not** have eviction enabled. If both source and target clusters have eviction enabled, due to eviction being a largely
+local operation, it is possible for a target cluster to evict data that has not been evicted on the source cluster.
+When replication is used for data consistency on a failover deployment, it is important that eviction is re-enabled on
+the standby cluster when it becomes active.
+
+While enabling this functionality can help to maintain stronger data consistency over WAN between clusters, it is
+important to note that this **does not guarantee full data consistency**. You can enable the replication of `IMap` and 
+`ICache` evictions to the other clusters by setting the `hazelcast.wan.replicate.imap/icache.evictions` property to
+`true`, as shown below.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <properties>
+        <property name="hazelcast.wan.replicate.imap.evictions">true</property>
+        <property name="hazelcast.wan.replicate.icache.evictions">true</property>
+    </properties>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+    ...
+    properties:
+      hazelcast.wan.replicate.imap.evictions: true
+      hazelcast.wan.replicate.icache.evictions: true
+    ...
+----
+You can find the specifications of these properties in xref:ROOT:system-properties.adoc[System Properties].
+====

@@ -5,7 +5,7 @@
 
 == Displaying the Execution Plan
 
-Add the keyword `EXPLAIN` in front of your query. For example:
+Add the keyword xref:sql:explain.adoc[`EXPLAIN`] in front of your query. For example:
 
 [source,sql]
 ----
@@ -14,5 +14,44 @@ FROM employees
 WHERE age > ?;
 ----
 
+
+== Ways of Improving Performance
+
+General advices for optimizing SQL queries apply also to Hazelcast SQL queries. However, because Hazelcast is not an RDBMS, there are some differences and special cases.
+
+=== Create indexes
+
 Scanning an entire table (full table scans) is the slowest way to access data, if you are filtering just a small subset of rows. If your queries are performing full table scans on a map, you can create indexes that contain at least one of the columns that the query is filtering in its `WHERE` clause. See xref:create-index.adoc[].
 
+=== Do Not Have Redundant Indexes
+
+Each index has to be updated after each change to the IMap, so there is a tradeoff between read performance and write performance when adding a new index. Both should be evaluated for realistic workload with and without additional index.
+
+=== Create Composite Idexes for Frequently Used Combinations of Fields
+
+SQL queries cannot use more than one SORTED or HASH index for given scan. If you have a query that filters rows using multiple attributes, consider creating a composite index with all these fields instead of or in addition to single-column indexes.
+
+For example, consider an `employees` mapping with the following indexes.
+
+```sql
+CREATE INDEX IF NOT EXISTS emp_age
+ON employees (age)
+TYPE SORTED;
+CREATE INDEX IF NOT EXISTS emp_name
+ON employees (name)
+TYPE SORTED;
+```
+
+A query like the following is able to utilize only one of the indexes (exactly which one to be used depends on the filter selectivity estimation and cost calculation).
+
+```sql
+SELECT * from employees where name = 'Smith' and age > 30
+```
+
+You could create the following composite index which covers the query filters.
+
+```sql
+CREATE INDEX IF NOT EXISTS emp_name_age
+ON employees (name, age)
+TYPE SORTED
+```

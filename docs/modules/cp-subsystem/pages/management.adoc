@@ -361,6 +361,77 @@ hz-cluster-cp-admin -o get-local-member --address 127.0.0.1 --port 5701
 --
 ====
 
+== Getting CP Members
+
+Get a list of all active CP members in the cluster.
+
+[tabs] 
+====
+Management Center::
++ 
+--
+See xref:{page-latest-supported-mc}@management-center:cp-subsystem:dashboard.adoc[] in the Management Center documentation.
+--
+
+Java member API::
++
+--
+[source,java]
+----
+include::ROOT:example$/cp/CpSubsystemAPI.java[tag=cpmembers]
+----
+--
+
+REST API::
++
+--
+[source,sh]
+----
+curl http://127.0.0.1:5701/hazelcast/rest/cp-subsystem/members
+
+# OR
+
+hz-cluster-cp-admin -o get-members --address 127.0.0.1 --port 5701
+----
+
+.Sample response
+[source,json]
+----
+[{
+    "uuid": "33f84b0f-46ba-4a41-9e0a-29ee284c1c2a",
+    "address": "[127.0.0.1]:5703"
+}, {
+    "uuid": "59ca804c-312c-4cd6-95ff-906b2db13acb",
+    "address": "[127.0.0.1]:5704"
+}, {
+    "uuid": "777ff6ea-b8a3-478d-9642-47d1db019b37",
+    "address": "[127.0.0.1]:5705"
+}, {
+    "uuid": "c6229b44-8976-4602-bb57-d13cf743ccef",
+    "address": "[127.0.0.1]:5701"
+}, {
+    "uuid": "c7856e0f-25d2-4717-9919-88fb3ecb3384",
+    "address": "[127.0.0.1]:5702"
+}]
+----
+--
+====
+
+
+== Creating CP Groups
+
+To create a custom CP group, add an `@` symbol to the end of the data structures name, followed by the name of the group that you want to create and store the data structure in. For example, here, a new CP group is created with the name `myGroup` and then an atomic long called `myAtomicLong` is initialized in this custom CP group: `.getAtomicLong("myAtomicLong@myGroup")`.
+
+If you use fenced locks or semaphores, we recommend using a minimal number of CP groups. For these data structures, a Hazelcast member or client starts
+a new xref:cp-subsystem:cp-subsystem.adoc#sessions[session] on the corresponding CP group when it makes its very first acquisition request, and then periodically commits session heartbeats
+to this CP group in order to indicate its liveliness. If fenced
+locks and semaphores are distributed to multiple CP groups, there will be
+a session management overhead on each CP group. Therefore, for most use
+cases, the `DEFAULT` CP group should be sufficient to maintain all CP data
+structure instances. Custom CP groups is recommended only when you benchmark
+your deployment and decide that performance of the `DEFAULT` CP group is not
+sufficient for your workload.
+
 == Getting CP Groups
 
 To see the list of active CP groups:
@@ -468,62 +539,6 @@ hz-cluster-cp-admin -o get-group --group ${CPGROUP_NAME} --address 127.0.0.1 --p
         "address": "[127.0.0.1]:5701"
     }]
 }
-----
---
-====
-
-== Getting CP Members
-
-Get a list of all active CP members in the cluster.
-
-[tabs] 
-====
-Management Center::
-+ 
---
-See xref:{page-latest-supported-mc}@management-center:cp-subsystem:dashboard.adoc[] in the Management Center documentation.
---
-
-Java member API::
-+
---
-[source,java]
-----
-include::ROOT:example$/cp/CpSubsystemAPI.java[tag=cpmembers]
-----
---
-
-REST API::
-+
---
-[source,sh]
-----
-curl http://127.0.0.1:5701/hazelcast/rest/cp-subsystem/members
-
-# OR
-
-hz-cluster-cp-admin -o get-members --address 127.0.0.1 --port 5701
-----
-
-.Sample response
-[source,json]
-----
-[{
-    "uuid": "33f84b0f-46ba-4a41-9e0a-29ee284c1c2a",
-    "address": "[127.0.0.1]:5703"
-}, {
-    "uuid": "59ca804c-312c-4cd6-95ff-906b2db13acb",
-    "address": "[127.0.0.1]:5704"
-}, {
-    "uuid": "777ff6ea-b8a3-478d-9642-47d1db019b37",
-    "address": "[127.0.0.1]:5705"
-}, {
-    "uuid": "c6229b44-8976-4602-bb57-d13cf743ccef",
-    "address": "[127.0.0.1]:5701"
-}, {
-    "uuid": "c7856e0f-25d2-4717-9919-88fb3ecb3384",
-    "address": "[127.0.0.1]:5702"
-}]
 ----
 --
 ====

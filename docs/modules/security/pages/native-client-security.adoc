@@ -1612,3 +1612,129 @@ client.getMap("protectedConfig").put("master.resolution", "1920");
 client.shutdown();
 hzLite.shutdown();
 ----
+
+[[deny-permissions]]
+=== Deny Permissions
+
+Hazelcast employs Additive Access Control as its default security mechanism.
+When a client connects to a security-enabled cluster, it is initially granted
+no permissions. As a result, access to protected resources is inherently denied
+unless explicit permissions are configured and granted to specific roles.
+
+The Additive Access Control approach has limited expression capabilities and
+is not well-suited for configurations involving simple exclusions.
+For example, it's challenging to allow access to all maps except
+the one named `"private"`.
+
+To address this limitation, Hazelcast introduces the concept of Deny Permissions
+(or Deny Rules).
+
+Within the permission configuration, there is a `boolean` flag called `deny`
+that enables permission subtraction.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+
+[source,xml]
+----
+<hazelcast>
+    ...
+    <security enabled="true">
+        <client-permissions>
+            <!-- Grant access to all maps. -->
+            <map-permission name="*">
+                <actions>
+                    <action>all</action>
+                </actions>
+            </map-permission>
+            <!-- Deny access to the "private" map. -->
+            <map-permission name="private" deny="true">
+                <actions>
+                    <action>all</action>
+                </actions>
+            </map-permission>
+       </client-permissions>
+    </security>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  security:
+    enabled: true
+    client-permissions:
+      map:
+        - name: *
+          actions:
+            - all
+        - name: private
+          deny: true
+          actions:
+            - all
+----
+====
+
+[[priority-of-grant-and-deny-permissions]]
+=== Priority of Grant and Deny Permissions
+
+By default, when a permission is both granted and denied, the denial takes precedence.
+In other words, if conflicting permissions exist, denial prevails.
+
+In certain scenarios, it might be beneficial to reverse this behavior and give higher
+priority to permission grants.
+Hazelcast supports this by introducing the `boolean` flag `priority-grant`,
+which can be set to `true`.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+
+[source,xml]
+----
+<hazelcast>
+    ...
+    <security enabled="true">
+        <client-permissions  priority-grant="true">
+        ...
+       </client-permissions>
+    </security>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  security:
+    enabled: true
+    client-permissions:
+      priority-grant: false
+----
+====
+
+[[permission-evaluation-table]]
+==== Permission Evaluation Table
+
+The table below illustrates how permission evaluation changes when `priority-grant` is configured.
+
+[options="header"]
+|============================================================================
+| Permission Implication       | `priority-grant=false` (default) | `priority-grant=true`
+| No Grant or Deny Implication | Denied                           | Granted
+| Implication from Grant only  | Granted                          | Granted
+| Implication from Deny only   | Denied                           | Denied
+| Both Grant and Deny Imply    | Denied                           | Granted
+|============================================================================

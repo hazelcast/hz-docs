@@ -3,7 +3,9 @@
 
 [blue]*Hazelcast Enterprise Feature*
 
-{description} Currently, the Data Migration Tool (DMT) supports:
+{description} The purpose of Data Migration Tool (DMT) is to migrate data from your Open Source or Enterprise clusters, to either a newer Enterprise cluster or a cluster on Hazelcast Viridian.
+
+Currently, the Data Migration Tool (DMT) supports:
 
 * migrating data only for maps and replicated maps
 * migrating data from Hazelcast 4.x.y and 5.x.y clusters to Hazelcast 5.3.2 and newer clusters.
@@ -35,21 +37,21 @@ Run the following Docker command to start a one-member source cluster.
 
 [source,shell]
 ----
-$ docker run -p 127.0.0.1:5701:5701 -e HZ_CLUSTERNAME=source hazelcast/hazelcast:4.x.y
+$ docker run -p 127.0.0.1:5701:5701 -e HZ_CLUSTERNAME=source hazelcast/hazelcast:4.2.7
 ----
 
-NOTE: For the `4.x.y` placeholder, you can use one of the released versions from Hazelcast 4 series, e.g., `4.2.7`.
+NOTE: The Hazelcast version can be any of 4.x.y and 5.x.y. We use `4.2.7` as an example here.
 
 This member is started using an internal Docker IP and the port `5701` on that IP address, something like `172.12.0.1:5701`.
 Since the Docker container is in a separate network, it does not collide with the running processes on your
 local machine. For example, in this case, the member can run on `127.0.0.1:5701`, and our container can run on `172.12.0.1:5701`.
 
-However, since it runs in a virtual network, we need to make it accessible to your local processes because migration and target
+NOTE: Instead of using Docker to start a member, you can also download one of the 4.x.y packages from https://hazelcast.com/open-source-projects/downloads/archives/#hazelcast-imdg[Hazelcast web site] and https://docs.hazelcast.com/imdg/4.2/getting-started[start a member]. Make sure to https://docs.hazelcast.com/imdg/4.2/clusters/creating-clusters[set the cluster's name] as `source`.
+
+INFORMATION: Since the member started with Docker runs in a virtual network, we need to make it accessible to your local processes because migration and target
 clusters, CLC, and DMT will be processes outside the Docker environment, directly running on your computer. The `-p` option in the Docker command allows you to 
 map a container's port to the host machine. The command assigns `5701` as the container's port, so `127.0.0.1:5701` becomes the Hazelcast member's address.
 `127.0.0.1` refers to your local machine's address. Make sure there is nothing else running on port `5701` on your local machine.
-
-NOTE: Instead of using Docker to start a member, you can also download one of the 4.x.y packages from https://hazelcast.com/open-source-projects/downloads/archives/#hazelcast-imdg[Hazelcast web site] and https://docs.hazelcast.com/imdg/4.2/getting-started[start a member]. Make sure to https://docs.hazelcast.com/imdg/4.2/clusters/creating-clusters[set the cluster's name] as `source`.
 
 === Step 2. Create a Map and Put Data
 
@@ -73,20 +75,26 @@ Check that you can put an entry to the source cluster by running the following C
 clc -c source.yaml map --name my-map set key-1 value-1
 ----
 
-Then, you can run the following script on your terminal to populate 1000 entries to the source cluster. This script is 
-for macOS and Linux.
+Then, you can run the following script on your terminal to populate 1000 entries to the source cluster.
 
+[tabs] 
+==== 
+macOS and Linux:: 
++ 
+-- 
 [source,shell]
 ----
 for i in {1..1000}; do clc -c source.yaml map --name my-map set key-$i value-$i --quiet; done && echo OK
 ----
+--
 
-This one is for Windows users:
-
+Windows::
++
 [source,shell]
 ----
 for /l %x in (1, 1, 100) do clc -c source.yaml map --name my-map set key-%x value-%x --quiet
 ----
+====
 
 NOTE: You can also use xref:getting-started:get-started-binary.adoc#step-3-write-data-to-memory[alternative ways] to create a map and put data.
 
@@ -105,17 +113,12 @@ docker run -e HZ_NETWORK_PORT_PORT=5901 -p 127.0.0.1:5901:5901
 <1> If you don't have a Hazelcast Enterprise license key, you can either use a Hazelcast Viridian https://docs.hazelcast.com/cloud/free-trial[trial cluster] or request a xref:getting-started:enterprise-overview.adoc#step-2-get-your-enterprise-license[trial license].
 <2> If you want to use the full distribution, remove the `-slim` postfix. See xref:getting-started:editions.adoc#full-and-slim-distributions[Distributions] to learn about the differences between full and slim distributions.
 
-Alternatively, you can use the migration build which is provided in the DMT download package as the target cluster.
-Run the following command in the folder where you extracted the DMT package.
-
-```shell
-$ HZ_CLUSTERNAME=target HZ_NETWORK_PORT_PORT=5901 ./bin/hz start
-```
-
 The cluster tries to start on port `5901` if it's available. It chooses another port otherwise. You can check the port in the cluster logs shown on the terminal.
 
 The configuration file for the target cluster is `target.yaml`, which can be found in the folder where you extracted the DMT package.
 In case the cluster starts on a different port as you notice within the cluster logs, you must change the `address` field in `target.yaml` accordingly to match the port number.
+
+NOTE: Instead of Docker, you can also by https://hazelcast.com/get-started/download/[download] Hazelcast 5.3.2 or newer, request a xref:getting-started:enterprise-overview.adoc#step-2-get-your-enterprise-license[trial license], and xref:getting-started:get-started-binary.adoc#step-2-start-a-local-member[start] a cluster.
 
 === Step 4. Start the Migration Cluster
 
@@ -148,7 +151,8 @@ Then retry and click `Open` on the OS' dialog.
 
 === Step 6. Verify the Data in Target Cluster
 
-You can verify the size of the map in the target cluster using Hazelcast CLC. Run the following CLC commands to see the size of the map, and the value of a random key from the data we put in Step 2.
+You can verify the size of the map in the target cluster using Hazelcast CLC.
+Run the following CLC commands to see the size of the map, and the value of a random key from the data we put in Step 2.
 
 [source,shell]
 ----
@@ -164,11 +168,17 @@ value-42
 OK
 ----
 
+The `target.yaml` file is used by Hazelcast CLC to connect to the target cluster and verify the data is migrated.
+
 Alternatively, you can use the https://docs.hazelcast.com/management-center/latest/getting-started/install[Hazelcast Management Center] to verify the data in the target cluster.
 
 == Using the DMT for an Existing Cluster
 
 To migrate data from your existing cluster (source), skip Step 1 and Step 2 in <<trying-out-the-dmt, Trying Out the DMT>> above.
 
-Before starting with Step 3 and moving forward, you only need to check the `migration_config/source/hazelcast-client.yaml` file in the folder where you extracted the DMT package.
+Before starting with Step 3 and moving forward, you need to
+
+* Check the `migration_config/source/hazelcast-client.yaml` file in the folder where you extracted the DMT package.
 Modify the `cluster-name` and `cluster-members` fields in this file, such that they match the name of your existing cluster and addresses of the cluster members.
+* Check the `migration_config/data/imap_names/replicated_map_names.txt` files in the folder where you extracted the DMT package.
+Modify the content of these files, such that they match the names of your existing maps and replicated maps. If you have multiple maps/replicated maps, put one map name per line.

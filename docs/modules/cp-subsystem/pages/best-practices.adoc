@@ -3,5 +3,9 @@
 
 {description}
 
-* Try to reuse already created or existing CP objects (AtomicReference, FencedLock, etc.) and try to avoid creating new ones since those will not automatically be garbage collected.
+* Try to reuse already created or existing xref:cp-subsystem:cp-subsystem.adoc#cp-members[CP objects] (AtomicReference, FencedLock, etc.) and try to avoid creating new ones since those will not automatically be garbage collected.
+* Since each Raft based data structure is bounded by a single xref:cp-subsystem:cp-subsystem.adoc#cp-groups[Raft group], a client will create a separate session on each Raft group which holds the session-based data structure and the client interacts with. And when idle, clients send separate heartbeat messages to each Raft group to keep the sessions alive. For instance, if five clients try to acquire four locks, where each lock is placed into a different Raft group, then there will be 5 x 4 = 20 heartbeat operations committed in total. However, if all locks are put into the same Raft group, there will be only five heartbeats in each period. Therefore, it is strongly recommended that you store all session-based CP data structures (locks and semaphores) in a single Raft group to avoid that cost.
+* Create the minimum number of xref:cp-subsystem:configuration.adoc#choosing-a-group-size[CP groups] that you think are sufficient for your CP subsystem use case.
+
+
 

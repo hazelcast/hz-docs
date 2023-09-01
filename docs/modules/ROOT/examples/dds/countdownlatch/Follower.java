@@ -12,7 +12,6 @@ public class Follower {
         System.out.println( "Waiting" );
         boolean success = latch.await( 10, TimeUnit.SECONDS );
         System.out.println( "Complete: " + success );
-        latch.destroy();
     }
 }
 //end::follower[]

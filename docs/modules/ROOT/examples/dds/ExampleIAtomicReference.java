@@ -13,8 +13,8 @@ public class ExampleIAtomicReference {
         IAtomicReference<String> ref = hz.getCPSubsystem().getAtomicReference("reference");
         ref.set("foo");
         System.out.println(ref.get());
-        System.exit(0);
         ref.destroy();
+        System.exit(0);
         //end::iar[]
     }
 }

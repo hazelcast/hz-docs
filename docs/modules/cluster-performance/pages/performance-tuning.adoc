@@ -84,26 +84,41 @@ the sender can overrun the receiver such that the sending host is
 faster than the receiving host, which causes the receiver to drop packets
 and the TCP congestion window to shut down.
 
-Hazelcast, by default, configures I/O buffers to 128KB; you can change these
-using the following properties:
-
-* `hazelcast.socket.receive.buffer.size`
-* `hazelcast.socket.send.buffer.size`
-
-Typically, you can determing the throughput by the following formulae: 
+Typically, you can determine the throughput by the following formulae:
 
 * Transaction per second = buffer size / latency
 * Buffer size = Round trip time * network bandwidth
 
-To increase the TCP maximum buffer size in Linux, use the following properties:
+Hazelcast, by default, configures I/O buffers to 128KB; you can change these
+using the following Hazelcast properties:
 
-* `net.core.rmem.max`
-* `net.core.wmem.max`
+* `hazelcast.socket.receive.buffer.size`
+* `hazelcast.socket.send.buffer.size`
 
-To increase TCP auto-tuning by Linux, see the following properties:
+The operating system has separate configuration for minimum, default and maximum socket buffer sizes, so it is not guaranteed that the socket buffers allocated to Hazelcast sockets will match the requested buffer size.
 
-* `net.ipv4.tcp.rmem`
-* `net.ipv4.tcp.wmem`
+On Linux, the following kernel parameters can be used to configure socket buffer sizes:
+
+* `net.core.rmem_max`: maximum socket receive buffer size in bytes
+* `net.core.wmem_max`: maximum socket send buffer size in bytes
+* `net.ipv4.tcp_rmem`: minimum, default and maximum receive buffer size per TCP socket
+* `net.ipv4.tcp_wmem`: minimum, default and maximum send buffer size per TCP socket
+
+To make a temporary change to one of these values, use `sysctl`:
+```
+$ sysctl net.core.rmem_max=2097152
+$ sysctl net.ipv4.tcp_rmem="8192 131072 6291456"
+```
+
+To apply changes permanently, edit file `/etc/sysctl.conf` e.g.:
+
+```
+$ vi /etc/sysctl.conf
+net.core.rmem_max = 2097152
+net.ipv4.tcp_rmem = 8192 131072 6291456
+```
+
+Check your Linux distribution's documentation for more information about configuring kernel parameters.
 
 == Virtual Machine Tuning
 
@@ -113,7 +128,7 @@ Keeping track of garbage collection (GC) statistics is vital to optimum performa
 especially if you run the JVM with large heap sizes. Tuning the garbage collector
 for your use case is often a critical performance practice prior to deployment.
 Likewise, knowing what baseline GC behavior looks like and
-monitoring for behavior outside of normal tolerances will keep you aware of
+monitoring for behavior outside normal tolerances will keep you aware of
 potential memory leaks and other pathological memory usage. Hazelcast provides a basic
 GC recommendation in our xref:ROOT:production-checklist.adoc#jvm-recommendations[JVM Recommendations].
 
@@ -132,24 +147,10 @@ We xref:ROOT:production-checklist.adoc#jvm-recommendations[recommend] enabling
 GC logs to allow troubleshooting if performance problems occur. To enable GC
 logging, use the following JVM arguments:
 
-*Java 8*
-```
--verbose:gc
--Xloggc:gc.log
--XX:NumberOfGCLogFiles=10
--XX:GCLogFileSize=10M
--XX:+UseGCLogFileRotation
--XX:+PrintGCDetails
--XX:+PrintGCDateStamps
--XX:+PrintTenuringDistribution
--XX:+PrintGCApplicationConcurrentTime
--XX:+PrintGCApplicationStoppedTime
-```
-
-*Java 9 (and above)*
+*Java 11 (and above)*
 
 ```
--Xlog:safepoint,gc+age=debug,gc*=debug:file=gc.log:uptime,level,tags:filesize=10m,filecount=10
+-Xlog:gc=debug:file=/tmp/gc.log:time,uptime,level,tags:filesize=100m,filecount=10
 ```
 
 === Azul Zing® and Zulu® Support
@@ -241,7 +242,7 @@ Costs:
 **com.hazelcast.nio.serialization.DataSerializable**
 
 This is an optimization over standard Java Serialization
-which doesn’t store class metadata.
+which doesn't store class metadata.
 
 Benefits:
 
@@ -256,7 +257,7 @@ Costs:
 **com.hazelcast.nio.serialization.IdentifiedDataSerializable**
 
 This is an optimization over standard Java Serialization
-which doesn’t use reflection.
+which doesn't use reflection.
 
 Benefits:
 
@@ -557,7 +558,7 @@ and effort on meticulous and fragile GC tuning.
 If you use HDMS with large data sizes,
 we recommend a large increase in partition count, starting with 5009 or higher. See the
 <<partition-count, Partition Count section>> above for more information. Also, if you intend
-to pre-load very large amounts of data into memory (tens, hundreds, or thousands of gigabytes),
+to preload very large amounts of data into memory (tens, hundreds, or thousands of gigabytes),
 be sure to profile the data load time and to take that startup time into account prior to deployment.
 
 See the xref:storage:high-density-memory.adoc[HDMS section] to learn more.

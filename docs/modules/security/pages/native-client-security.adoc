@@ -116,6 +116,15 @@ the client endpoint address (`ClusterEndpointPrincipal`), and client roles (`Clu
 The default permission policy allows to use comma separated names in the `principal`
 attribute configuration.
 
+[NOTE]
+====
+Unless part of the role name, do not include spaces when adding names to the `principal` attribute.
+
+Hazelcast does not automatically remove spaces in role names. If you include spaces that are not part of the name, permission is not granted to the intended role. 
+
+For example, if you configure permissions for the *admin* and *devel* roles using ``principal=" admin ,devel"``, the *admin* role is not granted the permission.
+====
+
 You can define the instance and principal names as wildcards using the `"*"` character.
 See the xref:configuration:using-wildcards.adoc[Using Wildcards] section for details.
 
@@ -1394,8 +1403,9 @@ You can give clients permission to use the following xref:sql:sql-statements.ado
 - xref:sql:create-index.adoc[`CREATE INDEX`]
 - xref:sql:create-view.adoc[`CREATE VIEW`]
 - xref:sql:drop-view.adoc[`DROP VIEW`]
-
-To apply permissions to certain mappings, provide the mapping name in the `name` attribute. Or, you can apply permissions to all mappings, using the `*` wildcard.
+- xref:sql:create-data-connection.adoc[`CREATE DATA CONNECTION`]
+- xref:sql:drop-data-connection.adoc[`DROP DATA CONNECTION`]
+- xref:sql:show-resources.adoc[`SHOW RESOURCES`]
 
 Actions:
 
@@ -1404,7 +1414,12 @@ Actions:
 - `create-index`: Use the `CREATE INDEX` statement to create a new index for a map.
 - `create-view`: Use the `CREATE VIEW` statement to create new views or replace existing ones.
 - `drop-view`: Use the `DROP VIEW` statement to delete an existing view.
+- `create-dataconnection`: Use the `CREATE DATA CONNECTION` statement to create new data connections or replace existing ones.
+- `drop-dataconnection`: Use the `DROP DATA CONNECTION` statement to delete data connections.
+- `view-dataconnection`: Use the `SHOW RESOURCES` statement to view the resources and data types accessible via data connections.
 - `all`: Enable all actions.
+
+To apply permissions to certain mappings or data connections, provide their names in the `name` attribute. Or, you can apply permissions to all mappings and data connections using the `*` wildcard.
 
 [tabs] 
 ==== 
@@ -1433,6 +1448,17 @@ XML::
   </actions>
 </sql-permission>
 ----
+
+.Apply permissions to a data connection
+[source,xml]
+----
+<sql-permission name="data_connection_name">
+  <actions>
+    <action>drop-dataconnection</action>
+    <action>view-dataconnection</action>
+  </actions>
+</sql-permission>
+----
 --
 
 YAML::
@@ -1457,6 +1483,17 @@ sql:
     actions:
       - create
       - destroy
+----
+
+.Apply permissions to a data connection
+
+[source,yaml]
+----
+sql:
+  - name: "data_connection_name"
+    actions:
+      - drop-dataconnection
+      - view-dataconnection
 ----
 --
 ====
@@ -1575,3 +1612,129 @@ client.getMap("protectedConfig").put("master.resolution", "1920");
 client.shutdown();
 hzLite.shutdown();
 ----
+
+[[deny-permissions]]
+=== Deny Permissions
+
+Hazelcast employs Additive Access Control as its default security mechanism.
+When a client connects to a security-enabled cluster, it is initially granted
+no permissions. As a result, access to protected resources is inherently denied
+unless explicit permissions are configured and granted to specific roles.
+
+The Additive Access Control approach has limited expression capabilities and
+is not well-suited for configurations involving simple exclusions.
+For example, it's challenging to allow access to all maps except
+the one named `"private"`.
+
+To address this limitation, Hazelcast introduces the concept of Deny Permissions
+(or Deny Rules).
+
+Within the permission configuration, there is a `boolean` flag called `deny`
+that enables permission subtraction.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+
+[source,xml]
+----
+<hazelcast>
+    ...
+    <security enabled="true">
+        <client-permissions>
+            <!-- Grant access to all maps. -->
+            <map-permission name="*">
+                <actions>
+                    <action>all</action>
+                </actions>
+            </map-permission>
+            <!-- Deny access to the "private" map. -->
+            <map-permission name="private" deny="true">
+                <actions>
+                    <action>all</action>
+                </actions>
+            </map-permission>
+       </client-permissions>
+    </security>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  security:
+    enabled: true
+    client-permissions:
+      map:
+        - name: *
+          actions:
+            - all
+        - name: private
+          deny: true
+          actions:
+            - all
+----
+====
+
+[[priority-of-grant-and-deny-permissions]]
+=== Priority of Grant and Deny Permissions
+
+By default, when a permission is both granted and denied, the denial takes precedence.
+In other words, if conflicting permissions exist, denial prevails.
+
+In certain scenarios, it might be beneficial to reverse this behavior and give higher
+priority to permission grants.
+Hazelcast supports this by introducing the `boolean` flag `priority-grant`,
+which can be set to `true`.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+
+[source,xml]
+----
+<hazelcast>
+    ...
+    <security enabled="true">
+        <client-permissions  priority-grant="true">
+        ...
+       </client-permissions>
+    </security>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  security:
+    enabled: true
+    client-permissions:
+      priority-grant: false
+----
+====
+
+[[permission-evaluation-table]]
+==== Permission Evaluation Table
+
+The table below illustrates how permission evaluation changes when `priority-grant` is configured.
+
+[options="header"]
+|============================================================================
+| Permission Implication       | `priority-grant=false` (default) | `priority-grant=true`
+| No Grant or Deny Implication | Denied                           | Granted
+| Implication from Grant only  | Granted                          | Granted
+| Implication from Deny only   | Denied                           | Denied
+| Both Grant and Deny Imply    | Denied                           | Granted
+|============================================================================

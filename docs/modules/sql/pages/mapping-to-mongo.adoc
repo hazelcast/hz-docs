@@ -54,7 +54,8 @@ For details, see xref:pipelines:job-security.adoc[].
 Before you can create a mapping to a MongoDB, you must have the following:
 
 * A `$jsonSchema` validation in the collection (see the https://www.mongodb.com/docs/manual/reference/operator/query/jsonSchema/[schema documentation]), or you have to have at least one element in the collection you want to create mapping for (for property type validation).
-* Enabled operations log (oplog) if you want to use streaming mappings.
+* Enabled operations log (oplog, see the link:https://www.mongodb.com/docs/manual/changeStreams/[Mongo documentation])
+  if you want to use streaming mappings.
 
 == Creating a MongoDB Mapping
 
@@ -136,7 +137,7 @@ Instead of providing the configuration in YAML or XML, you can also run the foll
 +
 [source,xml]
 ----
-CREATE DATA CONNECTION myMongo type Mongo SHARED 
+CREATE DATA CONNECTION myMongo type Mongo SHARED
 OPTIONS (
 	‘connectionString’ = ‘<your connection string>’
 )
@@ -147,11 +148,9 @@ OPTIONS (
 [source,sql]
 ----
 CREATE MAPPING people
-TYPE MONGO <1>
-DATA CONNECTION myMongo; <2>
+DATA CONNECTION myMongo; <1>
 ----
-<1> The type of the connector.
-<2> The name of the data connection configuration on your members (see Step 2 above).
+<1> The name of the data connection configuration on your members (see Step 2 above).
 +
 In the above case, automatic schema inference will be used. You may also want to provide the schema explicitly as shown below.
 +
@@ -165,6 +164,73 @@ CREATE MAPPING people (
 DATA CONNECTION myMongo
 ----
 Notice that there is no mention of `TYPE MONGO` this time; it’s automatically assumed by the SQL engine when you provide MongoDB data connection. This works with both schema provided or not.
+
+
+[NOTE]
+====
+Specify the database name using one of the following options:
+
+* Add `OPTIONS ('database' = 'myDatabase')` in `CREATE DATA CONNECTION`
+* Add `OPTIONS ('database' = 'myDatabase')` in `CREATE MAPPING`
+* Use the full external name, e.g., `CREATE MAPPING people EXTERNAL NAME myDatabase.people (...)`
+====
+
+== Supported Object Types
+
+There may be one or more object types for a connector. The Mongo SQL connector has two object types:
+
+ - `Collection`: Represents a batch read from a given collection. This is the default object type.
+ - `ChangeStream`: Represents reading a stream of events.
+
+To change the object type, append `OBJECT TYPE X` after `DATA CONNECTION` / `TYPE`. For example:
+
+[tabs]
+====
+Using Data Connection::
++
+--
+[source,sql]
+----
+CREATE MAPPING people (
+    firstName VARCHAR(100),
+    lastName VARCHAR(100),
+    age INT
+)
+DATA CONNECTION myMongo
+OBJECT TYPE ChangeStream
+OPTIONS (...)
+----
+--
+Using TYPE::
++
+--
+[source,sql]
+----
+CREATE MAPPING people (
+firstName VARCHAR(100),
+lastName VARCHAR(100),
+age INT
+)
+TYPE Mongo
+OBJECT TYPE ChangeStream
+OPTIONS (...)
+----
+--
+====
+
+== Field Mappings
+
+Object type `Collection` resolves columns to the names and types of the properties of a Mongo collection.
+For `ChangeStream` it is more complicated. The `ChangeStream` object contains the MongoDB collection properties, prefixed with `fullDocument.`.
+There are also some predefined, top-level columns without the `fullDocument.` prefix:
+
+- `operationType STRING`: Operation that triggered this change event, e.g. `insert`.
+- `resumeToken STRING`: Resume token associated with the given change stream event.
+- `wallTime DATE_TIME`: Wall time of the event. The date and time of the database operation on the server.
+- `ts TIMESTAMP`: Timestamp of the event. This is either equal to the wall time of the event, if provided, or to the current time on the Hazelcast member.
+- `clusterTime TIMESTAMP`: Cluster time of the event. The timestamp associated with Mongo oplog entry.
+
+For further information, see the link:https://www.mongodb.com/docs/manual/reference/change-events/create/[Mongo documentation].
 
 == Available options
 
@@ -236,7 +302,7 @@ serverless free tier, which currently does not support `$function` aggregates.
 
 == Type Mapping
 
-The type system in MongoDB and SQL is not exactly the same. That leads to potential confusions and the need of type coercion.
+The type system in MongoDB and SQL is not exactly the same. This leads to potential confusion and the need for the type coercion.
 
 .MongoDB Type Conversion
 [cols="1,1,1"]

@@ -27,6 +27,7 @@ public class IAtomicLongExecuteFuncs {
         result = atomicLong.getAndAlter( new Add2Function() );
         System.out.println( "getAndAlter.result: " + result );
         System.out.println( "getAndAlter.value: " + atomicLong.get() );
+        atomicLong.destroy();
         //end::ialef[]
     }
     //tag::add2func[]

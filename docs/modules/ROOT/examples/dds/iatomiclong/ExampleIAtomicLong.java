@@ -15,6 +15,7 @@ public class ExampleIAtomicLong {
             counter.incrementAndGet();
         }
         System.out.printf( "Count is %s\n", counter.get() );
+        counter.destroy();
         //end::ial[]
     }
 }

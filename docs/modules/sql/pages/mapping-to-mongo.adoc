@@ -46,7 +46,8 @@ NOTE: To be able to use SQL over MongoDB, you have to include `hazelcast-sql` as
 == Permissions
 [.enterprise]*Enterprise*
 
-The Mongo connector does not yet support permissions.
+If xref:security:enabling-jaas.adoc[security] is enabled, your clients may need permissions to use this connector.
+For details, see xref:pipelines:job-security.adoc[].
 
 == Before you Begin
 
@@ -226,10 +227,48 @@ There are also some predefined, top-level columns without the `fullDocument.` pr
 - `operationType STRING`: Operation that triggered this change event, e.g. `insert`.
 - `resumeToken STRING`: Resume token associated with the given change stream event.
 - `wallTime DATE_TIME`: Wall time of the event. The date and time of the database operation on the server.
-- `ts TIMESTAMP`: Timestamp of the event. This is either equal to the wall time of the event, if provided, or to the current time on the Hazelcast member. 
+- `ts TIMESTAMP`: Timestamp of the event. This is either equal to the wall time of the event, if provided, or to the current time on the Hazelcast member.
 - `clusterTime TIMESTAMP`: Cluster time of the event. The timestamp associated with Mongo oplog entry.
 
-For further information, see the link:https://www.mongodb.com/docs/manual/reference/change-events/create/[Mongo documentation].  
+For further information, see the link:https://www.mongodb.com/docs/manual/reference/change-events/create/[Mongo documentation].
+
+== Available options
+
+Best way is to configure MongoDB options via `Data Connection`. Options available when using Mongo Data Connections are:
+
+There are some options that can be added only in `CREATE MAPPING`:
+[cols="1,4"]
+|===
+| Name | Description
+| `startAt`
+| Defines moment in time from when the event stream should be read. The option is valid only if mapping
+has `ChangeStream` object type. This property should have value of:
+
+- `now`
+- time in epoch milliseconds or
+- ISO-formatted instant in UTC timezone, like `2023-03-24T15:31:00Z`
+
+| `idColumn`
+| Specifies which column should be used as a primary key in the queries. Default value is `_id`. Remember
+that `idColumn` should have index in Mongo.
+
+| `forceReadTotalParallelismOne`
+| Forces queries to be executed exactly on one member in one thread. Can be useful if you want to use, e.g., MongoDB Atlas
+serverless free tier, which currently does not support `$function` aggregates.
+
+| `checkExistence`
+| Configures when Hazelcast will perform database and collection existence checks to warn about non existing
+database and/or collection.
+
+Possible values:
+
+- `only-initial` - checks will be done only when the mapping is created. Recommended if you have many short-living queries
+(e.g. when mapping is used solely by GenericMapStore).
+- `once-per-job` - checks will be done as above and also during every query execution. This is the default value.
+- `on-each-connect` - similar to above, but in case of reconnection (e.g. restore after failure) it will perform the checks again.
+- `never` - means that checks won't be performed at all.
+
+|===
 
 == Type Mapping
 

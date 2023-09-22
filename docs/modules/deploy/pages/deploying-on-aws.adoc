@@ -495,6 +495,52 @@ clientConfig.getNetworkConfig().getAwsConfig()
 --
 ====
 
+* *Client running on Lambda:*
+
+Hazelcast Clients launched on Lambda functions can discover the members running on ECS in the same way as connecting outside of AWS. Since the Lambda function does not provide the Metadata API at execution time, the required properties cannot be inferred by the Discovery Plugin. That is why you must declare all the necessary properties in the Hazelcast Client configuration.
+
+- `access-key`, `secret-key` - IAM role cannot be used in Lambda function
+- `region` - it cannot be detected automatically
+- `cluster` - it cannot be detected automatically
+- `use-public-ip` - must be set to `true`
+
+NOTE: The access and secret keys generated for a session are not allowed for use in Discovery Plugins. Instead, you should use the Access and Secret keys generated from the persistent IAM Role.
+
+The following example demonstrates how to establish a connection to a Hazelcast Cluster in a Lambda function.
+
+That is the `hazelcast-client.yaml` file located within the JAR file of the Lambda function.
+
+```yaml
+hazelcast-client:
+  network:
+    aws:
+      enabled: true
+      access-key: my-access-key
+      secret-key: my-secret-key
+      region: ca-central-1
+      cluster: my-cluster
+      hz-port: 5701
+      use-public-ip: true
+```
+
+This is the simple Lambda handler in Java, which creates a Hazelcast Client by loading the given configuration file above.
+
+```java
+// Handler value: example.HazelcastClientHandler
+public class HazelcastClientHandler implements RequestHandler<Map<String, String>, Void> {
+
+    @Override
+    public Void handleRequest(Map<String, String> input, Context context) {
+        var clientConfig = ClientConfig.load();
+        var hz = HazelcastClient.newHazelcastClient(clientConfig);
+
+        // ---snip---
+
+        return null;
+    }
+}
+```
+
 == ECS Environment with EC2 Discovery
 
 If you use ECS on EC2 instances (not Fargate), you may also set up your ECS Tasks to use `host` network mode and then use EC2 discovery mode instead of ECS. In that case, your Hazelcast configuration would look as follows.

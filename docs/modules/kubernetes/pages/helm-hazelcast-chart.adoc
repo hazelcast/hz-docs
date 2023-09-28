@@ -1,0 +1,155 @@
+= Deploying Hazelcast Open Source on Kubernetes with Helm
+:description: This chart bootstraps a link:https://github.com/hazelcast/hazelcast-docker/tree/master/hazelcast-oss[Hazelcast] and link:https://github.com/hazelcast/management-center-docker[Management Center] deployments on a link:http://kubernetes.io[Kubernetes] cluster using the link:https://helm.sh[Helm] package manager.
+
+{description}
+
+[cols="1a,1a"]
+|===
+|Prerequisites|Useful resources
+
+|Kubernetes 1.14+
+|link:https://kubernetes.io/releases/[Kubernetes Version]
+
+|===
+
+== Quickstart
+
+[source,shell]
+----
+helm repo add hazelcast https://hazelcast-charts.s3.amazonaws.com/
+helm repo update
+helm install my-release hazelcast/hazelcast
+----
+
+For users who already added `hazelcast` repo to their local helm client before; you need to run `helm repo add` command again to use latest charts at the new chart repo.
+
+[source,shell]
+----
+helm repo list
+----
+
+[source,shell]
+----
+NAME            URL
+hazelcast       https://hazelcast.github.io/charts/
+...
+----
+
+[source,shell]
+----
+helm repo add hazelcast https://hazelcast-charts.s3.amazonaws.com/
+----
+
+[source,shell]
+----
+NAME            URL
+hazelcast       https://hazelcast-charts.s3.amazonaws.com/
+...
+----
+
+== Installing the Chart
+
+To install the chart with the release name `my-release`:
+
+[source,shell]
+----
+helm install my-release hazelcast/hazelcast
+----
+
+The command deploys Hazelcast on the Kubernetes cluster in the default configuration. The <<Configuration, configuration>> section lists the parameters that can be configured during installation.
+
+TIP: List all releases using `helm list` command.
+
+== Uninstalling the Chart
+
+To uninstall/delete the `my-release` deployment:
+
+[source,shell]
+----
+helm uninstall my-release
+----
+
+The command removes all the Kubernetes components associated with the chart and deletes the release.
+
+[configuration]
+== Configuration
+
+For available configuration properties see link:https://github.com/hazelcast/charts/blob/master/stable/hazelcast/values.yaml[values] file.
+
+Specify each parameter using the `--set key=value,key=value` argument to `helm install`. For example,
+
+[source,shell]
+----
+helm install my-release hazelcast/hazelcast \
+    --set cluster.memberCount=3
+----
+
+The above command sets number of Hazelcast members to 3.
+
+Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
+
+[source,shell]
+----
+helm install my-release hazelcast/hazelcast -f values.yaml
+----
+
+TIP: You can use the default `values.yaml`.
+
+== Using DNS Lookup Discovery
+
+By default, Hazelcast Helm Chart uses xref:kubernetes:kubernetes-auto-discovery.adoc#discovering-members[Kubernetes API discovery]. If you prefer the xref:kubernetes:kubernetes-auto-discovery.adoc#using-kubernetes-in-dns-lookup-mode[DNS Lookup discovery], use the following configuration.
+
+[source,yaml]
+----
+hazelcast:
+  yaml:
+    hazelcast:
+      network:
+        join:
+          kubernetes:
+            service-dns: "${serviceName}.${namespace}.svc.cluster.local"
+rbac:
+  create: false
+----
+
+== Custom Hazelcast configuration
+
+Custom Hazelcast configuration can be specified inside `values.yaml`, as the `hazelcast.yaml` property.
+
+[source,yaml]
+----
+hazelcast:
+  yaml:
+    hazelcast:
+      network:
+        join:
+          kubernetes:
+            enabled: true
+            service-name: ${serviceName}
+            namespace: ${namespace}
+        rest-api:
+          enabled: true
+      jet:
+        enabled: ${hz.jet.enabled}
+----
+
+
+
+== Notable changes
+
+=== 2.8.0
+
+Hazelcast REST Endpoints are no longer enabled by default and the parameter `hazelcast.rest` is no longer available. If you want to enable REST, please add the related `endpoint-groups` to the Hazelcast Configuration. For example:
+
+[source,yaml]
+----
+rest-api:
+  enabled: true
+  endpoint-groups:
+    HEALTH_CHECK:
+      enabled: true
+    CLUSTER_READ:
+      enabled: true
+    CLUSTER_WRITE:
+      enabled: true
+----

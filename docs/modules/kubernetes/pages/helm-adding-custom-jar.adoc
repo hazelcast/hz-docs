@@ -1,0 +1,75 @@
+= Adding custom JAR files to the Platform/Management Center Classpath
+
+You can mount any volume which contains your JAR files to the pods created by the helm chart using the `customVolume` configuration.
+
+Setting the `customVolume` mounts the provided volume to the pod on the `/data/custom` path. This path is also appended to the classpath of running Java process.
+
+For example, if you have existing link:https://kubernetes.io/blog/2019/04/04/kubernetes-1.14-local-persistent-volumes-ga/[Local Persistent Volumes] and Persistent Volume Claims like below;
+
+[source,yaml]
+----
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+name: local-storage
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+name: <hz-custom-local-pv / mc-custom-local-pv>
+spec:
+storageClassName: local-storage
+capacity:
+  storage: 1Gi
+accessModes:
+  - ReadWriteOnce
+local:
+  path: </path/to/your/jars>
+nodeAffinity:
+  required:
+  nodeSelectorTerms:
+  - matchExpressions:
+    - key: kubernetes.io/hostname
+      operator: In
+      values:
+      - <YOUR_NODE_1>
+      - <YOUR_NODE_2>
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+name: < hz-custom-local-pv-claim / mc-custom-local-pv-claim>
+spec:
+storageClassName: local-storage
+accessModes:
+  - ReadWriteOnce
+resources:
+  requests:
+    storage: 1Gi
+----
+
+You can configure your Helm chart to use it like below in your `values.yaml` file.
+
+For IMDG:
+
+[source,yaml]
+----
+customVolume:
+  persistentVolumeClaim:
+    claimName: hz-custom-local-pv-claim
+----
+
+For Management Center:
+
+[source,yaml]
+----
+mancenter:
+  ...
+  customVolume:
+    persistentVolumeClaim:
+      claimName: mc-custom-local-pv-claim
+----

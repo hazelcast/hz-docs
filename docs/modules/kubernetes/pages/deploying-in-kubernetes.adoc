@@ -1,30 +1,70 @@
 = Deploying on Kubernetes
 :description: Discover ways to deploy Hazelcast clusters in Kubernetes environments.
+:page-aliases: deploy:deploying-in-kubernetes.adoc
 
 [[deploying-in-kubernetes]]
 
 {description}
 
-== Limitations
-
-Hazelcast CP Subsystem can be used safely in Kubernetes only if xref:cp-subsystem:configuration.adoc#cp-subsystem-configuration[CP Subsystem Persistence] is enabled (Enterprise Feature). Otherwise, a CP Subsystem Group may not recover after scaling the cluster or a rolling upgrade.
-
 == Quickstart
 
-If you just want to play with Hazelcast on Kubernetes, execute the following commands to create a Hazelcast cluster
-with 3 members in the `default` namespace using the `default` Service Account.
+[tabs]
+====
 
-[source,shell,subs="attributes+"]
+Hazelcast Platform Operator::
++
+
+--
+[source, bash]
 ----
-kubectl apply -f https://raw.githubusercontent.com/hazelcast/hazelcast/master/kubernetes-rbac.yaml
-kubectl run hazelcast-1 --image=hazelcast/hazelcast:{full-version}
-kubectl run hazelcast-2 --image=hazelcast/hazelcast:{full-version}
-kubectl run hazelcast-3 --image=hazelcast/hazelcast:{full-version}
+helm repo add hazelcast https://hazelcast-charts.s3.amazonaws.com/
+helm repo update
+helm install operator hazelcast/hazelcast-platform-operator --set installCRDs=true
+cat << EOF | kubectl apply -f -
+apiVersion: hazelcast.com/v1alpha1
+kind: Hazelcast
+metadata:
+  name: hazelcast
+EOF
 ----
+--
 
-Hazelcast members <<discovering-members-in-kubernetes-automatically, automatically discover themselves>> and form one Hazelcast cluster.
+Helm::
++
+--
+[source, bash]
+----
+helm repo add hazelcast https://hazelcast-charts.s3.amazonaws.com/
+helm repo update
+helm install hazelcast hazelcast/hazelcast
+----
+--
 
-NOTE: For production-grade Kubernetes deployment, use Helm chart or Hazelcast Platform Operator.
+Kubectl::
++
+
+--
+[source, bash]
+----
+kubectl apply -f https://raw.githubusercontent.com/hazelcast/hazelcast-kubernetes/master/rbac.yaml
+
+kubectl run hazelcast-0 --image=hazelcast/hazelcast:{full-version} -l "role=hazelcast"
+kubectl run hazelcast-1 --image=hazelcast/hazelcast:{full-version} -l "role=hazelcast"
+kubectl run hazelcast-2 --image=hazelcast/hazelcast:{full-version} -l "role=hazelcast"
+
+kubectl create service clusterip hz-hazelcast --tcp=5701 -o yaml --dry-run=client | kubectl set selector --local -f - "role=hazelcast" -o yaml | kubectl create -f -
+----
+--
+
+====
+
+NOTE: For production-grade Kubernetes deployment, use Hazelcast Platform Operator or Helm chart.
+
+== Hazelcast Platform Operator for Kubernetes/OpenShift
+
+Kubernetes Operators are software extensions to Kubernetes which help you create and manage your applications. Hazelcast Platform Operator automates common management tasks such as configuring, creating, and scaling Hazelcast clusters on Kubernetes and Red Hat OpenShift. By taking care of manual deployment and life-cycle management, Hazelcast Platform Operator makes it simpler to work with Hazelcast clusters.
+
+See the https://docs.hazelcast.com/operator/latest/[Hazelcast Platform Operator Documentation] for more information and find details about deploying a Hazelcast cluster in Kubernetes and also connecting clients outside Kubernetes.
 
 == Helm Chart
 
@@ -32,15 +72,9 @@ https://helm.sh/[Helm^] is a package manager for Kubernetes. Hazelcast is distri
 
 * https://github.com/hazelcast/charts/tree/master/stable/hazelcast[hazelcast/hazelcast^]
 * https://github.com/hazelcast/charts/tree/master/stable/hazelcast-enterprise[hazelcast/hazelcast-enterprise^]
+* https://github.com/hazelcast/charts/tree/master/stable/hazelcast-platform-operator[hazelcast/hazelcast-platform-operator^]
 
-See the https://github.com/hazelcast/charts[Hazelcast Helm Charts documentation^]
-for more details.
-
-== Hazelcast Platform Operator for Kubernetes/OpenShift
-
-Kubernetes Operators are software extensions to Kubernetes which help you create and manage your applications. Hazelcast Platform Operator automates common management tasks such as configuring, creating, and scaling Hazelcast clusters on Kubernetes and Red Hat OpenShift. By taking care of manual deployment and life-cycle management, Hazelcast Platform Operator makes it simpler to work with Hazelcast clusters.
-
-See the https://docs.hazelcast.com/operator/latest/[Hazelcast Platform Operator Documentation] for more information and find details about deploying a Hazelcast cluster in Kubernetes and also connecting clients outside Kubernetes.
+See the xref:kubernetes:helm-hazelcast-chart.adoc[Hazelcast Helm Charts documentation] for more details.
 
 == Guides
 

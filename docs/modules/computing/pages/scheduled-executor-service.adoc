@@ -59,7 +59,9 @@ XML::
         <pool-size>16</pool-size>
         <durability>1</durability>
         <capacity>100</capacity>
+        <capacity-policy>PER_NODE</capacity-policy>
         <split-brain-protection-ref>splitbrainprotection-name</split-brain-protection-ref>
+        <merge-policy batch-size="100">PutIfAbsentMergePolicy</merge-policy>
     </scheduled-executor-service>
     ...
 </hazelcast>
@@ -78,7 +80,11 @@ hazelcast:
       pool-size: 16
       durability: 1
       capacity: 100
+      capacity-policy: PER_NODE
       split-brain-protection-ref: splitbrainprotection-name
+      merge-policy:
+        batch-size: 100
+        class-name: PutIfAbsentMergePolicy
 ----
 ====
 
@@ -93,10 +99,17 @@ The following are the descriptions of each configuration element and attribute:
 
 * `name`: Name of the scheduled executor.
 * `statistics-enabled`: Specifies whether the statistics gathering is enabled. If set to `false`, you cannot collect statistics.
-* `pool-size`: Number of executor threads per member for the executor.
-* `capacity`: Maximum number of tasks that a scheduler can have per partition. Attempt to schedule more results in `RejectedExecutionException`. To free up the capacity, tasks should get disposed by the user.
+* `pool-size`: Number of executor threads per member for the executor. The default value is 16.
+* `capacity`: Maximum number of tasks that a scheduler can have per partition or per member. Attempt to schedule more results in `RejectedExecutionException`. To free up the capacity, tasks should get disposed.
+If set to `0`, it means there is no capacity limitation.
+* `capacity-policy`: The active policy for the capacity setting; defines how the defined `capacity` value is applied - either per member or per partition. Available options are `PER_PARTITION` and `PER_NODE`.
+** `PER_NODE`: Capacity policy that counts tasks for each Hazelcast member. It rejects new tasks when the `capacity` value is reached.
+** `PER_PARTITION`: Capacity policy that counts tasks for each partition. It rejects new tasks when the `capacity` value is reached.
+Storage size depends on the partition count in a Hazelcast member. This policy option should not be used often - avoid using it with a small cluster: if the cluster is small,
+it hosts more partitions, and therefore tasks, than that of a larger cluster. This policy has no effect when scheduling is done using the `OnMember` APIs, e.g., `IScheduledExecutorService#scheduleOnMember(Runnable, Member, long, TimeUnit)`.
 * `durability`: Durability of the executor.
-* `split-brain-protection-ref`: Name of the split-brain protection configuration that you want this Scheduled Executor Service to use. See the <<split-brain-protection-for-ischeduled-executor-service, Split-Brain Protection for IScheduled Executor Service section>>.
+* `split-brain-protection-ref`: Name of the split-brain protection configuration that you want this Scheduled Executor Service to use. See <<split-brain-protection-for-ischeduled-executor-service, Split-Brain Protection for IScheduled Executor Service>>.
+* `merge-policy`: The default policy is `PutIfAbsentMergePolicy` with a batch size of 100. This is the policy used when merging entries from sub-clusters (after split-brain recovery). See xref:network-partitioning:split-brain-recovery.adoc#merge-policies[Merge Policies].
 
 [[scheduled-exec-srv-examples]]
 == Examples

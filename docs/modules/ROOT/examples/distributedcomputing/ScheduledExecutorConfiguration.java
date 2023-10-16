@@ -8,10 +8,12 @@ public class ScheduledExecutorConfiguration {
         //tag::sec[]
         Config config = new Config();
         config.getScheduledExecutorConfig( "myScheduledExecSvc" )
-                .setPoolSize ( 16 )
-                .setCapacity( 100 )
-                .setDurability( 1 )
-                .setSplitBrainProtectionName( "splitbrainprotectionname" );
+              .setPoolSize ( 16 )
+              .setCapacityPolicy( ScheduledExecutorConfig.CapacityPolicy.PER_PARTITION )
+              .setCapacity( 100 )
+              .setDurability( 1 )
+              .setMergePolicyConfig( new MergePolicyConfig("com.hazelcast.spi.merge.PassThroughMergePolicy", 110) )
+              .setSplitBrainProtectionName( "splitbrainprotectionname" );
 
         HazelcastInstance hazelcast = Hazelcast.newHazelcastInstance(config);
         IScheduledExecutorService myScheduledExecSvc = hazelcast.getScheduledExecutorService("myScheduledExecSvc");

@@ -1,35 +1,47 @@
 = Advanced Features
 [[wr-advanced]]
 
-This section describes how you can synchronize your WAN replicated clusters,
-change their configurations dynamically and intercept WAN replication events using
-the event filtering API.
+This section provides information on how to do the following:
+
+* xref:advanced-features.adoc#synchronizing-wan-clusters[Synchronize WAN Clusters]
+* xref:advanced-features.adoc#dynamically-adding-wan-publishers[Dynamically add WAN Publishers at runtime]
+* xref:advanced-features.adoc#event-filtering-api[Use the Event Filtering API for WAN replication events]
+* xref:advanced-features.adoc#implementing-a-custom-wan-publisher[Implement your own Custom WAN Publisher]
+* xref:advanced-features.adoc#customizing-wan-event-processing-on-passivetarget-cluster[Customize WAN event processing on target clusters]
+* xref:advanced-features.adoc#securing-the-connections-for-wan-replication[Secure connections used for WAN replication]
 
 == Synchronizing WAN Clusters
 
-WAN Replication replicates mutation events that happen on the source
-cluster as they happen. The events are queued up, collected in a batch
+WAN Replication creates a replica of data structure mutation events as they occur on 
+the source cluster. The events are queued up, collected in a batch
 and sent to the target cluster to be applied, without any user interaction.
 
-However, Hazelcast clusters connected over WAN may become out-of-sync because of various reasons
-including but not limited to the following:
+However, Hazelcast clusters connected over WAN may become out-of-sync for various reasons,
+including but not limited to:
 
 * Member failures
 * Concurrent updates
-* Target cluster freshly starts with no data
-* Target cluster experiences problems and some operations fail
+* Target cluster starts with no data
+* Target cluster experiences issues that result in the failure of one or more operations
 * Two sides disconnect and the in-memory buffer of the source
-cluster gets full (the behavior in this case is xref:tuning.adoc#queue-full-behavior[configurable])
-* The WAN link can't keep up with the burst that the source cluster experiences
+cluster becomes full (the behavior in this case is xref:tuning.adoc#queue-full-behavior[configurable])
+* The WAN link cannot keep up with a burst experienced by the source cluster
 and its in-memory buffer gets full (the behavior in this case is xref:tuning.adoc#queue-full-behavior[configurable])
+* Split-brain scenario in source clusters where both brains can 
+still communicate with WAN target clusters
 
-To overcome this out-of-sync issue, you have the
-following options to synchronize your WAN replicated clusters:
+As well as failures such as the examples above, data can become out-of-sync
+after manual interventions such as cluster restarts or failover of one cluster
+to another (for example disaster recovery). **After any such situation, you are
+advised to synchronize all WAN replicated data.**.
+
+To overcome this out-of-sync issue, you can use either of the following approaches
+to synchronize your WAN replicated clusters:
 
 * Full synchronization
 * Delta synchronization
 
-The following sections describe each. 
+These approaches are described in the following sections.
 
 [[synchronizing-wan-target-cluster]]
 == Full WAN Synchronization

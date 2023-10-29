@@ -1,8 +1,7 @@
 = List of Hazelcast Metrics
 [[appendix]]
 
-The table below lists the metrics with their explanations in
-alphabetical order.
+The table below lists the metrics with their explanations in grouped by their relevant subjects.
 
 The metrics are collected per member and specific to the local member from which
 you collect them. For example, the distributed data structure metrics
@@ -15,365 +14,218 @@ metrics reflect the member's local view of the cluster (consider split-brain sce
 metrics, and its value in the local member is obtained by communicating
 with the master member.
 
+.Streaming Engine Cluster-Wide Metrics
+[%collapsible]
+====
+[cols="h,a,a"]
+|===
+|Name|Description|Tags
+
+|blockingWorkerCount
+|Number of non-cooperative workers employed.
+.6+|_none_
+
+Each Hazelcast member will have one instance of this metric.
+
+|jobs.submitted
+|Number of computational jobs submitted.
+
+|jobs.completedSuccessfully
+|Number of computational jobs successfully completed.
+
+|jobs.completedWithFailure
+|Number of computational jobs that have failed.
+
+|jobs.executionStarted
+|Number of computational job executions started. Each job can
+execute multiple times, for example when it’s restarted or
+suspended and then resumed.
+
+|jobs.executionTerminated
+|Number of computational job executions finished. Each job can
+execute multiple times, for example when it’s restarted or
+suspended and then resumed.
+
+|iterationCount
+|The total number of iterations the driver of tasklets in
+cooperative thread N made. It should increase by at least 250
+iterations/s. Lower value means some of the cooperative
+processors blocks for too long. Somewhat lower value is normal
+if there are many tasklets assigned to the processor. Lower
+value affects the latency.
+.2+|_cooperativeWorker_
+
+Each Hazelcast member will have one of this metric for each of its
+cooperative worker threads.
+
+|taskletCount
+|The number of assigned tasklets to cooperative thread N.
+
+|===
+====
+
+.Streaming Engine Job-specific Metrics
+[%collapsible]
+====
+All job specific metrics have their `job=<jobId>` and
+`exec=<executionId>` tags set and most also have the
+`vertex=<vertexName>` tag set (with very few exceptions). This means
+that most of these metrics will have at least one instance for each
+vertex of each current job execution.
+
+Additionally, if the vertex sourcing them is a data source or data sink,
+then the `source` or `sink` tags will also be set to true.
+
+[cols="h,a,a"]
+|===
+|Name|Description|Tags
+
+|executionStartTime
+|Start time of the current execution of the job (epoch time in milliseconds).
+.2+|_job, exec_
+
+
+There will be a single instance of these metrics for each job
+execution.
+
+|executionCompletionTime
+|Completion time of the current execution of the job (epoch time
+in milliseconds).
+
+|snapshotBytes
+|Total number of bytes written out in the last snapshot.
+.2+|_job, exec, vertex_
+
+There will be a single instance of these metrics for each
+vertex.
+
+|snapshotKeys
+|Total number of keys written out in the last snapshot.
+
+|distributedBytesIn
+|Total number of bytes received from remote members.
+.4+|_job, exec, vertex, ordinal_
+
+Each Hazelcast member will have an instance of these metrics for each
+ordinal of each vertex of each job execution.
+
+Note: These metrics are only present for distributed edges, i.e., 
+edges producing network traffic.
+
+|distributedBytesOut
+|Total number of bytes sent to remote members.
+
+|distributedItemsIn
+|Total number of items received from remote members.
+
+|distributedItemsOut
+|Total number of items sent to remote members.
+
+|topObservedWm
+|This value is equal to the highest coalescedWm on any input edge
+of this processor.
+.6+|_job, exec, vertex, proc_
+
+Each Hazelcast member will have one instances of these metrics for
+each processor instance N, the N denotes the global processor
+index. Processor is the parallel worker doing the work of the
+vertex.
+
+|coalescedWm
+|The highest watermark received from all inputs that was sent to
+the processor to handle.
+
+|lastForwardedWm
+|Last watermark emitted by the processor to output.
+
+|lastForwardedWmLatency
+|The difference between <i>lastForwardedWn</i> and the system
+time at the moment when metrics were collected.
+
+|queuesCapacity
+|The total capacity of input queues.
+
+|queuesSize
+|The total number of items waiting in input queues.
+
+|topObservedWm
+|The highest received watermark from any input on edge N.
+.5+|_job, exec, vertex, proc, ordinal_
+
+Each Hazelcast member will have one instance of these metrics for each
+edge M (input or output) of each processor N. N is the global
+processor index and M is either the ordinal of the edge or has
+the value snapshot for output items written to state snapshot.
+
+|coalescedWm
+|The highest watermark received from all upstream processors on
+edge N.
+
+|emittedCount
+|The number of emitted items. This number includes watermarks,
+snapshot barriers etc. Unlike _distributedItemsOut_, it
+includes items emitted items to local processors.
+
+|receivedCount
+|The number of received items. This number does not include
+watermarks, snapshot barriers etc. It’s the number of items the
+Processor.process method will receive.
+
+|receivedBatches
+|The number of received batches. `Processor.process`
+receives a batch of items at a time, this is the number of such
+batches. By dividing _receivedCount_ by
+_receivedBatches_, you get the average batch size. It will
+be 1 under low load.
+
+|numInFlightOps
+|The number of pending (in flight) operations when using
+asynchronous mapping processors. See https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/core/processor/Processors.html#mapUsingServiceAsyncP-com.hazelcast.jet.pipeline.ServiceFactory-int-boolean-com.hazelcast.function.FunctionEx-com.hazelcast.function.BiFunctionEx-[Processors.mapUsingServiceAsyncP].
+.6+|_job, exec, vertex, proc, procType_
+
+Processor specific metrics, only certain types of processors
+have them. The _procType_ tag can be used to identify the
+exact type of processor sourcing them. Like all processor
+metrics, each Hazelcast member will have one instances of these
+metrics for each processor instance N, the N denotes the global
+processor index.
+
+|totalKeys
+|The number of active keys being tracked by a session window
+processor.
+
+
+|totalWindows
+|The number of active windows being tracked by a session window
+processor. See
+https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/core/processor/Processors.html#aggregateToSessionWindowP-long-long-java.util.List-java.util.List-com.hazelcast.jet.aggregate.AggregateOperation-com.hazelcast.jet.core.function.KeyedWindowResultFunction-[Processors.aggregateToSessionWindowP].
+
+
+|totalFrames
+|The number of active frames being tracked by a sliding window processor.
+
+
+|totalKeysInFrames
+|The number of grouping keys associated with the current active
+frames of a sliding window processor. See
+https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/core/processor/Processors.html#aggregateToSlidingWindowP-java.util.List-java.util.List-com.hazelcast.jet.core.TimestampKind-com.hazelcast.jet.core.SlidingWindowPolicy-long-com.hazelcast.jet.aggregate.AggregateOperation-com.hazelcast.jet.core.function.KeyedWindowResultFunction-[Processors.aggregateToSlidingWindowP].
+
+
+|lateEventsDropped
+|The number of late events dropped by various processor, due to
+the watermark already having passed their windows.
+
+|===
+====
+
+.Map
+[%collapsible]
+====
 [cols="4,1,6a"]
-.Metrics
 |===
 | Name
 | Unit
 | Description
-
-|`cache.averageGetTime`
-|µs
-|Mean time to execute gets on the cache
-
-|`cache.averagePutTime`
-|µs
-|Mean time to execute puts on the cache
-
-|`cache.averageRemovalTime`
-|µs
-|Mean time to execute removes on the cache
-
-|`cache.cacheEvictions`
-|count
-|Number of evictions on the cache
-
-|`cache.cacheGets`
-|count
-|Number of gets on the cache
-
-|`cache.cacheHits`
-|count
-|Number of successful get operations, hits, on the cache
-
-|`cache.cacheHitPercentage`
-|percent
-|Percentage of successful get operations, hits, out of all get operations on the cache
-
-|`cache.cachePuts`
-|count
-|Number of puts to the cache
-
-|`cache.cacheRemovals`
-|count
-|Number of removals from the cache
-
-|`cache.cacheMisses`
-|count
-|Number of missed cache accesses on the cache
-
-|`cache.cacheMissPercentage`
-|percent
-|Percentage of missed cache accesses out of all the cache accesses/access attempts
-
-|`cache.creationTime`
-|ms
-|Creation time of the cache on the member
-
-|`cache.lastAccessTime`
-|ms
-|Cache's last access time
-
-|`cache.lastUpdateTime`
-|ms
-|Cache's last update time
-
-|`cache.ownedEntryCount`
-|count
-|Locally owned entry count in the cache
-
-|`classloading.loadedClassesCount`
-|count
-|Number of classes that are currently loaded
-
-|`classloading.totalLoadedClassesCount`
-|count
-|Total number of classes that have been loaded since the instance has started execution.
-
-|`classloading.unloadedClassesCount`
-|count
-|Total number of unloaded classes.
-
-|`client.endpoint.count`
-|count
-|Number of active client endpoints for this member
-
-|`client.endpoint.totalRegistrations`
-|count
-|Total number of client endpoint registrations
-
-|`cluster.clock.clusterStartTime`
-|ms
-|[[clusterStartTime]]Start time of the cluster (when the first member in cluster becomes master, its localClockTime value is saved as clusterStartTime)
-
-|`cluster.clock.clusterTime`
-|ms
-|Elapsed time since the master member was created (<<clusterStartTime,`cluster.clock.clusterStartTime`>>)
-
-|`cluster.clock.clusterTimeDiff`
-|ms
-|Difference between the local time (`cluster.clock.localClockTime`) of the local member and the master member
-
-|`cluster.clock.clusterUpTime`
-|ms
-|Uptime of the cluster (current time - <<clusterStartTime, `cluster.clock.clusterStartTime`>>)
-
-|`cluster.clock.localClockTime`
-|ms
-|Member's local clock timestamp
-
-|`cluster.clock.maxClusterTimeDiff`
-|ms
-|Maximum observed cluster time difference
-
-|`cluster.connection.closedTime`
-|count
-|Connection close time for this connection
-
-|`cluster.connection.connectionId`
-|count
-|Connection ID for this client connection
-
-|`cluster.connection.eventHandlerCount`
-|count
-|Number of event handlers for this client connection
-
-|`cluster.heartbeat.lastHeartbeat`
-|ms
-|Last time that this member sent a heartbeat to other known cluster members
-
-|`cluster.size`
-|count
-|Number of members in the cluster
-
-|`cp.atomiclong.value`
-|count
-|Value of this `IAtomicLong`
-
-|`cp.countdownlatch.count`
-|count
-|Initial count of `ICountDownLatch`
-
-|`cp.countdownlatch.remaining`
-|count
-|Remaining number of expected countdowns
-
-|`cp.countdownlatch.round`
-|count
-|Round number of the `ICountDownLatch`; each time `ICountDownLatch` is initialized with a new count after it downs to zero, a new round begins
-
-|`cp.lock.acquireLimit`
-|count
-|Maximum number of reentrant acquires of this `FencedLock`
-
-|`cp.lock.lockCount`
-|count
-|Total number of times this `FencedLock` has been acquired since its creation
-
-|`cp.lock.owner`
-|count
-|Address of the `FencedLock` owner
-
-|`cp.lock.ownerSessionId`
-|count
-|Session Id of the `FencedLock` owner
-
-|`cp.semaphore.available`
-|count
-|Number of the remaining available permits
-
-|`cp.semaphore.initialized`
-|count
-|State value which shows whether semaphore is initialized with a value or not; in exposed metrics, it shows 0 when semaphore is not initialized, a positive value otherwise
-
-|`cp.session.creationTime`
-|ms
-|Creation time of this session
-
-|`cp.session.endpoint`
-|
-|Address of the endpoint which the CP session session belongs to
-
-|`cp.session.endpointName`
-|
-|Name of the endpoint which the CP session belongs. If a name is empty, the address will be used
-
-|`cp.session.endpointType`
-|
-|Type of the endpoint; either SERVER or CLIENT
-
-|`cp.session.expirationTime`
-|ms
-|Expiration time of the CP session
-
-|`cp.session.version`
-|count
-|Version number of the CP session, basically it shows how many times the session heartbeat is received
-
-|`event.eventQueueSize`
-|count
-|Total number of events pending to be processed
-
-|`event.eventsProcessed`
-|count
-|Total number of processed events
-
-|`event.listenerCount`
-|count
-|Number of subscribed listeners for the specified service
-
-|`event.publicationCount`
-|count
-|Number of published events for the specified service
-
-|`event.queueCapacity`
-|count
-|Queue capacity of the executor processing the events (this capacity is shared for all events)
-
-|`event.rejectedCount`
-|count
-|Number of rejected events; if the event is not accepted to the executor in `hazelcast.event.queue.timeout.millis`(see xref:system-properties.adoc[]), it will be rejected and not processed
-
-|`event.syncDeliveryFailureCount`
-|count
-|Number of failures of sync event delivery 
-
-|`event.threadCount`
-|count
-|Number of threads for the event service executor (the event thread count)
-
-|`event.totalFailureCount`
-|count
-|Number of events that fail to be published
-
-|`executor.cancelled`
-|count
-|Number of cancelled operations on the executor service
-
-|`executor.completed`
-|count
-|Number of completed operations on the executor service
-
-|`executor.creationTime`
-|ms
-|Creation time of this executor on the member
-
-|`executor.pending`
-|count
-|Number of pending operations on the executor service
-
-|`executor.started`
-|count
-|Number of started operations on the executor service
-
-|`executor.totalExecutionTime`
-|ms
-|Total execution time of the finished operations
-
-|`executor.totalStartLatency`
-|ms
-|Total start latency of operations started
-
-|`executor.internal.completedTasks`
-|count
-|Number of completed tasks by this executor
-
-|`executor.internal.maximumPoolSize`
-|count
-|Maximum number of threads in the executor's thread pool
-
-|`executor.internal.poolSize`
-|count
-|Number of threads in the executor's thread pool
-
-|`executor.internal.queueSize`
-|count
-|Number of pending tasks in this executor's task queue
-
-|`executor.internal.remainingQueueCapacity`
-|count
-|Remaining capacity on the executor's task queue
-
-// TODO: Validate this file.partition metrics 
-|`file.partition.freeSpace`
-|bytes
-|Amount of free space in the given directory, user.home
-
-|`file.partition.totalSpace`
-|bytes
-|Amount of total space in the given directory, user.home
-
-|`file.partition.usableSpace`
-|bytes
-|Amount of usable space in the given directory, user.home
-
-|`flakeIdGenerator.batchCount`
-|count
-|Total number of times the Flake ID generator has been used to generate a new ID batch
-
-|`flakeIdGenerator.creationTime`
-|ms
-|Creation time of this Flake ID Generator on the member
-
-|`flakeIdGenerator.idCount`
-|count
-|Total number of IDs generated (the sum of IDs for all batches)
-
-|`gc.majorCount`
-|count
-|Total number of major garbage collections (GCs) that have occurred
-
-|`gc.majorTime`
-|ms
-|Accumulated elapsed time in major GCs
-
-|`gc.minorCount`
-|count
-|Total number of minor GCs that have occurred
-
-|`gc.minorTime`
-|ms
-|Accumulated elapsed time in minor GCs
-
-|`gc.unknownCount`
-|count
-|Number of unknown GCs that cannot be determined as minor or major (this is usually due to the lack of support of the used garbage collector)
-
-|`gc.unknownTime`
-|ms
-|Accumulated elapsed time in unknown GCs
-
-|`invocations.maxCurrentInvocations`
-|count
-|Maximum number of concurrent client invocations
-
-|`invocations.pendingCalls`
-|count
-|Number of pending client invocations on this client
-
-|`invocations.startedInvocations`
-|count
-|Number of started client invocations on this client
-
-|`list.creationTime`
-|ms
-|Creation time of this list on the member
-
-|`list.lastAccessTime`
-|ms
-|Last access (read) time of the locally owned items
-
-|`list.lastUpdateTime`
-|ms
-|Last update time of the locally owned items
-
-|`listeners.eventsProcessed`
-|count
-|Total number of processed events on the client listener service
-
-|`listeners.eventQueueSize`
-|count
-|Total number of tasks pending to be processed on the client listener service
 
 |`map.backupCount`
 |count
@@ -394,6 +246,14 @@ with the master member.
 |`map.dirtyEntryCount`
 |count
 |Number of updated but not persisted yet entries, dirty entries, that the member owns
+
+|`map.evictionCount`
+|count
+|Number of evictions happened on locally owned entries, backups are not included
+
+|`map.expirationCount`
+|count
+|Number of expirations happened on locally owned entries, backups are not included
 
 |`map.getCount`
 |count
@@ -538,54 +398,17 @@ with the master member.
 |`map.index.updateCount`
 |count
 |Number of update operations performed on the index
+|===
+====
 
-|`memory.committedHeap`
-|bytes
-|Amount of heap memory that is committed for the JVM to use
-
-|`memory.committedNative`
-|bytes
-|Amount of native memory that is committed for current instance (member or client) to use
-
-|`memory.freeHeap`
-|bytes
-|Amount of free memory in the JVM of current instance (member or client)
-
-|`memory.freeNative`
-|bytes
-|Amount of free native memory in the current instance (member or client)
-
-|`memory.freePhysical`
-|bytes
-|Amount of free physical memory available in OS
-
-|`memory.maxHeap`
-|bytes
-|Maximum amount of memory that the JVM will attempt to us
-
-|`memory.maxMetadata`
-|bytes
-|Amount of native memory reserved for metadata (this memory is separate and not accounted for by the NativeMemory statistics)
-
-|`memory.maxNative`
-|bytes
-|Maximum amount of native memory that current instance (member or client) will attempt to use
-
-|`memory.totalPhysical`
-|bytes
-|Amount of total physical memory available in OS
-
-|`memory.usedHeap`
-|bytes
-|Amount of used memory in the JVM of the current instance (member or client)
-
-|`memory.usedMetadata`
-|bytes
-|Amount of used metadata memory by the current instance (member or client)
-
-|`memory.usedNative`
-|bytes
-|Amount of used native memory by the current instance (member or client)
+.MultiMap
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
 
 |`multiMap.backupCount`
 |count
@@ -702,6 +525,814 @@ with the master member.
 |`multiMap.totalSetLatency`
 |ms
 |Total latency of local set operations
+|===
+====
+
+.Replicated Map
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`replicatedMap.creationTime`
+|ms
+|Creation time of this replicated map on this member
+
+|`replicatedMap.getCount`
+|count
+|Number of get operations on this member
+
+|`replicatedMap.hits`
+|count
+|Number of hits (reads) of the locally owned entries
+
+|`replicatedMap.lastAccessTime`
+|ms
+|Last access (read) time of the locally owned entries
+
+|`replicatedMap.lastUpdateTime`
+|ms
+|Last update time of the locally owned entries
+
+|`replicatedMap.maxGetLatency`
+|ms
+|Maximum latency of get operations
+
+|`replicatedMap.maxPutLatency`
+|ms
+|Maximum latency of put operations
+
+|`replicatedMap.maxRemoveLatency`
+|ms
+|Maximum latency of remove operations
+
+|`replicatedMap.numberOfEvents`
+|count
+|Number of events received on this member
+
+|`replicatedMap.numberOfOtherOperations`
+|count
+|Total number of other operations on this member
+
+|`replicatedMap.ownedEntryCount`
+|count
+|Number of entries owned on this member
+
+|`replicatedMap.ownedEntryMemoryCost`
+|bytes
+|Memory cost of owned entries on this member
+
+|`replicatedMap.putCount`
+|count
+|Number of put operations on this member
+
+|`replicatedMap.removeCount`
+|count
+|Number of remove operations on this member
+
+|`replicatedMap.totalGetLatencies`
+|ms
+|Total latency of get operations
+
+|`replicatedMap.totalPutLatencies`
+|ms
+|Total latency of put operations
+
+|`replicatedMap.totalRemoveLatencies`
+|ms
+|Total latency of remove operations
+
+|`replicatedMap.total`
+|count
+|Total number of operations on this member
+|===
+====
+
+.Cache
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`cache.averageGetTime`
+|µs
+|Mean time to execute gets on the cache
+
+|`cache.averagePutTime`
+|µs
+|Mean time to execute puts on the cache
+
+|`cache.averageRemovalTime`
+|µs
+|Mean time to execute removes on the cache
+
+|`cache.cacheEvictions`
+|count
+|Number of evictions on the cache
+
+|`cache.cacheGets`
+|count
+|Number of gets on the cache
+
+|`cache.cacheHits`
+|count
+|Number of successful get operations, hits, on the cache
+
+|`cache.cacheHitPercentage`
+|percent
+|Percentage of successful get operations, hits, out of all get operations on the cache
+
+|`cache.cachePuts`
+|count
+|Number of puts to the cache
+
+|`cache.cacheRemovals`
+|count
+|Number of removals from the cache
+
+|`cache.cacheMisses`
+|count
+|Number of missed cache accesses on the cache
+
+|`cache.cacheMissPercentage`
+|percent
+|Percentage of missed cache accesses out of all the cache accesses/access attempts
+
+|`cache.creationTime`
+|ms
+|Creation time of the cache on the member
+
+|`cache.lastAccessTime`
+|ms
+|Cache's last access time
+
+|`cache.lastUpdateTime`
+|ms
+|Cache's last update time
+
+|`cache.ownedEntryCount`
+|count
+|Locally owned entry count in the cache
+|===
+====
+
+.Queue
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`queue.averageAge`
+|ms
+|Average age of the items in this member
+
+|`queue.backupItemCount`
+|count
+|Number of backup items held by the member
+
+|`queue.creationTime`
+|ms
+|Creation time of the topic on the member
+
+|`queue.eventOperationCount`
+|count
+|Number of event operations
+
+|`queue.maxAge`
+|ms
+|Maximum age of the items in this member
+
+|`queue.minAge`
+|ms
+|Minimum age of the items in this member
+
+|`queue.numberOfEmptyPolls`
+|count
+|Number of null returning poll operations
+
+|`queue.numberOfEvents`
+|count
+|Number of event operations (duplicate of eventOperationCount)
+
+|`queue.numberOfOffers`
+|count
+|Number of offer/put/add operations
+
+|`queue.numberOfOtherOperations`
+|count
+|Number of other operations
+
+|`queue.numberOfPolls`
+|count
+|Number of poll/take/remove operations.
+
+|`queue.numberOfRejectedOffers`
+|count
+|Number of rejected offers
+
+|`queue.ownedItemCount`
+|count
+|Number of owned items in this member
+
+|`queue.total`
+|count
+|Total number of operations (numberOfOffers + numberOfPolls + numberOfOtherOperations)
+|===
+====
+
+.Set
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`set.creationTime`
+|ms
+|Creation time of the set on the member
+
+|`set.lastAccessTime`
+|ms
+|Last access (read) time of the locally owned items
+
+|`set.lastUpdateTime`
+|ms
+|Last update time of the locally owned items
+|===
+====
+
+.List
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`list.creationTime`
+|ms
+|Creation time of this list on the member
+
+|`list.lastAccessTime`
+|ms
+|Last access (read) time of the locally owned items
+
+|`list.lastUpdateTime`
+|ms
+|Last update time of the locally owned items
+|===
+====
+
+.Topic
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`topic.creationTime`
+|ms
+|Creation time of the topic on the member
+
+|`topic.totalPublishes`
+|count
+|Total number of published messages of this topic on this member
+
+|`topic.totalReceivedMessages`
+|count
+|Total number of received messages of this topic on this member
+|===
+====
+
+.Reliable Topic
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`reliableTopic.creationTime`
+|ms
+|Creation time of this reliable topic on the member
+
+|`reliableTopic.totalPublishes`
+|count
+|Total number of published messages of this reliable topic on this member
+
+|`reliableTopic.totalReceivedMessages`
+|count
+|Total number of received messages of this reliable topic on this member
+|===
+====
+
+.Flake ID Generator
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`flakeIdGenerator.batchCount`
+|count
+|Total number of times the Flake ID generator has been used to generate a new ID batch
+
+|`flakeIdGenerator.creationTime`
+|ms
+|Creation time of this Flake ID Generator on the member
+
+|`flakeIdGenerator.idCount`
+|count
+|Total number of IDs generated (the sum of IDs for all batches)
+|===
+====
+
+.PN Counter
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`pnCounter.creationTime`
+|ms
+|Creation time of the PN counter on the member
+
+|`pnCounter.totalDecrementOperationCount`
+|count
+|Number of subtract (including decrement) operations on this PN counter
+
+|`pnCounter.totalIncrementOperationCount`
+|count
+|Number of add (including increment) operations on this PN counter
+
+|`pnCounter.value`
+|count
+|Current value of the PN counter
+|===
+====
+
+.Executor Service
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`executor.cancelled`
+|count
+|Number of cancelled operations on the executor service
+
+|`executor.completed`
+|count
+|Number of completed operations on the executor service
+
+|`executor.creationTime`
+|ms
+|Creation time of this executor on the member
+
+|`executor.pending`
+|count
+|Number of pending operations on the executor service
+
+|`executor.started`
+|count
+|Number of started operations on the executor service
+
+|`executor.totalExecutionTime`
+|ms
+|Total execution time of the finished operations
+
+|`executor.totalStartLatency`
+|ms
+|Total start latency of operations started
+
+|`executor.internal.completedTasks`
+|count
+|Number of completed tasks by this executor
+
+|`executor.internal.maximumPoolSize`
+|count
+|Maximum number of threads in the executor's thread pool
+
+|`executor.internal.poolSize`
+|count
+|Number of threads in the executor's thread pool
+
+|`executor.internal.queueSize`
+|count
+|Number of pending tasks in this executor's task queue
+
+|`executor.internal.remainingQueueCapacity`
+|count
+|Remaining capacity on the executor's task queue
+|===
+====
+
+.User Code Deployment
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`classloading.loadedClassesCount`
+|count
+|Number of classes that are currently loaded
+
+|`classloading.totalLoadedClassesCount`
+|count
+|Total number of classes that have been loaded since the instance has started execution.
+
+|`classloading.unloadedClassesCount`
+|count
+|Total number of unloaded classes.
+|===
+====
+
+.Cluster
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`cluster.clock.clusterStartTime`
+|ms
+|[[clusterStartTime]]Start time of the cluster (when the first member in cluster becomes master, its localClockTime value is saved as clusterStartTime)
+
+|`cluster.clock.clusterTime`
+|ms
+|Elapsed time since the master member was created (<<clusterStartTime,`cluster.clock.clusterStartTime`>>)
+
+|`cluster.clock.clusterTimeDiff`
+|ms
+|Difference between the local time (`cluster.clock.localClockTime`) of the local member and the master member
+
+|`cluster.clock.clusterUpTime`
+|ms
+|Uptime of the cluster (current time - <<clusterStartTime, `cluster.clock.clusterStartTime`>>)
+
+|`cluster.clock.localClockTime`
+|ms
+|Member's local clock timestamp
+
+|`cluster.clock.maxClusterTimeDiff`
+|ms
+|Maximum observed cluster time difference
+
+|`cluster.connection.closedTime`
+|count
+|Connection close time for this connection
+
+|`cluster.connection.connectionId`
+|count
+|Connection ID for this client connection
+
+|`cluster.connection.eventHandlerCount`
+|count
+|Number of event handlers for this client connection
+
+|`cluster.heartbeat.lastHeartbeat`
+|ms
+|Last time that this member sent a heartbeat to other known cluster members
+
+|`cluster.size`
+|count
+|Number of members in the cluster
+|===
+====
+
+.Clients
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`client.endpoint.count`
+|count
+|Number of active client endpoints for this member
+
+|`client.endpoint.totalRegistrations`
+|count
+|Total number of client endpoint registrations
+|===
+====
+
+.Client Invocations
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`invocations.maxCurrentInvocations`
+|count
+|Maximum number of concurrent client invocations
+
+|`invocations.pendingCalls`
+|count
+|Number of pending client invocations on this client
+
+|`invocations.startedInvocations`
+|count
+|Number of started client invocations on this client
+|===
+====
+
+.CP Subsystem
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`cp.atomiclong.value`
+|count
+|Value of this `IAtomicLong`
+
+|`cp.countdownlatch.count`
+|count
+|Initial count of `ICountDownLatch`
+
+|`cp.countdownlatch.remaining`
+|count
+|Remaining number of expected countdowns
+
+|`cp.countdownlatch.round`
+|count
+|Round number of the `ICountDownLatch`; each time `ICountDownLatch` is initialized with a new count after it downs to zero, a new round begins
+
+|`cp.lock.acquireLimit`
+|count
+|Maximum number of reentrant acquires of this `FencedLock`
+
+|`cp.lock.lockCount`
+|count
+|Total number of times this `FencedLock` has been acquired since its creation
+
+|`cp.lock.owner`
+|count
+|Address of the `FencedLock` owner
+
+|`cp.lock.ownerSessionId`
+|count
+|Session Id of the `FencedLock` owner
+
+|`cp.semaphore.available`
+|count
+|Number of the remaining available permits
+
+|`cp.semaphore.initialized`
+|count
+|State value which shows whether semaphore is initialized with a value or not; in exposed metrics, it shows 0 when semaphore is not initialized, a positive value otherwise
+
+|`cp.session.creationTime`
+|ms
+|Creation time of this session
+
+|`cp.session.endpoint`
+|
+|Address of the endpoint which the CP session belongs to
+
+|`cp.session.endpointType`
+|
+|Type of the endpoint; either SERVER or CLIENT
+
+|`cp.session.expirationTime`
+|ms
+|Expiration time of the CP session
+
+|`cp.session.version`
+|count
+|Version number of the CP session, basically it shows how many times the session heartbeat is received
+|===
+====
+
+.Events
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`event.eventQueueSize`
+|count
+|Total number of events pending to be processed
+
+|`event.eventsProcessed`
+|count
+|Total number of processed events
+
+|`event.listenerCount`
+|count
+|Number of subscribed listeners for the specified service
+
+|`event.publicationCount`
+|count
+|Number of published events for the specified service
+
+|`event.queueCapacity`
+|count
+|Queue capacity of the executor processing the events (this capacity is shared for all events)
+
+|`event.rejectedCount`
+|count
+|Number of rejected events; if the event is not accepted to the executor in `hazelcast.event.queue.timeout.millis`(see xref:system-properties.adoc[]), it will be rejected and not processed
+
+|`event.syncDeliveryFailureCount`
+|count
+|Number of failures of sync event delivery 
+
+|`event.threadCount`
+|count
+|Number of threads for the event service executor (the event thread count)
+
+|`event.totalFailureCount`
+|count
+|Number of events that fail to be published
+|===
+====
+
+.Listeners
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`listeners.eventsProcessed`
+|count
+|Total number of processed events on the client listener service
+
+|`listeners.eventQueueSize`
+|count
+|Total number of tasks pending to be processed on the client listener service
+|===
+====
+
+.Capacity
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+// TODO: Validate this file.partition metrics 
+|`file.partition.freeSpace`
+|bytes
+|Amount of free space in the given directory, user.home
+
+|`file.partition.totalSpace`
+|bytes
+|Amount of total space in the given directory, user.home
+
+|`file.partition.usableSpace`
+|bytes
+|Amount of usable space in the given directory, user.home
+|===
+====
+
+.Garbage Collection
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`gc.majorCount`
+|count
+|Total number of major garbage collections (GCs) that have occurred
+
+|`gc.majorTime`
+|ms
+|Accumulated elapsed time in major GCs
+
+|`gc.minorCount`
+|count
+|Total number of minor GCs that have occurred
+
+|`gc.minorTime`
+|ms
+|Accumulated elapsed time in minor GCs
+
+|`gc.unknownCount`
+|count
+|Number of unknown GCs that cannot be determined as minor or major (this is usually due to the lack of support of the used garbage collector)
+
+|`gc.unknownTime`
+|ms
+|Accumulated elapsed time in unknown GCs
+|===
+====
+
+.Memory
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`memory.committedHeap`
+|bytes
+|Amount of heap memory that is committed for the JVM to use
+
+|`memory.committedNative`
+|bytes
+|Amount of native memory that is committed for current instance (member or client) to use
+
+|`memory.freeHeap`
+|bytes
+|Amount of free memory in the JVM of current instance (member or client)
+
+|`memory.freeNative`
+|bytes
+|Amount of free native memory in the current instance (member or client)
+
+|`memory.freePhysical`
+|bytes
+|Amount of free physical memory available in OS
+
+|`memory.maxHeap`
+|bytes
+|Maximum amount of memory that the JVM will attempt to us
+
+|`memory.maxMetadata`
+|bytes
+|Amount of native memory reserved for metadata (this memory is separate and not accounted for by the NativeMemory statistics)
+
+|`memory.maxNative`
+|bytes
+|Maximum amount of native memory that current instance (member or client) will attempt to use
+
+|`memory.totalPhysical`
+|bytes
+|Amount of total physical memory available in OS
+
+|`memory.usedHeap`
+|bytes
+|Amount of used memory in the JVM of the current instance (member or client)
+
+|`memory.usedMetadata`
+|bytes
+|Amount of used metadata memory by the current instance (member or client)
+
+|`memory.usedNative`
+|bytes
+|Amount of used native memory by the current instance (member or client)
+|===
+====
+
+.Near Cache
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
 
 |`nearcache.creationTime`
 |ms
@@ -757,7 +1388,18 @@ with the master member.
 
 |`nearcache.persistenceCount`
 |count
-|Number of Near Cache key persistences (when the pre-load feature is enabled)
+|Number of Near Cache key persistences (when the preload feature is enabled)
+|===
+====
+
+.Operations
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
 
 |`operation.adhoc.executedOperationsCount`
 |count
@@ -938,6 +1580,17 @@ with the master member.
 |`operation.thread.priorityPendingCount`
 |count
 |Number of priority pending operations (tasks)
+|===
+====
+
+.Operating System
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
 
 |`os.committedVirtualMemorySize`
 |bytes
@@ -982,6 +1635,17 @@ with the master member.
 |`os.totalSwapSpaceSize`
 |bytes
 |Total amount of swap space
+|===
+====
+
+.Partitions
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
 
 |`partitions.activePartitionCount`
 |count
@@ -1061,7 +1725,18 @@ with the master member.
 
 |`partitions.totalElapsedMigrationTime`
 |ns
-|Total elapsed time from start of migration tasks to their completion since the beginning
+|Total elapsed time from the start of migration tasks to their completion (successful or otherwise) since the beginning
+|===
+====
+
+.Persistence
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
 
 |`persistence.liveTombstones`
 |count
@@ -1086,22 +1761,17 @@ with the master member.
 |`persistence.valOccupancy`
 |bytes
 |Approximate size of value chunks (it does not account for data in the active chunk, it is incremented when the active chunk is turned into a stable one)
+|===
+====
 
-|`pnCounter.creationTime`
-|ms
-|Creation time of the PN counter on the member
-
-|`pnCounter.totalDecrementOperationCount`
-|count
-|Number of subtract (including decrement) operations on this PN counter
-
-|`pnCounter.totalIncrementOperationCount`
-|count
-|Number of add (including increment) operations on this PN counter
-
-|`pnCounter.value`
-|count
-|Current value of the PN counter
+.Proxies
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
 
 |`proxy.createdCount`
 |count
@@ -1114,74 +1784,17 @@ with the master member.
 |`proxy.proxyCount`
 |count
 |Number of active proxies for a given service
+|===
+====
 
-|`reliableTopic.creationTime`
-|ms
-|Creation time of this reliable topic on the member
-
-|`reliableTopic.totalPublishes`
-|count
-|Total number of published messages of this reliable topic on this member
-
-|`reliableTopic.totalReceivedMessages`
-|count
-|Total number of received messages of this reliable topic on this member
-
-|`queue.averageAge`
-|ms
-|Average age of the items in this member
-
-|`queue.backupItemCount`
-|count
-|Number of backup items held by the member
-
-|`queue.creationTime`
-|ms
-|Creation time of the topic on the member
-
-|`queue.eventOperationCount`
-|count
-|Number of event operations
-
-|`queue.maxAge`
-|ms
-|Maximum age of the items in this member
-
-|`queue.minAge`
-|ms
-|Minimum age of the items in this member
-
-|`queue.numberOfEmptyPolls`
-|count
-|Number of null returning poll operations
-
-|`queue.numberOfEvents`
-|count
-|Number of event operations (duplicate of eventOperationCount)
-
-|`queue.numberOfOffers`
-|count
-|Number of offer/put/add operations
-
-|`queue.numberOfOtherOperations`
-|count
-|Number of other operations
-
-|`queue.numberOfPolls`
-|count
-|Number of poll/take/remove operations.
-
-|`queue.numberOfRejectedOffers`
-|count
-|Number of rejected offers
-
-|`queue.ownedItemCount`
-|count
-|Number of owned items in this member
-
-|`queue.total`
-|count
-|Total number of operations (numberOfOffers + numberOfPolls + numberOfOtherOperations)
+.Raft Algorithm
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
 
 |`raft.destroyedGroupIds`
 |count
@@ -1242,78 +1855,17 @@ with the master member.
 |`raft.terminatedRaftNodeGroupIds`
 |count
 |Terminated raft node group IDs
+|===
+====
 
-|`replicatedMap.creationTime`
-|ms
-|Creation time of this replicated map on this member
-
-|`replicatedMap.getCount`
-|count
-|Number of get operations on this member
-
-|`replicatedMap.hits`
-|count
-|Number of hits (reads) of the locally owned entries
-
-|`replicatedMap.lastAccessTime`
-|ms
-|Last access (read) time of the locally owned entries
-
-|`replicatedMap.lastUpdateTime`
-|ms
-|Last update time of the locally owned entries
-
-|`replicatedMap.maxGetLatency`
-|ms
-|Maximum latency of get operations
-
-|`replicatedMap.maxPutLatency`
-|ms
-|Maximum latency of put operations
-
-|`replicatedMap.maxRemoveLatency`
-|ms
-|Maximum latency of remove operations
-
-|`replicatedMap.numberOfEvents`
-|count
-|Number of events received on this member
-
-|`replicatedMap.numberOfOtherOperations`
-|count
-|Total number of other operations on this member
-
-|`replicatedMap.ownedEntryCount`
-|count
-|Number of entries owned on this member
-
-|`replicatedMap.ownedEntryMemoryCost`
-|bytes
-|Memory cost of owned entries on this member
-
-|`replicatedMap.putCount`
-|count
-|Number of put operations on this member
-
-|`replicatedMap.removeCount`
-|count
-|Number of remove operations on this member
-
-|`replicatedMap.totalGetLatencies`
-|ms
-|Total latency of get operations
-
-|`replicatedMap.totalPutLatencies`
-|ms
-|Total latency of put operations
-
-|`replicatedMap.totalRemoveLatencies`
-|ms
-|Total latency of remove operations
-
-|`replicatedMap.total`
-|count
-|Total number of operations on this member
+.Runtime
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
 
 |`runtime.availableProcessors`
 |count
@@ -1338,18 +1890,17 @@ with the master member.
 |`runtime.usedMemory`
 |bytes
 |Approximation to the total amount of memory currently used
+|===
+====
 
-|`set.creationTime`
-|ms
-|Creation time of the set on the member
-
-|`set.lastAccessTime`
-|ms
-|Last access (read) time of the locally owned items
-
-|`set.lastUpdateTime`
-|ms
-|Last update time of the locally owned items
+.TCP
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
 
 |`tcp.acceptor.eventCount`
 |count
@@ -1534,6 +2085,17 @@ with the master member.
 |`tcp.inputThread/outputThread.taskQueueSize`
 |count
 |Number of pending tasks on the queue of NioThread
+|===
+====
+
+.Threads
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
 
 |`thread.daemonThreadCount`
 |count
@@ -1550,18 +2112,17 @@ with the master member.
 |`thread.totalStartedThreadCount`
 |count
 |Total number of threads started since the JVM started
+|===
+====
 
-|`topic.creationTime`
-|ms
-|Creation time of the topic on the member
-
-|`topic.totalPublishes`
-|count
-|Total number of published messages of this topic on this member
-
-|`topic.totalReceivedMessages`
-|count
-|Total number of received messages of this topic on this member
+.Transactions
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
 
 |`transactions.commitCount`
 |count
@@ -1574,6 +2135,17 @@ with the master member.
 |`transactions.startCount`
 |count
 |Number of started transactions
+|===
+====
+
+.Tiered Store
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
 
 |`tstore.device.freeSpace`
 |bytes
@@ -1774,7 +2346,17 @@ with the master member.
 |`tstore.hlog.waste.paging.total`
 |bytes
 |Total space wasted due to crossing page boundaries of Hybrid Log allocations
+|===
+====
 
+.WAN Replication
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
 
 |`wan.ackDelayCurrentMillis`
 |ms
@@ -1883,206 +2465,5 @@ with the master member.
 |`wan.updateCount`
 |count
 |Number of entry update events
-
 |===
-
-
-== Jet Engine Cluster-Wide Metrics
-
-[cols="h,a,a"]
-|===
-|Name|Description|Tags
-
-|blockingWorkerCount
-|Number of non-cooperative workers employed.
-.6+|_none_
-
-Each Hazelcast member will have one instance of this metric.
-
-|jobs.submitted
-|Number of computational jobs submitted.
-
-|jobs.completedSuccessfully
-|Number of computational jobs successfully completed.
-
-|jobs.completedWithFailure
-|Number of computational jobs that have failed.
-
-|jobs.executionStarted
-|Number of computational job executions started. Each job can
-execute multiple times, for example when it’s restarted or
-suspended and then resumed.
-
-|jobs.executionTerminated
-|Number of computational job executions finished. Each job can
-execute multiple times, for example when it’s restarted or
-suspended and then resumed.
-
-|iterationCount
-|The total number of iterations the driver of tasklets in
-cooperative thread N made. It should increase by at least 250
-iterations/s. Lower value means some of the cooperative
-processors blocks for too long. Somewhat lower value is normal
-if there are many tasklets assigned to the processor. Lower
-value affects the latency.
-.2+|_cooperativeWorker_
-
-Each Hazelcast member will have one of this metric for each of its
-cooperative worker threads.
-
-|taskletCount
-|The number of assigned tasklets to cooperative thread N.
-
-|===
-
-== Jet Engine Job-specific Metrics
-
-All job specific metrics have their `job=<jobId>` and
-`exec=<executionId>` tags set and most also have the
-`vertex=<vertexName>` tag set (with very few exceptions). This means
-that most of these metrics will have at least one instance for each
-vertex of each current job execution.
-
-Additionally, if the vertex sourcing them is a data source or data sink,
-then the `source` or `sink` tags will also be set to true.
-
-[cols="h,a,a"]
-|===
-|Name|Description|Tags
-
-|executionStartTime
-|Start time of the current execution of the job (epoch time in milliseconds).
-.2+|_job, exec_
-
-
-There will be a single instance of these metrics for each job
-execution.
-
-|executionCompletionTime
-|Completion time of the current execution of the job (epoch time
-in milliseconds).
-
-|snapshotBytes
-|Total number of bytes written out in the last snapshot.
-.2+|_job, exec, vertex_
-
-There will be a single instance of these metrics for each
-vertex.
-
-|snapshotKeys
-|Total number of keys written out in the last snapshot.
-
-|distributedBytesIn
-|Total number of bytes received from remote members.
-.4+|_job, exec, vertex, ordinal_
-
-Each Hazelcast member will have an instance of these metrics for each
-ordinal of each vertex of each job execution.
-
-Note: These metrics are only present for distributed edges (ie.
-edges producing network traffic).
-
-|distributedBytesOut
-|Total number of bytes sent to remote members.
-
-|distributedItemsIn
-|Total number of items received from remote members.
-
-|distributedItemsOut
-|Total number of items sent to remote members.
-
-|topObservedWm
-|This value is equal to the highest coalescedWm on any input edge
-of this processor.
-.6+|_job, exec, vertex, proc_
-
-Each Hazelcast member will have one instances of these metrics for
-each processor instance N, the N denotes the global processor
-index. Processor is the parallel worker doing the work of the
-vertex.
-
-|coalescedWm
-|The highest watermark received from all inputs that was sent to
-the processor to handle.
-
-|lastForwardedWm
-|Last watermark emitted by the processor to output.
-
-|lastForwardedWmLatency
-|The difference between <i>lastForwardedWn</i> and the system
-time at the moment when metrics were collected.
-
-|queuesCapacity
-|The total capacity of input queues.
-
-|queuesSize
-|The total number of items waiting in input queues.
-
-|topObservedWm
-|The highest received watermark from any input on edge N.
-.5+|_job, exec, vertex, proc, ordinal_
-
-Each Hazelcast member will have one instance of these metrics for each
-edge M (input or output) of each processor N. N is the global
-processor index and M is either the ordinal of the edge or has
-the value snapshot for output items written to state snapshot.
-
-|coalescedWm
-|The highest watermark received from all upstream processors on
-edge N.
-
-|emittedCount
-|The number of emitted items. This number includes watermarks,
-snapshot barriers etc. Unlike _distributedItemsOut_, it
-includes items emitted items to local processors.
-
-|receivedCount
-|The number of received items. This number does not include
-watermarks, snapshot barriers etc. It’s the number of items the
-Processor.process method will receive.
-
-|receivedBatches
-|The number of received batches. `Processor.process`
-receives a batch of items at a time, this is the number of such
-batches. By dividing _receivedCount_ by
-_receivedBatches_, you get the average batch size. It will
-be 1 under low load.
-
-|numInFlightOps
-|The number of pending (in flight) operations when using
-asynchronous mapping processors. See https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/core/processor/Processors.html#mapUsingServiceAsyncP-com.hazelcast.jet.pipeline.ServiceFactory-int-boolean-com.hazelcast.function.FunctionEx-com.hazelcast.function.BiFunctionEx-[Processors.mapUsingServiceAsyncP].
-.6+|_job, exec, vertex, proc, procType_
-
-Processor specific metrics, only certain types of processors
-have them. The _procType_ tag can be used to identify the
-exact type of processor sourcing them. Like all processor
-metrics, each Hazelcast member will have one instances of these
-metrics for each processor instance N, the N denotes the global
-processor index.
-
-|totalKeys
-|The number of active keys being tracked by a session window
-processor.
-
-
-|totalWindows
-|The number of active windows being tracked by a session window
-processor. See
-https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/core/processor/Processors.html#aggregateToSessionWindowP-long-long-java.util.List-java.util.List-com.hazelcast.jet.aggregate.AggregateOperation-com.hazelcast.jet.core.function.KeyedWindowResultFunction-[Processors.aggregateToSessionWindowP].
-
-
-|totalFrames
-|The number of active frames being tracked by a sliding window processor.
-
-
-|totalKeysInFrames
-|The number of grouping keys associated with the current active
-frames of a sliding window processor. See
-https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/core/processor/Processors.html#aggregateToSlidingWindowP-java.util.List-java.util.List-com.hazelcast.jet.core.TimestampKind-com.hazelcast.jet.core.SlidingWindowPolicy-long-com.hazelcast.jet.aggregate.AggregateOperation-com.hazelcast.jet.core.function.KeyedWindowResultFunction-[Processors.aggregateToSlidingWindowP].
-
-
-|lateEventsDropped
-|The number of late events dropped by various processor, due to
-the watermark already having passed their windows.
-
-|===
+====

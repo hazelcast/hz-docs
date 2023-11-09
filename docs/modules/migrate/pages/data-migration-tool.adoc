@@ -14,7 +14,7 @@ You can download the DMT from https://viridian.hazelcast.com/[Hazelcast {hazelca
 Once downloaded, extract the DMT package to a location in your folder structure. The DMT package includes the following:
 
 * The DMT
-* A custom Hazelcast distribution that creates a migration cluster as a _hazelcast/_ folder and runs the data migration service
+* A custom Hazelcast distribution that creates a migration cluster and runs the data migration service
 * Example configuration files
 * Example connection configuration file, which is used to connect to the migration client
 
@@ -57,7 +57,7 @@ The target cluster is the new cluster to which you want to migrate the source cl
 
 . xref:migrate:data-migration-tool.adoc#start-the-migration-cluster[Start the migration cluster]
 +
-The _hazelcast/_ folder used as a migration cluster.
+The cluster created by the custom Hazelcast distribution.
 
 . xref:migrate:data-migration-tool.adoc#run-the-migration[Run the Migration]
 
@@ -94,17 +94,19 @@ NOTE: Ensure that the IP address you use for Docker is different to that used by
 
 The command has the following format:
 
-====
+[source,shell]
+----
 docker run -p <ip_address>:<port_range_start>:<port_range_end> -e HZ_CLUSTERNAME=source hazelcast/hazelcast:<source_version>
-====
+----
 
 NOTE: The `-p` option in the above command maps the container's port to the host machine. This ensures that your Docker instance, which is running in a virtual network, is accessible to your local processes. The option is required because the migration and target clusters, CLC, and DMT run locally on your computer outside the Docker environment.
 
 For example, to start a version 4.2.7 source cluster on IP address 127.0.0.1 and port 5701, enter the following command in a terminal:
 
-====
+[source,shell]
+----
 docker run -p 127.0.0.1:5701:5701 -e HZ_CLUSTERNAME=source hazelcast/hazelcast:4.2.7
-====
+----
 
 ==== Add Data to Cluster
 
@@ -117,11 +119,11 @@ To access the cluster and populate it with data - for example, because you are u
 The _source.yaml_ file contains the following:
 
 [source,yaml]
-====
+----
 cluster:
   name: "source"
   address: "127.0.0.1:5701"
-====
+----
 
 NOTE: If you have not installed the Hazelcast CLC, do this now. For further information on installing the CLC, refer to the https://docs.hazelcast.com/clc/latest/install-clc[Hazelcast Command-Line Client^] documentation.
 
@@ -157,6 +159,7 @@ Windows::
 ----
 for /l %x in (1, 1, 1000) do clc -c source.yaml map --name my-map set key-%x value-%x --quiet
 ----
+--
 ====
 
 ==== Update the Configuration
@@ -177,7 +180,7 @@ To update the cluster information, complete the following steps:
 To update the data structure information, complete the following steps:
 
 . Navigate to the folder in which you extracted the DMT package
-. Open the _migration_config/data/imaps.yaml_ and/or the _migration_config/data/imaps.yaml_ file in your favorite editor
+. Open the _migration_config/data/imap_names.txt_ and/or the _migration_config/data/replicated_map_names.txt_ file in your favorite editor
 . Update the file content to match the names of your maps
 +
 NOTE: If you have multiple data structures, use a new line for each map name.
@@ -199,13 +202,14 @@ To start the migration cluster, complete the following steps:
 . Navigate to the folder in which you extracted the DMT package
 . Enter the following command:
 +
-====
+[source,shell]
+----
 HZ_NETWORK_PORT_PORT=5702 HZ_CLUSTERNAME=migration ./bin/hz start
-====
+----
 
-If the specified port is available, the cluster starts on that port. Otherwise, the cluster selects a different port. You can confirm the port used by the cluster in the logs displayed in your terminal.
+If the specified port is available, the cluster starts on that port. Otherwise, Hazelcast tries to find a free port as described in the xref:clusters:network-configuration.adoc#port[Port] section of the Networking topic. You can confirm the port used by the cluster in the logs displayed in your terminal.
 
-You can find the _migration.yaml_ configuration folder in the _migration_config_ folder of the DMT download package. If your logs show that the cluster starts on a different port to that specified in this file, you must update the `address` field to match the port number used.
+You can find the _migration.yaml_ file in the root folder of the DMT download package. If your logs show that the cluster starts on a different port to that specified in this file, you must update the `address` field to match the port number used.
 
 DMT uses this configuration file to connect to the migration cluster when running the migration.
 
@@ -219,7 +223,7 @@ Before running the migration, you need the following information:
 * Your processor architecture
 * The binary that is suitable for your machine
 
-You can find DMT binaries, in the format `dmt_[platform]_arch]`, in the _bin_ folder of the extracted DMT package. Use the ``arm64`` binary for ARM, and the `amd64` binary for Intel.
+You can find DMT binaries, in the format `dmt_[platform]_[arch]`, in the _bin_ folder of the extracted DMT package. Use the ``arm64`` binary for ARM, and the `amd64` binary for Intel.
 
 To run the migration, complete the following steps:
 

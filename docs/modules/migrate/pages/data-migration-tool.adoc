@@ -30,11 +30,11 @@ When using the DMT, bear the following in mind:
 * You can run only one migration at a time
 * The target cluster must be on 5.3.x Enterprise Edition or the latest {hazelcast-cloud} release
 
-NOTE: {hazelcast-cloud} Trial and {hazelcast-cloud} Standard have a limit of 14GB of primal data. If you require more, you must use {hazelcast-cloud} Dedicated. For further information on the available {hazelcast-cloud} editions, refer to the https://docs.hazelcast.com/cloud/overview[Hazelcast {hazelcast-cloud}^] documentation.
+NOTE: {hazelcast-cloud} Trial and {hazelcast-cloud} Standard have a limit of 14GB of primary data. If you require more, you must use {hazelcast-cloud} Dedicated. For further information on the available {hazelcast-cloud} editions, refer to the https://docs.hazelcast.com/cloud/overview[Hazelcast {hazelcast-cloud}^] documentation.
 
 * You must specify at least one data structure name in the migration configuration file
 * All data structures specified in the migration configuration must exist in the source cluster
-* Any data structures that already exist on the target cluster are not migrated
+* Any populated data structures that already exist on the target cluster are not migrated; however, if the existing data structure is empty, it is migrated
 * Any empty data structures are not migrated
 
 == Migrate Your Data
@@ -45,7 +45,7 @@ To migrate your data, you must complete the following steps:
 +
 The source cluster is your existing cluster, the one that you want to migrate.
 +
-NOTE: Hazelcast recommends that the source cluster is put in a `PASSIVE` state before you start the migration. For information on changing the state, see xref:maintain-cluster:cluster-member-states.adoc#changing-a-clusters-state[Changing a Cluster's State]. 
+NOTE: Hazelcast recommends that the source cluster is put in a `PASSIVE` state before you start the migration. This is because the DMT cannot guarrantee that any data changed during migration will be migrated. For information on changing the state, see xref:maintain-cluster:cluster-member-states.adoc#changing-a-clusters-state[Changing a Cluster's State]. 
 +
 If necessary, you can add data to the source cluster before continuing. For example, this can be done when testing a migration using a Development cluster. For further information on doing this, see the xref:migrate:data-migration-tool.adoc#add-data-to-cluster[Add Data to Cluster] section.
 + 
@@ -96,7 +96,7 @@ The command has the following format:
 
 [source,shell]
 ----
-docker run -p <ip_address>:<port_range_start>:<port_range_end> -e HZ_CLUSTERNAME=source hazelcast/hazelcast:<source_version>
+docker run -p <ip_address_to_bind>:<host_port>:<container_port> -e HZ_CLUSTERNAME=source hazelcast/hazelcast:<source_version>
 ----
 
 NOTE: The `-p` option in the above command maps the container's port to the host machine. This ensures that your Docker instance, which is running in a virtual network, is accessible to your local processes. The option is required because the migration and target clusters, CLC, and DMT run locally on your computer outside the Docker environment.
@@ -173,6 +173,9 @@ To update the cluster information, complete the following steps:
 
 . Navigate to the folder in which you extracted the DMT package
 . Open the _migration_config/source/hazelcast.yaml_ file in your favorite editor
++
+NOTE: The _hazelcast.yaml_ file is a Hazelcast client configuration file, which can include any supported configuration.
++
 . Update the `cluster-name` field to match the name of your source cluster
 . Update the `cluster-members` field to match the addresses of the cluster members
 . Save the file
@@ -181,7 +184,7 @@ To update the data structure information, complete the following steps:
 
 . Navigate to the folder in which you extracted the DMT package
 . Open the _migration_config/data/imap_names.txt_ and/or the _migration_config/data/replicated_map_names.txt_ file in your favorite editor
-. Update the file content to match the names of your maps
+. Update the file content to match the names of your maps. To select multiple data structures using a single entry, you can use wildcards. For further information on using wildcards, see the xref:configuration:using-wildcards.adoc[Using Wildcards] topic.
 +
 NOTE: If you have multiple data structures, use a new line for each map name.
 

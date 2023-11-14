@@ -1,11 +1,41 @@
 = Using the Data Migration Tool
-:description: You can use the Data Migration Tool (DMT) to migrate your data from version 4.x or 5.x Open Source and Enterprise Edition Hazelcast clusters when upgrading to 5.3.x versions of Enterprise Edition, or moving to the latest {hazelcast-cloud} release.
+:description: You can use the Data Migration Tool (DMT) to migrate your data from version 4.x or 5.x Open Source and Enterprise Edition Hazelcast clusters when upgrading to 5.3.x or later versions of Enterprise Edition, or moving to the latest {hazelcast-cloud} release. The DMT can also be used for infrastructure consolidation or separation with selective migration of application data between clusters.
 
 {description} 
 
 NOTE: The DMT migrates your data for maps and replicated maps only. Replicated map metadata is not migrated.
 
+The DMT is typically used in the following situations:
+
+* When migrating from an Open Source cluster to an Enterprise Edition cluster
+* When migrating from an earlier version of Enterprise Edition to a newer version. Such a migration can move directly between specified versions, even if several minor versions exist between them
+* When migrating from an on-premise cluster to a self-managed Enterprise Edition cluster in the cloud
+* When migrating from an on-premise cluster to a {hazelcast-cloud} cluster
+* When you want to migrate specific application data from one cluster to another due to infrastructure changes
+
+====
+NOTES: 
+
+. You cannot use the DMT to upgrade or migrate from IMDG 3.12.x. If you are upgrading from IMDG 3.12.x, see the xref:upgrading-from-imdg-3.adoc[Upgrading from IMDG 3.12.x] topic. If migrating from IMDG 3.12.x, see the xref:migration-tool-imdg.adoc[Migrating Data from IMDG 3.12.x] topic. 
+
+. If you want to avoid downtime, use an in-place rolling upgrade instead of the DMT tool. For further information on upgrading without interrupting the operation of the cluster, see the xref:maintain-cluster:rolling-upgrade.adoc[Rolling Upgrades] topic.
+====
+
 The DMT can be run on Mac, Linux, and Windows Operating Systems.
+
+To use the DMT:
+
+* The source cluster must be running and populated with required data
+* The application must be using the source cluster
+* The target cluster must be set up, but have no data
+
+At a high-level, the migration process is as follows:
+
+. Set up the migration cluster
+. Shutdown all applications using the source cluster
+. Run the migration using the DMT command
+. Update the client configuration with the target cluster details
+. Restart the applications using the updated client configuration
 
 == Get the DMT
 
@@ -49,17 +79,23 @@ NOTE: Hazelcast recommends that the source cluster is put in a `PASSIVE` state b
 +
 If necessary, you can add data to the source cluster before continuing. For example, this can be done when testing a migration using a Development cluster. For further information on doing this, see the xref:migrate:data-migration-tool.adoc#add-data-to-cluster[Add Data to Cluster] section.
 + 
-You must also update the configuration for the source cluster and related data structures. For further information on doing this, see the xref:migrate:data-migration-tool.adoc#update-the-configuration[Update the configuration] section.
+You must also update the configuration for the source cluster and related data structures. For further information on doing this, see the xref:migrate:data-migration-tool.adoc#update-the-configuration[Update the Source Configuration] section.
 
 . xref:migrate:data-migration-tool.adoc#check-the-target-cluster[Check the target cluster]
 +
 The target cluster is the new cluster to which you want to migrate the source cluster.
 
+You must also update the configuration for the target cluster. For further information on doing this, see the xref:migrate:data-migration-tool.adoc#update-the-target-conf[Update the Target Configuration] section.
+
 . xref:migrate:data-migration-tool.adoc#start-the-migration-cluster[Start the migration cluster]
 +
 The cluster created by the custom Hazelcast distribution.
 
+. Shut down any applications using the source cluster
+
 . xref:migrate:data-migration-tool.adoc#run-the-migration[Run the Migration]
+
+. Update the client configuration with the target cluster details
 
 . xref:migrate:data-migration-tool.adoc#verify-the-migrated-data[Verify the migrated data]
 
@@ -73,7 +109,7 @@ image::ROOT:dmt_diagram.png[DMT Clusters]
 
 A 10-node limited license is included for use with your migration cluster. 
 
-This license is valid for 60 days following download and can be used only for data migration and trial purposes. 
+This license is valid for 30 days and can be used only for data migration and trial purposes. 
 
 The license terms are available in the _enterprise-license.txt_ file located in the _licenses_ folder of the extracted DMT package.
 
@@ -164,7 +200,7 @@ for /l %x in (1, 1, 1000) do clc -c source.yaml map --name my-map set key-%x val
 --
 ====
 
-==== Update the Configuration
+==== Update the Source Configuration
 
 You must update the following configuration:
 
@@ -198,6 +234,50 @@ Ensure that the target cluster is running on one of the following:
 
 * Enterprise Edition version 5.3.2 or later 
 * {hazelcast-cloud}
+
+==== Update the Target Configuration
+
+You must update the following configuration:
+
+* The cluster
+* The connection
+* If required, SSL
+
+To update this configuration, complete the following steps:
+
+. Navigate to the folder in which you extracted the DMT package
+. Open the _migration_config/target/hazelcast-client.yaml_ file in your favorite editor
++
+NOTE: The _hazelcast-client.yaml_ file is a Hazelcast client configuration file, which can include any supported configuration.
++
+. Update the `cluster-name` field to match the name of your source cluster
+. Update the `network` section as follows:
++
+* For an on-premise target cluster, update the `cluster-members` field to match the addresses of the cluster members
+* For a cloud target cluster, including a {hazelcast-cloud} cluster, update the network information. For a public cloud cluster, refer to the documentation for the cloud provider for the required network details. For {hazelcast-cloud}, you must update the network section as follows:
++
+----
+network:
+    hazelcast-cloud:
+      enabled: true
+      discovery-token: <token>
+----
+
+. If required, add the `ssl` information. The format is as follows:
++
+----
+ssl:
+      enabled: true
+      properties:
+        keyStore: client.keystore
+        keyStorePassword: abc123
+        trustStore: client.truststore
+        trustStorePassword: abc123
+----
+
+. Save the file
+
+NOTE: For further information on the `ssl` properties and their values, refer to the https://docs.hazelcast.com/cloud/connect-to-cluster#advanced[Using Advanced Setup^] section in the Hazelcast {hazelcast-cloud} documentation.
 
 === Start the Migration Cluster
 

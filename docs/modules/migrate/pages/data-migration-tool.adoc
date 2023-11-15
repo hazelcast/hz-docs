@@ -83,7 +83,7 @@ You must also update the configuration for the source cluster and related data s
 . xref:migrate:data-migration-tool.adoc#check-the-target-cluster[Check the target cluster]
 +
 The target cluster is the new cluster to which you want to migrate the source cluster.
-
++
 You must also update the configuration for the target cluster. For further information on doing this, see the xref:migrate:data-migration-tool.adoc#update-the-target-conf[Update the Target Configuration] section.
 
 . xref:migrate:data-migration-tool.adoc#start-the-migration-cluster[Start the migration cluster]
@@ -288,7 +288,7 @@ To start the migration cluster, complete the following steps:
 +
 [source,shell]
 ----
-HZ_NETWORK_PORT_PORT=5702 HZ_CLUSTERNAME=migration ./bin/hz start
+HZ_NETWORK_PORT_PORT=5702 HZ_CLUSTERNAME=migration ./bin/hz start 
 ----
 
 If the specified port is available, the cluster starts on that port. Otherwise, Hazelcast tries to find a free port as described in the xref:clusters:network-configuration.adoc#port[Port] section of the Networking topic. You can confirm the port used by the cluster in the logs displayed in your terminal.
@@ -307,7 +307,7 @@ Before running the migration, you need the following information:
 * Your processor architecture
 * The binary that is suitable for your machine
 
-You can find DMT binaries, in the format `dmt_[platform]_[arch]`, in the _bin_ folder of the extracted DMT package. Use the ``arm64`` binary for ARM, and the `amd64` binary for Intel.
+You can find DMT binaries in the _bin_ folder of the extracted DMT package. The binaries are in the format `dmt_[platform]_[arch]`.  Use the ``arm64`` binary for ARM, and the `amd64` binary for Intel.
 
 To run the migration, complete the following steps:
 
@@ -317,11 +317,12 @@ To run the migration, complete the following steps:
 +
 [source,shell]
 ----
-./bin/dmt_[platform]_[arch] --config migration.yaml start migration_config --yes
+./bin/dmt_[platform]_[arch] --config migration.yaml start migration_config --yes --log.path migration.log
 ----
 
 [NOTE]
 ====
+. `--log.path migration.log` specifies that the migration logs are saved to the _migration.log_ file on completion of the migration. For further information on viewing the migration details, see the xref:migrate:data-migration-tool.adoc#view-result[View Migration Results]
 . The DMT will attempt to connect to the migration cluster indefinitely. This means that it can appear to hang if unable to connect. To avoid this, you can set a timeout for the connection attempt using the `--timeout` flag.  For further information on the `--timeout` flag, refer to the https://docs.hazelcast.com/clc/5.3.5/configuration#clc-configuration-with-command-line-parameters[CLC Configuration with Command-line Parameters^] section of the Hazelcast CLC documentation. 
 . On MacOS, you might need to allow the `dmt*` binary to run. If the command is rejected, go to the *Privacy & Security* settings on your device and update them to allow the binary. After updating the settings, retry the command, and select *Open* when prompted
 ====
@@ -370,3 +371,28 @@ The output is similar to the following:
 value-42
 OK
 ----
+
+[view-result]
+=== View Migration Details
+
+When the migration completes, details of the migration are created in the following:
+
+* Migration report
++
+This is written to the _migration$$_$$report$$_$$[migration_id].txt_ file in the _bin_ folder of the extracted DMT package.
++
+The logs are in the format `[(migration_id)_(member uuid)] (member log)`
+
+* DMT log file
++
+This is the file specified in the `--log.path` flag of the `start` command. The file is saved to the _~/.hazelcast_ folder.
++
+NOTE: Logging uses the same environment variables as Hazelcast CLC. For further information on environment variables, refer to the https://docs.hazelcast.com/clc/latest/environment-variables[Environment Variables^] section of the Hazelcsat CLC documentation.
+
+* `__datamigration_results` IMap
++
+This is created on the target cluster.
++
+The keys are uuid4 string format migration IDs, and the values are `HazelcastJsonValue`s that correspond to migration statuses.
++
+The migration report is also included as a field.

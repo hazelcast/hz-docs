@@ -1,0 +1,47 @@
+= CPMap
+[[cpmap]]
+
+Hazelcast `CPMap` is a distributed implementation of a minimal key-value interface. It supports 
+atomic `compareAndSet`, `delete`, `get`, `put`, `remove` and `set` operations. Since `CPMap` is a 
+distributed key-value implementation, these operations involve remote calls and thus their 
+performance differs from non-distributed key-value data structures, e.g. `java.util.Hashmap`. 
+`CPMap` is an enterprise only feature.
+
+WARNING: There is no unsafe variant of `CPMap`, unlike other CP data structures. Therefore, CP must
+be enabled before making use of `CPMap`.
+
+The following example creates an instance of a `CPMap` in the `default` CP group, then updates its
+contents via the operations listed previously.
+
+[source,java]
+----
+include::ROOT:example$/dds/cpmap/ExampleCPMap.java[tag=cpm]
+----
+
+The mutations over the `CPMap` `capitalCities` in the above example are replicated across each of 
+the members of the `default` CP Group. 
+
+Preference should be given to `set` for associating a key with a value rather than `put` when the 
+previously associated value with the respective key is not required. This is because the network
+cost of `set` is less than `put`. Preference should be given to `delete` rather than `remove` for 
+the same reasons.
+
+WARNING: ``CPMap``s are not automatically removed. If an instance is not used anymore, Hazelcast
+does not automatically perform garbage collection on it.
+This can lead to an `OutOfMemoryError`. If you create ``CPMap``s on the fly,
+make sure they are destroyed. See xref:data-structures:distributed-data-structures.adoc#destroying-objects[Destroying Objects]
+and xref:data-structures:distributed-data-structures.adoc#cp-data[CP Data Structures].
+
+WARNING: A `CPMap` has a default capacity of 100MB. This capacity can be adjusted for a `CPMap` via
+configuration, either programmatically (see: `com.hazelcast.config.cp.CPMapConfig`) or via XML/YAML 
+configuration (see: `maps` within `hazelcast-full-example.xml` and respectively `hazelcast-full-example.yaml`).
+
+The backing data structure of a `CPMap` is stored on the JVM heap. Consequently the user must ensure
+that the JVM heap is appropriately sized. Currently there is a maximum `CPMap` size of `2000MB`.
+
+WARNING: A `CPMap` is a CP data structure and therefore takes part in a process called _snapshotting_.
+When defining the capacity of a `CPMap` you must consider the following memory requirements: on-heap 
+capacity for the `CPMap` and on-heap capacity for a `CPMap` snapshot per-follower within the respective
+CP Group. Therefore, at a minimum for a `CPMap` with a capacity of `5MB` within a 3-member CP Group,
+we must conservatively ensure that we have on-heap headroom for `15MB`. This capacity planning must
+be considered for all `CPMap` instances you intend to create.

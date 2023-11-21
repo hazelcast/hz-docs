@@ -3,15 +3,15 @@
 
 {description} 
 
-NOTE: The DMT migrates your data for maps and replicated maps only. Replicated map metadata is not migrated.
+NOTE: The DMT migrates your data for maps and replicated maps only. It does not migrate replicated map metadata.
 
-The DMT is typically used in the following situations:
+DMT Use Cases:
 
-* When migrating from an Open Source cluster to an Enterprise Edition cluster
-* When migrating from an earlier version of Enterprise Edition to a newer version. Such a migration can move directly between specified versions, even if several minor versions exist between them
-* When migrating from an on-premise cluster to a self-managed Enterprise Edition cluster in the cloud
-* When migrating from an on-premise cluster to a {hazelcast-cloud} cluster
-* When you want to migrate specific application data from one cluster to another due to infrastructure changes
+* Migrating from an Open Source cluster to an Enterprise Edition cluster
+* Migrating from an earlier version of Enterprise Edition to a newer version. Such a migration can move directly between specified versions, even if several minor versions exist between them
+* Migrating from an on-premise cluster to a self-managed Enterprise Edition cluster in the cloud
+* Migrating from an on-premise cluster to a {hazelcast-cloud} cluster
+* Migrating specific application data from one cluster to another due to infrastructure changes
 
 [NOTE] 
 ====
@@ -19,6 +19,10 @@ The DMT is typically used in the following situations:
 
 . If you want to avoid downtime, use an in-place rolling upgrade instead of the DMT tool. For further information on upgrading without interrupting the operation of the cluster, see the xref:maintain-cluster:rolling-upgrade.adoc[Rolling Upgrades] topic.
 ====
+
+The DMT uses a temporary cluster called a migration cluster to transfer data from a source cluster to a new target cluster. The migration cluster uses a stream processing pipeline to efficiently transfer the data.
+
+image::ROOT:dmt_diagram.png[DMT Clusters]
 
 The DMT can be run on Mac, Linux, and Windows Operating Systems.
 
@@ -33,12 +37,13 @@ At a high-level, the migration process is as follows:
 . Set up the migration cluster
 . Shutdown all applications using the source cluster
 . Run the migration using the DMT command
-. Update the client configuration with the target cluster details
-. Restart the applications using the updated client configuration
+. Verify that migration was successful
+. Update client applications to connect to the target cluster
+. Restart the client applications
 
 == Get the DMT
 
-You can download the DMT from https://viridian.hazelcast.com/[Hazelcast {hazelcast-cloud}^] or the https://hazelcast.com/[Hazelcast web site^].
+You can download the DMT https://repository.hazelcast.com/data-migration/com/hazelcast/hazelcast-enterprise-distribution/5.3.5-DM-1/[here^]. Make sure to download the correct build for your operating system and CPU type.
 
 Once downloaded, extract the DMT package to a location in your folder structure. The DMT package includes the following:
 
@@ -47,64 +52,8 @@ Once downloaded, extract the DMT package to a location in your folder structure.
 * Example configuration files
 * Example connection configuration file, which is used to connect to the migration client
 
-== Before You Begin
 
-Ensure that you have installed the following:
-
-* https://docs.docker.com/get-docker/[Docker^]
-* https://docs.hazelcast.com/clc/latest/install-clc[Hazelcast Command-Line Client (CLC)^]
-
-When using the DMT, bear the following in mind:
-
-* You can run only one migration at a time
-* The target cluster must be on 5.3.x Enterprise Edition or the latest {hazelcast-cloud} release
-
-NOTE: {hazelcast-cloud} Trial and {hazelcast-cloud} Standard have a limit of 14GB of primary data. If you require more, you must use {hazelcast-cloud} Dedicated. For further information on the available {hazelcast-cloud} editions, refer to the https://docs.hazelcast.com/cloud/overview[Hazelcast {hazelcast-cloud}^] documentation.
-
-* You must specify at least one data structure name in the migration configuration file
-* All data structures specified in the migration configuration must exist in the source cluster
-* Any populated data structures that already exist on the target cluster are not migrated; however, if the existing data structure is empty, it is migrated
-* Any empty data structures are not migrated
-
-== Migrate Your Data
-
-To migrate your data, you must complete the following steps:
-
-. xref:migrate:data-migration-tool.adoc#start-the-source-cluster[Start the source cluster]
-+
-The source cluster is your existing cluster, the one that you want to migrate.
-+
-NOTE: Hazelcast recommends that the source cluster is put in a `PASSIVE` state before you start the migration. This is because the DMT cannot guarrantee that any data changed during migration will be migrated. For information on changing the state, see xref:maintain-cluster:cluster-member-states.adoc#changing-a-clusters-state[Changing a Cluster's State]. 
-+
-If necessary, you can add data to the source cluster before continuing. For example, this can be done when testing a migration using a Development cluster. For further information on doing this, see the xref:migrate:data-migration-tool.adoc#add-data-to-cluster[Add Data to Cluster] section.
-+ 
-You must also update the configuration for the source cluster and related data structures. For further information on doing this, see the xref:migrate:data-migration-tool.adoc#update-the-configuration[Update the Source Configuration] section.
-
-. xref:migrate:data-migration-tool.adoc#check-the-target-cluster[Check the target cluster]
-+
-The target cluster is the new cluster to which you want to migrate the source cluster.
-+
-You must also update the configuration for the target cluster. For further information on doing this, see the xref:migrate:data-migration-tool.adoc#update-the-target-conf[Update the Target Configuration] section.
-
-. xref:migrate:data-migration-tool.adoc#start-the-migration-cluster[Start the migration cluster]
-+
-The cluster created by the custom Hazelcast distribution.
-
-. Shut down any applications using the source cluster
-
-. xref:migrate:data-migration-tool.adoc#run-the-migration[Run the Migration]
-
-. Update the client configuration with the target cluster details
-
-. xref:migrate:data-migration-tool.adoc#verify-the-migrated-data[Verify the migrated data]
-
-NOTE: If you are using the DMT to test a migration, use a Development cluster when following the steps. 
-
-The clusters work to migrate your data as illustrated below:
-
-image::ROOT:dmt_diagram.png[DMT Clusters]
-
-==== Limited Migration Cluster License
+=== Limited Migration Cluster License
 
 A 10-node limited license is included for use with your migration cluster. 
 
@@ -112,101 +61,17 @@ This license is valid for 30 days and can be used only for data migration and tr
 
 The license terms are available in the _enterprise-license.txt_ file located in the _licenses_ folder of the extracted DMT package.
 
-=== Start the Source Cluster
+== Configure the Migration Cluster
 
-You can start your source cluster in either of the following ways:
+The migration cluster acts as a client to both the source and target clusters. You need to set up the client configurations for both connections. Without both configurations, the migration cluster cannot connect, and migration will fail.
 
-* xref:migrate:data-migration-tool.adoc#using-docker[Using Docker]. This is the recommended method
-* Downloading the version package, for the examples in the sections below we use https://hazelcast.com/open-source-projects/downloads/archives/#hazelcast-imdg[Hazelcast IMDG version 4.2.7], and follow the IMDG https://docs.hazelcast.com/imdg/4.2/getting-started[Quickstart]
+=== Configuration for Source Client
 
-==== Using Docker
+. Collect the following data from your source cluster:
 
-To start your source cluster using Docker, you need the following information:
-
-* The IP Address on which to start the cluster. This will be your internal Docker IP address
-* The port to use. This will be your internal Docker port
-* The version of Hazelcast
-
-NOTE: Ensure that the IP address you use for Docker is different to that used by any running processes on your local machine, such as the source cluster. In the sections below, we use `127.0.0.1:5701` for the source cluster and `172.12.0.1:5701` for the Docker container.
-
-The command has the following format:
-
-[source,shell]
-----
-docker run -p <ip_address_to_bind>:<host_port>:<container_port> -e HZ_CLUSTERNAME=source hazelcast/hazelcast:<source_version>
-----
-
-NOTE: The `-p` option in the above command maps the container's port to the host machine. This ensures that your Docker instance, which is running in a virtual network, is accessible to your local processes. The option is required because the migration and target clusters, CLC, and DMT run locally on your computer outside the Docker environment.
-
-For example, to start a version 4.2.7 source cluster on IP address 127.0.0.1 and port 5701, enter the following command in a terminal:
-
-[source,shell]
-----
-docker run -p 127.0.0.1:5701:5701 -e HZ_CLUSTERNAME=source hazelcast/hazelcast:4.2.7
-----
-
-==== Add Data to Cluster
-
-To access the cluster and populate it with data - for example, because you are using the DMT to test a migration of a Development cluster - you can do either of the following: 
- 
-* Use the _source.yaml_ configuration file, included in the _migration_config_ folder of the DMT download package
-
-* Write data to memory as described in the xref:getting-started:get-started-binary.adoc#step-3-write-data-to-memory[Step 3. Write Data to Memory] section of this documentation
-
-The _source.yaml_ file contains the following:
-
-[source,yaml]
-----
-cluster:
-  name: "source"
-  address: "127.0.0.1:5701"
-----
-
-NOTE: If you have not installed the Hazelcast CLC, do this now. For further information on installing the CLC, refer to the https://docs.hazelcast.com/clc/latest/install-clc[Hazelcast Command-Line Client^] documentation.
-
-To make sure that you can add an entry to the source cluster, enter the following command in a terminal:
-
-[source,shell]
-----
-clc -c source.yaml map --name my-map set key-1 value-1
-----
-
-If an error relating to CLC being unable to connect to your source cluster is returned, confirm the following:
-
-* The port mapping is correct
-* The source cluster container is running
-* The configuration in your _source.yaml_ file is correct
-
-If no errors are returned, you can populate the source cluster with 1000 entries using the following script:
-
-[tabs] 
-==== 
-macOS and Linux:: 
-+ 
--- 
-[source,shell]
-----
-for i in {1..1000}; do clc -c source.yaml map --name my-map set key-$i value-$i --quiet; done && echo OK
-----
---
-
-Windows::
-+
-[source,shell]
-----
-for /l %x in (1, 1, 1000) do clc -c source.yaml map --name my-map set key-%x value-%x --quiet
-----
---
-====
-
-==== Update the Source Configuration
-
-You must update the following configuration:
-
-* The cluster information
-* The data structure information
-
-To update the cluster information, complete the following steps:
+* Cluster name
+* Cluster member addresses
+* List of data structures to be migrated
 
 . Navigate to the folder in which you extracted the DMT package
 . Open the _migration_config/source/hazelcast.yaml_ file in your favorite editor
@@ -217,8 +82,6 @@ NOTE: The _hazelcast.yaml_ file is a Hazelcast client configuration file, which 
 . Update the `cluster-members` field to match the addresses of the cluster members
 . Save the file
 
-To update the data structure information, complete the following steps:
-
 . Navigate to the folder in which you extracted the DMT package
 . Open the _migration_config/data/imap_names.txt_ and/or the _migration_config/data/replicated_map_names.txt_ file in your favorite editor
 . Update the file content to match the names of your maps. To select multiple data structures using a single entry, you can use wildcards. For further information on using wildcards, see the xref:configuration:using-wildcards.adoc[Using Wildcards] topic.
@@ -227,22 +90,13 @@ NOTE: If you have multiple data structures, use a new line for each map name.
 
 . Save the file
 
-=== Check the Target Cluster
+=== Configuration for Target Client
 
-Ensure that the target cluster is running on one of the following:
+. Collect the following data from your target cluster
 
-* Enterprise Edition version 5.3.2 or later 
-* {hazelcast-cloud}
-
-==== Update the Target Configuration
-
-You must update the following configuration:
-
-* The cluster
-* The connection
-* If required, SSL
-
-To update the target configuration, complete the following steps:
+* Cluster name
+* Connection data (IP address or cloud configuration)
+* If required, SSL keystore and truststore information
 
 . Navigate to the folder in which you extracted the DMT package
 . Open the _migration_config/target/hazelcast-client.yaml_ file in your favorite editor
@@ -302,7 +156,24 @@ hazelcast-client:
         trustStorePassword: abc123
 ----
 
-=== Start the Migration Cluster
+
+== Migrate your Data with the DMT
+
+=== Caveats
+
+When using the DMT, bear the following in mind:
+
+* You can run only one migration at a time
+* The target cluster must be on 5.3.x Enterprise Edition or the latest {hazelcast-cloud} release
+
+NOTE: {hazelcast-cloud} Trial and {hazelcast-cloud} Standard have a limit of 14GB of primary data. If you require more, you must use {hazelcast-cloud} Dedicated. For further information on the available {hazelcast-cloud} editions, refer to the https://docs.hazelcast.com/cloud/overview[Hazelcast {hazelcast-cloud}^] documentation.
+
+* You must specify at least one data structure name in the migration configuration file
+* All data structures specified in the migration configuration must exist in the source cluster
+* Any populated data structures that already exist on the target cluster are not migrated; however, if the existing data structure is empty, it is migrated
+* Any empty data structures are not migrated
+
+=== Step 1: Start the Migration Cluster
 
 To start the migration cluster, complete the following steps:
 
@@ -323,20 +194,18 @@ DMT uses this configuration file to connect to the migration cluster when runnin
 
 NOTE: The _migration.yaml_ file uses the same configuration options as the Hazelcast CLC. For further information on the options, refer to the https://docs.hazelcast.com/clc/latest/clc-config[Hazelcast CLC documentation^].
 
-=== Run the Migration
 
-Before running the migration, you need the following information:
+=== Step 2: Disconnect all Client Applications
 
-* Your Operating System
-* Your processor architecture
-* The binary that is suitable for your machine
+Disconnect all client applications from the source cluster. 
 
-You can find DMT binaries in the _bin_ folder of the extracted DMT package. The binaries are in the format `dmt_[platform]_[arch]`.  Use the ``arm64`` binary for ARM, and the `amd64` binary for Intel.
+[NOTE]
+To further guarantee a consistent migration, Hazelcast recommends that the source cluster is put in a `PASSIVE` state before you start the migration. This is because the DMT cannot guarrantee that any data changed during migration will be migrated. For information on changing the state, see xref:maintain-cluster:cluster-member-states.adoc#changing-a-clusters-state[Changing a Cluster's State]. 
 
-To run the migration, complete the following steps:
 
-. Open a terminal
-. Navigate to the folder containing the extracted DMT package
+=== Step 3: Run the Migration Tool
+
+. From your terminal window, navigate to the foloer containing the extracted DMT package. 
 . Enter the following command:
 +
 [source,shell]
@@ -353,7 +222,7 @@ To run the migration, complete the following steps:
 
 You can use the DMT `status` command to track the migration. For further information on the available DMT commands, see the xref:migrate:dmt-command-reference.adoc[DMT Command Reference].
 
-=== Verify the Migrated Data
+=== Step 4: Verify the Migrated Data
 
 You can verify the size of the map in the target cluster in the following ways:
 
@@ -397,9 +266,8 @@ OK
 ----
 
 [view-result]
-=== View Migration Details
 
-When the migration completes, details of the migration are created in the following:
+The DMT creates the following additional information:
 
 * Migration report
 +
@@ -424,3 +292,23 @@ This is created on the target cluster.
 The keys are UUID4 string format migration IDs, and the values are `HazelcastJsonValue` serialization interfaces that correspond to migration statuses. A migration status represents the details of the completed migration, and can be provided when contacting Hazelcast Support to help us in our investigations into your issue.
 +
 The migration report is also included as a field.
+
+=== Step 5: Configure your Client Applications
+
+Refer to the Hazelcast client library documentation for the client language you are using.
+
+* xref:clients/java.adoc#client-api[]
+* xref:clients/dotnet.adoc[]
+* xref:clients/cplusplus.adoc[]
+* xref:clients/python.adoc[]
+* xref:clients/go.adoc[]
+
+=== Step 6: Connect your Clients to the Target Cluster
+
+Follow the startup procedures for your client applications.
+
+
+
+
+
+

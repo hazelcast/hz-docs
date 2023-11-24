@@ -2,6 +2,7 @@ import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.cp.CPGroup;
 import com.hazelcast.cp.CPGroupId;
+import com.hazelcast.cp.CPMap;
 import com.hazelcast.cp.CPMember;
 import com.hazelcast.cp.CPSubsystem;
 import com.hazelcast.cp.CPSubsystemManagementService;
@@ -38,6 +39,8 @@ public class CpSubsystemAPI {
         ISemaphore semaphore = cpSubsystem.getSemaphore(name);
 
         ICountDownLatch latch = cpSubsystem.getCountDownLatch(name);
+
+        CPMap map = cpSubsystem.getMap(name);
         //end::apisample[]
 
         //tag::localmember[]

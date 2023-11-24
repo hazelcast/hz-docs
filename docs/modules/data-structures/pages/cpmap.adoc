@@ -1,0 +1,57 @@
+= CPMap
+[[cpmap]]
+
+Hazelcast `CPMap` is a distributed implementation of a minimal key-value interface. It supports 
+atomic `compareAndSet`, `delete`, `get`, `put`, `remove` and `set` operations. As `CPMap` is a 
+distributed key-value implementation, these operations involve remote calls and their 
+performance differs from non-distributed key-value data structures; for example, `java.util.HashMap`. 
+`CPMap` is only available in the Enterprise Edition.
+
+There is no unsafe variant of `CPMap`, unlike other CP data structures. Therefore, CP must be 
+xref:cp-subsystem:configuration.adoc#quickstart-configuration[enabled,window=_blank] before using `CPMap`.
+
+The following example creates an instance of a `CPMap` in the `default` CP group, then updates its
+contents using the operations listed previously.
+
+[source,java]
+----
+include::ROOT:example$/dds/cpmap/ExampleCPMap.java[tag=cpm]
+----
+
+The mutations over the `CPMap` `capitalCities` in the above example are replicated across each of 
+the members of the `default` CP Group. 
+
+Use `set` to associate a key with a value instead of `put` when the 
+previously-associated value with the respective key is not required. This is because the network
+cost of `set` is less than `put`. Use `delete` instead of `remove` for the same reason.
+
+WARNING: ``CPMap``s are not automatically removed. If an instance is not used anymore, Hazelcast
+does not automatically perform garbage collection on it.
+This can lead to an `OutOfMemoryError`. If you create ``CPMap``s on the fly,
+ensure that they are destroyed. See xref:data-structures:distributed-data-structures.adoc#destroying-objects[Destroying Objects,window=_blank]
+and xref:data-structures:distributed-data-structures.adoc#cp-data[CP Data Structures,window=_blank].
+
+A `CPMap` has a default capacity of 100MB. This capacity can be adjusted for a `CPMap` through 
+xref:cp-subsystem:configuration.adoc#cpmap-config[CPMap Options,window=_blank]. The backing data 
+structure of a `CPMap` is stored on the JVM heap.
+
+[NOTE]
+====
+A `CPMap` is a CP data structure and therefore takes part in a process called _snapshotting_.
+When defining the capacity of a `CPMap` you must consider the following memory requirements: 
+
+* On-heap capacity for the `CPMap`
+* On-heap capacity for a `CPMap` snapshot for each follower within the respective CP Group 
+
+Therefore, at a minimum for a `CPMap` with a capacity of `5MB` within a 3-member CP Group, we must 
+conservatively ensure that we have on-heap headroom for `15MB`. This capacity planning must be 
+considered for all `CPMap` instances you intend to create.
+====
+
+A `CPMap` like other CP data structures resides within a user specified CP Group. Each CP 
+Group is an instance of Raft and consequently has its own Raft Log. Co-locating CP data structures 
+within the same CP Group must be undertaken with care as the operations of the co-located CP data 
+structures are totally ordered with respect to one another via Raft. Snapshotting also takes place 
+at the granularity of a CP Group. Therefore, it is highly recommended that you carefully consider 
+the envisaged access frequency and patterns of a `CPMap` when deciding the CP Group a `CPMap` will 
+reside.

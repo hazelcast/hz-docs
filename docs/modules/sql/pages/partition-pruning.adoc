@@ -1,0 +1,36 @@
+= Partition pruning of SQL queries
+:description: Use partition pruning optimization technique to reduce latency for quick IMap SQL queries.
+:page-beta: false
+
+Partition pruning is an IMap-specific query optimization technique that automatically prunes members which don't contain
+the required cluster partitions. It works
+
+* by default for primitive `__key` types (default attribute strategy);
+* for all key types if user configure attribute partitioning strategy for `MapConfig`.
+
+== Limitations
+
+Partition pruning is only available for querying IMap with enabled attribute partitioning strategy.
+
+== Example
+
+=== Full table scans
+
+[source,java]
+----
+String mapName = "cities";
+
+hazelcastInstance().addMapConfig(
+    new MapConfig(mapName).setPartitioningAttributeConfigs("countries"));
+----
+
+[source,sql]
+----
+-- Create a mapping to observe IMap in SQL context;
+CREATE MAPPING cities (__key INT, name VARCHAR, countries VARCHAR)
+TYPE IMap
+OPTIONS ('keyFormat' = 'int', 'valueFormat' = 'java');
+
+-- Query IMap with a predicate allowing partition pruning;
+SELECT * FROM cities WHERE countries = 'United Kingdom';
+----

@@ -5,8 +5,11 @@
 Partition pruning is an IMap-specific query optimization technique that automatically prunes members which don't contain
 the required data on their partitions, and optimize count of Jet scan processors on required members. It works
 
-* by default for primitive `__key` types (default attribute strategy);
+* by default, for primitive `__key` types (default attribute strategy);
 * for all key types if user configure attribute partitioning strategy for `MapConfig`.
+
+Worth noticing, the query coordinator member is always involved in the query execution, even if it doesn't contain any
+required data.
 
 == Limitations
 
@@ -14,23 +17,23 @@ Partition pruning is only available for querying IMap with enabled attribute par
 
 == Example
 
-=== Full table scans
-
 [source,java]
 ----
-String mapName = "cities";
+String mapName = "map";
+hz.addMapConfig(new MapConfig(mapName).setPartitioningAttributeConfigs("k2"));
 
-hazelcastInstance().addMapConfig(
-    new MapConfig(mapName).setPartitioningAttributeConfigs("country"));
+IMap<ComplexKey, String> map = hz.getMap(mapName);
+map.put(new ComplexKey("k1", 21), "v1");
+map.put(new ComplexKey("k2", 42), "v2");
 ----
 
 [source,sql]
 ----
 -- Create a mapping to observe IMap in SQL context;
-CREATE MAPPING cities (__key INT, name VARCHAR, country VARCHAR)
+CREATE MAPPING map (k1 VARCHAR, k2 INT, v VARCHAR)
 TYPE IMap
-OPTIONS ('keyFormat' = 'int', 'valueFormat' = 'java');
+OPTIONS ('keyFormat' = 'java', 'valueFormat' = 'varchar');
 
 -- Query IMap with a predicate allowing partition pruning;
-SELECT * FROM cities WHERE country  = 'United Kingdom';
+SELECT * FROM cities WHERE k2 = 42;
 ----

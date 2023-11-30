@@ -1,27 +1,51 @@
 = Partition pruning of SQL queries
-:description: Use partition pruning optimization technique to reduce latency for quick IMap SQL queries.
+:description: The partition pruning optimization technique reduces latency for faster IMap SQL queries.
 :page-beta: false
 
-Partition pruning is an IMap-specific query optimization technique that automatically prunes members which don't contain
-the required data on their partitions, and optimize count of Jet scan processors on required members. It works
+Partition pruning is an IMap-specific query optimization technique that automatically prunes members that don't contain
+the required data on their partitions, and optimizes the count of Jet scan processors on required members. It works:
 
-* by default, for primitive `__key` types (default attribute strategy);
-* for all key types if user configure attribute partitioning strategy for `MapConfig`.
+* by default, for primitive `__key` types (default attribute strategy).
+* for all key types if you configure the `AttributePartitioningStrategy` in `MapConfig`.
 
-Worth noticing, the query coordinator member is always involved in the query execution, even if it doesn't contain any
+NOTE: The partition pruning may be used *only* when querying an IMap mapping if the partitioning strategy attribute is enabled.
+
+NOTE: The query coordinator member is always involved in the query execution, even if it doesn't contain any
 required data.
-
-== Limitations
-
-Partition pruning is only available for querying IMap with enabled attribute partitioning strategy.
 
 == Example
 
 [source,java]
 ----
+// first, define a complex key class
+class ComplexKey implemetns Serializable {
+  private String k1;
+  private int k2;
+
+  ComplexKey(String k1, int k2) {
+    this.k1 = k1;
+    this.k2 = k2;
+  }
+
+  public String getK1() {
+    return k1;
+  }
+
+  public int getK2() {
+    return k2;
+  }
+
+  // equals and hashCode omitted for brevity
+}
+----
+
+[source,java]
+----
+// then, define a map name and configure the map with a partitioning strategy
 String mapName = "map";
 hz.addMapConfig(new MapConfig(mapName).setPartitioningAttributeConfigs("k2"));
 
+// create IMap and populate it with some data
 IMap<ComplexKey, String> map = hz.getMap(mapName);
 map.put(new ComplexKey("k1", 21), "v1");
 map.put(new ComplexKey("k2", 42), "v2");

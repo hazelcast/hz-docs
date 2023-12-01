@@ -1,12 +1,15 @@
-= Partition pruning of SQL queries
+= Partition pruning
 :description: The partition pruning optimization technique reduces latency for faster IMap SQL queries.
 :page-beta: false
 
 Partition pruning is an IMap-specific query optimization technique that automatically prunes members that don't contain
-the required data on their partitions, and optimizes the count of Jet scan processors on required members. It works:
+the required data on their partitions, and optimizes the count of Jet scan processors on required members.
 
-* by default, for primitive `__key` types (default attribute strategy).
-* for all key types if you configure the `AttributePartitioningStrategy` in `MapConfig`.
+[NOTE]
+====
+* By default, partition pruning works for primitive `__key` types (default attribute strategy).
+* It also works for all key types if you configure the `AttributePartitioningStrategy` in `MapConfig`.
+====
 
 NOTE: The partition pruning may be used *only* when querying an IMap mapping if the partitioning strategy attribute is enabled.
 
@@ -15,6 +18,10 @@ required data.
 
 == Example
 
+The following example shows the config updates for the IMap partitioning strategy on the Java side,
+and the SQL query that enables the partition pruning optimizations.
+
+Java:
 [source,java]
 ----
 // first, define a complex key class
@@ -22,7 +29,7 @@ class ComplexKey implemetns Serializable {
   private String k1;
   private int k2;
 
-  ComplexKey(String k1, int k2) {
+  public ComplexKey(String k1, int k2) {
     this.k1 = k1;
     this.k2 = k2;
   }
@@ -37,10 +44,7 @@ class ComplexKey implemetns Serializable {
 
   // equals and hashCode omitted for brevity
 }
-----
 
-[source,java]
-----
 // then, define a map name and configure the map with a partitioning strategy
 String mapName = "map";
 hz.addMapConfig(new MapConfig(mapName).setPartitioningAttributeConfigs("k2"));
@@ -50,6 +54,8 @@ IMap<ComplexKey, String> map = hz.getMap(mapName);
 map.put(new ComplexKey("k1", 21), "v1");
 map.put(new ComplexKey("k2", 42), "v2");
 ----
+
+SQL queries:
 
 [source,sql]
 ----

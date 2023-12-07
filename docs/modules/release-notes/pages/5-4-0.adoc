@@ -6,6 +6,15 @@
 
 == Breaking Changes
 
+* The `MergingValue` interface within the SPI package now requires the `getDeserializedValue()` method to be defined within implementations, replacing the `getValue()` definition.
+https://github.com/hazelcast/hazelcast/pull/25942[#25942]
+* Serialized forms of the following have been changed:
+** `FunctionEx.compose`, `FunctionEx.andThen`, `BiFunctionEx.andThen`, `ConsumerEx.andThen`: Any Jet pipeline using these methods (directly or indirectly, such as `AggregateOperation.andThen`) has to be redeployed from the updated client.
+** `peekInputP`, `peekOutputP`, `peekSnapshotP` with the `SupplierEx`: Any Jet pipeline using these processors has to be redeployed from the updated client. These are only for diagnostics and available only in the core API.
++
+Due to the above changes, Jet jobs may fail to work properly in the clusters with mixed forms (before and after this change). The changes may also affect the jobs where processor fusing is performed.
++
+https://github.com/hazelcast/hazelcast/pull/25966[#25966]
 * Moved the MongoDB connector to the extensions module, i.e., its classes and related dependencies relocated;
 if you are using Maven to install the connector, you must add `<classifier>jar-with-dependencies</classifier>` to your `pom.xml`.
 Also removed the permissions for MongoDB connector.
@@ -56,6 +65,14 @@ https://github.com/hazelcast/hazelcast/pull/25305[#25305]
 
 === SQL/Jet Engine
 
+* Removed the beta annotations from the data connection classes.
+https://github.com/hazelcast/hazelcast/pull/26000[#26000]
+* Each Jet engine job was creating a client for connecting to the remote cluster, resulting in an excessive number of clients. This has been fixed by introducing a single data connection which can be reused for all job instances.
+https://github.com/hazelcast/hazelcast/pull/25754[#25754], https://github.com/hazelcast/hazelcast/pull/25731[#25731]
+* Added support of resolving fields from Avro schemas in Kafka mappings.
+https://github.com/hazelcast/hazelcast/pull/25935[#25935]
+* Added nested field support for Avro serialization format.
+https://github.com/hazelcast/hazelcast/pull/25269[#25269]
 * Removed the redundant sort and merge operations in sorted index scans, for the computations where the index order is not needed, e.g., aggregations.
 https://github.com/hazelcast/hazelcast/pull/25180[#25180]
 * Updated the data comparator to improve the performance of sorted index operations.
@@ -107,6 +124,8 @@ https://github.com/hazelcast/hazelcast/pull/24941[#24941]
 https://github.com/hazelcast/hazelcast/pull/25743[#25743]
 * Added TLS support for MongoDB data connections.
 https://github.com/hazelcast/hazelcast/pull/25301[#25301]
+* Added support of Oracle databases to JDBC SQL connector.
+https://github.com/hazelcast/hazelcast/pull/25255[#25255]
 * Added support of inline Avro schemas for Kafka mappings.
 https://github.com/hazelcast/hazelcast/pull/25207[#25207]
 * Added support of `DataSerializable` serialization to Mongo connector.
@@ -122,6 +141,8 @@ https://github.com/hazelcast/hazelcast/pull/25027[#25027]
 
 * Improved the naming convention for CP Session, Lock, and Persistence metrics.
 https://github.com/hazelcast/hazelcast/pull/24843[#24843], https://github.com/hazelcast/hazelcast/pull/24836[#24836]
+* Added `status` and `userCancelled` flags to job metrics.
+https://github.com/hazelcast/hazelcast/pull/24716[#24716]
 
 === Licensing
 
@@ -130,6 +151,12 @@ https://github.com/hazelcast/hazelcast/pull/24800[#24800]
 
 === Data Structures
 
+* [.enterprise]*Enterprise* Added CPMap as a minimal key-value CP data structure. See xref:data-structures:cpmap.adoc[CPMap documentation].
+https://github.com/hazelcast/hazelcast/pull/25802[#25802]
+** Added support of specifying the maximum size of a CPMap.
+https://github.com/hazelcast/hazelcast/pull/25881[#25881]
+** Added Java client support for CPMap.
+https://github.com/hazelcast/hazelcast/pull/25877[#25877]
 * Added check for negative positions on the collections' `getItemAtPositionOrNull()` method.
 https://github.com/hazelcast/hazelcast/pull/25672[#25672]
 * Added the `IMap.localValues()` and `IMap.localValues(Predicate)` methods for a faster access to locally owned values in maps.
@@ -139,6 +166,8 @@ https://github.com/hazelcast/hazelcast/pull/23509[#23509]
 
 === Other Enhancements
 
+* Added the support of loading and storing a single column as the value using the `GenericMapStore`.
+https://github.com/hazelcast/hazelcast/pull/25878[#25878]
 * Enhanced the warning message shown in the cases of incorrect configurations when deploying a Hazelcast client Amazon EKS.
 https://github.com/hazelcast/hazelcast/pull/25568[#25568]
 * Added the `demoteLocalDataMember()` method to convert members holding data to lite members, enabling a cluster to be alive while there is no data in it.
@@ -167,6 +196,8 @@ https://github.com/hazelcast/hazelcast/pull/17582[#17582]
 
 == Fixes
 
+* Fixed an issue where sending internal Debezium messages was causing failures when connecting to databases.
+https://github.com/hazelcast/hazelcast/pull/26027[#26027]
 * Fixed an issue where the entry listeners for Replicated Maps was checking the Map permissions instead of the Replicated Map ones.
 https://github.com/hazelcast/hazelcast/pull/25965[#25965]
 * Fixed an issue where the queries with indexes were producing duplicate results or failing.

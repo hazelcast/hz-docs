@@ -118,16 +118,18 @@ xref:pipelines:submitting-jobs.adoc#submitting-a-job-using-a-java-client-or-embe
 
 == Fault Tolerance
 
-When a Kafka Connect Source connector is deployed to a Hazelcast cluster, snapshots of the connector state are stored in the Jet engine. For example, partition offsets and any metadata required for a restart or recovery. If there is a connector failure, the recovery behavior will depend on the type of connector. Refer to the documentation of your Kafka Connect Source connector for more detailed information. 
+When a Kafka Connect Source connector is deployed to a Hazelcast cluster, snapshots of the connector state are stored by the Jet engine.
+Example for such states are partition offsets and any metadata required for a restart or recovery. If there is a connector failure, the recovery behavior will depend on the type of connector. Refer to the documentation of your Kafka Connect Source connector for more detailed information.
 
 == Parallelism and reconfigurations
 
 Kafka Connect Source uses `tasks.max` configuration property to determine parallelism.
-If pipeline's total parallelism is higher than `tasks.max` value, then `tasks.max` takes precedence.
+Even if pipeline's total parallelism is higher than `tasks.max` value, the `tasks.max` value takes precedence.
+It is prohibited to have pipeline's total parallelism (edge's local parallelism * number of nodes) lower than `tasks.max`.
 
-After creation of an instance of SourceConnector, Hazelcast Jet asks to provide `tasks.max` task configurations. If Kafka
-SourceConnector returns less than `tasks.max` configs, the remaining processors will become no-op processors.
+After creation of an instance of a SourceConnector, Hazelcast Jet asks it to provide `tasks.max` task configurations. If the
+SourceConnector returns less than `tasks.max` configs, the remaining processors will become no-op.
 
-When SourceConnector requests a reconfiguration, Hazelast asks for new set of configs and distributes them across the cluster.
+When SourceConnector requests a reconfiguration, Hazelcast asks for a new set of configs and distributes them across the cluster.
 Existing processors will be restarted automatically with new configuration assigned. If new number of returned task configurations
 is higher than it was before reconfiguration, some of the no-op processors will start processing entries as well.

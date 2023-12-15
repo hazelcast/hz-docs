@@ -20,9 +20,10 @@ Maven::
 [source,xml,subs="attributes+"]
 ----
 <dependency>
-  <groupId>com.hazelcast.jet</groupId>
-  <artifactId>hazelcast-jet-kafka-connect</artifactId>
-  <version>{full-version}</version>
+    <groupId>com.hazelcast.jet</groupId>
+    <artifactId>hazelcast-jet-kafka-connect</artifactId>
+    <version>{full-version}</version>
+    <classifier>jar-with-dependencies</classifier>
 </dependency>
 ----
 --
@@ -31,7 +32,7 @@ Gradle::
 --
 [source,shell,subs="attributes+"]
 ----
-compile group: 'com.hazelcast.jet', name: 'hazelcast-jet-kafka-connect', version: ${full-version}
+compile group: 'com.hazelcast.jet', name: 'hazelcast-jet-kafka-connect', version: ${full-version}, classifier: 'jar-with-dependencies'
 ----
 --
 ====
@@ -118,3 +119,15 @@ xref:pipelines:submitting-jobs.adoc#submitting-a-job-using-a-java-client-or-embe
 == Fault Tolerance
 
 When a Kafka Connect Source connector is deployed to a Hazelcast cluster, snapshots of the connector state are stored in the Jet engine. For example, partition offsets and any metadata required for a restart or recovery. If there is a connector failure, the recovery behavior will depend on the type of connector. Refer to the documentation of your Kafka Connect Source connector for more detailed information. 
+
+== Parallelism and reconfigurations
+
+Kafka Connect Source uses `tasks.max` configuration property to determine parallelism.
+If pipeline's total parallelism is higher than `tasks.max` value, then `tasks.max` takes precedence.
+
+After creation of an instance of SourceConnector, Hazelcast Jet asks to provide `tasks.max` task configurations. If Kafka
+SourceConnector returns less than `tasks.max` configs, the remaining processors will become no-op processors.
+
+When SourceConnector requests a reconfiguration, Hazelast asks for new set of configs and distributes them across the cluster.
+Existing processors will be restarted automatically with new configuration assigned. If new number of returned task configurations
+is higher than it was before reconfiguration, some of the no-op processors will start processing entries as well.

@@ -1,0 +1,128 @@
+= Configure Connections
+:description: The migration cluster acts a client for both source and target clusters. You must configure the connections to allow communication between the migration cluster and both the source and target clusters. 
+
+{description}
+
+If the connections are not correctly configured, the migration fails.
+
+== Source Cluster Connection
+
+To complete the configuration, you need the following information from your source cluster:
+
+* The cluster name
+* The cluster member addresses
+* The data structures to migrate
+
+=== Update Cluster Information
+
+To update the cluster information, complete the following steps:
+
+. Navigate to the folder containing the extracted DMT package
+. Open the _migration_config/source/hazelcast-client.yaml_ file in your favorite editor
++
+NOTE: The _hazelcast-client.yaml_ file is a Hazelcast client configuration file, which can include any supported configuration.
++
+. Update the `cluster-name` field to match the name of your source cluster
+. Update the `cluster-members` field to match the addresses of the cluster members
+. Save the file
+
+=== Update Data Structures
+
+To update the data structure information, complete the following steps:
+
+. Navigate to the folder containing the extracted DMT package
+. Open the _migration_config/data/imap_names.txt_ and/or the _migration_config/data/replicated_map_names.txt_ file in your favorite editor
+. Update the file content to match the names of your maps
++
+If you have multiple data structures use a new line for each map name, or use wildcards to select multiple data structures using a single entry. For further information on using wildcards, see the xref:configuration:using-wildcards.adoc[Using Wildcards] topic.
+
+. Save the file
+
+== Target Cluster Connection
+
+Ensure that the target cluster is running on one of the following:
+
+* Enterprise Edition version 5.3.2 or later 
+* {hazelcast-cloud}
+
+To complete the configuration, you need the following information from your target cluster:
+
+* The cluster name
+* The IP address or cloud configuration
+* If required, the SSL keystore and truststore
+
+=== Update Connection Configuration
+
+To update the target connection configuration, complete the following steps:
+
+. Navigate to the folder containing the extracted DMT package
+. Open the _migration_config/target/hazelcast-client.yaml_ file in your favorite editor
++
+NOTE: The _hazelcast-client.yaml_ file is a Hazelcast client configuration file, which can include any supported configuration.
++
+. Update the `cluster-name` field to match the name of your source cluster
+. Update the `network` section as follows:
++
+* For an on-premise target cluster, update the `cluster-members` field to match the addresses of the cluster members
+* For a cloud target cluster, including a {hazelcast-cloud} cluster, update the network information 
++
+For a public cloud cluster, refer to the documentation for the cloud provider for the required network details. 
++
+For {hazelcast-cloud}, you must update the network section as follows:
++
+----
+hazelcast-client:
+  :
+  network:
+    hazelcast-cloud:
+      enabled: true
+      discovery-token: <token>
+----
++
+For further information on finding the discovery token in {hazelcast-cloud}, refer to the xref:cloud:ROOT:connect-to-cluster.adoc[Connecting to Viridian Cloud Clusters, window=_blank] topic of the Hazelcast {hazelcast-cloud} documentation.
+
+. If required, add the `ssl` information. The format is as follows:
++
+----
+hazelcast-client:
+  :
+  network:
+  :
+    ssl:
+      enabled: true
+      properties:
+        keyStore: client.keystore
+        keyStorePassword: abc123
+        trustStore: client.truststore
+        trustStorePassword: abc123
+----
+
+. Save the file
+
+NOTE: For further information on the `ssl` properties and their values, refer to the xref:cloud:ROOT:connect-to-cluster#advanced[Using Advanced Setup, window=_blank] section in the Hazelcast {hazelcast-cloud} documentation.
+
+=== Example Cloud Target Connection
+
+In the example connection configuration below, we do the following:
+
+* Add the name of our target cluster
+* Enable Hazelcast {hazelcast-cloud}, and add our cluster's discovery token
+* Enable SSL and add the keystore and truststore credentials
+
+The file content for this cloud-based target cluster is as follows:
+
+----
+hazelcast-client:
+  cluster-name: xyz
+  network:
+    hazelcast-cloud:
+      enabled: true
+      discovery-token: tokentoken
+    ssl:
+      enabled: true
+      properties:
+        keyStore: client.keystore
+        keyStorePassword: abc123
+        trustStore: client.truststore
+        trustStorePassword: abc123
+----

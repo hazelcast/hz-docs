@@ -1,0 +1,119 @@
+= Try the DMT
+:description: You can use a Development cluster to try the DMT and see how a migration works before starting a Production cluster migration.
+
+{description}
+
+Before you start, make sure your development souce cluster is ready as follows:
+
+* Start the source cluster, as described in the xref:migrate:dmt-dev-test.adoc#start-the-source-cluster[] section below
+* Add data to the source cluster, as described in the xref:migrate:dmt-dev-test.adoc#add-data-to-source-cluster[] section below
+
+You can use the populated data to verify the migration, as described in the xref:migrate:dmt-dev-test.adoc#verify-the-migration[] section below.
+
+To complete the migration, follow the xref:migrate:dmt-migration.adoc#high-level-process[high-level process], omitting steps 3 and 5. 
+
+NOTE: You can skip steps 3, shutting down connected applications, and 5, updating your client configuration, as the test on a Development cluster only demonstrates how the data is migrated.
+
+== Start the Source Cluster
+
+You can start your source cluster in either of the following ways:
+
+* Using Docker, as described below. This is the recommended method
+* Downloading a version package and following the IMDG https://docs.hazelcast.com/imdg/4.2/getting-started[Quickstart]. For example, we used https://hazelcast.com/open-source-projects/downloads/archives/#hazelcast-imdg[Hazelcast IMDG version 4.2.7] for the samples provided in this section
+
+To start your source cluster using Docker, you need the following information:
+
+* The IP Address on which to start the cluster. This will be your internal Docker IP address
+* The port to use. This will be your internal Docker port
+* The version of Hazelcast
+
+NOTE: Ensure that the IP address you use for Docker is different to that used by any running processes on your local machine, such as the source cluster. In the sections below, we use `127.0.0.1:5701` for the source cluster and `172.12.0.1:5701` for the Docker container.
+
+The command has the following format:
+
+[source,shell]
+----
+docker run -p <ip_address_to_bind>:<host_port>:<container_port> -e HZ_CLUSTERNAME=source hazelcast/hazelcast:<source_version>
+----
+
+NOTE: The `-p` option in the above command maps the container's port to the host machine. This ensures that your Docker instance, which is running in a virtual network, is accessible to your local processes. The option is required because the migration and target clusters, CLC, and DMT run locally on your computer outside the Docker environment.
+
+For example, to start a version 4.2.7 source cluster on IP address 127.0.0.1 and port 5701, enter the following command in a terminal:
+
+[source,shell]
+----
+docker run -p 127.0.0.1:5701:5701 -e HZ_CLUSTERNAME=source hazelcast/hazelcast:4.2.7
+----
+
+== Add Data to Source Cluster
+
+To access the cluster and populate it with data to test a migration of a Development cluster, you can do either of the following: 
+ 
+* Use the _source.yaml_ configuration file, included in the root folder of the DMT download package
+
+* Write data to memory as described in the xref:getting-started:get-started-binary.adoc#step-3-write-data-to-memory[Step 3. Write Data to Memory] section of the Start a Local Cluster from Binary topic in this documentation
+
+The _source.yaml_ file contains the following:
+
+[source,yaml]
+----
+cluster:
+  name: "source"
+  address: "127.0.0.1:5701"
+----
+
+NOTE: If you have not installed the Hazelcast CLC, do this now. For further information on installing the CLC, refer to the https://docs.hazelcast.com/clc/latest/install-clc[Hazelcast Command-Line Client^] documentation.
+
+To make sure that you can add an entry to the source cluster, enter the following command in a terminal:
+
+[source,shell]
+----
+clc -c source.yaml map --name my-map set key-1 value-1
+----
+
+If an error relating to CLC being unable to connect to your source cluster is returned, confirm the following:
+
+* The port mapping is correct
+* The source cluster container is running
+* The configuration in your _source.yaml_ file is correct
+
+If no errors are returned, you can populate the source cluster with 1000 entries using the following script:
+
+[tabs] 
+==== 
+macOS and Linux:: 
++ 
+-- 
+[source,shell]
+----
+for i in {1..1000}; do clc -c source.yaml map --name my-map set key-$i value-$i --quiet; done && echo OK
+----
+--
+
+Windows::
++
+[source,shell]
+----
+for /l %x in (1, 1, 1000) do clc -c source.yaml map --name my-map set key-%x value-%x --quiet
+----
+--
+====
+
+== Verify the Migration
+
+To ensure that the migration was successful, you can check a random value from the data you xref:migrate:dmt-dev-test.adoc#add-data-to-source-cluster[added to the source cluster] using the provided script.
+
+Enter the following command in a terminal:
+
+[source,shell]
+----
+clc -c target.yaml map get key-42 --name my-map
+----
+
+The output is similar to the following:
+
+[source,shell]
+----
+value-42
+OK
+----

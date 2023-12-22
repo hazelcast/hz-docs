@@ -257,7 +257,7 @@ the watermark already having passed their windows.
 
 |`map.getCount`
 |count
-|Number of local get operations on the map
+|Number of local get operations on the map; it is incremented for every get operation even the entries do not exist.
 
 |`map.heapCost`
 |count
@@ -265,7 +265,7 @@ the watermark already having passed their windows.
 
 |`map.hits`
 |count
-|Number of reads of the locally owned entries
+|Number of reads of the locally owned entries; it is incremented for every read by any type of operation (get, set, put). So, the entries should exists.
 
 |`map.indexedQueryCount`
 |count
@@ -350,6 +350,18 @@ the watermark already having passed their windows.
 |`map.totalSetLatency`
 |ms
 |Total latency of local set operations on the map
+
+3+a|
+The above `*latency` metrics are only measured for the members and they are not representing the overall performance of the cluster.
+We recommend monitoring the average latency for each operation, for example, `map.totalGetLatency` / `map.getCount` and `map.totalSetLatency` / `map.setCount`.
+Increased average latency is a sign that the cluster would experience performance problems, or there is a spike in the load.
+The following may be the reasons:
+
+* Increase in the load on the cluster: If the cluster is under heavy load, this can lead to increased latency for all operations, slowing down the overall performance.
+* Increasing member count in the cluster: As the number of cluster members increases, the total latency for operations can also increase.
+This is because the cluster has to communicate with more members, which can add to the overall latency. This might be a data architecture problem.
+* Increasing the data set size: This causes the cluster to search through more data to find the requested data, which can slow down the overall performance. Creating indexes may solve these kind of problems.
+* Increasing the number of concurrent operations: This causes the cluster to process more requests at the same time, which can slow down the overall performance. This is a potential bottleneck on resources (CPU, memory, network).
 
 |`map.index.averageHitLatency`
 |ns
@@ -1395,6 +1407,10 @@ the watermark already having passed their windows.
 .Operations
 [%collapsible]
 ====
+
+NOTE: Within Hazelcast context, the **priority** operations are the ones that are important for the stability of cluster, for example heartbeats and migration requests.
+The **normal** operations are the ones that manipulate the data, for example `map.get` and `map.put`.
+
 [cols="4,1,6a"]
 |===
 | Name
@@ -1503,11 +1519,16 @@ the watermark already having passed their windows.
 
 |`operation.queueSize`
 |count
-|Number of normal operations pending (normal partition ops. + normal generic ops.)
+|Number of normal operations pending (normal partition operations + normal generic operations).
+
+It refers to the number of operations sent to the member that have yet to be consumed for processing by the partition operation threads.
+This is the most critical queue for partition aware operations such as `map.put` and `map.remove`.
+This value should be zero or very close to zero.
+Based on your latency tolerance in your business use case, you can define a threshold for alerts with your preferred alerting mechanism. For instance, triggering an alert if this value is above 100 for 15 seconds would be useful.
 
 |`operation.responseQueueSize`
 |count
-|Total number of pending responses to be processed
+|Total number of pending responses (work queue for the response threads) to be processed.
 
 |`operation.responses.backupCount`
 |count

@@ -2,7 +2,9 @@
 
 == New Features
 
-* **xref:???.adoc[???]**: ???
+* **User Code Namespaces**: Enable undeployment and redeployment of your custom classes.
+* [.enterprise]*Enterprise* **CPMap**: * Added CPMap as a minimal key-value CP data structure. See xref:data-structures:cpmap.adoc[CPMap documentation].
+https://github.com/hazelcast/hazelcast/pull/25802[#25802]
 
 == Breaking Changes
 
@@ -42,24 +44,18 @@ https://github.com/hazelcast/hazelcast/pull/24729[#24729]
 
 == Enhancements
 
-=== Storage
-
-* Tiered Store can now be used for map loaders. See ???.
-https://github.com/hazelcast/hazelcast/pull/24827[#24827]
-
-=== Networking
-
-* Added the ability to evaluate priorities while picking member addresses; when interfaces are not configured, the first possible IP address is no longer used. Instead, all addresses are evaluated and the one with the highest priority (IPv6 address) is selected.
-https://github.com/hazelcast/hazelcast/pull/25305[#25305]
-
 === SQL/Jet Engine
 
 * Removed the beta annotations from the data connection classes.
 https://github.com/hazelcast/hazelcast/pull/26000[#26000]
+* Added the support of loading and storing a single column as the value using the `GenericMapStore`.
+https://github.com/hazelcast/hazelcast/pull/25878[#25878]
 * Each Jet engine job was creating a client for connecting to the remote cluster, resulting in an excessive number of clients. This has been fixed by introducing a single data connection which can be reused for all job instances.
 https://github.com/hazelcast/hazelcast/pull/25754[#25754], https://github.com/hazelcast/hazelcast/pull/25731[#25731]
 * Added support of resolving fields from Avro schemas in Kafka mappings.
 https://github.com/hazelcast/hazelcast/pull/25935[#25935]
+* Changed the exception type from `CancellationException` to `CancellationByUserException` when the user cancels a job before it is initialized.
+https://github.com/hazelcast/hazelcast/pull/25383[#25383]
 * Added nested field support for Avro serialization format.
 https://github.com/hazelcast/hazelcast/pull/25269[#25269]
 * Removed the redundant sort and merge operations in sorted index scans, for the computations where the index order is not needed, for example, aggregations.
@@ -83,30 +79,6 @@ https://github.com/hazelcast/hazelcast/pull/24689[#24689]
 * Added the `stream()` method to the SQL service to return the stream of result rows.
 https://github.com/hazelcast/hazelcast/pull/24525[#24525]
 
-=== Security
-
-* Updated permission checks in `CacheCreateConfig` and `GetSemaphoreType` tasks.
-https://github.com/hazelcast/hazelcast/pull/25529[#25529]
-* Improved the permission checks in the file connectors by adding a method that returns the permissions required to resolve field names.
-https://github.com/hazelcast/hazelcast/pull/25348[#25348]
-* Added support of permission subtraction (deny permissions) for the client connections. See xref:security:native-client-security.adoc#deny-permissions[Deny Permissions].
-https://github.com/hazelcast/hazelcast/pull/25154[#25154]
-
-=== Serialization
-
-* Added the ability to use consistent serialization service for `ByKey` plans.
-https://github.com/hazelcast/hazelcast/pull/25631[#25631]
-
-=== WAN Replication
-
-* Improved dead connection handling for WAN replication static IP discovery, by introducing health check to the discovery strategy.
-https://github.com/hazelcast/hazelcast/pull/25364[#25364]
-* Added support for the dynamic adding of WAN replication configurations using Java API.
-https://github.com/hazelcast/hazelcast/pull/25118[#25118]
-* Added support for evicting map and cache entries through WAN replication by introducing two new properties. When enabled, WAN replication
-events are fired when values are evicted from the map and cache objects. See xref:wan:tuning.adoc#replicating-imap-icache-evictions[Replicating `IMap`/`ICache` Evictions].
-https://github.com/hazelcast/hazelcast/pull/24941[#24941]
-
 === Connectors
 
 * Removed the beta annotations from the MongoDB classes.
@@ -126,6 +98,67 @@ https://github.com/hazelcast/hazelcast/pull/25071[#25071]
 * Added the ability to configure the pool size of a MongoDB data connection. See xref:sql:mapping-to-mongo.adoc#creating-a-mongodb-mapping[Creating a MongoDB Mapping].
 https://github.com/hazelcast/hazelcast/pull/25027[#25027]
 
+=== Data Structures
+
+** Added support of specifying the maximum size of a CPMap.
+https://github.com/hazelcast/hazelcast/pull/25881[#25881]
+** Added Java client support for CPMap.
+https://github.com/hazelcast/hazelcast/pull/25877[#25877]
+* Added check for negative positions on the collections' `getItemAtPositionOrNull()` method.
+https://github.com/hazelcast/hazelcast/pull/25672[#25672]
+* Introduced a cluster state check to improve the removal of expired map/cache entries from the cluster.
+The removal operation now is not being executed if the cluster is in passive state.
+https://github.com/hazelcast/hazelcast/pull/24808[#24808]
+* Added the `IMap.localValues()` and `IMap.localValues(Predicate)` methods for a faster access to locally owned values in maps.
+https://github.com/hazelcast/hazelcast/pull/24673[#24763]
+* Added the `deleteAsync()` for maps to asynchronously remove a provided map entry key.
+https://github.com/hazelcast/hazelcast/pull/23509[#23509]
+* Fixed the Javadoc for caches where it was referring incorrectly to statistics instead of management, for the `setManagementEnabled()` method.
+https://github.com/hazelcast/hazelcast/pull/22575[#22575]
+
+=== WAN Replication
+
+* Improved dead connection handling for WAN replication static IP discovery, by introducing health check to the discovery strategy.
+https://github.com/hazelcast/hazelcast/pull/25364[#25364]
+* Added support for the dynamic adding of WAN replication configurations using Java API.
+https://github.com/hazelcast/hazelcast/pull/25118[#25118]
+* Added support for evicting map and cache entries through WAN replication by introducing two new properties. When enabled, WAN replication
+events are fired when values are evicted from the map and cache objects. See xref:wan:tuning.adoc#replicating-imap-icache-evictions[Replicating `IMap`/`ICache` Evictions].
+https://github.com/hazelcast/hazelcast/pull/24941[#24941]
+
+=== Security
+
+* Updated permission checks in `CacheCreateConfig` and `GetSemaphoreType` tasks.
+https://github.com/hazelcast/hazelcast/pull/25529[#25529]
+* Improved the permission checks in the file connectors by adding a method that returns the permissions required to resolve field names.
+https://github.com/hazelcast/hazelcast/pull/25348[#25348]
+* Added support of permission subtraction (deny permissions) for the client connections. See xref:security:native-client-security.adoc#deny-permissions[Deny Permissions].
+https://github.com/hazelcast/hazelcast/pull/25154[#25154]
+
+=== Storage
+
+* Tiered Store can now be used for map loaders. See ???.
+https://github.com/hazelcast/hazelcast/pull/24827[#24827]
+
+=== Networking
+
+* Added the ability to evaluate priorities while picking member addresses; when interfaces are not configured, the first possible IP address is no longer used. Instead, all addresses are evaluated and the one with the highest priority (IPv6 address) is selected.
+https://github.com/hazelcast/hazelcast/pull/25305[#25305]
+* Added the `demoteLocalDataMember()` method to convert members holding data to lite members, enabling a cluster to be alive while there is no data in it.
+https://github.com/hazelcast/hazelcast/pull/24617[#24617]
+* Improved the duration of joins by the clients to the cluster; the clients can now join instantaneously without waiting by internally delaying the migrations asynchronously.
+https://github.com/hazelcast/hazelcast/pull/17582[#17582]
+
+=== Serialization
+
+* Added the ability to use consistent serialization service for `ByKey` plans.
+https://github.com/hazelcast/hazelcast/pull/25631[#25631]
+
+=== Cloud
+
+* Enhanced the warning message shown in the cases of incorrect configurations when deploying a Hazelcast client on Amazon EKS.
+https://github.com/hazelcast/hazelcast/pull/25568[#25568]
+
 === Metrics
 
 * Improved the naming convention for CP Session, Lock, and Persistence metrics.
@@ -133,36 +166,8 @@ https://github.com/hazelcast/hazelcast/pull/24843[#24843], https://github.com/ha
 * Added `status` and `userCancelled` flags to job metrics.
 https://github.com/hazelcast/hazelcast/pull/24716[#24716]
 
-=== Licensing
+=== Distribution
 
-* License keys are now being masked in the license expiration notifications.
-https://github.com/hazelcast/hazelcast/pull/24800[#24800]
-
-=== Data Structures
-
-* [.enterprise]*Enterprise* Added CPMap as a minimal key-value CP data structure. See xref:data-structures:cpmap.adoc[CPMap documentation].
-https://github.com/hazelcast/hazelcast/pull/25802[#25802]
-** Added support of specifying the maximum size of a CPMap.
-https://github.com/hazelcast/hazelcast/pull/25881[#25881]
-** Added Java client support for CPMap.
-https://github.com/hazelcast/hazelcast/pull/25877[#25877]
-* Added check for negative positions on the collections' `getItemAtPositionOrNull()` method.
-https://github.com/hazelcast/hazelcast/pull/25672[#25672]
-* Added the `IMap.localValues()` and `IMap.localValues(Predicate)` methods for a faster access to locally owned values in maps.
-https://github.com/hazelcast/hazelcast/pull/24673[#24763]
-* Added the `deleteAsync()` for maps to asynchronously remove a provided map entry key.
-https://github.com/hazelcast/hazelcast/pull/23509[#23509]
-
-=== Other Enhancements
-
-* Added the support of loading and storing a single column as the value using the `GenericMapStore`.
-https://github.com/hazelcast/hazelcast/pull/25878[#25878]
-* Enhanced the warning message shown in the cases of incorrect configurations when deploying a Hazelcast client Amazon EKS.
-https://github.com/hazelcast/hazelcast/pull/25568[#25568]
-* Added the `demoteLocalDataMember()` method to convert members holding data to lite members, enabling a cluster to be alive while there is no data in it.
-https://github.com/hazelcast/hazelcast/pull/24617[#24617]
-* Changed the exception type from `CancellationException` to `CancellationByUserException` when the user cancels a job before it is initialized.
-https://github.com/hazelcast/hazelcast/pull/25383[#25383]
 * Updated the versions of following dependencies:
 ** Snappy to 1.1.10.5
 ** Netty to 4.1.99.Final
@@ -172,16 +177,12 @@ https://github.com/hazelcast/hazelcast/pull/25383[#25383]
 https://github.com/hazelcast/hazelcast/pull/24863[#25607],
 https://github.com/hazelcast/hazelcast/pull/25555[#25555],
 https://github.com/hazelcast/hazelcast/pull/25576[#25576],
-https://github.com/hazelcast/hazelcast/issues/22407[#22407],
+https://github.com/hazelcast/hazelcast/issues/22407[#22407]
 
-* Introduced a cluster state check to improve the removal of expired map/cache entries from the cluster.
-The removal operation now is not being executed if the cluster is in passive state.
-https://github.com/hazelcast/hazelcast/pull/24808[#24808]
-* Fixed the Javadoc for caches where it was referring incorrectly to statistics instead of management, for the `setManagementEnabled()` method.
-https://github.com/hazelcast/hazelcast/pull/22575[#22575]
-* Improved the duration of joins by the clients to the cluster; the clients can now join instantaneously without waiting by internally delaying the migrations asynchronously.
-https://github.com/hazelcast/hazelcast/pull/17582[#17582]
+=== Licensing
 
+* License keys are now being masked in the license expiration notifications.
+https://github.com/hazelcast/hazelcast/pull/24800[#24800]
 
 == Fixes
 
@@ -241,12 +242,13 @@ https://github.com/hazelcast/hazelcast/pull/24463[#24463]
 https://github.com/hazelcast/hazelcast/issues/23698[#23698]
 * Fixed an issue where the results of the stream-to-stream join could not be inserted into the remote table connected via JDBC, causing an exception.
 https://github.com/hazelcast/hazelcast/issues/22459[#22459]
+* [.enterprise]*Enterprise* Fixed an issue where the map entries with time-to-live values were being removed as soon as the cluster with persistence enabled is restarted. #233
 
 == Removed/Deprecated Features
 
-* The connector for Elasticsearch 6 has been removed, as the Elasticsearch 6 module has been removed from Hazelcast distributions.
+* The connector for Elasticsearch 6 is removed, as the Elasticsearch 6 module is removed from Hazelcast distributions.
 https://github.com/hazelcast/hazelcast/pull/24734[#24734]
-* Removed the evaluation tool for IMDG 3.x users (Hazelcast 3 Connector). In the upcoming releases, a new tooling for migrating data from 3.x versions will be introduced.
+* The evaluation tool for IMDG 3.x users (Hazelcast 3 Connector) is removed. In the upcoming releases, a new tooling for migrating data from 3.x versions will be introduced.
 https://github.com/hazelcast/hazelcast/pull/25051[#25051]
 * Transactions are deprecated:
 ** Only maintenance support will be provided for transactions.
@@ -254,6 +256,7 @@ https://github.com/hazelcast/hazelcast/pull/25051[#25051]
 ** Issues arising from new or existing implementations of transactions will no longer be supported.
 +
 In the meantime, if you are already using transactions and want to discuss alternatives, please get in touch with xref:getting-started:support.adoc[Hazelcast Support].
+* The user code deployment API has been deprecated. #223
 
 == Contributors
 

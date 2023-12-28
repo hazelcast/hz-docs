@@ -26,7 +26,7 @@ Step 3: Delete persistent volume of the deleted Management Center:
 
 [source,bash]
 ----
-kubectl get pvc --no-headers=true | awk '/mancenter/{print $1}' | xargs kubectl delete pvc
+kubectl get pvc -o name | grep "mancenter" | xargs -n 1 kubectl delete
 ----
 
 Step 4: Upgrade your installation without disabling Management Center:
@@ -59,10 +59,26 @@ helm upgrade hz hazelcast/hazelcast-enterprise --version 5.3.9 -f values.yaml
 
 == Upgrading from Hazelcast Version 5.x to 5.x
 
-We support rolling upgrade for two different version ranges:
+We support Hazelcast rolling upgrade and chart upgrade from 5.4.7 to 5.9.2. However, in 5.8.0, there is a breaking change: `hot-restart-persistence` is renamed to `persistence`. Following steps should be applied:
 
-- Users who want to upgrade their Hazelcast Version from 5.0.x to 5.1.x can upgrade their Helm Chart Version from [5.4.7, 5.4.14] to [5.4.15, 5.7.0]
-- Users who want to upgrade their Hazelcast Version from 5.1.x to 5.2.x can upgrade their Helm Chart Version from [5.8.0, 5.8.5] to [5.9.0, 5.9.2]
+Step 1: Export values of existing installation
+
+[source,bash]
+----
+helm get values <installation-name> > values.yaml
+----
+
+Step 2: Modify existing values
+
+- `hot-restart-persistence` should be replaced with `persistence` in Hazelcast configuration. See: link:https://docs.hazelcast.com/hazelcast/5.2/storage/configuring-persistence[Configuring Persistence].
+- `hotRestart` field in `values.yaml` should be replaced with `persistence`. See: link:https://docs.hazelcast.com/hazelcast/5.3/kubernetes/helm-hazelcast-enterprise-chart#5-8-0[Notable Changes in Helm Chart]
+
+Step 3: Upgrade using corrected values
+
+[source,bash]
+----
+helm upgrade hz hazelcast/hazelcast-enterprise --version 5.8.0 -f values.yaml
+----
 
 If you are using versions other than in these ranges, please check the next section.
 

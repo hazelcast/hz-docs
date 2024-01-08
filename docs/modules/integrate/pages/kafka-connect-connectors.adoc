@@ -118,18 +118,21 @@ xref:pipelines:submitting-jobs.adoc#submitting-a-job-using-a-java-client-or-embe
 
 == Fault Tolerance
 
-When a Kafka Connect Source connector is deployed to a Hazelcast cluster, snapshots of the connector state are stored by the Jet engine.
-Example for such states are partition offsets and any metadata required for a restart or recovery. If there is a connector failure, the recovery behavior will depend on the type of connector. Refer to the documentation of your Kafka Connect Source connector for more detailed information.
+When you deploy a Kafka Connect Source connector to a Hazelcast cluster, the Jet engine stores snapshots of the connector state.
+Examples of snapshotted connector states include partition offsets and any metadata required for a restart or for recovery. If there is a connector failure, the recovery behavior will depend on the type of connector. Refer to the documentation of your Kafka Connect Source connector for more detailed information.
 
-== Parallelism and reconfigurations
+== Parallelism and Reconfigurations
 
-Kafka Connect Source uses `tasks.max` configuration property to determine parallelism.
-Even if pipeline's total parallelism is higher than `tasks.max` value, the `tasks.max` value takes precedence.
-It is prohibited to have pipeline's total parallelism (edge's local parallelism * number of nodes) lower than `tasks.max`.
+Kafka Connect Source uses the `tasks.max` configuration property to determine parallelism.
+The `tasks.max` value takes precedence even if pipeline's total parallelism is higher than that value.
+A pipeline's total parallelism cannot be lower than `tasks.max`, where total parallelism is calculated as:
+```
+total parallelism = edge's local parallelism * number of nodes
+```
 
-After creation of an instance of a SourceConnector, Hazelcast Jet asks it to provide `tasks.max` task configurations. If the
-SourceConnector returns less than `tasks.max` configs, the remaining processors will become no-op.
+Hazelcast Jet requests `tasks.max` task configurations after an instance of SourceConnector has been created. If the
+SourceConnector returns fewer configurations than `tasks.max` value, the remaining processors will become no-op.
 
-When SourceConnector requests a reconfiguration, Hazelcast asks for a new set of configs and distributes them across the cluster.
-Existing processors will be restarted automatically with new configuration assigned. If new number of returned task configurations
+When SourceConnector requests a reconfiguration, Hazelcast requests for a new set of configurations and distributes them across the cluster.
+Existing processors automatically restart to use the updated configuration. If new number of returned task configurations
 is higher than it was before reconfiguration, some of the no-op processors will start processing entries as well.

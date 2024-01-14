@@ -123,7 +123,7 @@ Please quote license id CUSTOM_TEST_KEY
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 ```
 
-This frequency of these warnings depends on how long if left until the license expires:
+The frequency of these warnings varies depending on the time remaining before the license expires.
 
 .Frequency of warnings about license expiration
 [cols="1a,1a"]
@@ -141,7 +141,7 @@ This frequency of these warnings depends on how long if left until the license e
 
 |===
 
-To get details about your current license, you can use the <<mc, Management Center>>, the <<jmx, JMX API>>, or the <<rest, REST API>>.
+To get details about your current license, you can use the <<mc, Management Center>>, <<jmx, JMX API>>, or <<rest, REST API>>.
 
 [[jmx]]
 === Getting License Details with the JMX API
@@ -152,7 +152,7 @@ following parameters represent these details:
 
 * `maxNodeCountAllowed`: Maximum members allowed to form a cluster under
 the current license.
-* `expiryDate`: Expiration date of the current license.
+* [[expiry-date]]`expiryDate`: Expiration date of the current license.
 * `typeCode`: Type code of the current license.
 * `type`: Type of the current license.
 * `ownerEmail`: Email of the current license's owner.
@@ -202,15 +202,11 @@ See xref:{page-latest-supported-mc}@management-center:ROOT:managing-licenses.ado
 
 == Renewing a License Key
 
-License keys are often valid only for a certain period of time.
+License keys are valid for a certain period of time; see the <<expiry-date, expiry date>>. You can do one of the following to get a new license to renew or upgrade:
 
-To upgrade or renew a license key, you can do one of the following:
-
-- Email mailto:sales@hazelcast.com[Sales].
-
-- Email mailto:support@hazelcast.com[Support].
-
-- Call your sales representative.
+* Send an email to mailto:sales@hazelcast.com[Sales].
+* Send an email to mailto:support@hazelcast.com[Support].
+* Call your sales representative.
 
 NOTE: If your license is expired on a running cluster or Management Center,
 do not restart the host device.
@@ -224,22 +220,26 @@ Reach out to Hazelcast Support to resolve any issues with an expired license.
 [[update]]
 == Updating a License Key at Runtime
 
-You can use any xref:configuration:dynamic-config.adoc[dynamic configuration] option to update a license key at runtime.
+When you receive the renewed or upgraded license, you can update it as follows:
 
-To use the dedicated `/license` endpoint, do the following:
+. Shut down the members.
+. Update the license key; see <<configuring-a-license-key-on-members, Configuring a License Key on Members>>.
+. Restart the members.
+
+Alternatively, you can update the license key dynamically, without shutting down the members.
+You can use any of the dynamic configuration options to update a license key at runtime. For further information on these options, see the xref:configuration:dynamic-config.adoc#options[Adding Dynamic Configuration] topic.
+
+The example in this section uses the REST API option with its dedicated `/license` endpoint. To update a license key at runtime:
 
 . xref:clients:rest.adoc#using-the-rest-endpoint-groups[Enable the REST API].
-+
-WARNING: By default, if a member shuts down, its license key will not be persisted. To persist the license key, xref:configuration:dynamic-config.adoc#persistence[enable persistence for dynamic configuration].
-
-. Send a `POST` request to the `/license` endpoint. 
+. Send a `POST` request to the `/license` endpoint:
 +
 ```bash
 curl --data "{cluster-name}&{password}&{license}" http://localhost:5001/hazelcast/rest/license
 ```
 +
 NOTE: The request parameters must be URL-encoded as described in the xref:clients:rest.adoc[REST Client section].
-
++
 This command updates the license on all running Hazelcast members of the cluster.
 If successful, you should see something like the following:
 
@@ -261,3 +261,15 @@ If successful, you should see something like the following:
 If the update fails on some members, the whole operation fails, leaving the cluster in
 a potentially inconsistent state where some members have been switched to the new license
 while some have not. You must resolve this situation manually.
+
+[WARNING]
+====
+By default, if a member shuts down after you dynamically update the license key, its license key will not be persisted.
+
+To persist the license key, you can either enable the persistence for dynamic configuration or update your members' configuration to include the new license key before you restart them.
+
+For further information, see the following topics:
+
+* xref:configuration:dynamic-config.adoc#persistence[Enabling persistence for dynamic configuration].
+* <<configuring-a-license-key-on-members, Configuring a License Key on Members>>.
+====

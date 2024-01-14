@@ -20,9 +20,10 @@ Maven::
 [source,xml,subs="attributes+"]
 ----
 <dependency>
-  <groupId>com.hazelcast.jet</groupId>
-  <artifactId>hazelcast-jet-kafka-connect</artifactId>
-  <version>{full-version}</version>
+    <groupId>com.hazelcast.jet</groupId>
+    <artifactId>hazelcast-jet-kafka-connect</artifactId>
+    <version>{full-version}</version>
+    <classifier>jar-with-dependencies</classifier>
 </dependency>
 ----
 --
@@ -31,7 +32,7 @@ Gradle::
 --
 [source,shell,subs="attributes+"]
 ----
-compile group: 'com.hazelcast.jet', name: 'hazelcast-jet-kafka-connect', version: ${full-version}
+compile group: 'com.hazelcast.jet', name: 'hazelcast-jet-kafka-connect', version: ${full-version}, classifier: 'jar-with-dependencies'
 ----
 --
 ====
@@ -117,4 +118,21 @@ xref:pipelines:submitting-jobs.adoc#submitting-a-job-using-a-java-client-or-embe
 
 == Fault Tolerance
 
-When a Kafka Connect Source connector is deployed to a Hazelcast cluster, snapshots of the connector state are stored in the Jet engine. For example, partition offsets and any metadata required for a restart or recovery. If there is a connector failure, the recovery behavior will depend on the type of connector. Refer to the documentation of your Kafka Connect Source connector for more detailed information. 
+When you deploy a Kafka Connect Source connector to a Hazelcast cluster, the Jet engine stores snapshots of the connector state.
+Examples of snapshotted connector states include partition offsets and any metadata required for a restart or for recovery. If there is a connector failure, the recovery behavior depends on the type of connector. Refer to the documentation of your Kafka Connect Source connector for more detailed information.
+
+== Parallelism and Reconfigurations
+
+Kafka Connect Source uses the `tasks.max` configuration property to determine parallelism.
+The `tasks.max` value takes precedence even if pipeline's total parallelism is higher than that value.
+A pipeline's total parallelism cannot be lower than `tasks.max`, where total parallelism is calculated as:
+```
+total parallelism = edge's local parallelism * number of nodes
+```
+
+Hazelcast Jet requests `tasks.max` task configurations after an instance of SourceConnector has been created. If the
+SourceConnector returns fewer configurations than specified by the `tasks.max` value, the remaining processors do nothing.
+
+When SourceConnector requests a reconfiguration, Hazelcast requests the new collection of configuration sets and distributes them across the cluster.
+Existing processors automatically restart to use the updated configuration. If the number of returned task configuration sets
+has increased, some of the processors that previously did nothing can start processing entries.

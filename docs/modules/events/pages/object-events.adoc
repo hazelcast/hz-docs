@@ -448,6 +448,84 @@ public class ExampleMessageListener implements MessageListener<MyEvent> {
 }
 ----
 
+[[reliable-topic-messages]]
+== Reliable Topic Messages
+
+link:https://github.com/hazelcast/hazelcast/blob/master/hazelcast/src/main/java/com/hazelcast/topic/ReliableMessageListener.java[ReliableMessageListener] is a link:https://github.com/hazelcast/hazelcast/blob/master/hazelcast/src/main/java/com/hazelcast/topic/MessageListener.java[MessageListener] to better integrate with the reliable topic.
+
+If a standard `MessageListener` is registered on a reliable topic, it acts only as an asynchronous event handler for messages; however, a `ReliableMessageListener` allows you to control the behavior of the listener.
+
+If a `ReliableMessageListener` is registered on a normal `ITopic`, only the methods inherited from `MessageListener` are called.
+
+For example, a Reliable Message Listener class can be defined as follows:
+[source,java]
+----
+    public class ExampleReliableMessageListener implements ReliableMessageListener<Long> {
+        private long lastSequence;
+
+        public void onMessage(Message<Long> m) {
+            System.out.println("Received: " + m.getMessageObject());
+        }
+
+        @Override
+        public long retrieveInitialSequence() {
+            // The initial sequence to start reading from.
+            return 1;
+        }
+
+        @Override
+        public void storeSequence(long l) {
+            // The sequence to store somewhere so that it can be retrieved upon restart.
+            lastSequence = l;
+            System.out.println("Stored sequence: " + l);
+        }
+
+        @Override
+        public boolean isLossTolerant() {
+            System.out.println("isLossTolerant called");
+            // If true, the listener will not be removed upon an exception.
+            return false;
+        }
+
+        @Override
+        public boolean isTerminal(Throwable throwable) {
+            System.out.println("isTerminal called");
+            return false;
+        }
+
+        @Override
+        public void onCancel() {
+            System.out.println("onCancel called. The listener is being removed.");
+        }
+    }
+----
+
+**Durable Subscription**
+
+You can use the `ReliableMessageListener` to control which message to start processing from when the listener is registered. This supports the creation of a durable subscription by storing the sequence of the last message and then re-starting from the specified `sequenceId`.
+
+**Exception Handling**
+
+The `ReliableMessageListener` also copes with exceptions using the `isTerminal(Throwable)` method. This method allows you to control which exceptions can terminate and cancel the listener. If a `MessageListener` is used, it doesn't terminate following an exception and continues to run. In some situations, such as cluster being stopped, it is better to cancel the listener following the exception.
+
+**Global Order**
+
+The `ReliableMessageListener` always gets all events in order (global order). It does not get duplicates, and gaps (loss of messages) only occur when it is too slow. For more information on dealing with message loss, refer to the `isLossTolerant()` method in the https://docs.hazelcast.org/docs/5.4.0-SNAPSHOT/javadoc/com/hazelcast/topic/ReliableMessageListener.html#isLossTolerant()[Java API documentation^].
+
+**Delivery Guarantees**
+
+The `ReliableMessageListener` controls the item to continue from following a restart, providing an at-least-once or at-most-once delivery guarantee. The `storeSequence(long sequence)` is always called before a message is processed; so it can be persisted on non-volatile storage. When the `retrieveInitialSequence()` returns the stored sequence, an at-least-once delivery is implemented as the same item is processed again. To implement an at-most-once delivery guarantee, add 1 to the stored sequence when the `retrieveInitialSequence()` is called.
+
+**Loss Tolerance**
+
+If this `ReliableMessageListener` can deal with message loss, the `boolean isLosstolerant()` method returns `true`. Even though the reliable topic promises to be reliable, a `MessageListener` can be too slow and eventually this causes the message to become unavailable.
+
+If the `ReliableMessageListener` is not loss tolerant and the topic detects that there are missing messages, the `ReliableMessageListener` terminates.
+
+**onCancel Callback**
+
+This method is called by Hazelcast when the `ReliableMessageListener` is canceled. This can happen when the listener is unregistered, or when it has been canceled due to an exception or shutdown.
+
 === Registering Message Listeners
 
 After you create your class, you can configure your cluster to include

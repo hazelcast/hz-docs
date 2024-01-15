@@ -1,0 +1,96 @@
+= Configuring Reflection
+:description: Clusters can be configured to restrict the capability of creating objects through reflection during SQL execution.
+
+Clusters can be configured to restrict the capability of creating objects through reflection during SQL execution.
+
+== Disallowing Reflection of Untrusted Java Classes
+
+To prevent Hazelcast from constructing objects of arbitrary classes through reflection, you have the option to permit or deny the reflection for Java classes based on class name, package name, or prefix using the java-reflection-filter parameter.
+
+The following filtering rules are used when the objects are constructed through reflection:
+
+* When the `whitelist` option is empty:
+** If the object's class name or package name is blacklisted, reflection fails.
+** Otherwise, reflection is allowed.
+* When the `whitelist` option is provided:
+** If the object's class name or package name is blacklisted, reflection fails.
+** If the object's class name or package name is whitelisted, reflection is allowed
+** Otherwise, reflection fails.
+
+When reflection fails, a `SecurityException` is thrown.
+
+By default, class names or package names that have these prefixed are allowed:
+
+* `java`
+* `com.hazelcast.`
+* `[` (for primitives and arrays)
+
+If you do not want to allow these default prefixes, set the `defaults-disabled` attribute to true.
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+  ...
+  <sql>
+    <java-reflection-filter defaults-disabled="true">
+      <whitelist>
+        <class>example.Foo</class>
+        <package>com.acme.app</package>
+        <prefix>com.hazelcast.</prefix>
+        <prefix>java.</prefix>
+        <prefix>javax.</prefix>
+        <prefix>[</prefix>
+      </whitelist>
+      <blacklist>
+        <class>com.acme.app.BeanComparator</class>
+      </blacklist>
+    </java-reflection-filter>
+  </sql>
+  ...
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  sql:
+    java-reflection-filter:
+      defaults-disabled: true
+      whitelist:
+        class:
+          - example.Foo
+        package:
+          - com.acme.app
+        prefix:
+          - com.hazelcast.
+          - java.
+          - javax.
+          - \[
+      blacklist:
+        class:
+          - com.acme.app.BeanComparator
+----
+--
+Java::
++
+--
+[source,java]
+----
+Config config = new Config();
+JavaSerializationFilterConfig reflectionConfig = new JavaSerializationFilterConfig();
+reflectionConfig.setDefaultsDisabled(true);
+reflectionConfig.getBlacklist().addClasses(SomeDeniedClass.class.getName());
+reflectionConfig.getWhitelist().addClasses(SomeAllowedClass.class.getName());
+config.getSqlConfig().setJavaReflectionFilterConfig(reflectionConfig);
+----
+--
+====

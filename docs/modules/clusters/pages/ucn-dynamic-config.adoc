@@ -1,0 +1,47 @@
+= Dynamic Configuration API
+:description: You can use the dynamic configuration API to deploy resources from your client. This means that you can configure namespaces and their resources, and replace the resources at runtime for use when a user customization is next instantiated.
+:page-enterprise: true
+:page-beta: true
+
+{description}
+
+For example, you can use the dynamic configuration API to add or remove a specific namespace from a running cluster's configuration.
+
+NOTE: Before you can use UCN, you must enable it as described in the xref:clusters:ucn-enable.adoc[] topic.
+
+You must create a _member.java_ file containing the configuration and save it to your class configuration folder. 
+
+The file will be similar to the following:
+
+[source,java]
+----
+package com.hazelcast.namespace.dynamic;
+
+import com.hazelcast.config.Config;
+import com.hazelcast.config.UserCodeNamespaceConfig;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+
+public class Member {
+
+    public static void main(String[] args) {
+        Config config = new Config();
+        config.getNamespacesConfig().setEnabled(true); <1>
+
+        // construct a namespace configuration with no resources
+        UserCodeNamespaceConfig userCodeNamespaceConfig = new UserCodeNamespaceConfig("namespace_name");
+        config.getNamespacesConfig().addNamespaceConfig(userCodeNamespaceConfig); <2>
+
+        // referencing the new UserCodeNamespaceConfig in a map config
+        config.getMapConfig("map_name").setUserCodeNamespace("namespace_name"); <3>
+
+        HazelcastInstance member = Hazelcast.newHazelcastInstance(config);
+        // putting key/value in the map that client can execute on
+        member.getMap("map_name").put("key", 0); <4>
+    }
+}
+----
+<1> Enables UCN on `Config`
+<2> Creates a `UserCodeNamespaceConfig` with a name of `namespace_name` and no resources. This must exist on the running instance before the client can add to it 
+<3> Creates a `MapConfig` for the `map_name` Map, which references the specified namespace name
+<4> Puts the key and value in the Map

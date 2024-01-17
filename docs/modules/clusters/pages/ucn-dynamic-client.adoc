@@ -1,0 +1,41 @@
+= Configure Client
+:description: Clients use the dynamic configuration API to update {ucn} on the cluster. 
+:page-enterprise: true
+:page-beta: true
+
+{description}
+
+You must create a _client.java_ file containing the configuration and save it to your configuration folder. 
+
+The file will be similar to the following:
+
+[source,java]
+----
+package com.hazelcast.namespaces.dyamicconfig;
+
+import com.hazelcast.client.HazelcastClient;
+import com.hazelcast.config.UserCodeNamespaceConfig;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.EntryProcessor;
+import usercodenamespaces.IncrementingEntryProcessor;
+
+public class Client {
+
+    public static void main(String[] args) {
+        HazelcastInstance client = HazelcastClient.newHazelcastClient();
+
+        EntryProcessor entryProcessor = new IncrementingEntryProcessor();
+        UserCodeNamespaceConfig namespaceConfig = new UserCodeNamespaceConfig("namespace_name"); <1>
+        namespaceConfig.addClass(yourEntryProcessor.class); <2>
+
+        // dynamically add the namespace config
+        client.getConfig().getNamespacesConfig().addNamespaceConfig(namespaceConfig); <3>
+        // execute the entry processor
+        client.getMap("map_name").executeOnKey("key", entryProcessor); <4>
+    }
+}
+----
+<1> Creates a `UserCodeNamespaceConfig` with a name of `namespace_name`
+<2> Adds the defined class from the classpath to the `UserCodeNamespaceConfig`
+<3> Gets the Hazelcast configuration from the client instance and adds the `UserCodeNamespaceConfig` to the `Config`
+<4> Puts the key and value in the Map

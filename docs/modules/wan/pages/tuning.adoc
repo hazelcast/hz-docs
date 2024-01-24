@@ -800,3 +800,84 @@ hazelcast:
 ----
 ====
 You can find the specifications of these properties in xref:ROOT:system-properties.adoc[System Properties].
+
+== Static Endpoints Discovery Strategy Health Checking Properties
+
+Since its introduction in Hazelcast 5.4, the default behaviour is for the static endpoint discovery strategy
+to perform health checks on endpoints. There is no additional configuration required beyond defining the static
+endpoints as our default values cover most use-cases, however the following properties can be adjusted to suit
+specific needs:
+
+* `health-check-interval-ms` (default: `10000`): Defines the interval (in milliseconds) between connection health check tasks.
+Consider that health checks involve attempting connections which may take up to 10 seconds to timeout per connection, so tasks
+should be adequately spaced apart as to lower system resource usage.
+* `health-check-timeout-ms` (default: `3000`): Defines the maximum duration to wait (in milliseconds) when checking connection health.
+* `health-check-max-failed-probes` (default: `10`):  When an unhealthy connection is not found during target discovery, it is
+marked as a "failed probe". This property defines the maximum number of times a connection probe can be marked as failed in a row,
+after which it will be removed from health checks. Set to `-1` to never remove these connections from health checks.
+* `health-check-eager-first-check` (default: `false`): Defines whether all connections should be treated as potentially unhealthy
+on startup, and probed for liveliness before being considered as a viable endpoint. This is useful when a large number of the
+configured endpoints are expected to be unavailable on startup, however if most endpoints are expected to be lively on startup
+this property should be set to `false` as it can cause delays in replication while connections are probed individually.
+* `health-check-initial-delay-ms` (default: `1000`): Defines the initial delay (in milliseconds) before the connection health
+check task's first execution. When the `health-check-eager-first-check` property is set to `true`, this value should be
+fairly low so that connection health can be probed as quickly as possible.
+* `health-check-back-off-delay-step-ms` (default: `5000`): Defines the additional back-off delay (step) duration (in milliseconds)
+added between liveliness checks when an endpoint is found to be unhealthy. The total delay between connection attempts will be
+this duration multiplied by the connection's total failed connection attempts, up to a maximum multiplier of
+`health-check-back-off-max-steps`
+* `health-check-back-off-max-steps` (default: `12`): Defines the maximum number of `health-check-back-off-delay-step-ms` steps
+used in back-off strategy for connection health checks.
+
+NOTE: The legacy behaviour of static endpoints where connection health is not checked can be enabled
+with the following Hazelcast property: `hazelcast.wan.static.discovery.legacy=true`
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+    <wan-replication name="london-wan-rep">
+        <batch-publisher>
+            <cluster-name>london</cluster-name>
+            <publisher-id>londonID</publisher-id>
+            <target-endpoints>10.3.5.1:5701, 10.3.5.2:5701</target-endpoints>
+            <properties>
+                <property name="health-check-interval-ms">10000</property>
+                <property name="health-check-timeout-ms">3000</property>
+                <property name="health-check-max-failed-probes">10</property>
+                <property name="health-check-eager-first-check">false</property>
+                <property name="health-check-initial-delay-ms">1000</property>
+                <property name="health-check-back-off-delay-step-ms">5000</property>
+                <property name="health-check-back-off-max-steps">12</property>
+            </properties>
+        </batch-publisher>
+    </wan-replication>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  wan-replication:
+    london-wan-rep:
+      batch-publisher:
+        londonID:
+          cluster-name: london
+          target-endpoints: 10.3.5.1:5701, 10.3.5.2:5701
+          properties:
+            health-check-interval-ms: 10000
+            health-check-timeout-ms: 3000
+            health-check-max-failed-probes: 10
+            health-check-eager-first-check: false
+            health-check-initial-delay-ms: 1000
+            health-check-back-off-delay-step-ms: 5000
+            health-check-back-off-max-steps: 12
+----
+====

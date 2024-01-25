@@ -1,24 +1,128 @@
 = User-Defined Types in SQL
 
-User-Defined Types (also known as UDTs, nested types, or nested fields) allow you to create custom data types that can be referenced in the xref:sql:create-mapping.adoc[CREATE MAPPING statement].
-
-UDTs are useful for creating and accessing hierarchical data structures, which can even be cyclic. See <<queryingExamples,examples>> for more information.
+User-Defined Types (also known as UDTs, nested types, or nested fields) allow you to create custom data types that can be referenced in the xref:sql:create-mapping.adoc[CREATE MAPPING statement]. UDTs are also useful for creating and accessing hierarchical data structures.
 
 == Feature Overview
 
-- All serialization formats (namely `portable`, `compact`, `java` and `avro`) are supported.
+- `portable`, `compact`, `java` and `avro` formats are supported.
 - Cyclic definitions are only supported for Java-serialized structures. Portable and Compact formats do not support cyclic schemas, and Avro support is currently limited to acyclic schemas.
 +
 NOTE: If mappings use cyclic structures, the `INSERT` and `UPDATE` queries are disabled.
-- Type options override mapping options. Where both the mapping and type define a schema (Portable class definition, Compact schema, Java class or Avro schema) and the mapping contains only `__key` or `this` fields, the schema defined by the type is used. This means that the mapping does not need to define a schema if the type defines one.
-- If the type does not specify a schema, the parent structure is used. The parent structure could be a mapping or another type.
-- Type fields are optional and are resolved from the schema if not specified. Following a `CREATE MAPPING` statement, type fields are resolved and materialized. You can check the resolved fields using a `GET_DDL` query after the type has been used in a mapping. If type fields are not specified:
+- Type options override mapping options. Where both the mapping and type define a schema (Portable class definition, Compact schema, Java class or Avro schema) and the corresponding mapping field is `__key` or `this`, the schema defined by the type is used. This means that the mapping does not need to define a schema if the type defines one.
+- If the type does not specify a schema, it is resolved from the parent structure, which may be a mapping or another type.
+- Type fields are optional and if not specified, they are resolved from the class/schema when the type is used in a `CREATE MAPPING` statement. You can check the resolved fields using a `GET_DDL` query. The field resolution feature has the following limitations.
+ ** For Portable, Compact, or Avro formats, schema fields cannot be complex (`PORTABLE`, `COMPACT`, or `RECORD`). Otherwise, an exception will be thrown once the type is used in a mapping.
+ ** For Portable format, portable IDs (`portableFactoryId`, `portableClassId` and `portableVersion`) must be unique within the cluster. Otherwise, deserialization issues can occur.
+ ** For Portable format, the field resolution relies on the Portable class being already registered (by internal means, such as adding a configuration for Portable serialization) on the member executing the `CREATE MAPPING` command.
+ ** For Java format, complex class fields are allowed and mapped to `OBJECT`.
+ ** For Java format, only the fields declared by the type class are considered. The fields inherited from superclasses are ignored.
 
- ** For Portable, Compact, or Avro formats, schema fields cannot be complex (`PORTABLE`, `COMPACT`, or `RECORD`
- ). 
- ** For Java format, complex fields are allowed and map to `OBJECT`. 
+== Creating Types
 
-== Enabling Cycling Type Support
+To create a new type, use the `CREATE TYPE` statement:
+
+[source,sql]
+----
+CREATE [OR REPLACE] TYPE [IF NOT EXISTS] MyTypeName [(
+    colName colType,
+    ...
+)] [OPTIONS (
+    'javaClass'='com.mypackage.MyJavaClass' <1>
+  | 'compactTypeName'='MyCompactRecordName' <2>
+  | 'portableFactoryId'='123', 'portableClassId'='456', ['portableVersion'='789'] <3>
+  | 'avroSchema'='{"type":"record","name":"myType","fields":[{"name":"colName","type":"colType"},...]}' <4>
+)]
+----
+<1> In `java` format, you can use the `javaClass` option to override the type class with a subclass. This is necessary if the original type class is abstract or interface, and you want to use `INSERT` and `UPDATE` statements.
+<2> In `portable` format, you can use the `portableFactoryId`, `portableClassId` and `portableVersion` options to specify a portable ID for the type. This is only effective when the type is used for `__key` or `this` fields. `portableVersion` defaults to 0 if not specified. Portable ID components must be defined together; incomplete definitions have the same effect as no definition.
+<3> In `compact` format, you can use the `compactTypeName` option to specify the Compact record name. If unspecified, it defaults to `<TypeName>CompactType`.
+<4> In `avro` format, you can use the `avroSchema` option to specify an inline Avro schema. This is only effective when the type is used for `__key` or `this` fields.
+
+[NOTE]
+====
+. `EXTERNAL NAME` aliases are not supported for UDTs; column names must have the same name as their corresponding Java class field or Portable/Compact/Avro schema field.
+. You can mix options that belong to different formats. When you create a mapping that references your UDT, the relevant options are used and the others are ignored, which makes it possible to use a UDT in multiple mappings having different formats.
+====
+
+=== Replacing Types and Type Consistency
+Currently, there is a limitation on the replacement of existing types:
+if the replaced type was already used in a mapping, you need to recreate that mapping
+to update its data type information using the `DROP MAPPING` and `CREATE MAPPING` statements.
+However, if the type hierarchy was not used in a mapping, any type in that hierarchy can be safely
+changed, and these changes will appear in the new mapping. This is because the links
+between types are symbolic (based on the name only), and they are materialized only when used in a mapping.
+
+=== Examples
+The following classes are used as a reference in the sections below to create types and mappings:
+
+[source,java]
+----
+package com.example;
+
+class User implements Serializable {
+    public Long id;
+    public String name;
+    public Organization organization;
+}
+
+class Organization implements Serializable {
+    public Long id;
+    public String name;
+    public Office office;
+}
+
+class Office implements Serializable {
+    public Long id;
+    public String name;
+}
+----
+
+NOTE: The name of a type can differ from the one specified in the Java class or Portable/Compact/Avro schema. However, types must have distinct names within the set of names across all mappings and views as they share the same namespace.
+
+[#organization-office-types]
+[source,sql]
+----
+CREATE TYPE Organization (
+    id BIGINT
+    name VARCHAR,
+    office Office
+) OPTIONS (
+    'javaClass'='com.example.Organization'
+);
+
+CREATE TYPE Office (
+    id BIGINT
+    name VARCHAR
+) OPTIONS (
+    'javaClass'='com.example.Office'
+);
+----
+
+== Creating Mappings
+
+NOTE: The `organization` column is explicitly specified as `Organization` to prevent it being auto-resolved as a generic `OBJECT`, and therefore unable to query its sub-columns.
+
+[#users-mapping]
+[source,sql]
+----
+CREATE MAPPING users (
+    __key BIGINT,
+    id BIGINT,
+    name VARCHAR,
+    organization Organization
+) TYPE IMap OPTIONS (
+    'keyFormat'='bigint',
+    'valueFormat'='java',
+    'valueJavaClass'='com.example.User'
+);
+----
+
+== Support for Cycles
+Cycles between types are only supported for Java format. However, this is limited to querying, not inserting or updating.
+
+NOTE: The existence of referenced types are only verified when the type is used in a `CREATE MAPPING` statement.
+
+=== Enabling Cycling Type Support
 You can enable cyclic types by setting the `hazelcast.sql.experimental.custom.cyclic.types.enabled` property to `true` in the member configuration.
 [tabs]
 ====
@@ -51,66 +155,7 @@ config.setProperty("hazelcast.sql.experimental.custom.cyclic.types.enabled", "tr
 ----
 ====
 
-== Creating Types
-
-To create a new type, use the `CREATE TYPE` statement:
-
-[source,sql]
-----
-CREATE [OR REPLACE] TYPE [IF NOT EXISTS] MyTypeName [(
-    colName colType,
-    ...
-)] [OPTIONS (
-    'javaClass'='com.mypackage.MyJavaClass' <1>
-  | 'compactTypeName'='MyCompactRecordName' <2>
-  | 'portableFactoryId'='123', 'portableClassId'='456', ['portableVersion'='789'] <3>
-  | 'avroSchema'='{"type":"record","name":"myType","fields":[{"name":"colName","type":"colType"},...]}' <4>
-)]
-----
-<1> In `java` format, you can use the `javaClass` option to override the type class with a subclass. You must provide a concrete class for `INSERT` statements; this means that the `javaClass` option is mandatory when the original type class is abstract or interface.
-<2> In `portable` format, you can use the `portableFactoryId`, `portableClassId` and `portableVersion` options to specify a portable ID for the type. This is only effective when the type is used for `__key` or `this` fields. `portableVersion` is optional. However, components cannot be inherited from the parent, so portable ID components must be defined together. Incomplete definitions have the same effect as no definition.
-<3> In `compact` format, you can use the `compactTypeName` option to specify the Compact record name. If unspecified, it defaults to `<TypeName>CompactType`.
-<4> In `avro` format, you can use the `avroSchema` option to specify an inline Avro schema. This is only effective when the type is used for `__key` or `this` fields.
-
-NOTE: `EXTERNAL NAME` aliases are not supported for types, column names must have the same name as their corresponding Java class field or Portable/Compact/Avro schema field.
-[NOTE]
-====
-. `EXTERNAL_NAME` aliases  are not supported for types, column names must have the same name as their corresponding Java class field or Portable/Compact/Avro schema field.
-. You can mix options that belong to different formats. When you create a mapping that references your UDT, the relevant options are used and the others are ignored, which makes it possible to use a UDT in multiple mappings having different serialization formats.
-. To reference another type, you must provide the column list. Otherwise, in Java format, the column will be resolved as `OBJECT` type; in Portable, Compact and Avro formats, an exception will be thrown once the type is used in a mapping.
-====
-NOTE: You can mix options that belong to different formats. When you create a mapping that references your UDT, the relevant options are used and the others are ignored, which makes it possible to use a UDT in multiple mappings having different serialization formats.
-
-NOTE: To reference another type, you must provide the column list. Otherwise, in Java format, the column will be resolved as `OBJECT` type; in Portable, Compact and Avro formats, an exception will be thrown once the type is used in a mapping.
-
-=== Java Format notes
-For `java` format, if the column list is omitted, it will be automatically resolved from the corresponding
-Java class. Note that the column list will only be extracted from the source class itself;
-if it has columns that are inherited from a superclass, these columns will not be resolved.
-
-=== Portable Format notes
-When using the `portable` format, portable IDs (`factoryId`, `classId`, `version`) must be unique within the cluster. Otherwise, deserialization issues can occur.
-
-In addition, there is a rudimentary auto-resolution mechanism for column list. However, it is not recommended for use:
-it relies on the Portable class being already registered (through internal Portable means,
-e.g., when a configuration for Portable serialization is added) on the member executing the above SQL command.
-This mechanism is not reliable since this command will fail if the member that executes the command doesn't have
-the Portable class in question. Therefore, it is recommended to always specify the column list.
-
-=== Support for Cycles
-Cycles between types are only supported for Java format; however, this is limited to queries. 
-
-NOTE: The existence of referenced types are only verified when used in a `CREATE MAPPING` statement.
-
-=== Replacing Types and Type Consistency
-Currently, there is a limitation on the replacement of existing types:
-if the replaced type was already used in a mapping, you need to fully replace that mapping
-to update its data type information using the `DROP MAPPING` and `CREATE MAPPING` statements.
-However, if the type hierarchy was not used in a mapping, any type in that hierarchy can be safely
-changed, and these changes will appear in the new mapping. This is because the links
-between types are symbolic (based on the name only), and they are materialized only when used in a mapping.
-
-==== Creating Java Type Hierarchy with Cycles
+=== Creating Cyclic Types
 
 Java classes for reference:
 
@@ -136,7 +181,7 @@ The following commands will create an interlinked type hierarchy:
 
 NOTE: Order of execution of these commands doesn't matter.
 
-===== Cyclic Type Hierarchy [[cyclicTypeDefinitions]]
+[#a-type]
 [source,sql]
 ----
 CREATE TYPE AType (
@@ -161,78 +206,7 @@ CREATE TYPE CType (
 );
 ----
 
-=== Java Class Hierarchy for Reference:
-The following classes are used as a reference in the sections below to create types and mappings:
-
-[source,java]
-----
-package com.example;
-
-class User implements Serializable {
-    public Long id;
-    public String name;
-    public Organization organization;
-}
-
-class Organization implements Serializable {
-    public Long id;
-    public String name;
-    public Office office;
-}
-
-class Office implements Serializable {
-    public Long id;
-    public String name;
-}
-----
-
-=== Creating Types [[normalTypeDefinitions]]
-
-NOTE: The name of a type can differ from the one specified in the Java class or Portable/Compact/Avro schema. However, types must have distinct names within the set of names across all mappings and views as they share the same namespace.
-
-[source,sql]
-----
-CREATE TYPE Organization (
-    id BIGINT
-    name VARCHAR,
-    office Office
-) OPTIONS (
-    'format'='java',
-    'javaClass'='com.example.Organization'
-);
-
-CREATE TYPE Office (
-    id BIGINT
-    name VARCHAR
-) OPTIONS (
-    'javaClass'='com.example.Office'
-);
-----
-
-=== Creating Mappings
-
-NOTE: The `organization` column is explicitly specified as `Organization` to prevent it being auto-resolved as a generic `OBJECT`, and therefore unable to query its sub-columns.
-
-==== Normal Type Hierarchy [[normalMappings]]
-
-[source,sql]
-----
-CREATE MAPPING users (
-    __key BIGINT,
-    id BIGINT,
-    name VARCHAR,
-    organization Organization
-) TYPE IMap OPTIONS (
-    'keyFormat'='bigint',
-    'valueFormat'='java',
-    'valueJavaClass'='com.example.User'
-);
-----
-
-==== Using Types from Cyclic Type Hierarchy [[cylicMappings]]
-
-Using type hierarchy from the <<cyclicTypeDefinitions, cyclic types example>>, all the following
-mappings will work.
+=== Using Cyclic Types
 
 [source,sql]
 ----
@@ -278,15 +252,13 @@ Querying is provided with the field access operator which has the following synt
 `mappingColumn` must be the top-level column inside a mapping that has a UDT as its type,
 whereas `typeACOlumn`,`typeBColumn` and `typeCColumn` are all columns within the UDTs.
 
-NOTE: The `mappingColumn` type must have the `typeACOlumn`,`typeBColumn` and `typeCColumn` columns defined in the `CREATE TYPE` command
-or at least auto-resolved (Java types only). Otherwise, the query fails even if the underlying object
-contains fields with these names.
+NOTE: `typeACOlumn`, `typeBColumn` and `typeCColumn` must be defined in their corresponding UDTs. Otherwise, the query will fail even if the underlying object contains fields with these names.
 
-=== Examples[[queryingExamples]]
+=== Examples [[queryingExamples]]
 
-==== Non-cyclic Type Hierarchy Querying
+==== Querying Acyclic Types
 
-Following examples use <<normalTypeDefinitions, normal type definitions>> and <<normalMappings, normal mappings>>.
+Following examples use <<users-mapping, `users` mapping>>, and <<organization-office-types, `Organization` and `Office` types>>.
 
 Basic querying:
 [source,sql]
@@ -300,23 +272,18 @@ Selecting whole sub-object:
 SELECT (organization).office FROM users
 ----
 
-NOTE: When selecting the entire object, the query will always try to return the underlying object verbatim.
-For Java Types, this means returning an underlying Java class instance, which can fail with a `ClassNotFoundException`
-if the class is not in the classpath of the client (or embedded server) JVM.
-To avoid this, you can select a field-by-field instead. Additionally, this issue does not apply to Portable, Compact, or Avro types as sub-objects in these mappings and types are `GenericRecord` subclasses;
-`PortableGenericRecord`, `CompactGenericRecord` and `org.apache.avro.generic.GenericRecord` are present in the base distribution of Hazelcast.
+NOTE: When selecting the entire object, the query will always try to return the underlying object verbatim. For Java-serialized types, this means returning an underlying Java class instance, which can fail with a `ClassNotFoundException` if the class is not in the classpath of the client (or embedded server) JVM. To avoid this, you can select individual fields instead. This issue does not apply to Portable, Compact, or Avro types as sub-objects in these mappings and types are `GenericRecord` subclasses; `PortableGenericRecord`, `CompactGenericRecord` and `org.apache.avro.generic.GenericRecord` are present in the base distribution of Hazelcast.
 
 Using projections:
 [source,sql]
 ----
 SELECT (organization).id * 1000, ABS((organization).office.id) FROM users
 ----
-Projections work as usual as field access expressions have virtually same semantics and possible usage contexts as normal
-column projections.
+Projections work as usual since field access expressions have virtually the same semantics and possible usage contexts as normal column projections.
 
-==== Cyclic Type Hierarchy Querying
+==== Querying Cyclic Types
 
-Following examples use <<cyclicTypeDefinitions, cyclic type definitions>> and following mapping:
+Following examples use <<a-type, AType>>.
 
 [source,java]
 ----
@@ -340,9 +307,9 @@ CREATE MAPPING test (
 ----
 
 
-Assuming following data is present in the table:
+Assuming the following data is present in the table:
 
-*Test table content*
+*`test` table content*
 [cols="1,1"]
 |===
 |__key BIGINT|root AType
@@ -355,7 +322,7 @@ Assuming following data is present in the table:
 
 |===
 
-*A-instances* [[cyclicObjectInstances]]
+*`A` class instances*
 
 A1
 
@@ -397,9 +364,7 @@ a2.b.c.a.b.name = "B3"
 a2.b.c.a.b.c.name = "C3"
 ----
 
-*Examples:*
-
-Basic Query:
+*Basic query:*
 
 [source,sql]
 ----
@@ -424,7 +389,7 @@ Result:
 
 |===
 
-Multiple Iteration Loop back through Cycle:
+*Cyclic chain:*
 
 [source,sql]
 ----
@@ -443,7 +408,7 @@ Result:
 
 |===
 
-Accessing additional cyclic chain:
+*Accessing additional cyclic chain:*
 
 [source,sql]
 ----
@@ -471,19 +436,19 @@ Result:
 
 INSERT and UPDATE queries are supported in a limited way, specifically:
 
-- `INSERT` and `UPDATE` queries are only supported for non-cyclic type hierarchies. The presence of a cycle in a type hierarchy automatically disables the ability to run these queries against any MAPPING that uses UDTs from that type hierarchy.
+- `INSERT` and `UPDATE` queries are disabled for mappings that reference cyclic UDTs anywhere in the type hierarchy.
 - `INSERT` queries require specifying the full list of columns even if the column of a nested type needs to be set to `NULL`.
 - `UPDATE` queries only work on the root column and also require the full list of columns and sub-columns to work.
 Updating sub-columns is technically possible by specifying column projections in place of sub-columns that shouldn't be changed.
 - Both `UPDATE` and `INSERT` queries use the Row Value expression, which is similar to the `VALUES` clause of an `INSERT` query.
 
-=== Examples[[upsertExamples]]
+=== Examples [[upsertExamples]]
 
-Following examples use <<normalTypeDefinitions, normal type definitions>> and <<normalMappings, normal mappings>>.
+Following examples use <<users-mapping, `users` mapping>>, and <<organization-office-types, `Organization` and `Office` types>>.
 
-NOTE: The order of column values is identical to the order of columns specified when executing the underlying `CREATE MAPPING` and `CREATE TYPE` statements.
+NOTE: The order of column values must be the same as the order of columns specified when executing the `CREATE MAPPING` and `CREATE TYPE` statements.
 
-Basic Insert of UDT-column:
+Basic insertion of UDT column:
 
 [source,sql]
 ----
@@ -513,11 +478,9 @@ Replacing nested column value:
 UPDATE users SET organization = ((organization).id, (organization).name, ((organization).office.id, 'new-office-name'))
 ----
 
-NOTE: Updating UDT-based columns requires providing a value for every column in the UDT and its child UDTs, however
-`null` can also be specified in place of nested UDT column to initialize it to `null`. Not providing full list of columns
-will cause a query validation error.
+NOTE: Updating UDT columns requires providing a value for every column in the UDT and its child UDTs unless it needs to be set to `null`. Not providing full list of columns will cause a query validation error.
 
-Inserting with Query Parameter (java only):
+Inserting with query parameter (Java only):
 
 [source,java]
 ----
@@ -533,7 +496,7 @@ organization.office = office;
 hz.getSql().execute("INSERT INTO users VALUES (1, 'user1', ?)", organization);
 ----
 
-Updating with Query Parameter:
+Updating with query parameter:
 
 Using `organization` from the example above.
 
@@ -542,7 +505,7 @@ Using `organization` from the example above.
 hz.getSql().execute("UPDATE users SET organization = ?", organization);
 ----
 
-Updating nested UDT column with Query Parameter:
+Updating nested UDT column with query parameter:
 
 [source,java]
 ----
@@ -550,4 +513,4 @@ hz.getSql().execute("UPDATE users SET organization = ((organization).id, (organi
 ----
 
 == Rolling Upgrade Notes
-You must drop all user-defined types and mappings with UDTs before the rolling upgrade, and recreate them with the new semantics after upgrading.
+When performing a rolling upgrade from version 5.3 to 5.4, you must drop all user-defined types and mappings with UDTs before the upgrade, and recreate them with the new semantics after upgrading.

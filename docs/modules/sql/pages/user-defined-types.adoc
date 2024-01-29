@@ -4,10 +4,7 @@ User-Defined Types (also known as UDTs, nested types, or nested fields) allow yo
 
 == Feature Overview
 
-- `portable`, `compact`, `java` and `avro` formats are supported.
-- Cyclic definitions are only supported for Java-serialized structures. Portable and Compact formats do not support cyclic schemas, and Avro support is currently limited to acyclic schemas.
-+
-NOTE: If mappings use cyclic structures, the `INSERT` and `UPDATE` queries are disabled.
+- UDTs can only be incorporated into mappings that has `portable`, `compact`, `java` or `avro` format although UDTs themselves are not tied to a specific format.
 - Type options override mapping options. Where both the mapping and type define a schema (Portable class definition, Compact schema, Java class or Avro schema) and the corresponding mapping field is `__key` or `this`, the schema defined by the type is used. This means that the mapping does not need to define a schema if the type defines one.
 - If the type does not specify a schema, it is resolved from the parent structure, which may be a mapping or another type.
 - Type fields are optional and if not specified, they are resolved from the class/schema when the type is used in a `CREATE MAPPING` statement. You can check the resolved fields using a `GET_DDL` query. The field resolution feature has the following limitations.
@@ -16,6 +13,7 @@ NOTE: If mappings use cyclic structures, the `INSERT` and `UPDATE` queries are d
  ** For Portable format, the field resolution relies on the Portable class being already registered (by internal means, such as adding a configuration for Portable serialization) on the member executing the `CREATE MAPPING` command.
  ** For Java format, complex class fields are allowed and mapped to `OBJECT`.
  ** For Java format, only the fields declared by the type class are considered. The fields inherited from superclasses are ignored.
+- Cyclic definitions are only supported for Java-serialized structures. Portable and Compact formats do not support cyclic schemas, and Avro support is currently limited to acyclic schemas.
 
 == Creating Types
 
@@ -34,7 +32,7 @@ CREATE [OR REPLACE] TYPE [IF NOT EXISTS] MyTypeName [(
 )]
 ----
 <1> In `java` format, you can use the `javaClass` option to override the type class with a subclass. This is necessary if the original type class is abstract or interface, and you want to use `INSERT` and `UPDATE` statements.
-<2> In `portable` format, you can use the `portableFactoryId`, `portableClassId` and `portableVersion` options to specify a portable ID for the type. This is only effective when the type is used for `__key` or `this` fields. `portableVersion` defaults to 0 if not specified. Portable ID components must be defined together; incomplete definitions have the same effect as no definition.
+<2> In `portable` format, you can use the `portableFactoryId`, `portableClassId` and `portableVersion` options to specify a portable ID for the type. This is only effective when the type is used for `__key` or `this` fields. `portableVersion` defaults to 0 if not specified. Required portable ID components must be defined together; incomplete definitions are ignored.
 <3> In `compact` format, you can use the `compactTypeName` option to specify the Compact record name. If unspecified, it defaults to `<TypeName>CompactType`.
 <4> In `avro` format, you can use the `avroSchema` option to specify an inline Avro schema. This is only effective when the type is used for `__key` or `this` fields.
 
@@ -118,12 +116,12 @@ CREATE MAPPING users (
 ----
 
 == Support for Cycles
-Cycles between types are only supported for Java format. However, this is limited to querying, not inserting or updating.
+When creating a UDT, the existence of referenced types are only verified when the type is used in a `CREATE MAPPING` statement. This makes it possible to create cyclic types.
 
-NOTE: The existence of referenced types are only verified when the type is used in a `CREATE MAPPING` statement.
+NOTE: Cyclic types are only supported for Java format. However, the support is limited only to querying. Inserting or updating with cyclic types is currently not supported.
 
 === Enabling Cycling Type Support
-You can enable cyclic types by setting the `hazelcast.sql.experimental.custom.cyclic.types.enabled` property to `true` in the member configuration.
+You can enable cyclic types by setting the `hazelcast.sql.experimental.custom.cyclic.types.enabled` property to `true` in the member configuration. It is disabled by default.
 [tabs]
 ====
 XML::
@@ -243,7 +241,7 @@ CREATE MAPPING tableC (
 
 == Querying Support
 
-Querying is provided with the field access operator which has the following syntax:
+Querying is provided with the field access operator which has the following syntax (parentheses are required):
 [source,sql]
 ----
 (<mappingColumn>).typeAColumn.typeBColumn.typeCColumn
@@ -272,7 +270,11 @@ Selecting whole sub-object:
 SELECT (organization).office FROM users
 ----
 
-NOTE: When selecting the entire object, the query will always try to return the underlying object verbatim. For Java-serialized types, this means returning an underlying Java class instance, which can fail with a `ClassNotFoundException` if the class is not in the classpath of the client (or embedded server) JVM. To avoid this, you can select individual fields instead. This issue does not apply to Portable, Compact, or Avro types as sub-objects in these mappings and types are `GenericRecord` subclasses; `PortableGenericRecord`, `CompactGenericRecord` and `org.apache.avro.generic.GenericRecord` are present in the base distribution of Hazelcast.
+[NOTE]
+====
+. When selecting the entire object, the query will always try to return the underlying object verbatim. For Java-serialized types, this means returning an underlying Java class instance, which can fail with a `ClassNotFoundException` if the class is not in the classpath of the client (or embedded server) JVM. To avoid this, you can select individual fields instead. This issue does not apply to Portable- or Compact-serialized types as sub-objects in these mappings and types are `GenericRecord` subclasses; `PortableGenericRecord` and `CompactGenericRecord` are present in the base distribution of Hazelcast.
+. For Avro-serialized types, the returned objects are subclasses of `org.apache.avro.generic.GenericRecord`, whose (de)serialization is supported by Java clients only.
+====
 
 Using projections:
 [source,sql]
@@ -480,7 +482,7 @@ UPDATE users SET organization = ((organization).id, (organization).name, ((organ
 
 NOTE: Updating UDT columns requires providing a value for every column in the UDT and its child UDTs unless it needs to be set to `null`. Not providing full list of columns will cause a query validation error.
 
-Inserting with query parameter (Java only):
+Inserting with query parameter:
 
 [source,java]
 ----
@@ -495,6 +497,8 @@ organization.office = office;
 
 hz.getSql().execute("INSERT INTO users VALUES (1, 'user1', ?)", organization);
 ----
+
+NOTE: For Avro-serialized types, the query parameters need to be subclasses of `org.apache.avro.generic.GenericRecord`, whose (de)serialization is supported by Java clients only.
 
 Updating with query parameter:
 
@@ -512,5 +516,7 @@ Updating nested UDT column with query parameter:
 hz.getSql().execute("UPDATE users SET organization = ((organization).id, (organization).name, ?)", office);
 ----
 
-== Rolling Upgrade Notes
-When performing a rolling upgrade from version 5.3 to 5.4, you must drop all user-defined types and mappings with UDTs before the upgrade, and recreate them with the new semantics after upgrading.
+== Upgrade Notes
+[.enterprise]*Enterprise*
+
+When performing a (normal or rolling) upgrade from version 5.3 to 5.4, you must drop all user-defined types and mappings with UDTs before the upgrade, and recreate them with the new semantics after upgrading.

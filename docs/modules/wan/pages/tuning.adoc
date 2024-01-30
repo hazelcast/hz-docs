@@ -805,30 +805,6 @@ You can find the specifications of these properties in xref:ROOT:system-properti
 
 The default behavior for the static endpoint discovery strategy is to perform health checks on the endpoints. There is no additional configuration required beyond defining the static endpoints as our default values cover the most use-cases. However, you can configure the cluster using the following properties for your specific needs.
 
-* `health-check-interval-ms` (default: `10000`): Defines the interval (in milliseconds) between connection health check tasks.
-Health checks attempt connections, and each connection attempt can take up to ten seconds to timeout.
-For this reason, ensure that tasks are sufficiently spaced to reduce system resource usage.
-* `health-check-timeout-ms` (default: `3000`): Defines the maximum duration to wait (in milliseconds) when checking connection health.
-* `health-check-max-failed-probes` (default: `10`):  When an unhealthy connection is not found during target discovery, it is
-marked as a failed probe attempt. This property defines the maximum number of times a connection probe can be marked as failed in a row,
-after which it is removed from subsequent health checks. Set to `-1` if you do not want to remove these connections from health checks.
-* `health-check-eager-first-check` (default: `false`): Defines whether all connections are treated as potentially unhealthy
-on startup, and probed for liveliness before being considered as a viable endpoint. This is useful when a large number of the
-configured endpoints are expected to be unavailable on startup, however if most endpoints are expected to be lively on startup
-this property should be set to `false` as it can cause delays in replication while connections are probed individually.
-* `health-check-initial-delay-ms` (default: `1000`): Defines the initial delay (in milliseconds) before the connection health
-check task's first execution. When the `health-check-eager-first-check` property is set to `true`, set this value to a
-a short period so that connection health can be probed as quickly as possible.
-* `health-check-back-off-delay-step-ms` (default: `5000`): Defines the additional back-off delay (step) duration (in milliseconds)
-added between liveliness checks when an endpoint is found to be unhealthy. The total delay between connection attempts is calculated by
-multiplying this duration by the connection's total failed connection attempts, up to a maximum multiplier of
-`health-check-back-off-max-steps`
-* `health-check-back-off-max-steps` (default: `12`): Defines the maximum number of `health-check-back-off-delay-step-ms` steps
-used in back-off strategy for connection health checks.
-
-NOTE: The legacy behaviour of static endpoints where connection health is not checked can be enabled
-with the following Hazelcast property: `hazelcast.wan.static.discovery.legacy=true`
-
 [tabs]
 ====
 XML::
@@ -843,13 +819,13 @@ XML::
             <publisher-id>londonID</publisher-id>
             <target-endpoints>10.3.5.1:5701, 10.3.5.2:5701</target-endpoints>
             <properties>
-                <property name="health-check-interval-ms">10000</property>
-                <property name="health-check-timeout-ms">3000</property>
-                <property name="health-check-max-failed-probes">10</property>
-                <property name="health-check-eager-first-check">false</property>
-                <property name="health-check-initial-delay-ms">1000</property>
-                <property name="health-check-back-off-delay-step-ms">5000</property>
-                <property name="health-check-back-off-max-steps">12</property>
+                <property name="health-check-interval-ms">10000</property> <1>
+                <property name="health-check-timeout-ms">3000</property> <2>
+                <property name="health-check-max-failed-probes">10</property> <3>
+                <property name="health-check-eager-first-check">false</property> <4>
+                <property name="health-check-initial-delay-ms">1000</property> <5>
+                <property name="health-check-back-off-delay-step-ms">5000</property> <6>
+                <property name="health-check-back-off-max-steps">12</property> <7>
             </properties>
         </batch-publisher>
     </wan-replication>
@@ -869,12 +845,32 @@ hazelcast:
           cluster-name: london
           target-endpoints: 10.3.5.1:5701, 10.3.5.2:5701
           properties:
-            health-check-interval-ms: 10000
-            health-check-timeout-ms: 3000
-            health-check-max-failed-probes: 10
-            health-check-eager-first-check: false
-            health-check-initial-delay-ms: 1000
-            health-check-back-off-delay-step-ms: 5000
-            health-check-back-off-max-steps: 12
+            health-check-interval-ms: 10000 <1>
+            health-check-timeout-ms: 3000 <2>
+            health-check-max-failed-probes: 10 <3>
+            health-check-eager-first-check: false <4>
+            health-check-initial-delay-ms: 1000 <5>
+            health-check-back-off-delay-step-ms: 5000 <6>
+            health-check-back-off-max-steps: 12 <7>
 ----
 ====
+<1> Defines the interval between the connection health check tasks, in milliseconds.
+Health checks attempt connections, and each connection attempt can take up to ten seconds to timeout.
+For this reason, ensure that tasks are sufficiently spaced to reduce the system resource usage. Default is `10000`.
+<2> Defines the maximum duration to wait when checking connection health, in milliseconds. Default is `3000`.
+<3> When an unhealthy connection is not found during target discovery, it is
+marked as a failed probe attempt. This property defines the maximum number of times a connection probe can be marked as failed in a row,
+after which it is removed from subsequent health checks. Set to `-1` if you do not want to remove these connections from health checks. Default is `10`.
+<4> Defines whether all connections are treated as potentially unhealthy
+on startup, and probed for liveliness before being considered as a viable endpoint. This is useful when a large number of the
+configured endpoints are expected to be unavailable on startup. However, if most endpoints are expected to be lively on startup, this property should be set to `false` as it can cause delays in replication while connections are probed individually. Default is `false`.
+<5>  Defines the initial delay before the connection health check task's first execution, in milliseconds. When the `health-check-eager-first-check` property is set to `true`, set this value to a
+a short period so that connection health can be probed as quickly as possible. Default is `1000`.
+<6> Defines the additional back-off delay (step) duration, in milliseconds, added between liveliness checks when an endpoint is found to be unhealthy. The total delay between the connection attempts is calculated by
+multiplying this duration by the connection's total failed connection attempts, up to a maximum multiplier of
+`health-check-back-off-max-steps`. Default is `5000`.
+<7> Defines the maximum number of `health-check-back-off-delay-step-ms` steps
+used in the back-off strategy for the connection health checks. Default is `12`.
+
+NOTE: You can enable the legacy behavior of static endpoints, where the connection health is not checked
+by setting  the `hazelcast.wan.static.discovery.legacy` property to `true`.

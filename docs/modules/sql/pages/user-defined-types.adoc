@@ -4,10 +4,10 @@ User-Defined Types (also known as UDTs, nested types, or nested fields) allow yo
 
 == Feature Overview
 
-- UDTs can only be incorporated into mappings that has `portable`, `compact`, `java` or `avro` format although UDTs themselves are not tied to a specific format.
+- UDTs can only be incorporated into mappings that have the `portable`, `compact`, `java` or `avro` format, although UDTs themselves are not tied to a specific format.
 - Type options override mapping options. Where both the mapping and type define a schema (Portable class definition, Compact schema, Java class or Avro schema) and the corresponding mapping field is `__key` or `this`, the schema defined by the type is used. This means that the mapping does not need to define a schema if the type defines one.
 - If the type does not specify a schema, it is resolved from the parent structure, which may be a mapping or another type.
-- Type fields are optional and if not specified, they are resolved from the class/schema when the type is used in a `CREATE MAPPING` statement. You can check the resolved fields using a `GET_DDL` query. The field resolution feature has the following limitations.
+- Type fields are optional and if not specified, they are resolved from the class/schema when the type is used in a `CREATE MAPPING` statement. You can check the resolved fields using a `GET_DDL` query. The field resolution feature has the following limitations:
  ** Once the fields are resolved, they are not updated when the underlying class/schema changes or when the type is used in another mapping.
  ** For Portable, Compact, or Avro formats, schema fields cannot be complex (`PORTABLE`, `COMPACT`, or `RECORD`). Otherwise, an exception will be thrown once the type is used in a mapping.
  ** For Portable format, portable IDs (`portableFactoryId`, `portableClassId` and `portableVersion`) must be unique within the cluster. Otherwise, deserialization issues can occur.
@@ -242,7 +242,7 @@ CREATE MAPPING tableC (
 
 == Querying Support
 
-Querying is provided with the field access operator which has the following syntax (parentheses are required):
+Querying is provided with the field access operator, which has the following syntax:
 [source,sql]
 ----
 (<mappingColumn>).typeAColumn.typeBColumn.typeCColumn
@@ -251,7 +251,11 @@ Querying is provided with the field access operator which has the following synt
 `mappingColumn` must be the top-level column inside a mapping that has a UDT as its type,
 whereas `typeAColumn`,`typeBColumn` and `typeCColumn` are all columns within the UDTs.
 
-NOTE: `typeAColumn`, `typeBColumn` and `typeCColumn` must be defined in their corresponding UDTs. Otherwise, the query will fail even if the underlying object contains fields with these names.
+[NOTE]
+====
+. The parentheses around `mappingColumn` are required.
+. `typeAColumn`, `typeBColumn` and `typeCColumn` must be defined in their corresponding UDTs. Otherwise, the query will fail even if the underlying object contains fields with these names.
+====
 
 === Examples [[queryingExamples]]
 
@@ -273,7 +277,7 @@ SELECT (organization).office FROM users
 
 [NOTE]
 ====
-. When selecting the entire object, the query will always try to return the underlying object verbatim. For Java-serialized types, this means returning an underlying Java class instance, which can fail with a `ClassNotFoundException` if the class is not in the classpath of the client (or embedded server) JVM. To avoid this, you can select individual fields instead. This issue does not apply to Portable- or Compact-serialized types as sub-objects in these mappings and types are `GenericRecord` subclasses; `PortableGenericRecord` and `CompactGenericRecord` are present in the base distribution of Hazelcast.
+. When selecting the entire object, the query will always try to return the underlying object verbatim. For Java-serialized types, this means returning an underlying Java class instance, which can fail with a `ClassNotFoundException` if the class is not in the classpath of the client (or embedded server) JVM. To avoid this, you can select individual fields instead. This issue does not apply to Portable- or Compact-serialized types, as sub-objects in these mappings and types are `GenericRecord` subclasses; `PortableGenericRecord` and `CompactGenericRecord` are present in the base distribution of Hazelcast.
 . For Avro-serialized types, the returned objects are subclasses of `org.apache.avro.generic.GenericRecord`, whose (de)serialization is supported by Java clients only.
 ====
 
@@ -286,7 +290,7 @@ Projections work as usual since field access expressions have virtually the same
 
 ==== Querying Cyclic Types
 
-Following examples use <<a-type, AType>>.
+The following examples use <<a-type, AType>>.
 
 [source,java]
 ----
@@ -447,7 +451,7 @@ Updating sub-columns is technically possible by specifying column projections in
 
 === Examples [[upsertExamples]]
 
-Following examples use <<users-mapping, `users` mapping>>, and <<organization-office-types, `Organization` and `Office` types>>.
+The following examples use <<users-mapping, `users` mapping>>, and <<organization-office-types, `Organization` and `Office` types>>.
 
 NOTE: The order of column values must be the same as the order of columns specified when executing the `CREATE MAPPING` and `CREATE TYPE` statements.
 
@@ -481,7 +485,7 @@ Replacing nested column value:
 UPDATE users SET organization = ((organization).id, (organization).name, ((organization).office.id, 'new-office-name'))
 ----
 
-NOTE: Updating UDT columns requires providing a value for every column in the UDT and its child UDTs unless it needs to be set to `null`. Not providing full list of columns will cause a query validation error.
+NOTE: When updating UDT columns, a value must be provided for every column in the UDT and its child UDTs unless it needs to be set to `null`. If a full list of columns is not provided, a query validation error occurs.
 
 Inserting with query parameter:
 
@@ -499,7 +503,7 @@ organization.office = office;
 hz.getSql().execute("INSERT INTO users VALUES (1, 'user1', ?)", organization);
 ----
 
-NOTE: For Avro-serialized types, the query parameters need to be subclasses of `org.apache.avro.generic.GenericRecord`, whose (de)serialization is supported by Java clients only.
+NOTE: For Avro-serialized types, the query parameters must be subclasses of `org.apache.avro.generic.GenericRecord`, whose (de)serialization is supported by Java clients only.
 
 Updating with query parameter:
 
@@ -520,4 +524,4 @@ hz.getSql().execute("UPDATE users SET organization = ((organization).id, (organi
 == Upgrade Notes
 [.enterprise]*Enterprise*
 
-When performing a (normal or rolling) upgrade from version 5.3 to 5.4, you must drop all user-defined types and mappings with UDTs before the upgrade, and recreate them with the new semantics after upgrading.
+When performing a normal or rolling upgrade from version 5.3 to 5.4, you must drop all user-defined types and mappings with UDTs before the upgrade, and recreate them with the new semantics after upgrading.

@@ -1,4 +1,4 @@
-= 5.4.0 Release Notes
+= 5.4.0-BETA-2 Release Notes
 
 CAUTION: Starting with this release of Hazelcast Platform, the minimum supported Java version is 17.
 
@@ -50,6 +50,8 @@ https://github.com/hazelcast/hazelcast/pull/24729[#24729]
 
 * Removed the beta annotations from the data connection classes.
 https://github.com/hazelcast/hazelcast/pull/26000[#26000]
+* Replaced the user-defined types (UDTs) feature flag with the cyclic UDT feature flag, to prevent querying such type data.
+https://github.com/hazelcast/hazelcast/pull/25977[#25977]
 * Added support for loading and storing a single column as the value using the `GenericMapStore`.
 https://github.com/hazelcast/hazelcast/pull/25878[#25878]
 * Each Jet engine job was creating a client for connecting to the remote cluster, resulting in an excessive number of clients. This has been fixed by introducing a single data connection which can be reused for all job instances.
@@ -66,6 +68,10 @@ https://github.com/hazelcast/hazelcast/pull/25180[#25180]
 https://github.com/hazelcast/hazelcast/pull/25196[#25196]
 * Added support for partition pruning for the `__key` filters.
 https://github.com/hazelcast/hazelcast/pull/25105[25105]
+* Added support for partitioned edges in Jet engine's partition pruning.
+https://github.com/hazelcast/hazelcast/pull/25062[#25062]
+* Added a new mechanism to compute the required partitions to be scanned, if attribute partitioning strategy is applied.
+https://github.com/hazelcast/hazelcast/pull/25006[#25006]
 * Added the condition type to the `EXPLAIN PLAN` statement outputs for all physical joins.
 https://github.com/hazelcast/hazelcast/pull/24899[#24899]
 * Added support for nullable types when reading Avro files.
@@ -80,7 +86,10 @@ https://github.com/hazelcast/hazelcast/pull/24804[#24804]
 https://github.com/hazelcast/hazelcast/pull/24689[#24689]
 * Added the `stream()` method to the SQL service to return the stream of result rows.
 https://github.com/hazelcast/hazelcast/pull/24525[#24525]
-* Added the ability to limit the creation of objects through reflection. See ???[documentation update to come]. #296
+* Boxing of partitionId is now avoided in the `getPartitionAssignment()` method when the partition pruning is not used. #486
+* Added the ability to limit the creation of objects through reflection. #296
+* Added the ability to use reusable processor meta supplier for `forceTotalParallelismOne ()` on random members without permissions. #227
+* Added a comparator for the High-Density Memory Store's index entries. Previously, on-heap entries comparators were used which causes incorrect query outputs. #52
 
 
 === Connectors
@@ -92,7 +101,7 @@ https://github.com/hazelcast/hazelcast/pull/26194[#26194]
 https://github.com/hazelcast/hazelcast/pull/25743[#25743]
 * Added TLS support for MongoDB data connections.
 https://github.com/hazelcast/hazelcast/pull/25301[#25301]
-* Added support of Oracle databases to JDBC SQL connector.
+* Added support Oracle databases support by the JDBC SQL connector.
 https://github.com/hazelcast/hazelcast/pull/25255[#25255]
 * Added support for inline Avro schemas for Kafka mappings.
 https://github.com/hazelcast/hazelcast/pull/25207[#25207]
@@ -107,9 +116,9 @@ https://github.com/hazelcast/hazelcast/pull/25027[#25027]
 
 === Data Structures
 
-** Added support of specifying the maximum size of a CPMap.
+* Added support of specifying the maximum size of a CPMap.
 https://github.com/hazelcast/hazelcast/pull/25881[#25881]
-** Added Java client support for CPMap.
+* Added Java client support for CPMap.
 https://github.com/hazelcast/hazelcast/pull/25877[#25877]
 * Added check for negative positions on the collections' `getItemAtPositionOrNull()` method.
 https://github.com/hazelcast/hazelcast/pull/25672[#25672]
@@ -122,6 +131,9 @@ https://github.com/hazelcast/hazelcast/pull/24673[#24763]
 https://github.com/hazelcast/hazelcast/pull/23509[#23509]
 * Fixed the Javadoc for caches where it was referring incorrectly to statistics instead of management, for the `setManagementEnabled()` method.
 https://github.com/hazelcast/hazelcast/pull/22575[#22575]
+* Added the `getCPGroupIds()` method to the CP Subsystem API to allow listing all data structures within a CP group. #591
+* The "last update time" record of the map entries recovered from the disk persistence is not used anymore when calculating the entries' expiration times. #233
+* [.enterprise]*Enterprise* Added the ability to check whether the `ADVANCED_CP` feature is present in the Hazelcast Platform Enterprise license, to enable CPMap. #157
 
 === WAN Replication
 
@@ -147,8 +159,11 @@ https://github.com/hazelcast/hazelcast/pull/25154[#25154]
 
 === Storage
 
-* Tiered Store can now be used for map loaders. See ???.
+* Improved the hit/miss cache statistics counter performance.
+https://github.com/hazelcast/hazelcast/pull/25146[#25146]
+* Tiered Store can now be used for map loaders.
 https://github.com/hazelcast/hazelcast/pull/24827[#24827]
+* Added the ability to persist namespaces for Hot Restart. #402
 
 === Networking
 
@@ -163,21 +178,44 @@ https://github.com/hazelcast/hazelcast/pull/17582[#17582]
 
 * Added the ability to use consistent serialization service for `ByKey` plans.
 https://github.com/hazelcast/hazelcast/pull/25631[#25631]
+* Serialization service is not created anymore for light jobs as it creates overhead and generates garbage. #235, #449
 
 === Cloud
 
 * Enhanced the warning message shown in the cases of incorrect configurations when deploying a Hazelcast client on Amazon EKS.
 https://github.com/hazelcast/hazelcast/pull/25568[#25568]
+* Added the ability to retry DNS resolutions for the Kubernetes discovery plugin. #445
 
-=== Metrics
+=== Metrics and Logs
 
+* Disabled the log4j2 shutdown hook for cleaner shutdown logs after a Hazelcast Platform cluster deployed on Kubernetes is shutdown.
+https://github.com/hazelcast/hazelcast/pull/26006[#26006]
+* Enabled faster execution times and more efficient garbage collection by making method probes to use `MethodHandle` instead of reflections.
+https://github.com/hazelcast/hazelcast/pull/25279[#25279]
 * Improved the naming convention for CP Session, Lock, and Persistence metrics.
 https://github.com/hazelcast/hazelcast/pull/24843[#24843], https://github.com/hazelcast/hazelcast/pull/24836[#24836]
 * Added `status` and `userCancelled` flags to job metrics.
 https://github.com/hazelcast/hazelcast/pull/24716[#24716]
+* Removed the stack trace for WAN connection exception since its content was the same as the exception log itself. #578
+* Added the ability to collect job execution metrics only from the members which run the job. #194
+
+=== Events and Listeners
+
+* Added the `onCancel()` method to the reliable message listener to trigger a notification when the listener is cancelled for any reason. #286
+
+=== REST API
+
+* Added the new `RestConfig` tag under the server `Config`; it allows configuration of the new REST API server. #508
+# Added the health check endpoints for the new REST API; these include state of the members and cluster, and the member count. #192
 
 === Distribution
 
+* Improved the binary scripts of Hazelcast Platform for Windows operating systems.
+** `common.bat` has been updated to not include excessive spaces in parameters.
+** `hz-cli.bat` and `hz-start.bat` have been updated to reference the `common.bat` script with correct paths.
+** `hz-start.bat` has been updated to remove double quote expansion for `CLASSPATH`.
++
+#165
 * Updated the versions of following dependencies:
 ** Snappy to 1.1.10.5
 ** Netty to 4.1.99.Final
@@ -188,6 +226,8 @@ https://github.com/hazelcast/hazelcast/pull/24863[#25607],
 https://github.com/hazelcast/hazelcast/pull/25555[#25555],
 https://github.com/hazelcast/hazelcast/pull/25576[#25576],
 https://github.com/hazelcast/hazelcast/issues/22407[#22407]
+* Upgraded the Hazelcast Platform's `pom.xml` to use JDK 17, as it requires at minimum JDK 17. #436
+* Updated the copyright year to 2024 in the codebase. #396
 
 === Licensing
 
@@ -218,10 +258,14 @@ https://github.com/hazelcast/hazelcast/pull/25220[#25220]
 https://github.com/hazelcast/hazelcast/pull/25202[#25202]
 * Fixed an issue where the mechanism to retrieve partitioning strategy on a client was ignoring to check the provided Hazelcast cluster properties.
 https://github.com/hazelcast/hazelcast/pull/25162[#25162]
+* Fixed an issue where `ClientConfigXmlGenerator` didn't have the support for `hazelcast-cloud` configuration.
+https://github.com/hazelcast/hazelcast/pull/25155[#25155]
 * Fixed an issue where the cache provider was not able to read the YAML configurations.
 https://github.com/hazelcast/hazelcast/pull/25137[#25137]
 * Fixed an issue where the `getDistributedObjects()` was returning inconsistent results when multiple members are simultaneously joining to the cluster.
 https://github.com/hazelcast/hazelcast/pull/25114[#25114]
+* Fixed an issue where zero-config compact serialization was not working on the objects that have a field of type `java.util.UUID`.
+https://github.com/hazelcast/hazelcast/pull/25073[#25073]
 * Fixed an issue where the retry mechanism for the communications between CP leader and followers was generating too many retries, due to incorrect backoff timeout reset behavior.
 https://github.com/hazelcast/hazelcast/pull/25055[#25055]
 * Fixed an issue where there was a difference between the elapsed clock time and elapsed total time when listening to migration events.
@@ -248,13 +292,16 @@ https://github.com/hazelcast/hazelcast/pull/24639[#24639]
 https://github.com/hazelcast/hazelcast/pull/24616[#24616]
 * Fixed an issue where the predicates did not have managed context injection when the predicate is local or not serialized.
 https://github.com/hazelcast/hazelcast/pull/24463[#24463]
-* Fixed an issue where zero-config compact serialization was not working on the objects that have a field of type `java.util.UUID`.
-https://github.com/hazelcast/hazelcast/issues/23698[#23698]
 * Fixed an issue where the results of the stream-to-stream join could not be inserted into the remote table connected via JDBC, causing an exception.
 https://github.com/hazelcast/hazelcast/issues/22459[#22459]
+* Fixed an issue when querying JSON, elements that appear after an element containing nested JSON was not appearing in the query results. #570
+* Fixed an issue where data was lost from the ICache data structure with `NATIVE` entries in a split-brain scenario. #480
+* Fixed an issue where the `ANALYZE INSERT INTO` SQL statement did not generate metrics. #444
 * [.enterprise]*Enterprise* Fixed an issue where the map entries with time-to-live values were being removed as soon as the cluster with persistence enabled is restarted. #233
+* Fixed an issue where map entries' metadata were replicated incorrectly over WAN after a merge, causing deserialization of values. #225
 * Fixed an issue where the process of retrieving metrics for job executions was entering into an infinite loop, when a job execution is completed on a member but continues on the other members.
 With this fix, only the members on which the jobs have not been completed are queried for metrics; for completed jobs, the metrics are already retrieved from the completed jobs context. #194
+* Fixed an issue where the attribute partitioning strategy was not working with Compact and Portable classes. #127
 
 == Removed/Deprecated Features
 
@@ -262,13 +309,14 @@ With this fix, only the members on which the jobs have not been completed are qu
 https://github.com/hazelcast/hazelcast/pull/24734[#24734]
 * The evaluation tool for IMDG 3.x users (Hazelcast 3 Connector) is removed. In the upcoming releases, a new tooling for migrating data from 3.x versions will be introduced.
 https://github.com/hazelcast/hazelcast/pull/25051[#25051]
-* Transactions are deprecated:
+* Transactions are deprecated, will be removed as of Hazelcast Platform version 7.0.
 ** Only maintenance support will be provided for transactions.
 ** Transactions will no longer be actively developed.
 ** Issues arising from new or existing implementations of transactions will no longer be supported.
 +
 In the meantime, if you are already using transactions and want to discuss alternatives, please get in touch with xref:getting-started:support.adoc[Hazelcast Support].
-* The user code deployment API has been deprecated. #223
+* Portable Serialization is deprecated. We recommend you to use Compact Serialization as Portable Serialization will be removed as of Hazelcast Platform version 7.0.
+* The user code deployment API is deprecated, and will be removed in Hazelcast Platform version 6.0. #223
 
 == Contributors
 

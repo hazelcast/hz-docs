@@ -1,38 +1,43 @@
 = Dynamic Configuration API
-:description: You can use the dynamic configuration API to deploy resources from your client. This means that you can configure namespaces and their resources, and replace the resources at runtime for use when a user customization is next instantiated.
+:description: You can use the dynamic configuration API to deploy resources from your client. This means that you can configure namespaces and their resources, and replace the resources at runtime for use when a user customization is next instantiated or executed.
 :page-enterprise: true
-:page-beta: true
+:page-beta: false
 
 {description}
 
-For example, you can use the dynamic configuration API to add or replace a specific namespace from a running cluster's configuration.
+For example, you can use the dynamic configuration API to add or replace a specific namespace on a running cluster's configuration.
 
 NOTE: Before you can use {ucn}, you must enable it as described in the xref:clusters:ucn-enable.adoc[] topic.
 
-You must create a _member.java_ file containing the configuration and save it to your class configuration folder. 
-
+You must create a _Client.java_ file containing the required code and save it to your class configuration folder. 
 The file will be similar to the following:
-
 [source,java]
 ----
 package com.hazelcast.namespace.dynamic;
-
-import com.hazelcast.config.Config;
 import com.hazelcast.config.UserCodeNamespaceConfig;
-import com.hazelcast.core.Hazelcast;
+import com.hazelcast.config.UserCodeNamespacesConfig;
 import com.hazelcast.core.HazelcastInstance;
-
-public class Member {
-
-    public static void main(String[] args) {
-        Config config = new Config();
-        config.getNamespacesConfig().setEnabled(true); <1>
-
-        // construct a namespace configuration with no resources
-        UserCodeNamespaceConfig userCodeNamespaceConfig = new UserCodeNamespaceConfig("namespace_name");
-        config.getNamespacesConfig().addNamespaceConfig(userCodeNamespaceConfig); <2>
+import java.net.MalformedURLException;
+import java.nio.file.Paths;
+public class Client {
+    public static void main(String[] args) throws MalformedURLException {
+        // Assumes a HazelcastInstance is already running with a Config that has UCN enabled
+        HazelcastInstance instance = getHazelcastInstance();
+        UserCodeNamespacesConfig parentConfig = instance.getConfig().getNamespacesConfig(); <1>
+        UserCodeNamespaceConfig namespaceConfig = new UserCodeNamespaceConfig("my_namespace"); <2>
+        namespaceConfig.addClass(MyRequireClass.class); <3>
+        parentConfig.addNamespaceConfig(namespaceConfig); <4>
+        // After some time, you can replace `my_namespace` with new resources...
+        UserCodeNamespaceConfig newNamespaceConfig = new UserCodeNamespaceConfig("my_namespace"); <5>
+        newNamespaceConfig.addJar(Paths.get("/etc/path/to/my-resource.jar").toUri().toURL(), "my-resource-jar"); <6>
+        parentConfig.addNamespaceConfig(namespaceConfig); <7>
     }
 }
 ----
-<1> Enables {ucn} on `Config`
-<2> Creates a `UserCodeNamespaceConfig` with a name of `namespace_name` and no resources 
+<1> Fetches the dynamic {ucn} configuration instance from the member
+<2> Creates a new `UserCodeNamespaceConfig` with the name `my_namespace`
+<3> Adds a `Class` resource to the `my_namespace` config, where the `Class` resolved from the client's local context
+<4> Adds the `my_namespace` configuration with its resources to the parent, which is dynamically applied on the member
+<5> Creates a new namespace config with the same name `my_namespace`
+<6> Adds different resources which will replace all previously defined resources
+<7> Adds the new `my_namespace` config to the parent, which will replace the previously defined resources

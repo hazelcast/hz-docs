@@ -19,6 +19,9 @@ public class ExampleCPMap {
         capitalCities.set("Germany", "Munich");
         assert capitalCities.compareAndSet("Germany", "Munich", "Berlin");
         assert "Berlin".equals(capitalCities.get("Germany"));
+        assert null == capitalCities.putIfAbsent("Ireland", "Dublin");
+        assert "Dublin".equals(capitalCities.putIfAbsent("Ireland", "Cork"));
+        assert "Dublin".equals(capitalCities.get("Ireland"));
         capitalCities.destroy();
         //end::cpm[]
     }

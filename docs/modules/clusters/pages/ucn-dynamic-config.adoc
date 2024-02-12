@@ -1,0 +1,46 @@
+= Dynamic Configuration API
+:description: You can use the dynamic configuration API to deploy resources from your client or HazelcastInstance member. This means that you can configure namespaces and their resources, and replace the resources at runtime for use when a user customization is next instantiated or executed.
+:page-enterprise: true
+:page-beta: false
+
+{description}
+
+For example, you can use the dynamic configuration API to add or replace a specific namespace on a running cluster's configuration.
+
+NOTE: Before you can use {ucn}, you must enable it as described in the xref:clusters:ucn-enable.adoc[] topic.
+
+You must create a _Client.java_ file containing the required code and save it to your class configuration folder. 
+The file will be similar to the following:
+[source,java]
+----
+package com.hazelcast.namespace.dynamic;
+import com.hazelcast.config.UserCodeNamespaceConfig;
+import com.hazelcast.config.UserCodeNamespacesConfig;
+import com.hazelcast.core.HazelcastInstance;
+import java.net.MalformedURLException;
+import java.nio.file.Paths;
+public class Client {
+    public static void main(String[] args) throws MalformedURLException {
+        // Assumes a HazelcastInstance is already running with a Config that has UCN enabled
+        HazelcastInstance instance = getHazelcastInstance();
+        UserCodeNamespacesConfig parentConfig = instance.getConfig().getNamespacesConfig(); <1>
+        UserCodeNamespaceConfig namespaceConfig = new UserCodeNamespaceConfig("my_namespace"); <2>
+            namespaceConfig.addClass(Paths.get("/etc/path/to/MyRequiredClass.class).toUri().toURL(), "MyRequiredClass-class");  <3>
+        UserCodeNamespaceConfig ucn = new UserCodeNamespaceConfig("my_namespace")
+            namespaceConfig.addClass(Paths.get("url/to/the/class/file).toUri().toURL(), "classId"); <4>
+        parentConfig.addNamespaceConfig(namespaceConfig); <5>
+        // After some time, you can replace `my_namespace` with new resources...
+        UserCodeNamespaceConfig newNamespaceConfig = new UserCodeNamespaceConfig("my_namespace"); <6>
+        newNamespaceConfig.addJar(Paths.get("/etc/path/to/my-resource.jar").toUri().toURL(), "my-resource-jar"); <7>
+        parentConfig.addNamespaceConfig(namespaceConfig); <8>
+    }
+}
+----
+<1> Fetches the dynamic {ucn} configuration instance from the member
+<2> Creates a new `UserCodeNamespaceConfig` with the name `my_namespace`
+<3> Adds a `Class` resource to the `my_namespace` config, where the `Class` resolved from the client's local context
+<4> Adds a `Class` resource using the URL to the _.class_ and the supplied identifier. In this case, a null identifier is valid; if null is supplied, the class name is used as the ID
+<5> Adds the `my_namespace` configuration with its resources to the parent, which is dynamically applied on the member
+<6> Creates a new namespace config with the same name `my_namespace`
+<7> Adds different resources which will replace all previously defined resources
+<8> Adds the new `my_namespace` config to the parent, which will replace the previously defined resources

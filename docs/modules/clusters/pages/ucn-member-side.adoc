@@ -1,0 +1,117 @@
+= Member Configuration
+:description: {ucn} are referenced by name, and can be statically configured in the Hazelcast configuration file. You can specify JAR, JARS IN ZIP, and CLASS resources in the configuration file.
+:page-enterprise: true
+:page-beta: false
+
+{description}
+
+To configure {ucn} using the _hazelcast_ configuration file, in either XML or YAML format, complete the following steps:
+
+. If not already open, open the _hazelcast_ configuration file in your preferred editor and scroll to the {ucn} section
+. If required, add a `class-filter` to verify classes when loaded into the class loader during namespace deployment
++
+An example class filter is included in the sample below. For further information on the configuration of the `class-filter`, see the xref:serialization:serialization-configuration.adoc[] topic.
+
+. Define the name of the namespace under the line in which you enabled {ucn}, as follows:
++
+[tabs]
+====
+XML::
++
+[source,xml]
+----
+<user-code-namespaces enabled="true">
+    <class-filter defaults-disabled="true">
+      <whitelist>
+        <class>example.Foo</class>
+        <package>com.acme.app</package>
+        <prefix>com.hazelcast.</prefix>
+        <prefix>java.</prefix>
+        <prefix>javax.</prefix>
+        <prefix>[</prefix>
+      </whitelist>
+      <blacklist>
+        <class>com.acme.app.BeanComparator</class>
+      </blacklist>
+    </java-serialization-filter>
+    <user-code-namespace name="myNameSpace">
+    </user-code-namespace>
+</user-code-namespaces>
+----
+
+YAML::
++
+[source,yaml]
+----
+user-code-namespaces:
+   enabled: true
+   class-filter:
+      defaults-disabled: true
+      whitelist:
+        class:
+          - example.Foo
+        package:
+          - com.acme.app
+        prefix:
+          - com.hazelcast.
+          - java.
+          - javax.
+          - \[
+      blacklist:
+        class:
+          - com.acme.app.BeanComparator
+   myNameSpace:
+----
+====  
+. Define the resources
++
+To define a resource, you must provide the resource type, and the location (URL) in which the resource can be found. You can also provide an identifier for the resource. If you do not provide an identifier, the specified URL is used.
++
+You can define multiple {ucn}, if required, by repeating steps 3 and 4 for your other namespaces.
++
+The resource type can be JAR (`jar`), JARS_IN_ZIP (`jars-in-zip`), or CLASS ('class'); the following extract provides examples for these resource types:
++
+[tabs]
+====
+XML::
++
+[source,xml]
+----
+<user-code-namespaces enabled="true">
+    ...
+    <user-code-namespace name="myNameSpace">
+        <jar id="jarID">
+            <url>file:///hazelcast/src/class/usercodedeployment/MyJarFile.jar</url>
+        </jar>
+        <jars-in-zip id="MyJARsInZIPFileID">
+            <url>file:///hazelcast/src/class/usercodedeployment/MyJarZIP.zip</url>
+        </jars-in-zip>
+        <class id="classId">
+          <url>file:///hazelcast/src/class/usercodedeployment/MyClass.class</url>
+        </class>
+    </user-code-namespace>
+</user-code-namespaces>
+----
+
+YAML::
++
+[source,yaml]
+----
+user-code-namespaces:
+   enabled: true
+   ...
+   myNameSpace:
+    - id: jarID
+      resource-type: JAR
+      url: "file:///yoursrc/class/usercodedeployment/MyJarFile.jar"
+    - id: MyJARsInZIPFileID
+      resource-type: JARS_IN_ZIP
+      url: "file:///yoursrc/class/usercodedeployment/MyJarZIP.zip"
+    - id: classId
+      resource-type: CLASS
+      url: "file:///yoursrc/class/usercodedeployment/MyClass.class"
+----
+====  
+. Save the file
+Before you can use these namespaces, you must update your data structure configuration to identify the namespace it will use. For further information on configuring the namespace used by your data structure, see the xref:clusters:ucn-data-structures.adoc[] topic.
+NOTE: You can configure the `default` namespace as a fallback for situations where the data structure does not have a defined namespace. For further information on configuring the `default` namespace, see the xref:clusters:ucn-non-associated.adoc[] topic.

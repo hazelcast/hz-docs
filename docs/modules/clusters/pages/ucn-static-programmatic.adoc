@@ -1,0 +1,50 @@
+= Programmatic Configuration
+:description: You can configure your {ucn} and data structures programmatically. You can specify JAR, JARS IN ZIP, and CLASS resources in programmatic configuration.
+:page-enterprise: true
+:page-beta: false
+
+{description}
+
+You must create a _Member.java_ file containing the required code and save it to your class configuration folder. 
+The file will be similar to the following:
+[source,java]
+----
+package com.hazelcast.namespace.staticconfig;
+import com.hazelcast.config.Config;
+import com.hazelcast.config.MapConfig;
+import com.hazelcast.config.UserCodeNamespaceConfig;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import java.net.MalformedURLException;
+import java.nio.file.Paths;
+public class Member {
+    public static void main(String[] args) {
+        // Setup a Hazelcast member with namespace resources
+        Config config = new Config(); <1>
+        config.getNamespacesConfig().setEnabled(true); <2>
+        UserCodeNamespaceConfig namespaceConfig = new UserCodeNamespaceConfig("namespace_name"); <3>
+        namespaceConfig.addJarsInZip(Paths.get("/etc/path/to/all-my-jars.zip").toUri().toURL(), "my-resources-zip"); <4>
+        config.getNamespacesConfig().addNamespaceConfig(namespaceConfig); <5>
+        MapConfig mapConfig = new MapConfig("imap_name"); <6> 
+        mapConfig.setUserCodeNamespace("namespace_name"); <7>
+        config.addMapConfig(mapConfig); <8>
+        HazelcastInstance hz = Hazelcast.newHazelcastInstance(config); <9>
+
+        // The HazelcastInstance is started, with our resources available to executions on our defined IMap...
+        
+        // Execute user code from clients on the Hazelcast member now that it has the required context
+        hz.getMap("imap_name").executeOnEntries(new CustomEntryProcessor()); <10>
+    }
+}
+----
+<1> Creates a new `Config` as the base for configuring our Hazelcast member
+<2> Enables {ucn} in the `Config`
+<3> Creates a `UserCodeNamespaceConfig` with a name of `namespace_name`
+<4> Adds resources to the namespace, in this case JARS IN ZIP from a local URL
+<5> Adds the completed `UserCodeNamespaceConfig` to the parent `UserCodeNamespacesConfig` in `Config`
+<6> Creates a new `MapConfig` for the map named `imap_name`
+<7> Sets the namespace for the `imap_name` to `namespace_name`
+<8> Adds the newly created `MapConfig` to the parent `Config`
+<9> Starts a new Hazelcast member using our defined `Config`
+<10> Accesses the `imap_name` and runs the `CustomEntryProcessor` from a client, leveraging the {ucn} to provide the member with the classpath context it needs for execution

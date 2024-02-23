@@ -6,20 +6,22 @@ You can enable Thread-Per-Core (TPC) on clients and cluster members to improve s
 [[tpc-what]]
 == What is Thread-Per-Core (TPC)?
 
-The threading model is responsible for networking/storage and compute, which means it has a big impact on system performance. With Staged Event-Driven Architecture (SEDA) you have dedicated threads that do one particular task (for example, reading from a socket or evaluating a map.get) and thread pools that manage these task groups.  
+The threading model is responsible for networking/storage and compute, which means it has a big impact on system performance. With Staged Event-Driven Architecture (SEDA) you have dedicated threads that do one particular task (for example, reading from a socket or evaluating a map.get) and thread pools that manage these threads.  
 
-This architecture can lead to throughput and latency issues on machines with limited cores (fewer than 8), as the frequent context switching and state sharing can add significant overhead. Conversely, on machines with a very high number of CPUs (more than 32), a bottleneck can be created by the limited number of I/O threads vs. operation threads. Typically, smaller servers are more readily available through virtualization and for cloud-specific workloads, which can limit system performance in a SEDA environment. 
+SEDA can lead to throughput and latency issues on machines with limited cores (fewer than 8), as the frequent context switching and state sharing can add significant overhead. Conversely, on machines with a very high number of CPUs (more than 32), a bottleneck can be created by the limited number of I/O threads vs. operation threads. Typically, smaller servers are more readily available through virtualization and for cloud-specific workloads, which can limit system performance in a SEDA environment. 
 
 A Thread-Per-Core (TPC) design uses one thread for every CPU core and every thread does everything. With each TPC thread able to do networking/storage and compute, scaling is mostly a case of increasing the number of threads to spread the work. This means you can scale up and down easily based on the number of available cores, and make more efficient use of resources on machines with either a low or high number of cores. Every task is non-blocking and you can scale vertically much easier, which means high throughput, low latency and significantly improved system performance.  
 
-When TPC is enabled, regardless of the routing mode (smart or unisocket), the client will establish connections to all cluster members. If the server side has also enabled TCP, the client will open connections to all cores of all members and route partition-specific requests to the correct cores.  TCP-enabled servers will continue using the same ports for discovery, which means there's no difference in how the cluster member list is created and TPC-aware servers will be backwards compatible with clients not using TPC.
+When TPC is enabled, smart clients will connect to the configured number of cores (default is 1) but unisocket clients will establish connections to all cluster members (which can reduce performance in cloud environments). If the server side has also enabled TPC, the client will open connections to all cores of all members and route partition-specific requests to the correct cores.  TPC-enabled servers will continue using the same ports for discovery, which means there's no difference in how the cluster member list is created and TPC-aware servers will be backwards compatible with clients not using TPC.
 
 [[tpc-config]]
 == Configuration Options
 
 TPC is disabled by default and must be enabled on each cluster member and client.  
 
-NOTE: For example configuration files (XML and YAML) with TPC enabled, see xref:configuration:configuring-declaratively.adoc[].  
+NOTE: If you configure a client with TPC and the server doesn't support it, the client is ignored. If you configure a client without TPC and the server supports it, TPC is ignored (server and client will still communicate).
+
+TIP: For example configuration files (XML and YAML) with TPC enabled, see xref:configuration:configuring-declaratively.adoc[].  
 
 === Enabling TPC on Members
 
@@ -56,7 +58,7 @@ YAML::
 ----
 ====
 
-<1> The eventloop-count will default to the number of available CPU cores.  
+<1> The eventloop-count property sets a maximum number of eventloops (an eventloop is essentially a loop that processes events; normally you have one-per-core). This will default to the number of available CPU cores, assuming your license supports that number of eventloops (license limit will override). In environments with a very large number of cores, reducing the eventloop-count may increase performance due to better batching and less packet-processing overhead.  
 
 === Enabling TPC on Clients
 

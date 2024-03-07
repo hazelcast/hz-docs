@@ -1,16 +1,55 @@
 = Compactor
 
-TBD
+== Overview
 
-High-level overview of the behavior: the compactor copies data to the memory.
-Behavior:
+The compactor used by Tiered Storage is a partitioned, synchronous, incremental, garbage-first, moving compactor, working on the disk only.
 
-- adjacent alive entries will be adjacent after compaction as well.
-- compactor thrashes the hot cache of entries
-- the working unit of the compactor
+It's partitioned in the sense that compactions happen per Hazelcast partitions, offloaded from Hazelcast's partition operation threads to let operations assigned on the given partition operation thread to execute, including operations of the same partition, of different IMaps or data structures.
 
+Tiered Storage compactors get triggered before and after the operations allocating data enough to reach the configured thresholds either per partition or globally.
+This means the compactor runs synchronously to the operations of the same partition and map.
+
+Being incremental means that the compactor scans only a fraction of the used disk space at once to free the partition of the IMap as soon as possible.
+
+The compactor of Tiered Storage is based on statistics.
+When it comes to reclaim some space on the disk, it scans the area with the highest garbage ratio to be as efficient as possible, since working with garbage needs no further action to take.
+
+The alive entries the compactor finds get moved to the memory, temporarily decreasing the efficiency of the hot cache.
+
+The compactor scans the disk linearly, and moving the alive entries to the memory linearly too.
+This means the IMap entries adjacent on the disk before compaction will be adjacent to each other after the compaction as well.
+This can help with access patterns taking the entries in the same order.
 
 === Configuration Parameters
 
-...
+The compactor can be fine-tuned by the following properties:
+
+|===
+|Property |Default |Description
+
+|`hazelcast.tiered.store.log.file.max.size.in.mb`
+|8MB
+|Maximum file size of a Tiered Storage file. It defines the working unit of the compactor.
+
+
+|`hazelcast.tiered.store.partition.compactor.gc.threshold.per.map.partition.in.mb`
+|The value set for `hazelcast.tiered.store.log.file.max.size.in.mb`
+|Makes the compactor on the partition threads getting triggered only if at least this amount of garbage is there on the partition.
+
+|`hazelcast.tiered.store.partition.compactor.gc.threshold.per.map.partition.in.mb`
+|8MB
+|Makes the compactor on the partition threads getting triggered only if at least this amount of garbage is there on the partition.
+
+|`hazelcast.tiered.store.compaction.starting.device.usage.percentage`
+|0.9
+|Forces the compactor running if the configured percentage of the configured device capacity is reached.
+
+|`hazelcast.tiered.store.compactor.thread.count`
+|1
+|The number of the compactor threads.
+
+|`hazelcast.tiered.store.partition.compactor.scan.timeout.millis`
+|10ms
+|Soft-limit for the compactor to runs.
+|===
 

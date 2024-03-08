@@ -1,0 +1,45 @@
+= Running Hazelcast Enterprise with Persistence under Kubernetes
+:description: Hazelcast Enterprise members configured with persistence enabled can monitor the Kubernetes (K8s) context and automate Hazelcast cluster state management to ensure the optimal cluster behavior during shutdown and restart.
+:page-enterprise: true
+
+Hazelcast Enterprise members configured with xref:storage:configuring-persistence.adoc[persistence] enabled can monitor the Kubernetes (K8s) context and automate Hazelcast cluster state management to ensure optimal cluster behavior during shutdown and restart. 
+
+TIP: We recommend you use Hazelcast Platform Operator - see the https://docs.hazelcast.com/operator/latest/[Hazelcast Platform Operator Documentation] for more information and find details about deploying a Hazelcast cluster in Kubernetes and also connecting clients outside Kubernetes.
+
+The benefits of enabling persistence include:
+
+ - During a cluster-wide shutdown, the Hazelcast cluster automatically switches the cluster to a `PASSIVE` xref:maintain-cluster:cluster-member-states.adoc#cluster-states[cluster state]. This offers the following advantages over the behavior in previous Hazelcast Platform releases (where Hazelcast always ran clusters in an `ACTIVE` state):
+   * No data migrations are performed, speeding up the cluster shutdown.
+   * No risk of out-of-memory exception due to migrations. When a cluster is in an `ACTIVE` state and Kubernetes applies the ordered shutdown of members, all data is eventually migrated to a single member (the last one in the shutdown sequence). This relieves you of the need to plan capacity for a single member to hold all the cluster data, or risk an out-of-memory exception, which was necessary with previous Hazelcast Platform releases.
+   * Persisted cluster metadata remain consistent across all members during shutdown. This consistency allows recovery from disk to proceed without unexpected metadata validation errors. These errors can result in the need for a xref:storage:triggering-force-start.adoc[force-start], wiping out persistent data from one or more members.
+ - During temporary loss of members (for example, with a rolling restart of the cluster or a pod being rescheduled by Kubernetes), Hazelcast cluster switches to a configurable cluster state (`FROZEN` or `NO_MIGRATION`) to ensure speedy recovery when the member rejoins the cluster.
+ - When scaling up or down, Hazelcast automatically switches the cluster to an `ACTIVE` state, so partitions are rebalanced and data is spread across all members.
+
+TIP: For a step-by-step tutorial that details how to deploy Hazelcast with persistence enabled, see https://docs.hazelcast.com/tutorials/hazelcast-platform-operator-external-backup-restore[Restore a Cluster from Cloud Storage with Hazelcast Platform Operator]
+
+== Requirements
+Automatic cluster state management requires:
+
+- Hazelcast configured with xref:storage:configuring-persistence.adoc[persistence] enabled
+- xref:kubernetes:deploying-in-kubernetes.adoc[Kubernetes discovery] is in use, either explicitly configured or as auto-detected join configuration
+- Hazelcast is deployed in a `StatefulSet`
+- Hazelcast is executed with a cluster role that is allowed access to `apps` Kubernetes API group and `statefulsets` resources with the `watch` verb. See https://raw.githubusercontent.com/hazelcast/hazelcast/master/kubernetes-rbac.yaml[the proposed `ClusterRole` configuration]
+
+== Configuration
+
+Automatic cluster state management is enabled by default when Hazelcast is configured with persistence enabled and Kubernetes discovery. It can be explicitly disabled by setting the `hazelcast.persistence.auto.cluster.state` Hazelcast property to `false`.
+
+Depending on the use case, the `hazelcast.persistence.auto.cluster.state.strategy` Hazelcast property configures which cluster state will be used when members are temporarily missing from the cluster, e.g., pod is rescheduled or rolling restart is in progress. This property has the following values:
+
+ - `NO_MIGRATION`: Use this as the cluster state if the cluster hosts a mix of persistent and in-memory data structures or if the cluster hosts only persistent data, but you favor availability over speed of recovery. While a member is missing from the cluster, cluster state switches to `NO_MIGRATION`: this way, the first replica of partitions owned by the missing member are promoted and the data is available. When the member rejoins the cluster, persistent data can be recovered from disk and a differential sync (assuming Merkle trees are enabled, which is the case by default for persistent `IMap` and `ICache`) brings them up to speed. For in-memory data structures, a full partition sync is required. This is the default value.
+ - `FROZEN`: Use this cluster state if your cluster hosts only persistent data structures and you do not mind temporarily losing availability of partitions owned by a missing member in exchange for a speedy recovery from disk. Once the member rejoins, no synchronization over the network is required.
+
+== Best practices
+
+When running Hazelcast with persistence in Kubernetes, the following configuration is recommended:
+
+ - Use `/hazelcast/health/node-state` as liveness probe and `/hazelcast/health/ready` as readiness probe.
+ - In your xref:storage:configuring-persistence.adoc#global-persistence-options[persistence configuration]:
+ ** Never set a non-zero value for the `rebalance-delay-seconds` property. Automatic cluster state management switches to the cluster to the appropriate state, which may or may not allow partition rebalancing to occur depending on the detected status of the cluster.
+ ** Use `PARTIAL_RECOVERY_MOST_COMPLETE` as `cluster-data-recovery-policy` and set `auto-remove-stale-data` to `true`, to minimize the need for manual interventions. Even in edge cases in which a member performs force-start (that is, cleans its persistent data directory and rejoins the cluster with a new identity), data can usually be recovered from backup partitions (assuming `IMap` and `ICache` are configured with one or more backups).
+ - Start Hazelcast with the `-Dhazelcast.stale.join.prevention.duration.seconds=5` Java option. Since Kubernetes can quickly reschedule pods, the default value of `30` seconds is too high and can cause unnecessary delays in members rejoining the cluster.

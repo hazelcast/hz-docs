@@ -10,21 +10,19 @@
 NOTE: If your Enterprise license was generated before Hazelcast Platform version 5.2, you'll need a new Enterprise license that enables Tiered Storage.
 See xref:deploy:enterprise-licenses.adoc[].
 
-== What Can You Do with Tiered Storage?
-
-Have fewer Hazelcast members for large maps. For example, for a map with 1 TB of data, you'll need
-ten Hazelcast members if all data is kept in memory and each member has 100 GB of data. Tiered Storage allows you to split the data between memory and disks, which requires fewer cluster members depending on how the data is distributed.
-
-== When to Use Tiered Storage
+Tiered Storage allows you to work with datasets that are larger than memory using the same Hazelcast map API.
+It allows you to optimize infrastructure costs and performance by combining a fast, high performance in-memory layer and a lower-cost, high-capacity disk-based storage layer.
+With a larger data capacity per member, Tiered Storage can also reduce the number of deployed Hazelcast cluster members.
 
 Accessing data in the memory offers superior access speed, but memory is much more expensive than disks, while the modern NVMe SSDs offer performance that makes Tiered Storage a viable alternative to memory-only storage at a much lower total cost of ownership.
 
 Consider using Tiered Storage if one of the following is true for your use-case.
 
 - The data size Hazelcast manages exceeds the capacity of the memory.
-- You will to trade off performance for lower ownership costs.
+- You are willing to trade off performance for lower ownership costs.
 - The hot set of entries fit in the memory.
 - Your project uses MapStore and you intend to use local disk to improve the access latency of the entries not fitting in the memory of your machine.
+- You have significant temporal access patterns inside a larger dataset.
 
 == Limitations
 
@@ -58,7 +56,5 @@ The table of these hash indices are stored in the native memory, whereas the cha
 
 Tiered Storage makes sure every accessed IMap entry is available in the memory to build a hot cache of entries.
 This means, if an entry is on the disk, first it gets relocated to the memory inside the HybridLog hosting the entry, and its previous location on the disk becomes unreachable.
-As more and more entries get unreachable, to prevent running out of disk space the disk space occupied by these unreachable entries has to be reclaimed.
+As more and more entries are relocated to the in-memory region of the HybridLog, the memory space occupied by the unreachable entries on disk are reclaimed.
 This reclamation is done by a compactor running synchronously with regards to the IMap operations of the same partition.
-
-The design of Tiered Storage is based on the concepts and data structures introduced by the https://www.microsoft.com/en-us/research/uploads/prod/2018/03/faster-sigmod18.pdf[FASTER: A Concurrent Key-Value Store with In-Place Updates] Microsoft research paper.

@@ -1,0 +1,159 @@
+= Helm Upgrade Guide
+
+Before upgrading, review the Hazelcast xref:hazelcast:maintain-cluster:rolling-upgrades.adoc#hazelcast-members-compatibility-guarantees[Compatibility Guarantees].
+
+Due to a link:https://github.com/helm/charts/issues/7803[bug in the Helm Project], the helm upgrade command does not allow modifications to the spec.volumeClaimTemplates property in stateful sets. This results in some limitations for persistence in the Management Center and any hotRestart/persistence using `volumeClaimTemplates` internally.
+The following sections provide some methods of addressing these limitations.
+
+NOTE: Although we have tested common scenarios without hotRestart (persistence) and the Management Center persistence feature enabled, we cannot test every upgrade scenario. If you encounter issues, please contact xref:operator:ROOT:index.adoc#support[Support].
+
+We recommend that you disable Management Center before you upgrade, and re-enable it after the upgrade. To do this, complete the following steps:
+
+. Export the values from your existing installation:
++
+
+[source,bash]
+----
+helm get values <release-name> > values.yaml
+----
+
+. Disable Management Center:
++
+
+[source,bash]
+----
+helm upgrade <release-name> hazelcast/hazelcast-enterprise -f values.yaml --version <installed-version> --set mancenter.enabled=false
+----
+
+. Delete the persistent volume of the disabled Management Center:
++
+
+[source,bash]
+----
+kubectl get pvc -o name | grep "mancenter" | xargs -n 1 kubectl delete
+----
+
+. Upgrade your installation, and re-enable Management Center, as described in the Upgrade Hazelcast section below.
+
+== Upgrade Hazelcast
+
+The following sections cover scenarios for upgrading Hazelcast with persistence/hotRestart enabled.
+
+=== Hazelcast Version 4.x to 5.x
+
+You can use rolling upgrades when moving from version 4.2 to version 5.0. For further information on rolling upgrades, see the xref:maintain-cluster:rolling-upgrades.adoc[Hazelcast's Compatibility Guarantees] topic.
+
+NOTE: If upgrading from a Helm Chart of version 3.10 or earlier, Helm Chart upgrade is not supported. For information on other ways to upgrade, see the xref:helm-upgrade-guide.adoc#alternative-solutions[] section below.
+
+If you are using version 3.11, we recommend upgrading to 5.3.9 as follows:
+
+[source,bash]
+----
+helm get values > values.yaml
+helm upgrade hz hazelcast/hazelcast-enterprise --version 5.3.9 -f values.yaml
+----
+
+=== Hazelcast Version 5.x to 5.x
+
+Hazelcast rolling upgrade and chart upgrade can be used from version 5.4.7 to 5.9.2. However in version 5.8.0,  `hot-restart-persistence` was renamed to `persistence`. To upgrade from version 5.8.0, complete the following steps:
+
+. Export the values from the existing installation:
++
+
+[source,bash]
+----
+helm get values <release-name> > values.yaml
+----
+
+. Modify existing values:
++
+
+- Optionally, replace `hot-restart-persistence` with `persistence` in your Hazelcast configuration. For further information on configuring persistence, see the xref:storage:configuring-persistence.adoc[] topic.
++
+
+NOTE: This step is optional, as the previous configuration is still supported in later Hazelcast versions.
+
+- Replace the `hotRestart` field in the _values.yaml_ file with `persistence`. An example of the required change is provided in the version xref:kubernetes:helm-hazelcast-enterprise-chart.adoc#5-8-0[] section of the the Notable Changes in Helm Chart topic.
+
+. Upgrade using your updated values:
++
+
+[source,bash]
+----
+helm upgrade hz hazelcast/hazelcast-enterprise --version 5.8.0 -f values.yaml
+----
+
+NOTE: If you are upgrading from a version that is not mentioned above, use an xref:helm-upgrade-guide.adoc#alternative-solutions[alternative method].
+
+=== Alternative Solutions
+
+The following alternative methods can be used:
+
+xref:helm-upgrade-guide.adoc#persistence-based[]
+
+xref:helm-upgrade-guide.adoc#retain-helm-chart-version[]
+
+=== Persistence-based
+
+WARNING: This solution does not support rolling upgrades.
+
+To use the persistence-based solution, complete the following steps:
+
+. Export the values from your existing installation:
++
+
+[source,bash]
+----
+helm get values <release-name> > values.yaml
+----
+
+. Uninstall existing cluster:
++
+
+[source,bash]
+----
+helm uninstall <release-name>
+----
+
+. Install a cluster with the same name as the previous cluster but using a later Helm Chart version:
++
+
+WARNING: To attach volumes correctly, you must use the same cluster name and size.
++
+
+[source,bash]
+----
+helm install <release-name> --version <newer-version> -f values.yaml
+----
+
+=== Retain Helm Chart Version
+
+This solution does support rolling upgrades, but does not allow you to benefit from the improvements in later Helm Chart versions.
+
+For example to upgrade Hazelcast version 5.0.0, which was deployed to a cluster using Helm Chart version 5.2.0, to version is 5.3.6, you would complete the following steps:
+
+. Upgrade Hazelcast to version 5.1.1 without upgrading the Helm Chart version:
++
+NOTE: As mentioned above, you must upgrade each minor version, so we must upgrade Hazelcast multiple times as shown in the next steps.
++
+
+[source,bash]
+----
+helm upgrade --reuse-values hz hazelcast/hazelcast-enterprise --set image.tag=5.1.1 --version 5.2.0
+----
+
+. Upgrade Hazelcast to version 5.2.1 without upgrading the Helm Chart version:
++
+
+[source,bash]
+----
+helm upgrade --reuse-values hz hazelcast/hazelcast-enterprise --set image.tag=5.2.1 --version 5.2.0
+----
+
+. Upgrade Hazelcast to version 5.3.6 without upgrading the Helm Chart version:
++
+
+[source,bash]
+----
+helm upgrade --reuse-values hz hazelcast/hazelcast-enterprise --set image.tag=5.3.6 --version 5.2.0
+----

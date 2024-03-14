@@ -17,9 +17,9 @@ The variables are as follows:
 - `ts_imap_count`: The number of IMaps where Tiered Storage is enabled.
 - `ts_index_count`: The sum of all indices defined for the IMaps where Tiered Storage is enabled.
 - `partition_count`: The partition count of the Hazelcast cluster; by default 271.
-- `min_hybridlog_mem`: Constant 4MB.
+- `min_hybridlog_mem`: 4x hybrid log page size (by default 4*1MB=4MB).
 
-This means that having Tiered Storage enabled for a single IMap, with no index configured, and with the default partition count, the minimum required memory is `(1 + 0) * 271 * 4MB = 1084MB`.
+This means that having Tiered Storage enabled for a single IMap, with no index configured, and with the default partition count and page size, the minimum required memory is `(1 + 0) * 271 * 4MB = 1084MB`.
 
 The Hazelcast cluster members validate, on startup, if the native memory configured for the member is greater than or equal to the minimum required memory as calculated above.
 If not, the cluster fails to start.
@@ -33,9 +33,12 @@ This is the reason why Hazelcast always uses the partition count of the cluster 
 
 == Planning with the Disk
 
-There are no hard minimums for the available disk capacity as the amount of data stored by Tiered Storage is not known by Hazelcast and the disk usage depends only on the data amount.There are still a few things to consider:
+There are no hard minimums for the available disk capacity as the amount of data stored by Tiered Storage is not known by Hazelcast and the disk usage depends only on the data amount.
+There are still a few things to consider:
 
 - The aggregated capacity of the memory and the disk has to be large enough for the data stored in the IMap.
 - There are always unreachable entries on the disk.
 - Compaction will get triggered at certain usage percentage of the configured capacity, therefore, the disk has to be configured larger than the total data stored by the member.
 - The larger the disk headroom on top of the data, the more efficient the compactor is.
+- When a member rejoins the cluster after a split, it needs to merge the entries it stores with the view of the cluster.
+While the merging process is ongoing, there will be 2 versions of all entries.

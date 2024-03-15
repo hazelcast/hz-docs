@@ -7,7 +7,6 @@ The considerations for memory and disk capacity are explored below.
 == Memory Capacity
 
 A HybridLog data structure exists for each partition in all your maps, and for every index defined on the maps.
-Moreover, each index defined for these maps has a corresponding HybridLog.
 As the HybridLog includes a mandatory memory component, the configuration of IMaps backed by Tiered Storage dictates the minimum required native memory for the system.
 This minimum memory footprint can be calculated using the following formula:
 
@@ -23,9 +22,9 @@ The variables are as follows:
 - `partition_count`: The partition count of the Hazelcast cluster; by default 271.
 - `min_hybridlog_mem`: Four times the size of the hybrid log page (by default 4*1MB=4MB).
 
-NOTE: Please note that there is a HybridLog instance for every configured index on every partition.
+NOTE: There is a HybridLog instance for every configured index on every partition.
 
-This means that having Tiered Storage enabled for a single IMap, with no index configured, and with the default partition count and page size, the minimum required memory is `(1 + 0) * 271 * 4MB = 1084MB`.
+This means that if you have Tiered Storage enabled for a single IMap, with no index configured, and the default partition count and page size, the minimum required memory is `(1 + 0) * 271 * 4MB = 1084MB`.
 
 The Hazelcast cluster members validate, on startup, if the native memory configured for the member is greater than or equal to the minimum required memory as calculated above.
 If not, the cluster fails to start.
@@ -34,17 +33,17 @@ If not, the cluster fails to start.
 ##
 
 NOTE: Since the partitions are distributed in the cluster, a single member is not expected to store data from all partitions.
-However, in undesired conditions such as network splits and member shutdowns, all data may end up in a single member.
-This is the reason why Hazelcast always uses the partition count of the cluster for the above validation.
+However, in unexpected circumstances, such as network splits and member shutdowns, all data might be stored in a single member.
+For this reason, Hazelcast always uses the partition count of the cluster for the validation.
 
-== Planning with the Disk
+== Disk Capacity
 
-There are no hard minimums for the available disk capacity as the amount of data stored by Tiered Storage is not known by Hazelcast and the disk usage depends only on the data amount.
-There are still a few things to consider:
+As the disk usage depends on the amount of data, Hazelcast cannot set a minimum requirement for available disk capacity.
+When planning your disk capacity requirements, consider the following:
 
-- The aggregated capacity of the memory and the disk has to be large enough for the data stored in the IMap.
-- There are always unreachable entries on the disk.
-- Compaction will get triggered at certain usage percentage of the configured capacity, therefore, the disk has to be configured larger than the total data stored by the member.
+- The aggregated capacity of the memory and the disk must be large enough for the data stored in the IMap.
+- There is always less available space on the disk than stated. The difference in capacity is due to the software required by the disk itself, for example the driver.
+- The disk must be larger than the total data stored by the member as compaction is triggered when the disk reaches a certain percentage of the configured capacity.
 - The larger the disk headroom on top of the data, the more efficient the compactor is.
-- When a member rejoins the cluster after a split, it needs to merge the entries it stores with the view of the cluster.
-While the merging process is ongoing, there will be 2 versions of all entries.
+- When a member rejoins the cluster after a split, it must merge the entries it stores with the view of the cluster.
+All entries are duplicated during the merging process.

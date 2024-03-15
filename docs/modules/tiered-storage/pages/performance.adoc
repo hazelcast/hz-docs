@@ -1,53 +1,55 @@
 = Performance
 
-== Throughput vs Access Pattern
+Performance considerations are explored below.
+
+== Throughput or Access Pattern
 
 Tiered Storage is sensitive to disk reads and therefore performs best when operating with entries retrieved mostly from the memory.
 The higher the probability of hitting an entry in the memory, the closer Tiered Storage gets to the throughput of HD.
-This means random access pattern is the worst for Tiered Storage, while predictable access patterns working mostly with the hot cache fitting in the memory is the best.
+This means that random access pattern performs worst for Tiered Storage, while predictable access patterns where the hot cache fits in the memory performs best.
 
 == Impact of the Access Latency of the Devices
 
-Tiered Storage reads from the device synchronously, making the access latency of the device directly translating to throughput when the device needs to be touched.
-This rules out all high latency devices (HDDs, SAN drives, cloud block storages etc) from the list of the recommended types.
+Tiered Storage reads from the device synchronously, which means that the access latency of the device directly translates to throughput when the device needs to be touched.
+This rules out all high latency devices (for example, HDDs, SAN drives, cloud block storages) from the list of recommended types.
 
-== Compaction is the Driver of the Performance
+== Compaction Drives the Performance
 
-Compaction runs synchronously before/after the IMap operations making it the main driver/limiter of the performance of Tiered Storage.
-There are a few aspects that determine the impact of compaction on the performance of Tiered Storage:
+Compaction runs synchronously before/after the IMap operations, which means that it is the main driver/limiter of Tiered Storage performance.
+The following aspects determine the impact of compaction on the performance of Tiered Storage:
 
 - *Frequency of the compaction*: The less frequently it runs, the less impact it has on the latency, therefore, on the throughput.
-The compactor gets active when the used space or the amount of garbage reaches the configured threshold.
+The compactor gets active when the used space, or the amount of garbage, reaches the configured threshold.
 Then it runs incrementally and time-boxed to make the smallest impact possible on latency.
 
-- *Efficiency of the compaction*: The compaction is the most efficient when it can just clean up disk space without relocating alive entries inside the address space of Tiered Storage.
-This can be impacted by trading off disk space for compaction performance, see later.
+- *Efficiency of the compaction*: The compaction is most efficient when it can just clean up disk space without relocating alive entries inside the address space of Tiered Storage.
+This can be impacted by trading disk space for compaction performance, as discussed below.
 
-- *Hot cache thrashing*: The compactor employed by Tiered Storage relocates the alive entries it encounters with to the memory where the hot cache resides.
-Since the memory consumption of the HybridLog is fixed, this means records from the memory hot cache will be accessible only from the disk until the next access.
+- *Hot cache thrashing*: The compactor used by Tiered Storage relocates the alive entries it encounters to the memory where the hot cache resides.
+As the memory consumption of the HybridLog is fixed, records from the memory hot cache are accessible only from the disk until the next access.
 This means that the compactor replaces hot entries with cold entries temporarily.
 
 == Compaction vs Disk Space Trade-Off
 
-Because of the behavior of the compactor discussed in the previous section, the compactor should encounter the minimum alive entries possible.
+Due to the behavior of the compactor covered in the previous section, the compactor ought to encounter the minimum alive entries possible.
 The compactor is a garbage-first compactor, meaning that it compacts the hybrid log pages with the highest garbage ratio first.
-Assuming the data size to be constant, the efficiency of the compactor can be improved by giving more space for Tiered Storage to reduce the density of the alive entries on the disk.
+Assuming the data size to be constant, the efficiency of the compactor can be improved by providing more space for Tiered Storage to reduce the density of the alive entries on the disk.
 
 == CPU Usage
 
-While in certain setups Tiered Storage can achieve the same level of throughput that HD produces, it typically operates with higher CPU usage.
-This has two reasons:
+While in certain setups Tiered Storage can achieve the same level of throughput as the HD, it typically operates with higher CPU usage.
+This is due to the following reasons:
 
-- since the entries may be in the memory or in the disk tier the computational complexity of accessing the entries is higher, and
-- the synchronous I/O calls force the threads waiting for the result of the calls, visible as increased I/O wait time CPU metric reported by the OS.
+- As entries can be in the memory or in the disk tier, the computational complexity of accessing the entries is higher.
+- The synchronous I/O calls force the threads waiting for the result of the calls. This is visible as an increased I/O wait time CPU metric reported by the OS.
 
 == Efficiency of the Page Cache
 
 The page cache is an area in the memory maintained by the operating system where in-memory copies of the hottest pages from the disk are kept to improve performance.
-While this is efficient in many use-cases, data systems based on their contextual knowledge can decide better what to keep in the memory.
-Tiered Storage is no exception, therefore, it is recommended to assign the available memory to Tiered Storage to increase its hot cache size.
+While this is efficient in many use-cases, data systems based on their contextual knowledge can make better decisions about what to keep in the memory.
+Tiered Storage is no exception, therefore, we recommend that the available memory is assigned to Tiered Storage to increase its hot cache size.
 
 == Recommendations for Performance Testing
 
-Since compaction does not start immediately after a member starts, performance testing setups with Tiered Storage enabled needs to be performed with tests that run long enough to let the compaction running, and the metrics of the system stabilizing.
-The conclusions from the tests can be made only after that.
+Compaction does not start immediately after a member starts. Therefore, performance testing setups with Tiered Storage enabled must be performed with tests that run long enough to allow the compaction to run, and the metrics of the system to stabilize.
+The conclusions from the tests can be made only after both of these conditions have been met.

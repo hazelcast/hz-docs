@@ -21,6 +21,28 @@ Consider using Tiered Storage if any of the following applies to your use-case:
 NOTE: If your Enterprise license was generated before Hazelcast Platform version 5.2, you'll need a new Enterprise license that enables Tiered Storage.
 See xref:deploy:enterprise-licenses.adoc[].
 
+== Supported Devices
+
+Hazelcast supports only nonvolatile memory express (NVMe) local SSD devices for Tiered Storage.
+While HDDs and some network storage options work with the same file abstraction as local SSDs, and technically such set-ups work, the access latency of these devices compared to that of modern SSDs are so high that using Tiered Storage with such devices are not supported.
+
+== High-Level Design Overview
+
+Tiered Storage for IMaps is backed by a special-purpose, addressable data structure called HybridLog.
+It is called HybridLog because it seamlessly combines in-place updates with a traditional append-only log.
+This data structure spans the memory and the configured disk to provide the aggregated capacity of the resources available for storing IMap's entries.
+There is a HybridLog data structure for every partition of every IMap.
+
+The IMap entries stored in these HybridLog instances are internally referenced by their logical addresses.
+The key to logical address mapping uses a hash index component.
+These hash indices are hashtables using separate chaining for conflict resolution.
+The table of these hash indices is stored in native memory; the chaining information for the buckets is stored on the disk.
+
+Tiered Storage ensures that every accessed IMap entry is available in the memory to build a hot cache of entries.
+This means that, if an entry is on the disk, it is relocated to the memory inside the HybridLog hosting the entry, and its previous location on the disk becomes unreachable.
+As more and more entries are relocated to the in-memory region of the HybridLog, the memory space occupied by the unreachable entries on disk is reclaimed.
+This reclamation is done by a compactor running synchronously with IMap operations on the same partition.
+
 == Limitations
 
 - Data recovery from persisted data is not yet supported. When a Hazelcast member has Tiered Storage enabled and it fails or shuts down, you cannot use the local Tiered Storage device files for data recovery. Data recovery will be supported in the future releases.
@@ -43,25 +65,3 @@ If both are enabled simultaneously, `InvalidConfigurationException` is thrown du
 To avoid this, use xref:query:predicate-overview.adoc[Predicate API] instead.
 
 - Dynamically adding local devices is not supported.
-
-== Supported Devices
-
-Hazelcast supports only nonvolatile memory express (NVMe) local SSD devices for Tiered Storage.
-While HDDs and some network storage options work with the same file abstraction as local SSDs, and technically such set-ups work, the access latency of these devices compared to that of modern SSDs are so high that using Tiered Storage with such devices are not supported.
-
-== High-Level Design Overview
-
-Tiered Storage for IMaps is backed by a special-purpose, addressable data structure called HybridLog.
-It is called HybridLog because it seamlessly combines in-place updates with a traditional append-only log.
-This data structure spans the memory and the configured disk to provide the aggregated capacity of the resources available for storing IMap's entries.
-There is a HybridLog data structure for every partition of every IMap.
-
-The IMap entries stored in these HybridLog instances are internally referenced by their logical addresses.
-The key to logical address mapping uses a hash index component.
-These hash indices are hashtables using separate chaining for conflict resolution.
-The table of these hash indices is stored in native memory; the chaining information for the buckets is stored on the disk.
-
-Tiered Storage ensures that every accessed IMap entry is available in the memory to build a hot cache of entries.
-This means that, if an entry is on the disk, it is relocated to the memory inside the HybridLog hosting the entry, and its previous location on the disk becomes unreachable.
-As more and more entries are relocated to the in-memory region of the HybridLog, the memory space occupied by the unreachable entries on disk is reclaimed.
-This reclamation is done by a compactor running synchronously with IMap operations on the same partition.

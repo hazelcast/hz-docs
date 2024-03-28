@@ -1,15 +1,12 @@
 = Configuring Tiered Storage
 :page-enterprise: true
-:page-beta: true
 :description: You can enable and configure Tiered Storage for Hazelcast members, as well as fine-tune the configuration for advanced use cases.
 
 == Before you Begin
 
 Tiered Storage works only with maps whose in-memory format is `NATIVE`.  Before you configure Tiered Storage for a map, make sure that it uses this in-memory format. See xref:storage:high-density-memory.adoc[High-Density Memory] to learn how to enable and configure the `NATIVE` in-memory format for maps.
 
-You cannot yet create xref:query:indexing-maps.adoc[indexes] on maps that have Tiered Storage enabled.
-
-== Configuration Options
+== Quickstart Configuration
 
 Configuration for Tiered Storage includes setting the device (local disk) parameters for the Hazelcast member
 and providing Tiered Storage details for the map. The following shows the **minimal** configuration to start
@@ -17,33 +14,9 @@ using Tiered Storage. See <<fine-tuning, Fine Tuning>> for additional device-spe
 
 [tabs] 
 ==== 
-XML::
+YAML::
 +
 --
-[source,xml]
-----
-<hazelcast>
-    <native-memory enabled="true"> <1>
-        ... <2>
-    </native-memory>
-    <local-device name="my-disk"> <3>
-        <base-dir>tiered-store</base-dir> <4>
-    </local-device>
-    <map name="my-map">
-        <in-memory-format>NATIVE</in-memory-format> <5>
-        <tiered-store enabled="true"> <6>
-            <memory-tier>
-                <capacity unit="MEGABYTES" value="256"/> <7>
-            </memory-tier>
-            <disk-tier enabled="true" device-name="my-disk"/> <8> <9>
-        </tiered-store>
-    </map>
-</hazelcast>
-----
---
-
-YAML:: 
-+ 
 [source,yaml]
 ----
 hazelcast:
@@ -66,6 +39,30 @@ hazelcast:
           enabled: true <8>
           device-name: "my-disk" <9>
 ----
+--
+
+XML:: 
++ 
+[source,xml]
+----
+<hazelcast>
+    <native-memory enabled="true"> <1>
+        ... <2>
+    </native-memory>
+    <local-device name="my-disk"> <3>
+        <base-dir>tiered-store</base-dir> <4>
+    </local-device>
+    <map name="my-map">
+        <in-memory-format>NATIVE</in-memory-format> <5>
+        <tiered-store enabled="true"> <6>
+            <memory-tier>
+                <capacity unit="MEGABYTES" value="256"/> <7>
+            </memory-tier>
+            <disk-tier enabled="true" device-name="my-disk"/> <8> <9>
+        </tiered-store>
+    </map>
+</hazelcast>
+----
 ====
 <1> The native memory usage for the member must be enabled.
 <2> See xref:storage:high-density-memory.adoc#configuring-high-density-memory-store[here] for available native memory configuration options.
@@ -81,15 +78,17 @@ NOTE: For now, Tiered Storage supports the local machine's disk as the storage d
 additional systems such as Amazon S3 and Google Blobstore in the future releases, so that
 when the local disk is filled up, you will be able to flush data to, for example, Amazon S3.
 
+NOTE: The native memory setting is global and is shared by maps configured for Tiered Storage and for High-Density Memory. Ensure that the configured native memory is large enough for both map configurations.
+
 == Fine-Tuning
 
 Tiered Storage works fine for most use cases with the default settings provided in <<configuring-tiered-storage, Configuring Tiered Storage>>.
 However, there may be specific use cases where you might want to change the behavior related to the device to be used.
 
-[tabs] 
+[tabs]
 ==== 
-YAML:: 
-+ 
+YAML::
++
 -- 
 [source,yaml]
 ----
@@ -128,8 +127,53 @@ XML::
 </hazelcast>
 ----
 ====
-<1> Soft upper limit capacity of the device. You can give the size using its `value` attribute and the unit using its `unit` attribute. Unit can be bytes, kilobytes, megabytes and gigabytes. The default is 256 gigabytes.
+
+<1> Soft upper limit of the device capacity.
+Use the `value` attribute to define the size and the `unit` attribute to define the unit in which the value is measured.
+`unit` can be set to bytes, kilobytes, megabytes or gigabytes.
+The default is 256 gigabytes.
 <2> Allocated size of the device’s IO (read/write), in bytes; refers to the minimum size to request IO.
-If it is 4096 Bytes, then even if you read or write 100 Bytes, it will still read 4096 Bytes from disk.
-<3> Number of threads for read/write operations from/to disk. For hard disk drives, having write thread IO count of 1 or 2 is optimal;
-whereas for solid state drives (SSDs) this would lead to under-utilization, so higher writer thread count would be better.
+If it is 4096 Bytes, then even if you read or write 100 Bytes, it still reads 4096 Bytes from disk.
+<3> Number of threads for read/write operations from/to disk.
+For hard disk drives, a write thread IO count of 1 or 2 is optimal; whereas for solid state drives (SSDs) this would lead to under-utilization, so a higher write thread count is needed.
+
+You also have the following system properties to further fine-tune the Tiered Storage setup. See xref:configuration:configuring-with-system-properties.adoc[Configuring with System Properties] on how to add a property to your setup.
+
+|===
+|Property |Default |Description
+
+|`hazelcast.tiered.store.hybridlog.page.size.in.mb`
+|1
+|The size of a single HybridLog page, defined in megabytes. The valid values are `[1,2,4,8,16]`.
+
+|`hazelcast.tiered.store.log.file.max.size.in.mb`
+|8
+|Maximum file size of a Tiered Storage file. It defines the working unit of the compactor. Use a multiple of the `hazelcast.tiered.store.hybridlog.page.size.in.mb` setting.
+
+
+|`hazelcast.tiered.store.partition.compactor.gc.threshold.per.map.partition.in.mb`
+|The value set for `hazelcast.tiered.store.log.file.max.size.in.mb`
+|The compactor on the partition threads is triggered only if there is at least the specified amount of garbage present on the partition.
+
+|`hazelcast.tiered.store.compaction.starting.device.usage.percentage`
+|0.9
+|Triggers the compactor to run when the configured percentage of the configured device capacity is reached.
+
+|`hazelcast.tiered.store.partition.compactor.scan.timeout.millis`
+|10
+|Time goal for a single compaction round, defined in milliseconds.
+|===
+
+== Dynamic License Key Update
+
+To support extending the Tiered Storage capacity property of the Enterprise License Key without restarting the members, Tiered Storage detects and adapts its limits to the new Tiered Storage capacity defined in the new License Key.
+For further information on updating license keys, see xref:deploy:enterprise-licenses.adoc#update[Updating a License Key at Runtime].
+
+By increasing the Tiered Storage capacity with a new License Key, the capacity of the configured devices might be too low to benefit from the new License Key permissions.
+To ensure optimal use of Tiered Storage, increase the capacity parameter of the devices accordingly.
+
+NOTE: The capacity parameter of the devices can be increased only by reloading the configuration, and only increasing the capacity is allowed.
+You cannot add devices or change any other configuration parameter using dynamic configuration reload.
+
+NOTE: Updating the License Key and increasing the capacity of the devices can be done in one step by updating the configuration for both before reloading the configuration.
+

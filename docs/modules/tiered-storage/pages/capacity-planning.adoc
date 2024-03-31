@@ -1,0 +1,72 @@
+= Capacity Planning
+
+You must calculate the capacity of external storage you require to ensure that your selected storage is suitable for your needs.
+
+The considerations for memory and disk capacity are explored below.
+
+== Memory Capacity
+
+A HybridLog data structure exists for each partition in all your maps, and for every index defined on the maps.
+As the HybridLog includes a mandatory memory component, the configuration of IMaps backed by Tiered Storage dictates the minimum required native memory for the system.
+This minimum memory footprint can be calculated using the following formula:
+
+----
+min_memory = (ts_imap_count + ts_index_count) * partition_count
+             * min_hybridlog_mem
+----
+
+The variables are as follows:
+
+- `ts_imap_count`: The number of IMaps that have Tiered Storage enabled.
+- `ts_index_count`: The sum of all indices defined for the IMaps that have Tiered Storage enabled.
+- `partition_count`: The partition count of the Hazelcast cluster; by default 271.
+- `min_hybridlog_mem`: The minimum memory allocated to the hybrid log page. This is four times the size of the hybrid log page (by default 4*1MB=4MB).
+
+NOTE: There is a HybridLog instance for every configured index on every partition.
+
+This means that if you have Tiered Storage enabled for a single IMap, with no index configured, and the default partition count and page size, the minimum required memory is `(1 + 0) * 271 * 4MB = 1084MB`.
+
+The Hazelcast cluster members validate, on startup, if the native memory configured for the member is greater than or equal to the minimum required memory as calculated above.
+If not, the cluster fails to start.
+
+In addition, around 20 MB of RAM is required for every one million entries stored on a member, including backups. To calculate the required RAM for members, divide the total expected number of entries (including backups) stored in the cluster by the member count.
+For example, if you have a cluster of ten members and you need to store five million entries in the cluster, then, with the backup count of 1, you need around 20 MB of RAM on each member.
+
+As partitions are distributed in the cluster, data from all partitions would not normally be stored in a single member. However, there are occasions, such as network splits and member shutdowns, when all data might be stored in a single member.
+For this reason, Hazelcast always uses the partition count of the cluster for validation.
+
+TIP: For optimal performance and resource allocation, we recommend that you allocate approximately 12GB of memory per 100GB of Tiered Storage.
+This ratio ensures efficient caching and retrieval of data, balancing memory usage with storage capacity to enhance system responsiveness and stability.
+
+== Disk Capacity
+
+As the disk usage depends on the amount of data, there is no minimum requirement for available disk capacity.
+When planning your disk capacity requirements, consider the following:
+
+- The aggregated capacity of the memory and the disk must be large enough for the data stored in the IMap.
+- There is always less available space on the disk than stated. The difference in capacity is due to the software required by the disk itself, for example the driver.
+- The disk must be larger than the total data stored by the member as compaction is triggered when the disk reaches a certain percentage of the configured capacity.
+- The larger the disk headroom on top of the data, the more efficient the compactor is.
+- When a member rejoins the cluster after a split, it must merge the entries it stores with the view of the cluster.
+All entries are duplicated during the merging process.
+
+While disk usage generally varies based on the volume of data and there is no strict minimum requirement for available disk capacity,
+we recommend using the calculation below to ensure sufficient disk capacity for optimal performance.
+
+```
+disk_capacity = total_data_size + (partition_count * value of hazelcast.tiered.store.partition.compactor.gc.threshold.per.map.partition.in.mb * 10)
+```
+The capacity calculated here ensures that frequent compactions do not overwhelm the cluster's resources. 
+
+In this formula:
+
+* Total data size is your data volume in the whole cluster.
+* Partition count is the total number of partitions in your cluster, with a default value of `271`. See xref:ROOT:capacity-planning.adoc#partition-count[Partition Count].
+* `hazelcast.tiered.store.partition.compactor.gc.threshold.per.map.partition.in.mb` is the minimum garbage amount to trigger the compactor, with a default value of `8MB`. See xref:configuration.adoc#additional-parameters[Additional Parameters].
+* `10` is the multiplier.
+
+As an example, with default parameters, and for a 100GB of total data size, the formula and the recommended disk capacity become as follows:
+
+```
+disk_capacity = 100GB + (271*8MB*10) -> ~121GB
+```

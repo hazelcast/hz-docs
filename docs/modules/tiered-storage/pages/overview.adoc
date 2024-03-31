@@ -1,27 +1,69 @@
-= Tiered Storage
+= Overview
 :description: Tiered Storage offers an extension to Hazelcast map, which allows you to store a larger data set than available memory.
 :page-aliases: ROOT:tiered-storage.adoc[]
-:page-beta: true
 :page-enterprise: true
 [[tiered-storage]]
 
 {description}
 
-NOTE: If your Enterprise license was generated before Hazelcast Platform version 5.2, you'll need a new Enterprise license that enables Tiered Storage. See xref:deploy:enterprise-licenses.adoc[].
+Tiered Storage allows you to work with datasets that are larger than memory using the same Hazelcast map API. It allows you to optimize infrastructure costs and performance by combining a fast in-memory layer with a cost-effective, high-capacity disk-based storage layer.
 
-== What Can You Do with Tiered Storage?
+Additionally, with the extended data capacity for each member, Tiered Storage can also reduce the number of deployed Hazelcast cluster members.
 
-Have fewer Hazelcast members for large maps. For example, for a map with 1 TB of data, you'll need
-ten Hazelcast members if all data is kept in memory and each member has 100 GB of data. Tiered Storage allows you to split the data between memory and disks, which requires fewer cluster members depending on how the data is distributed. 
+Consider using Tiered Storage if any of the following applies to your use-case:
 
+- The data size Hazelcast manages exceeds the capacity of the memory.
+- You want lower ownership costs, despite that having an impact on performance.
+- The hot set of entries fit in the memory.
+- You have significant temporal access patterns inside a very large dataset.
+- Your project uses MapStore and you intend to use local disk to improve the access latency of entries that do not fit in the memory of your machine.
 
-== How Does Tiered Storage Work?
+NOTE: If your Enterprise license was generated before Hazelcast Platform version 5.2, you'll need a new Enterprise license that enables Tiered Storage.
+See xref:deploy:enterprise-licenses.adoc[].
 
-Tiered Storage uses the following:
+== Design Overview
 
-* An in-memory index to allow faster access to map entries.
-* A special memory manager to decide which entries to store in the memory tier or the disk tier. If a map entry is not accessed for some time, it gets flushed to the disk. If a map is frequently accessed, it stays in memory.
+Tiered Storage for IMaps is backed by a special-purpose, addressable data structure called HybridLog.
+It is called HybridLog because it seamlessly combines in-place updates with a traditional append-only log.
+This data structure spans the memory and the configured disk to provide the aggregated capacity of the resources available for storing IMap's entries.
+There is a HybridLog data structure for every partition of every IMap.
 
-== Not Yet Supported
+The IMap entries stored in these HybridLog instances are internally referenced by their logical addresses.
+The key to logical address mapping uses a hash index component.
+These hash indices are hashtables using separate chaining for conflict resolution.
+The table of these hash indices is stored in native memory; the chaining information for the buckets is stored on the disk.
 
-- Data recovery from persisted data: When a Hazelcast member has Tiered Storage enabled and it fails or shuts down, you are not able to use the local device files of Tiered Storage for data recovery. Data recovery will be supported in the future releases.
+Tiered Storage ensures that every accessed IMap entry is available in the memory to build a hot cache of entries.
+This means that, if an entry is on the disk, it is relocated to the memory inside the HybridLog hosting the entry, and its previous location on the disk becomes unreachable.
+As more and more entries are relocated to the in-memory region of the HybridLog, the memory space occupied by the unreachable entries on disk is reclaimed.
+This reclamation is done by a compactor running synchronously with IMap operations on the same partition.
+
+== Supported Devices
+
+Hazelcast supports only non-volatile memory express (NVMe) local SSD devices for Tiered Storage.
+While HDDs and some network storage options work with the same file abstraction as local SSDs, and technically such set-ups work, the access latency of these devices compared to that of modern SSDs is so high that using Tiered Storage with such devices are not supported.
+
+== Limitations
+
+- Tiered Storage currently only supports Hazelcast IMap data structure.
+
+- Data recovery from persisted data is not supported. When a Hazelcast member has Tiered Storage enabled and it fails or shuts down, you cannot use the local Tiered Storage device files for data recovery.
+
+- Time-to-live (TTL) expiration is not supported by maps backed by Tiered Storage.
+This means that methods, such as `IMap.put`, throw `UnsupportedOperationException` if a TTL value is provided.
+If the default TTL setting is present in the map configuration, `InvalidConfigurationException` is thrown during the member startup.
+
+- Max-Idle expiration is not supported by maps backed by Tiered Storage.
+This means that methods, such as `IMap.put`, throw `UnsupportedOperationException` if a Max-Idle value is provided.
+If the default Max-Idle setting is present in the map configuration, `InvalidConfigurationException` is thrown during the member startup.
+
+- Eviction is not supported.
+If an eviction policy is configured for a Tiered-Storage-backed map, `InvalidConfigurationException` is thrown during the member startup.
+
+- Data Persistence and Tiered Storage are mutually exclusive features.
+If both are enabled simultaneously, `InvalidConfigurationException` is thrown during the member startup.
+
+- SQL is not supported for the Tiered-Storage-backed maps. `UnsupportedOperationException` is thrown when a SQL query is executed.
+To avoid this, use xref:query:predicate-overview.adoc[Predicate API] instead.
+
+- Dynamic addition of local devices is not supported.

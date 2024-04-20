@@ -7,15 +7,15 @@ NOTE: For information on threading in Thread-Per-Core (TPC) environments, see xr
 == I/O Threading
 
 Hazelcast uses a pool of threads for I/O. A single thread does not perform all the I/O.
-Instead, multiple threads perform the I/O. On each cluster member, the I/O threading is split up in 3 types of I/O threads:
+Instead, multiple threads perform the I/O. On each cluster member, the I/O threading is split up in three types of I/O threads:
 
 * I/O thread for the accept requests
 * I/O threads to read data from other members/clients
 * I/O threads to write data to other members/clients
 
 You can configure the number of I/O threads using the `hazelcast.io.thread.count` system property.
-Its default value is 3 per member. If 3 is used, in total there are 7 I/O threads:
-1 accept I/O thread, 3 read I/O threads and 3 write I/O threads. Each I/O thread has
+Its default value is `3`, which is applied to each member. If the default is used, in total there are 7 I/O threads:
+one accept I/O thread, three read I/O threads and three write I/O threads. Each I/O thread has
 its own Selector instance and waits on the `Selector.select` if there is nothing to do.
 
 NOTE: You can also specify counts for input and output threads separately.
@@ -49,15 +49,15 @@ to alter the system's behavior:
 * `hazelcast.event.queue.timeout.millis`: Timeout for placing an item on the work queue in milliseconds. Its default value is 250 milliseconds.
 
 If you process a lot of events and have many cores, changing the value of `hazelcast.event.thread.count` property to
-a higher value is a good practice. This way, more events can be processed in parallel.
+a higher value is good practice. This way, more events can be processed in parallel.
 
-Multiple components share the same event queues. If there are 2 topics, say A and B, for certain messages
+Multiple components share the same event queues. If there are two topics, say A and B, for certain messages
 they may share the same queue(s) and hence the same event thread. If there are a lot of pending messages produced by A, then B needs to wait.
 Also, when processing a message from A takes a lot of time and the event thread is used for that, B suffers from this.
 That is why it is better to offload processing to a dedicated thread (pool) so that systems are better isolated.
 
 If the events are produced at a higher rate than they are consumed, the queue grows in size. To prevent overloading the system
-and running into an `OutOfMemoryException`, the queue is given a capacity of 1 million items. When the maximum capacity is reached, the items are
+and running into an `OutOfMemoryException`, the queue is given a capacity of one million items. When the maximum capacity is reached, the items are
 dropped. This means that the event system is a 'best effort' system. There is no guarantee that you are going to get an
 event. Topic A might have a lot of pending messages and therefore B cannot receive messages because the queue
 has no capacity and messages for B are dropped.
@@ -75,15 +75,15 @@ using `<executor>` (declarative configuration). See also the xref:computing:exec
 
 The following are the operation types:
 
-* operations that are aware of a certain partition, e.g., `IMap.get(key)`
-* operations that are not partition aware, e.g., `IExecutorService.executeOnMember(command, member)`
+* operations that are aware of a certain partition; for example., `IMap.get(key)`
+* operations that are not partition aware; for example, `IExecutorService.executeOnMember(command, member)`
 
 Each of these operation types has a different threading model explained in the following sections.
 
 === Partition-aware Operations
 
 To execute partition-aware operations, an array of operation threads is created.
-The default value of this array's size is the number of cores and it has a minimum value of 2.
+The default value of this array's size is the number of cores and it has a minimum value of `2`.
 This value can be changed using the `hazelcast.operation.thread.count` property.
 
 Each operation thread has its own work queue and it consumes messages from this work queue. If a partition-aware
@@ -91,14 +91,14 @@ operation needs to be scheduled, the right thread is found using the formula bel
 
 `threadIndex = partitionId % partition thread-count`
 
-After the `threadIndex` is determined, the operation is put in the work queue of that operation thread. This means the followings:
+After the `threadIndex` is determined, the operation is put in the work queue of that operation thread. This means the following:
 
 * A single operation thread executes operations for multiple partitions;
 if there are 271 partitions and 10 partition threads, then roughly every operation thread executes operations for 27 partitions.
-* Each partition belongs to only 1 operation thread.
+* Each partition belongs to only one operation thread.
 All operations for a partition are always handled by exactly the same operation thread.
 * Concurrency control is not needed to deal with partition-aware operations because
-once a partition-aware operation is put in the work queue of a partition-aware operation thread, only 1 thread is able to touch that partition.
+once a partition-aware operation is put in the work queue of a partition-aware operation thread, only one thread is able to touch that partition.
 
 Because of this threading strategy, there are two forms of false sharing you need to be aware of:
 
@@ -108,8 +108,8 @@ the method `employees.get("peter")` running on partition 25 may be blocked by
 the method `orders.get(1234)` also running on partition 25.
 If independent data structures share the same partition, a slow operation on one data structure can slow down the other data structures.
 * False sharing of the partition-aware operation thread - each operation thread is responsible for executing
- operations on a number of partitions. For example, *thread 1* could be responsible for partitions 0, 10, 20, etc. and *thread-2* could be responsible for partitions
- 1, 11, 21, etc. If an operation for partition 1 takes a lot of time, it blocks the execution of an operation for partition
+ operations on a number of partitions. For example, *thread 1* could be responsible for partitions 0, 10, 20 and so on, and *thread-2* could be responsible for partitions
+ 1, 11, 21 and so on. If an operation for partition 1 takes a lot of time, it blocks the execution of an operation for partition
  11 because both of them are mapped to the same operation thread.
 
 You need to be careful with long-running operations because you could starve operations of a thread.
@@ -118,7 +118,7 @@ as long-running operations. That is why, for example, it is very dangerous to ex
 using `AtomicReference.alter()` or an `IMap.executeOnKey()`, because these operations block other operations to be executed.
 
 Currently, there is no support for work stealing. Different partitions that map to the same thread may need to wait
-till one of the partitions is finished, even though there are other free partition-aware operation threads available.
+until one of the partitions is finished, even though there are other free partition-aware operation threads available.
 
 **Example:**
 
@@ -127,9 +127,9 @@ say you have one CPU and four cores per CPU. By default, four operation threads 
 
 === Non-Partition-aware Operations
 
-To execute operations that are not partition-aware, e.g., `IExecutorService.executeOnMember(command, member)`, generic operation
+To execute operations that are not partition-aware - for example, `IExecutorService.executeOnMember(command, member)` - generic operation
 threads are used. When the Hazelcast instance is started, an array of operation threads is created. The size of this array
-has a default value of the number of cores divided by two with a minimum value of 2. It can be changed using the
+has a default value of the number of cores divided by two with a minimum value of `2`. It can be changed using the
 `hazelcast.operation.generic.thread.count` property.
 
 A non-partition-aware operation thread does not execute an operation for a specific partition. Only partition-aware
@@ -146,7 +146,7 @@ production since performance is dominated by I/O and the system does not run man
 
 === Priority Operations
 
-In some cases, the system needs to run operations with a higher priority, e.g., an important system operation.
+In some cases, the system needs to run operations with a higher priority; for example, an important system operation.
 To support priority operations, Hazelcast has the following features:
 
 * For partition-aware operations: Each partition thread has its own work queue and it also has a priority
@@ -155,8 +155,8 @@ To support priority operations, Hazelcast has the following features:
  needs to be run, it is put in the `genericPriorityWorkQueue`. Like the partition-aware operation threads, a generic
  operation thread first checks the `genericPriorityWorkQueue` for work.
 
-Since a worker thread blocks on the normal work queue (either partition specific or generic), a priority operation
-may not be picked up because it is not put in the queue where it is blocking. Hazelcast always sends a 'kick the worker' operation that
+Since a worker thread blocks the normal work queue (either partition specific or generic), a priority operation
+may not be picked up because it is not put in the queue where it is blocked. Hazelcast always sends a 'kick the worker' operation that
 only triggers the worker to wake up and check the priority queue.
 
 === Operation-response and Invocation-future
@@ -170,7 +170,7 @@ Future future = operationService.invoke( operation );
 future.get();
 ----
 
-The calling side blocks for a reply. In this case, `GetOperation` is set in the work queue for the partition of `key`, where
+The calling side blocks the thread for a reply. In this case, `GetOperation` is set in the work queue for the partition of `key`, where
 it eventually is executed. Upon execution, a response is returned and placed on the `genericWorkQueue` where it is executed by a
 "generic operation thread". This thread signals the `future` and notifies the blocked thread that a response is available.
 Hazelcast has a plan of exposing this `future` to the outside world, and we will provide the ability to register a completion listener so you can perform asynchronous calls.
@@ -213,19 +213,19 @@ You can set the CPU thread affinity properties shown above only on the command l
 Let's have a look at how we define the values for the above configuration
 properties:
 
-* **Individual CPUs**, e.g., `1,2,3`: This means there are going to be
+* **Individual CPUs**, for example `1,2,3`: This means there are going to be
 three threads. The first thread runs on CPU 1, the second thread on CPU 2, and so on.
-* **CPU ranges**, e.g., `1-3`: Shortcut syntax for `1,2,3`.
-* **Group**, e.g., `[1-3]`: This configures three threads and each of
+* **CPU ranges**, for example `1-3`: Shortcut syntax for `1,2,3`.
+* **Group**, for example `[1-3]`: This configures three threads and each of
 these threads can run on CPU 1, 2 and 3.
-* **Group with thread count**, e.g., `[1-3]:2`: This configures two
+* **Group with thread count**, for example `[1-3]:2`: This configures two
 threads and each of these two threads can run on CPU 1, 2 and 3.
 
-You can also combine those, e.g., `1,2,[5-7],[10,12,16]:2`.
+You can also combine those, for example `1,2,[5-7],[10,12,16]:2`.
 
 Note that, the syntax for CPU thread affinity shown above not only determines
 the mapping of CPUs to threads, it also determines the thread count.
-If you use CPU thread affinity, e.g., `hazelcast.io.input.thread.affinity`,
+If you use CPU thread affinity - for example, `hazelcast.io.input.thread.affinity` - 
 then `hazelcast.io.input.thread.count` is ignored. See <<threading-model, Threading Model>> for more
 information about specifying explicit thread counts.
 
@@ -262,7 +262,7 @@ and confine the threads to these NUMA nodes, you can use the following configura
 -Dhazelcast.operation.thread.affinity=[0-9,20-29],[10-19,30-39]
 ```
 
-See https://en.wikipedia.org/wiki/Non-uniform_memory_access[here^]
+Refer to https://en.wikipedia.org/wiki/Non-uniform_memory_access[Non-uniform memory access^]
 for information about NUMA nodes.
 
 == SlowOperationDetector
@@ -275,7 +275,7 @@ The `SlowOperationDetector` stores the fully qualified classname of the operatio
 operation details, start time and duration of each slow invocation. All collected data is available in
 the xref:{page-latest-supported-mc}@management-center:monitor-imdg:monitor-members.adoc[Management Center].
 
-The `SlowOperationDetector` is configured via the following system properties.
+The `SlowOperationDetector` is configured using the following system properties.
 
 * `hazelcast.slow.operation.detector.enabled`
 * `hazelcast.slow.operation.detector.log.purge.interval.seconds`
@@ -326,7 +326,7 @@ To enable backoff mode please set the following property for Hazelcast cluster m
 -Dhazelcast.operation.responsequeue.idlestrategy=backoff  
 ```
 
-For Hazelcast clients, please use the following property to enable backoff:
+For Hazelcast clients, use the following property to enable backoff:
 
 ```
 -Dhazelcast.client.responsequeue.idlestrategy=backoff

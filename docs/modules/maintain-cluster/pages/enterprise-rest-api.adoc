@@ -1,0 +1,411 @@
+= ENTERPRISE REST API
+[[enterprise-rest-api]]
+
+Hazelcast Enterprise provides a REST API that allows you to access your data
+structures and cluster using the HTTP/HTTPS protocols.
+
+You can interact with the API using various tools and platforms such as cURL, REST clients (like Postman and Insomnia), or programming languages with HTTP request libraries or built-in support.
+
+The REST API also includes a Swagger page available at http://<host>:<port>/swagger-ui/index.html for making requests.
+
+NOTE: In this document, all the request examples are demonstrated using cURL.
+
+== Enabling REST API
+
+REST service is **disabled** in the configuration by default.
+You should enable it on your rest configuration as shown in the below declarative example:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <rest enabled="true">
+        ...
+    </rest>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  rest:
+    enabled: true
+----
+====
+
+== Changing Default Port
+
+`8443` is the default port for REST API. To change it, you can use the rest configuration as shown in the below declarative example:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    <rest enabled="true">
+        <port>8080</port>
+    </rest>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  rest:
+    enabled: true
+    port: 8080
+----
+====
+
+== Authentication
+
+REST supports simple authentication. To configure authentication in the REST API, you should complete the following steps:
+
+* **#Enable Security:#**
+You need to enable the security to use REST API.
+
+* **#Configure Rest Realm:#**
+You need to introduce a REST realm as the authentication mechanism. This realm will handle user authentication using a simple method based on username and password.
+
+* **#Setup Users and Roles:#**
+You should identify users and their roles within the REST realm.
+
+* **#Configure AccessControlService:#**
+To configure `AccessControlService`, you should provide a factory class that creates an instance of the service. `AccessControlService` delegates authentication to the configured security realm. You can either create a custom factory class, or use the default implementation.
+For the default implementation, you can use `DefaultAccessControlServiceFactory`, to produce `DefaultAccessControlService`. Authorization decisions in this service are based on three predefined roles: `reader`, `writer` and `admin`.
+
+Following declarative example includes all the steps:
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+    <security enabled="true">
+        <realms>
+            <realm name="restRealm">
+                <authentication>
+                    <simple>
+                        <user username="restuser" password="restsecret">
+                            <role>admin</role>
+                        </user>
+                    </simple>
+                </authentication>
+                <access-control-service>
+                    <factory-class-name>com.hazelcast.internal.rest.access.DefaultAccessControlServiceFactory</factory-class-name>
+                    <properties>
+                        <property name="decisionFile">/opt/acl.xml</property>
+                    </properties>
+                </access-control-service>
+            </realm>
+        </realms>
+    </security>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  security:
+    enabled: true
+    realms:
+      - name: restRealm
+        authentication:
+          simple:
+            users:
+              - username: 'restuser'
+                password: 'restpassword'
+                roles:
+                  - admin
+        access-control-service:
+          factory-class-name: com.hazelcast.internal.rest.access.DefaultAccessControlServiceFactory
+          properties:
+            decisionFile: '/opt/acl.xml'
+----
+====
+
+== HTTPS Support
+You can configure SSL in the REST API. The configuration options are available to set up SSL as shown in
+the below declarative example:
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+    <rest enabled="true">
+        <ssl enabled="true">
+            <client-auth>NEED</client-auth>
+            <ciphers>TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_128_CBC_SHA256</ciphers>
+            <key-alias>myKeyAlias</key-alias>
+            <key-password>myKeyPassword</key-password>
+            <key-store>/path/to/keystore</key-store>
+            <key-store-password>myKeyStorePassword</key-store-password>
+            <key-store-type>JKS</key-store-type>
+            <key-store-provider>SUN</key-store-provider>
+            <trust-store>/path/to/truststore</trust-store>
+            <trust-store-password>myTrustStorePassword</trust-store-password>
+            <trust-store-type>JKS</trust-store-type>
+            <trust-store-provider>SUN</trust-store-provider>
+            <enabled-protocols>TLSv1.2, TLSv1.3</enabled-protocols>
+            <protocol>TLS</protocol>
+            <certificate>/path/to/certificate</certificate>
+            <certificate-key>/path/to/certificate-key</certificate-key>
+            <trust-certificate>/path/to/trust-certificate</trust-certificate>
+            <trust-certificate-key>/path/to/trust-certificate-key</trust-certificate-key>
+        </ssl>
+    </rest>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  rest:
+    enabled: true
+    ssl:
+      enabled: true
+      client-auth: NEED
+      ciphers: TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_128_CBC_SHA256
+      enabled-protocols: TLSv1.2, TLSv1.3
+      key-alias: myKeyAlias
+      key-password: myKeyPassword
+      key-store: /path/to/keystore
+      key-store-password: myKeyStorePassword
+      key-store-type: JKS
+      key-store-provider: SUN
+      trust-store: /path/to/truststore
+      trust-store-password: myTrustStorePassword
+      trust-store-type: JKS
+      trust-store-provider: SUN
+      protocol: TLS
+      certificate: /path/to/certificate
+      certificate-key: /path/to/certificate-key
+      trust-certificate: /path/to/trust-certificate
+      trust-certificate-key: /path/to/trust-certificate-key
+----
+====
+
+
+== JWT Based Authorization
+
+After a successful authentication by making request to token endpoint, you will receive a short-living JWT token with assigned role names as a claim for authorization checks in subsequent REST calls.
+
+Token issued by one member is not trusted by other members.
+
+Tokens are valid for 15 minutes by default. To change it you can use the rest configuration as shown in the below declarative example:
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+    <rest enabled="true">
+        <token-validity-seconds>300</token-validity-seconds>
+    </rest>
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  rest:
+    enabled: true
+    token-validity-seconds: 300
+----
+====
+
+== Obtaining a Token
+
+To obtain a token, you should send a `POST` request to the token endpoint at `/hazelcast/rest/api/v1/token`. The request should include the `username` and `password` in JSON format. If authentication successful, the response will contain a token.
+
+Example request using cURL:
+
+[source,shell]
+----
+curl -X 'POST' \
+  'http://localhost:8443/hazelcast/rest/api/v1/token' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "username": "restuser",
+  "password": "restpassword"
+}'
+----
+
+
+== GET/POST/DELETE HTTP Request Examples
+
+All the requests in the REST API can return one of the following types of responses.
+
+* Successful Void/Boolean response which does not have body.
+
+* Successful response which returns data in JSON format. For example:
+[source,json]
+----
+{
+  "nodeState": "ACTIVE",
+  "clusterState": "ACTIVE",
+  "numberOfMembers": 1
+}
+----
+
+* Error response in JSON format. For example:
+[source,json]
+----
+{
+  "statusCode": 400,
+  "message": "Please provide a valid value."
+}
+----
+
+
+=== Retrieving Cluster Status
+
+You can retrieve the status of your cluster by making a GET request to endpoint at `/hazelcast/rest/api/v1/cluster/state`.
+
+Example request using cURL:
+
+[source,shell]
+----
+curl -X 'GET' \
+  'http://localhost:8443/hazelcast/rest/api/v1/cluster' \
+  -H 'Authorization: Bearer <JWT Token>'
+----
+
+It returns the following response if successful:
+
+[source,json]
+----
+{
+  "members": [
+    {
+      "address": "[192.168.0.24]:5701",
+      "liteMember": false,
+      "localMember": true,
+      "uuid": "3d8b9c35-a35f-461a-9e7f-d64e3f1f0f03",
+      "memberVersion": "5.5.0"
+    }
+  ],
+  "clientCount": 0,
+  "allConnectionCount": 0,
+  "state": "ACTIVE",
+  "version": "5.5"
+}
+----
+
+=== Retrieving Cluster State
+
+You can make a GET request to endpoint at `/hazelcast/rest/api/v1/cluster/state` to retrieve your cluster state.
+
+Example request using cURL:
+
+[source,shell]
+----
+curl -X 'GET' \
+  'http://localhost:8443/hazelcast/rest/api/v1/cluster/state' \
+  -H 'Authorization: Bearer <JWT Token>'
+----
+
+
+It returns the following response if successful:
+
+[source,json]
+----
+{
+  "state": "ACTIVE"
+}
+----
+
+=== Changing Cluster State
+
+You can make a POST request to endpoint at `/hazelcast/rest/api/v1/cluster/state` to change your cluster state. You should provide new state within the request body in JSON format. Valid states are `ACTIVE, NO_MIGRATION, FROZEN, PASSIVE`.
+
+Example request using cURL:
+
+[source,shell]
+----
+curl -X 'POST' \
+  'http://localhost:8443/hazelcast/rest/api/v1/cluster/state' \
+  -H 'Authorization: Bearer Bearer <JWT Token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "state": "PASSIVE"
+}'
+----
+
+* It returns 200 response without body if successful.
+* It returns 400 response if provided state is not a valid cluster state. For example:
+
+[source,json]
+----
+{
+  "statusCode": 400,
+  "message": "FOOBAR is not a valid ClusterState. Please provide one of the valid values: [ACTIVE, NO_MIGRATION, FROZEN, PASSIVE]"
+}
+----
+
+
+=== Destroying a CP Group
+
+You can make a DELETE request to endpoint at `/hazelcast/rest/api/v1/cp/groups/+{group-name}+` to unconditionally destroy the given active CP group.
+
+Example request using cURL:
+
+[source,shell]
+----
+curl -X 'DELETE' \
+  'http://localhost:8443/hazelcast/rest/api/v1/cp/groups/my-group' \
+  -H 'Authorization: Bearer Bearer <JWT Token>'
+----
+
+* It returns 200 response without body if successful.
+* It returns 400 response if you try to destroy METADATA group. For example:
+
+[source,json]
+----
+{
+  "statusCode": 400,
+  "message": "Meta data CP group [METADATA] cannot be destroyed!"
+}
+----
+
+* It returns 500 response if CP subsystem is not enabled:
+
+[source,json]
+----
+{
+  "statusCode": 500,
+  "message": "CP Subsystem is not enabled!"
+}
+----

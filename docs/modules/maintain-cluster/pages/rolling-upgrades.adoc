@@ -5,6 +5,18 @@
 
 {description}
 
+== Best Practices
+
+Before starting a rolling upgrade, consider the following best practises:
+
+* Ensure that the <<hazelcast-members-compatibility-guarantees,Compatibility Guarantees>> cover your requirements
+* If the minimum version of JDK has changed between releases, <<updated-jdk,upgrade the JDK version>> before starting a rolling upgrade
+* If you used Hazelcast Operator to deploy your cluster, refer to the link:https://docs.hazelcast.com/operator/latest/scaling-upgrading#upgrading[Operator documentation, window=_blank]
+* If using Hazelcast Management Center to trigger your rolling upgrade, upgrade Management Center before upgrading your members. For information on upgrading Management Center, refer to the link:https://docs.hazelcast.com/management-center/5.4/getting-started/install[Management Center documentation, window=_blank]
+* If using the `hz-cluster-admin` script to update your cluster, enable the `CLUSTER_WRITE` endpoints in the REST API. For further information on the REST API, see xref:maintain-cluster:rest-api.adoc#using-the-rest-endpoint-groups[REST API]
+* Plan sufficient time for the migration and upgrade to complete, and remember that members cannot join or leave during the upgrade
+* Avoid issues where an automatic upgrade is triggered before the last member has been upgraded by setting a <<enabling-auto-upgrading,minimum cluster size>>
+
 == Before you Begin
 
 Hazelcast uses semantic versioning, where versions appear in the following format:
@@ -39,7 +51,7 @@ To allow you to use rolling upgrades, Hazelcast commits to the following compati
 - Hazelcast members operating on the same major and minor
 cluster version are always compatible, regardless of patch version.
 
-- Each minor version is always compatible with the previous one.
+- Each minor version is compatible with the previous one.
 
 As a result, you can use rolling upgrades to upgrade clusters to the following member codebase versions:
 
@@ -48,7 +60,22 @@ As a result, you can use rolling upgrades to upgrade clusters to the following m
 +
 This also includes the ability of rolling upgrade from Hazelcast IMDG 4.2 to Platform 5.0, since IMDG is part of the Platform and 5.0 is considered to be the next minor version after IMDG 4.2.
 
+- Releases from 5.2 to 5.4, directly to the 5.5 LTS release. For further information on additional compatibilities for direct-to-LTS rolling upgrades, see xref:migrate:lts.adoc[].
+
 NOTE: Following the rolling upgrade, you must resubmit jobs as they don't run during the upgrade. For further information on the compatibility of job states in upgrades, see xref:deploy:versioning-compatibility.adoc#job-states[Versioning and Compatibility].
+
+=== Upgrade to LTS Release
+
+With the introduction of Hazelcast's first Long-term Support (LTS) release for 5.5, you can upgrade directly from 5.2 or later to 5.5. This means that, if using a supported earlier release, you do not need to upgrade to each release between your current version and the LTS release.
+
+For more information on LTS releases, and any specific considerations when upgrading, see xref:migrate:lts.adoc[].
+
+[[updated-jdk]]
+== JDK Version Upgrade
+
+As newer JDK releases contain improvements, we recommend that you upgrade to a newer JDK version where xref:deploy:versioning-compatibility.adoc#supported-java-virtual-machines[supported].
+
+Upgrade the JDK version before upgrading your members if support for the JDK version has changed between your current and planned cluster versions. For example, in 5.2 JDK 8 was supported, but 5.5 supports only JDK 17 or later. 
 
 [[rolling-upgrade-procedure]]
 == Performing a Rolling Upgrade
@@ -106,6 +133,12 @@ include::clients:partial$rest-deprecation.adoc[]
 * Allow the cluster to <<enabling-auto-upgrading, auto-upgrade>>.
 
 The cluster is now operating on the new codebase version: Both the codebase version and the cluster version have been upgraded.
+
+=== Restart Members on Previous Version
+
+If you experience any issues during the rolling upgrade, you can recover to the previous version by restarting the members.
+
+To do this, xref:maintain-cluster:shutdown.adoc#shutting-down-a-hazelcast-member[shut down] then start each member.
 
 == Enabling Auto-Upgrading
 
@@ -220,3 +253,14 @@ binary and algorithmic compatibility and some other steps.
 
 It is worth mentioning that a business app upgrade is orthogonal to a
 rolling member upgrade. A rolling business app upgrade may be done without upgrading the members.
+
+**Are features marked as Beta in my current version upgraded?**
+
+Features marked as Beta are not upgraded. This is due to changes that can occur between Beta and general availability releases. If a Beta feature has been updated or made generally available in the target release, that version of the feature is included in the upgraded feature set.
+
+**Can I upgrade directly to the latest release?**
+
+You can upgrade directly to the latest release in the following circumstances:
+
+* Your current version is no more than one minor version below the current release
+* The latest release is an xref:migrate:lts.adoc[LTS release] and your current version is among those supported

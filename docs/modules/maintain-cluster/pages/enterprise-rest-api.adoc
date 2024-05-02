@@ -6,11 +6,13 @@ structures and cluster using the HTTP/HTTPS protocols.
 
 You can interact with the API using various tools and platforms such as cURL, REST clients (like Postman and Insomnia), or programming languages with HTTP request libraries or built-in support.
 
-The REST API also includes a Swagger page available at http://<host>:<port>/swagger-ui/index.html for making requests.
+The REST API also includes a Swagger page available at http://<host>:<port>/swagger-ui/index.html for making requests.<host> is the server running the REST server and <port> is the rest server port.
 
 NOTE: In this document, all the request examples are demonstrated using cURL.
 
 == Enabling REST API
+
+WARNING: **hazelcast-enterprise-rest-<VERSION>.jar** should exist at the classpath of the server to use REST API.
 
 REST service is **disabled** in the configuration by default.
 You should enable it on your rest configuration as shown in the below declarative example:
@@ -72,6 +74,8 @@ hazelcast:
 
 == Authentication
 
+=== Configuring Authentication
+
 REST supports simple authentication. To configure authentication in the REST API, you should complete the following steps:
 
 * **#Enable Security:#**
@@ -84,8 +88,7 @@ You need to introduce a REST realm as the authentication mechanism. This realm w
 You should identify users and their roles within the REST realm.
 
 * **#Configure AccessControlService:#**
-To configure `AccessControlService`, you should provide a factory class that creates an instance of the service. `AccessControlService` delegates authentication to the configured security realm. You can either create a custom factory class, or use the default implementation.
-For the default implementation, you can use `DefaultAccessControlServiceFactory`, to produce `DefaultAccessControlService`. Authorization decisions in this service are based on three predefined roles: `reader`, `writer` and `admin`.
+To configure `AccessControlService`, you should provide a factory class that creates an instance of the service. `AccessControlService` delegates authentication to the configured security realm. You can either create a custom factory class, or use the default implementation. For the default implementation, you can use `DefaultAccessControlServiceFactory`, to produce `DefaultAccessControlService`. Authorization decisions in this service are based on three predefined roles: `reader`, who can make requests via GET endpoints only; `writer`, who can make requests including GET, POST, and DELETE; and `admin`, who can make all requests and access admin-specific endpoints.
 
 Following declarative example includes all the steps:
 
@@ -109,9 +112,6 @@ XML::
                 </authentication>
                 <access-control-service>
                     <factory-class-name>com.hazelcast.internal.rest.access.DefaultAccessControlServiceFactory</factory-class-name>
-                    <properties>
-                        <property name="decisionFile">/opt/acl.xml</property>
-                    </properties>
                 </access-control-service>
             </realm>
         </realms>
@@ -138,13 +138,18 @@ hazelcast:
                   - admin
         access-control-service:
           factory-class-name: com.hazelcast.internal.rest.access.DefaultAccessControlServiceFactory
-          properties:
-            decisionFile: '/opt/acl.xml'
 ----
 ====
 
+=== Authentication Process
+
+To authenticate to the REST API, the REST client must obtain a token. See the <<obtaining-a-token, Obtaining a Token section>> for details. The token request requires a username and password and the role(s) assigned to the user are included in the token as claims. You can use the token until it expires.
+
 == HTTPS Support
-You can configure SSL in the REST API. The configuration options are available to set up SSL as shown in
+You can configure SSL in the REST API. We use Spring Boot underneath to enable Spring web services, and all the SSL related options correspond to the underlying Spring Boot SSL support capabilities.
+
+The SSL configuration of the REST server is completely different from Hazelcast SSL configuration which has different configuration settings.
+The configuration settings are available to set up SSL as shown in
 the below declarative example:
 
 [tabs]
@@ -214,7 +219,7 @@ hazelcast:
 
 == JWT Based Authorization
 
-After a successful authentication by making request to token endpoint, you will receive a short-living JWT token with assigned role names as a claim for authorization checks in subsequent REST calls.
+After a successful authentication by making request to token endpoint (see the <<obtaining-a-token, Obtaining a Token section>> for details), you will receive a short-living JWT token with assigned role names as a claim for authorization checks in subsequent REST calls.
 
 Token issued by one member is not trusted by other members.
 
@@ -246,9 +251,10 @@ hazelcast:
 ----
 ====
 
+[#obtaining-a-token]
 == Obtaining a Token
 
-To obtain a token, you should send a `POST` request to the token endpoint at `/hazelcast/rest/api/v1/token`. The request should include the `username` and `password` in JSON format. If authentication successful, the response will contain a token.
+To obtain a token, you should send a `POST` request to the token endpoint at `/hazelcast/rest/api/v1/token`.The request should include the `username` and `password` in JSON format.If authentication successful, the response will contain a token.
 
 Example request using cURL:
 
@@ -266,7 +272,7 @@ curl -X 'POST' \
 
 == GET/POST/DELETE HTTP Request Examples
 
-All the requests in the REST API can return one of the following types of responses.
+All the requests in the REST API can return one of the following response types.
 
 * Successful Void/Boolean response which does not have body.
 
@@ -378,7 +384,7 @@ curl -X 'POST' \
 
 === Destroying a CP Group
 
-You can make a DELETE request to endpoint at `/hazelcast/rest/api/v1/cp/groups/+{group-name}+` to unconditionally destroy the given active CP group.
+You can make a DELETE request to endpoint at `/hazelcast/rest/api/v1/cp/groups/{group-name}` to unconditionally destroy the given active CP group.
 
 Example request using cURL:
 

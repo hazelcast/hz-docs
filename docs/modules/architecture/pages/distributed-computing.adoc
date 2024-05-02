@@ -121,6 +121,112 @@ introduce a network connection between tasks, sending the data from one
 cluster node to the other. This is the basic principle behind
 auto-parallelization and distribution.
 
+== Word Count with Isolated Job 
+
+**[RJL: This is holding text; my best guess. Actual example to be provided by dev team]**
+
+Now we'll take the Word Count task above and use isolated jobs to define the location of the Jet processing job.
+
+NOTE: Your license key must include `Advanced Compute` to activate this feature.
+
+We'll use the same `ArrayList` that we used in the previous example., but we'll run the Jet processing job on a specific lite member.
+
+Define your `JobBuilder` so that it implements member selection:
+
+```java
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
+public class JobBuilder {
+    private final JetService jet;
+    private @Nonnull JobConfig jobConfig = new JobConfig();
+    private @Nullable DAG dag;
+    private @Nullable Pipeline pipeline;
+    private boolean isLightJob;
+    
+    JobBuilder(@Nonnull JetService jet, @Nonnull DAG dag) {
+       this.jet = jet;
+       this.dag = dag;
+    }    
+    
+    JobBuilder(@Nonnull JetService jet, @Nonnull Pipeline p) {
+       this.jet = jet;
+       this.pipeline = p;
+    }
+
+    // ...
+
+    public JobBuilder withConfig(@Nonnull JobConfig jobConfig) {
+        this.jobConfig = jobConfig;
+        return this;
+    }
+
+    // ...
+
+    public JobBuilder withMemberSelector(@Nonnull JetMemberSelector memberSelector) {
+        throw new UnsupportedOperationException();
+    }
+
+    public JobBuilder asLightJob() {
+        isLightJob = true;
+        return this;
+    }
+
+    public Job start() {
+        if (dag != null) return isLightJob ? jet.newLightJob(dag,      jobConfig) : jet.newJob(dag,      jobConfig);
+        else             return isLightJob ? jet.newLightJob(pipeline, jobConfig) : jet.newJob(pipeline, jobConfig);
+    }    
+    
+    public Job startIfAbsent() {
+        if (isLightJob)  throw new UnsupportedOperationException();
+        
+        if (dag != null) return jet.newJobIfAbsent(dag,      jobConfig);
+        else             return jet.newJobIfAbsent(pipeline, jobConfig);
+    }
+}
+```
+
+Create your `JobBuilder` for the pipeline:
+
+```java
+   /**
+     * Creates a JobBuilder for a new Jet job with Pipeline definition.
+     */
+    default JobBuilder newJobBuilder(Pipeline p) {
+        return new JobBuilder(this, p);
+    }
+}
+```
+
+Define your pipeline and any member selection override to submit your Jet job from your Hazelcast Java client:
+
+```java
+HazelcastInstance hz = HazelcastClient.newHazelcastClient();
+// ... 
+Map map = hz.getMap(MAP_NAME);
+
+Pipeline p = Pipeline.create()
+                .readFrom(Sources.map(map))
+                .map(Entry::getValue)
+                .writeTo(sink)
+                .getPipeline();
+
+Job job = hz.getJet()
+        .newJobBuilder(p)
+        .withMemberSelector(ALL_LITE_MEMBERS)
+        .start();
+```
+
+In this form we can clearly identify individual steps taken by the computation:
+
+. Get the Map.
+. Read lines from the text source.
+. Get the value from the loaded Map.
+. Write to the sink.
+. Define the `JobBuilder` for the job.
+. Override the default member settings, and select all lite members.
+. Run the processing job.
+
 == Core DAG Planner
 
 As you write a pipeline, you form the pipeline DAG and when you submit it for execution, the planner converts it to the core DAG.

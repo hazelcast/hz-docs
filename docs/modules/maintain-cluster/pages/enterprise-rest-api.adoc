@@ -12,13 +12,11 @@ In this section, we use cURL to provide the request examples.
 NOTE: REST API is only available in the {enterprise-product-name} Edition.
 Hazelcast also offers an Open Source REST API which has been deprecated, and will be removed as of Hazelcast version 7.0. You can still use the Open Source one until its removal; see the xref:rest-api.adoc[Deprecated REST API] documentation.
 
-
 == Enabling REST API
 
 NOTE: In case you have Hazelcast's xref:getting-started:editions.adoc#slim-distribution[slim distribution], you must add `hazelcast-enterprise-rest-{full-version}.jar` to your member's classpath to use the REST API. If you are working with the full distribution, there is no need for this step.
 
-REST service is **disabled** in the configuration by default.
-You should enable it on your rest configuration as shown in the below declarative example:
+REST service is **disabled** in the configuration by default; enable it as shown in the following configuration.
 
 [tabs] 
 ==== 
@@ -45,10 +43,9 @@ hazelcast:
 ----
 ====
 
-
 == Changing Default Port
 
-`8443` is the default port for REST API. To change it, you can use the rest configuration as shown in the below declarative example:
+`8443` is the default port for REST API. To change it to another port, update the `rest` configuration as shown in the following example.
 
 [tabs] 
 ==== 
@@ -76,12 +73,19 @@ hazelcast:
 ----
 ====
 
-
 == Authentication
+
+You must secure the communication with REST API by configuring its authentication and access control.
 
 === Configuring Authentication
 
-REST supports simple authentication. To configure authentication in the REST API, you should complete the following steps:
+REST supports simple authentication based on username, password and user roles; see xref:security:simple-authentication.adoc[Simple Authentication]. To configure the simple authentication in the REST API, complete the following steps:
+
+* **#Enable REST API:#**
+You need to enable the REST API.
+
+* **#Define A Security Realm:#**
+You need to define the security realm within the rest configuration.
 
 * **#Enable Security:#**
 You need to enable the security to use REST API.
@@ -95,7 +99,7 @@ You should identify users and their roles within the REST realm.
 * **#Configure AccessControlService:#**
 To configure `AccessControlService`, you should provide a factory class that creates an instance of the service. `AccessControlService` delegates authentication to the configured security realm. You can either create a custom factory class, or use the default implementation. For the default implementation, you can use `DefaultAccessControlServiceFactory`, to produce `DefaultAccessControlService`. Authorization decisions in this service are based on three predefined roles: `reader`, who can make requests via GET endpoints only; `writer`, who can make requests including GET, POST, and DELETE; and `admin`, who can make all requests and access admin-specific endpoints.
 
-Following declarative example includes all the steps:
+The following configuration example includes all the steps listed above.
 
 [tabs]
 ====
@@ -105,6 +109,9 @@ XML::
 [source,xml]
 ----
 <hazelcast>
+    <rest enabled="true">
+        <security-realm>restRealm</security-realm>
+    </rest>
     <security enabled="true">
         <realms>
             <realm name="restRealm">
@@ -115,7 +122,7 @@ XML::
                         </user>
                     </simple>
                 </authentication>
-                <access-control-service>
+                <access-control-service> <1>
                     <factory-class-name>com.hazelcast.internal.rest.access.DefaultAccessControlServiceFactory</factory-class-name>
                 </access-control-service>
             </realm>
@@ -130,6 +137,9 @@ YAML::
 [source,yaml]
 ----
 hazelcast:
+  rest:
+    enabled: true
+    security-realm: restRealm
   security:
     enabled: true
     realms:
@@ -141,21 +151,24 @@ hazelcast:
                 password: 'restpassword'
                 roles:
                   - admin
-        access-control-service:
+        access-control-service: <1>
           factory-class-name: com.hazelcast.internal.rest.access.DefaultAccessControlServiceFactory
 ----
 ====
+<1> To configure `AccessControlService`, you should provide a factory class that creates an instance of the service. `AccessControlService` delegates authentication to the configured security realm. You can either create a custom factory class, or use the default implementation. For the default implementation, you can use `DefaultAccessControlServiceFactory`, to produce `DefaultAccessControlService`. Authorization decisions in this service are based on three predefined roles: `reader`, who can make requests via GET endpoints only; `writer`, who can make requests including GET, POST, and DELETE; and `admin`, who can make all requests and access admin-specific endpoints.
+
+NOTE: Besides the simple authentication, you can also use other authentication types such as LDAP. See xref:security:security-realms.adoc#authentication-configuration[Authentication Configuration] on how to configure different types within a security realm.
 
 === Authentication Process
 
 To authenticate to the REST API, the REST client must obtain a token. See the <<obtaining-a-token, Obtaining a Token section>> for details. The token request requires a username and password and the role(s) assigned to the user are included in the token as claims. You can use the token until it expires. You use the token at the `Authorization` header for each subsequent REST API call so that the call is authorized appropriately. If a valid token is not included in the header, the API will respond with a `401 Unauthorized` error.
 
-
 == HTTPS Support
-You can configure SSL in the REST API. We use Spring Boot underneath to enable Spring web services, and all the SSL related options correspond to the underlying Spring Boot SSL support capabilities.
 
-The SSL configuration of the REST server is completely different from Hazelcast SSL configuration which has different configuration settings.
-The configuration settings are available to set up SSL as shown in
+You can configure TLS/SSL in the REST API. We use Spring Boot underneath to enable Spring web services, and all the TLS/SSL related options correspond to the underlying Spring Boot TLS/SSL support capabilities.
+
+The TLS/SSL configuration of the REST server is completely different from Hazelcast TLS/SSL configuration which has different configuration settings.
+The configuration settings are available to set up TLS/SSL as shown in
 the below declarative example:
 
 [tabs]
@@ -222,14 +235,13 @@ hazelcast:
 ----
 ====
 
-
 == JWT Based Authorization
 
-After a successful authentication by making request to token endpoint (see the <<obtaining-a-token, Obtaining a Token section>> for details), you will receive a short-living JWT token with assigned role names as a claim for authorization checks in subsequent REST calls.
+After a successful authentication by making request to the token endpoint (see <<obtaining-a-token, Obtaining a Token section>>), you will receive a short-living JWT token with assigned role names as a claim for authorization checks in subsequent REST calls.
 
 Token issued by one member is not trusted by other members.
 
-Tokens are valid for 15 minutes by default. To change it you can use the rest configuration as shown in the below declarative example:
+Tokens are valid for 15 minutes by default. You can update the expiry duration using the `token-validity-seconds` configuration element as shown in the following example.
 
 [tabs]
 ====
@@ -257,11 +269,10 @@ hazelcast:
 ----
 ====
 
-
 [#obtaining-a-token]
 == Obtaining a Token
 
-To obtain a token, you should send a `POST` request to the token endpoint at `/hazelcast/rest/api/v1/token`. The request should include the `username` and `password` in JSON format. If authentication is successful, the response will contain a valid token for the expiry duration.
+To obtain a token, you send a `POST` request to the token endpoint at `/hazelcast/rest/api/v1/token`. The request must include JSON-formatted `username` and `password` which you <<configuring-authentication, already configured>>. If the authentication is successful, you get a response which contains a valid token for the expiry duration.
 
 Example request using cURL:
 
@@ -285,6 +296,15 @@ It returns the following response if successful:
 }
 ----
 
+It returns the following response if the provided credentials are incorrect:
+
+[source,json]
+----
+{
+  "statusCode": 401,
+  "message": "Username/password provided don't match the expected values."
+}
+----
 
 == Accessing the Swagger UI
 
@@ -296,28 +316,25 @@ Hazelcast REST API's Swagger UI provides information about each endpoint, includ
 
 The following is an example view:
 
-On the Swagger page, each endpoint is listed with a caret icon on the right side as shown below.
-
 image::rest-api-swagger-listed-endpoints.png[]
 
-Click the caret icon to expand the details for the endpoint. For this example, let's expand the `GET /hazelcast/rest/api/v1/cluster` endpoint.
+On the Swagger page, each endpoint is listed with a caret icon on the right side. Click the caret icon to expand the details for an endpoint. For this example, let's expand the `GET /hazelcast/rest/api/v1/cluster` endpoint.
 
 image::rest-api-swagger-expanding-an-endpoint.png[]
 
-After expanding the endpoint, let's proceed to make a request. Click the `Try it out` button, enter the parameters (if any). There are no parameters for this example.
+After expanding the endpoint, let's proceed to send a request. Click the `Try it out` button, enter the parameters (if any). There are no parameters for this example.
 
 image::rest-api-swagger-clicking-execute-button.png[]
 
-Click the `Execute` button to send the request. You will see the response under "Server response" section as shown below. You can also view the executed Curl command in the "Curl" section.
+Click the `Execute` button to send the request. You can see the response in the **Server response** section as shown below. You can also see the executed cURL command in the **Curl** section.
 
 image::rest-api-swagger-clicking-try-it-out-button.png[]
-
 
 == GET/POST/DELETE HTTP Request Examples
 
 All the requests in the REST API can return one of the following response types.
 
-* Successful Void/Boolean response which does not have body.
+* Successful void/boolean response which does not have a body.
 
 * Successful response which returns data in JSON format. For example:
 
@@ -342,7 +359,7 @@ All the requests in the REST API can return one of the following response types.
 
 === Retrieving Cluster Status
 
-You can retrieve the status of your cluster by making a GET request to endpoint at `/hazelcast/rest/api/v1/cluster/state`.
+You can send a `GET` request to the endpoint at `/hazelcast/rest/api/v1/cluster` to retrieve the status of your cluster.
 
 Example request using cURL:
 
@@ -376,7 +393,7 @@ It returns the following response if successful:
 
 === Retrieving Cluster State
 
-You can make a GET request to endpoint at `/hazelcast/rest/api/v1/cluster/state` to retrieve your cluster state.
+You can send a `GET` request to the endpoint at `/hazelcast/rest/api/v1/cluster/state` to retrieve the state of your cluster.
 
 Example request using cURL:
 
@@ -386,7 +403,6 @@ curl -X 'GET' \
   'http://localhost:8443/hazelcast/rest/api/v1/cluster/state' \
   -H 'Authorization: Bearer <JWT Token>'
 ----
-
 
 It returns the following response if successful:
 
@@ -399,7 +415,7 @@ It returns the following response if successful:
 
 === Changing Cluster State
 
-You can make a POST request to endpoint at `/hazelcast/rest/api/v1/cluster/state` to change your cluster state. You should provide new state within the request body in JSON format. Valid states are `ACTIVE, NO_MIGRATION, FROZEN, PASSIVE`.
+You can send a `POST` request to the endpoint at `/hazelcast/rest/api/v1/cluster/state` to change the state of your cluster. You must provide the new state within the request body in the JSON format. Valid states are `ACTIVE`, `NO_MIGRATION`, `FROZEN`, `PASSIVE`.
 
 Example request using cURL:
 
@@ -427,7 +443,7 @@ curl -X 'POST' \
 
 === Destroying a CP Group
 
-You can make a DELETE request to endpoint at `/hazelcast/rest/api/v1/cp/groups/{group-name}` to unconditionally destroy the given active CP group.
+You can send a `DELETE` request to the endpoint at `/hazelcast/rest/api/v1/cp/groups/{group-name}` to unconditionally destroy the given active CP group.
 
 Example request using cURL:
 

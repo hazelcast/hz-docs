@@ -52,16 +52,16 @@ These make sure that the `Customer` entry and its ``Order``s are stored on the s
 [source,java]
 ----
 HazelcastInstance hazelcastInstance = Hazelcast.newHazelcastInstance();
-Map mapCustomers = hazelcastInstance.getMap( "customers" );
-Map mapOrders = hazelcastInstance.getMap( "orders" );
+IMap<Long, Customer> customerMap = hazelcastInstance.getMap( "customers" );
+IMap<OrderKey, Order> orderMap = hazelcastInstance.getMap( "orders" );
 
 // create the customer entry with customer id = 1
-mapCustomers.put( 1, customer );
+customerMap.put( 1, customer );
 
 // now create the orders for this customer
-mapOrders.put( new OrderKey( 21, 1 ), order );
-mapOrders.put( new OrderKey( 22, 1 ), order );
-mapOrders.put( new OrderKey( 23, 1 ), order );
+orderMap.put( new OrderKey( 21, 1 ), order );
+orderMap.put( new OrderKey( 22, 1 ), order );
+orderMap.put( new OrderKey( 23, 1 ), order );
 ----
 
 Assume that you have a customers map where `customerId` is the key and the customer object is the value.
@@ -71,13 +71,13 @@ Here is how you would normally do it.
 [source,java]
 ----
 public static int removeOrder( long customerId, long orderId ) throws Exception {
-    IMap<Long, Customer> mapCustomers = instance.getMap( "customers" );
-    IMap mapOrders = hazelcastInstance.getMap( "orders" );
+    IMap<Long, Customer> customerMap = hazelcastInstance.getMap( "customers" );
+    IMap<OrderKey, Order> orderMap = hazelcastInstance.getMap( "orders" );
 
-    mapCustomers.lock( customerId );
-    mapOrders.remove( new OrderKey(orderId, customerId) );
-    Set orders = orderMap.keySet(Predicates.equal( "customerId", customerId ));
-    mapCustomers.unlock( customerId );
+    customerMap.lock( customerId );
+    orderMap.remove( new OrderKey(orderId, customerId) );
+    Set<Order> orders = orderMap.keySet(Predicates.equal( "customerId", customerId ));
+    customerMap.unlock( customerId );
 
     return orders.size();
 }

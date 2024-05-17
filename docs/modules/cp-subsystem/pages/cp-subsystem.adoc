@@ -277,15 +277,15 @@ a force-reset. See xref:management.adoc#cp-subsystem-management-apis[CP Subsyste
 == Kubernetes
 
 IMPORTANT: We strongly encourage using xref:kubernetes:deploying-in-kubernetes.adoc#hazelcast-platform-operator-for-kubernetesopenshift[Hazelcast Platform Operator,window=_blank] for deployments into Kubernetes. When using Helm please make sure to use the official 
-`hazelcast/hazelcast-enterprise` Helm Chart (see xref:kubernetes:deploying-in-kubernetes.adoc#helm-chart[Hazelcast Platform Operator,window=_blank]) 
-within the limitations of what is described in this section. 
+`hazelcast/hazelcast-enterprise` Helm Chart (see xref:kubernetes:deploying-in-kubernetes.adoc#helm-chart[Helm Chart,window=_blank]) 
+and configure within the limitations of what is described in this section. 
 
 Deployment of CP within Kubernetes is supported from Hazelcast Enterprise 5.5 and covers the 
 following scenarios when using platform opertor our Helm Hazelcast Enterprise chart:
 
 - Deployment: see xref:kubernetes:deploying-in-kubernetes.adoc[Deploying in Kubernetes,window=_blank].
 - Pause: scaling of compute to `0`
-- Resume: scaling of compute back to the number of members defined during Deployment
+- Resume: scaling of compute back to the number of members defined during _Deployment_
 - Rolling Update
 - Spurious pod restarts
 
@@ -303,3 +303,38 @@ Explicit removal and promotion of a CP member is not supported: Kubernetes has t
 restarting CP members should they be terminated. These restrictions will be removed in a subsequent
 release of Hazelcast Enterprise.
 
+We recommend setting xref:cp-subsystem:configuration.adoc#data-load-timeout-seconds[data-load-timeout-seconds,window=_blank]
+to a value that spans the duration from the when the first pod is running to when last pod is running and completed its CP 
+intialisation procedure. This is particularly important if you intend to do a _resume_ scenario. Currently the only way to determine when a CP member has completed its initialisation is to consult the logs. Therefore, we recommend the following to determine a reasonable value for `data-load-timeout-seconds`:
+
+1. Load CP with an amount of data that is representative of your production use case
+2. Pause the cluster
+3. Resume the cluster and determine the duration in seconds between when first member in the `StatefulSet` running and when the last member in the `StatefulSet` is running and outputted an `INFO` level log message that matches the pattern `CP restore completed` as described shortly.
+
+If you are using a log aggregation service and wish to filter key startup events within CP then the `INFO` level patterns emitted by `CPPersistenceServiceImpl` can be used.
+
+[cols="1,1,1"]
+|===
+|Phrase|Example Match|Description
+
+|`CP restore starting`
+|`CP restore starting...in /data/cp-data/0e667605-c650-42b7-9625-376a213008a6; Timeout(s): 120`
+| Denotes the starting of the entire CP restoration process.
+
+|`CP restore completed`
+|`CP restore completed...in /data/cp-data/0e667605-c650-42b7-9625-376a213008a6; Took(ms): 50387`
+| Denotes completion of the entire CP restoration process. This includes notification to other CP members that this member has rejoined in addition to the loading of its persisted data.
+
+|`CP restore starting(CPGroupId`
+|`CP restore starting(CPGroupId{name='METADATA', seed=0, groupId=0})...in /data/persistence/cp/212561fb-c2d5-442a-a4e0-a863fdf7074b/METADATA@0@0`
+| Denotes the starting of loading a particular CP Group's data. 
+
+|`CP restore starting(CPGroupId`
+|`CP restore starting(CPGroupId{name='METADATA', seed=0, groupId=0})...in /data/persistence/cp/212561fb-c2d5-442a-a4e0-a863fdf7074b/METADATA@0@0`
+| Denotes the starting of loading a particular CP Group's data. 
+
+|`CP restore completed(CPGroupId`
+|`CP restore completed(CPGroupId{name='METADATA', seed=0, groupId=0})...in /data/persistence/cp/212561fb-c2d5-442a-a4e0-a863fdf7074b/METADATA@0@0; Took(ms): 29`
+| Denotes the starting of loading a particular CP Group's data. 
+ 
+|===

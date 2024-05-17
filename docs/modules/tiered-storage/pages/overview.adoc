@@ -38,6 +38,12 @@ This means that, if an entry is on the disk, it is relocated to the memory insid
 As more and more entries are relocated to the in-memory region of the HybridLog, the memory space occupied by the unreachable entries on disk is reclaimed.
 This reclamation is done by a compactor running synchronously with IMap operations on the same partition.
 
+After a cluster restart, Tiered Storage ensures seamless restoration of data within
+the configured maps from files stored on the designated device.
+This data restoration requires graceful shutdowns using the `HazelcastInstance.shutdown()` method, while the cluster is in the `PASSIVE` state;
+see xref:maintain-cluster:shutdown.adoc#graceful-shutdown[Graceful Shutdown] and xref:maintain-cluster:cluster-member-states.adoc#cluster-states[Cluster States].
+Failure to do so may lead to restart failures. The maps backed by Tiered Storage maintain consistent state synchronization, seamlessly restoring data from files upon restart.
+
 == Supported Devices
 
 Hazelcast supports only non-volatile memory express (NVMe) local SSD devices for Tiered Storage.
@@ -46,8 +52,6 @@ While HDDs and some network storage options work with the same file abstraction 
 == Limitations
 
 - Tiered Storage currently only supports Hazelcast IMap data structure.
-
-- Data recovery from persisted data is not supported. When a Hazelcast member has Tiered Storage enabled and it fails or shuts down, you cannot use the local Tiered Storage device files for data recovery.
 
 - Time-to-live (TTL) expiration is not supported by maps backed by Tiered Storage.
 This means that methods, such as `IMap.put`, throw `UnsupportedOperationException` if a TTL value is provided.

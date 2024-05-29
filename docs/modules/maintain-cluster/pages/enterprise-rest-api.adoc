@@ -474,3 +474,104 @@ curl -X 'DELETE' \
   "message": "CP Subsystem is not enabled!"
 }
 ----
+
+== Dynamic Configuration Update REST Endpoint
+You can use the `/hazelcast/rest/api/v1/config/update` REST endpoint to change the dynamic server configurations (see xref:configuration:dynamic-config.adoc[Dynamic Configuration for Members]). The dynamic configuration lets you change different configurations in addition to adding new configurations for Hazelcast data structures.
+
+The endpoint requires that you send a xml/yaml server configuration file with the needed changes. The response will be two lists in json format. The first list is the newly added configurations among the configs sent to the server, and another list of ignored configurations which were in the sent configuration but could not be applied at the server, possibly since they are not dynamic configuration options but static configurations.
+
+Let's now see how you can add a new `MapConfig` using this REST endpoint and analyse its response.
+
+=== Add New MapConfig
+Here is an example POST request for adding a new `MapConfig` for my-map:
+
+[source,shell]
+----
+curl -X 'POST' \
+  'http://localhost:8443/hazelcast/rest/api/v1/config/update' \
+  -H 'Content-Type: text/plain' \
+  -d '
+        <hazelcast xmlns="http://www.hazelcast.com/schema/config">
+                       <map name="my-map">
+                           <in-memory-format>BINARY</in-memory-format>
+                           <statistics-enabled>true</statistics-enabled>
+                           <backup-count>2</backup-count>
+                       </map>
+        </hazelcast>
+        '
+----
+
+We send a request to create a new config for the new map to be created named `my-map`. The in-memory format is set to BINARY while the statistics is enabled and the backup count is set to 2.
+
+When we send this request we receive the response body similar to this:
+
+[source,json]
+----
+{
+  "addedConfigs": [
+    {
+      "sectionName": "map",
+      "configName": "my-map"
+    }
+  ],
+  "ignoredConfigs": []
+}
+----
+As you can observe from the response, a new map config is added for map with name my-map and all the requested dynamic configurations are applied.
+
+Now, if you like to add the config with the same map name and a different configuration, then you get response code 400 meaning an invalid configuration is provided since you can not change an existing map configuration. Let's try this:
+[source,shell]
+----
+curl -X 'POST' \
+  'http://localhost:8443/hazelcast/rest/api/v1/config/update' \
+  -H 'Content-Type: text/plain' \
+  -d '
+        <hazelcast xmlns="http://www.hazelcast.com/schema/config">
+                       <map name="my-map">
+                           <statistics-enabled>false</statistics-enabled>
+                       </map>
+        </hazelcast>
+        '
+----
+The response has the response code 400 and the error message why it was invalid configuration update request as follows:
+[source,json]
+----
+{
+  "statusCode": 400,
+  "message": "Cannot add a dynamic configuration 'MapConfig{name='my-map', inMemoryFormat='BINARY', metadataPolicy=CREATE_ON_UPDATE, backupCount=1, asyncBackupCount=0, timeToLiveSeconds=0, maxIdleSeconds=0, readBackupData=false, evictionConfig=EvictionConfig{size=2147483647, maxSizePolicy=PER_NODE, evictionPolicy=NONE, comparatorClassName=null, comparator=null}, merkleTree=MerkleTreeConfig{enabled=null, depth=10}, eventJournal=EventJournalConfig{enabled=false, capacity=10000, timeToLiveSeconds=0}, hotRestart=HotRestartConfig{enabled=false, fsync=false}, dataPersistenceConfig=DataPersistenceConfig{enabled=false, fsync=false}, nearCacheConfig=null, mapStoreConfig=MapStoreConfig{enabled=false, className='null', factoryClassName='null', writeDelaySeconds=0, writeBatchSize=1, implementation=null, factoryImplementation=null, properties={}, initialLoadMode=LAZY, writeCoalescing=true, offload=true}, mergePolicyConfig=MergePolicyConfig{policy='com.hazelcast.spi.merge.PutIfAbsentMergePolicy', batchSize=100}, wanReplicationRef=null, entryListenerConfigs=null, indexConfigs=null, attributeConfigs=null, splitBrainProtectionName=null, queryCacheConfigs=null, cacheDeserializedValues=INDEX_ONLY, statisticsEnabled=false, entryStatsEnabled=false, tieredStoreConfig=TieredStoreConfig{enabled=false, memoryTierConfig=MemoryTierConfig{capacity=256 MEGABYTES}, diskTierConfig=DiskTierConfig{enabled=false, deviceName='default-tiered-store-device'}}, partitioningAttributeConfigs=null, userCodeNamespace=null}' as there is already a conflicting configuration 'MapConfig{name='my-map', inMemoryFormat='BINARY', metadataPolicy=CREATE_ON_UPDATE, backupCount=2, asyncBackupCount=0, timeToLiveSeconds=0, maxIdleSeconds=0, readBackupData=false, evictionConfig=EvictionConfig{size=2147483647, maxSizePolicy=PER_NODE, evictionPolicy=NONE, comparatorClassName=null, comparator=null}, merkleTree=MerkleTreeConfig{enabled=null, depth=10}, eventJournal=EventJournalConfig{enabled=false, capacity=10000, timeToLiveSeconds=0}, hotRestart=HotRestartConfig{enabled=false, fsync=false}, dataPersistenceConfig=DataPersistenceConfig{enabled=false, fsync=false}, nearCacheConfig=null, mapStoreConfig=MapStoreConfig{enabled=false, className='null', factoryClassName='null', writeDelaySeconds=0, writeBatchSize=1, implementation=null, factoryImplementation=null, properties={}, initialLoadMode=LAZY, writeCoalescing=true, offload=true}, mergePolicyConfig=MergePolicyConfig{policy='com.hazelcast.spi.merge.PutIfAbsentMergePolicy', batchSize=100}, wanReplicationRef=null, entryListenerConfigs=null, indexConfigs=null, attributeConfigs=null, splitBrainProtectionName=null, queryCacheConfigs=null, cacheDeserializedValues=INDEX_ONLY, statisticsEnabled=true, entryStatsEnabled=false, tieredStoreConfig=TieredStoreConfig{enabled=false, memoryTierConfig=MemoryTierConfig{capacity=256 MEGABYTES}, diskTierConfig=DiskTierConfig{enabled=false, deviceName='default-tiered-store-device'}}, partitioningAttributeConfigs=null, userCodeNamespace=null}'"
+}
+----
+If you look carefully in the message, it says that "there is already a conflicting configuration" with the same map name.
+
+As you can see, you can not try adding a map config with the same map name but you can send an update request with the same configuration and map name, and you will observe that this update will be ignored since there is no change. Let's try the request again:
+[source,shell]
+----
+curl -X 'POST' \
+  'http://localhost:8443/hazelcast/rest/api/v1/config/update' \
+  -H 'Content-Type: text/plain' \
+  -d '
+        <hazelcast xmlns="http://www.hazelcast.com/schema/config">
+                       <map name="my-map">
+                           <in-memory-format>BINARY</in-memory-format>
+                           <statistics-enabled>true</statistics-enabled>
+                           <backup-count>2</backup-count>
+                       </map>
+        </hazelcast>
+        '
+----
+We receive a response code OK (200) and the following body:
+[source,json]
+----
+{
+  "addedConfigs": [],
+  "ignoredConfigs": [
+    {
+      "sectionName": "map",
+      "configName": "my-map"
+    }
+  ]
+}
+----
+As you see from the response, no new configs added and the provided config is ignored.
+
+Whether a dynamic configuration can be applied or not depends on the request. For some updates, it is allowed to change configuration parameters of an existing configuration while for some as above you are not allowed to change it.

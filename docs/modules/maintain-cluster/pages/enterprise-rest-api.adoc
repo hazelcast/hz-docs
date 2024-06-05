@@ -480,7 +480,9 @@ You can use the `/hazelcast/rest/api/v1/config/update` REST endpoint to change t
 
 The endpoint requires that you send a xml/yaml server configuration file with the needed changes. The response will be two lists in json format. The first list is the newly added configurations among the configs sent to the server, and another list of ignored configurations which were in the sent configuration but could not be applied at the server, possibly since they are not dynamic configuration options but static configurations.
 
-Let's now see how you can add a new `MapConfig` using this REST endpoint and analyse its response.
+Whether a dynamic configuration can be applied or not depends on the request. For some updates, it is allowed to change configuration parameters of an existing configuration while for some others you are not allowed to change the configuration.
+
+Let's now see different update requests and their results.
 
 === Add New MapConfig
 Here is an example POST request for adding a new `MapConfig` for my-map:
@@ -519,7 +521,8 @@ When we send this request we receive the response body similar to this:
 ----
 As you can observe from the response, a new map config is added for map with name my-map and all the requested dynamic configurations are applied.
 
-Now, if you like to add the config with the same map name and a different configuration, then you get response code 400 meaning an invalid configuration is provided since you can not change an existing map configuration. Let's try this:
+=== Add New Conflicting MapConfig For An Existing Map
+If you like to add the config with the same map name and a different configuration, then you get response code 400 meaning an invalid configuration is provided since you can not change an existing map configuration. Let's try this:
 [source,shell]
 ----
 curl -X 'POST' \
@@ -543,7 +546,8 @@ The response has the response code 400 and the error message why it was invalid 
 ----
 If you look carefully in the message, it says that "there is already a conflicting configuration" with the same map name.
 
-As you can see, you can not try adding a map config with the same map name but you can send an update request with the same configuration and map name, and you will observe that this update will be ignored since there is no change. Let's try the request again:
+=== Add New MapConfig For An Existing Map But With No Configuration Change
+As you can see, you can not try adding a map config with the same map name. You can send an update request with the same configuration and map name, and you will observe that this update will be ignored since there is no change. Let's try the request again:
 [source,shell]
 ----
 curl -X 'POST' \
@@ -574,4 +578,60 @@ We receive a response code OK (200) and the following body:
 ----
 As you see from the response, no new configs added and the provided config is ignored.
 
-Whether a dynamic configuration can be applied or not depends on the request. For some updates, it is allowed to change configuration parameters of an existing configuration while for some as above you are not allowed to change it.
+=== Add New MapConfig With Duplicate Configs
+As you can see, you can not try adding a map config with the same map name. You can send an update request with the same configuration and map name, and you will observe that this update will be ignored since there is no change. Let's try the request again:
+[source,shell]
+----
+curl -X 'POST' \
+  'http://localhost:8443/hazelcast/rest/api/v1/config/update' \
+  -H 'Content-Type: text/plain' \
+  -d '
+        <hazelcast xmlns="http://www.hazelcast.com/schema/config">
+                       <map name="my-duplicate-map">
+                           <statistics-enabled>true</statistics-enabled>
+                       </map>
+                       <map name="my-duplicate-map">
+                           <statistics-enabled>true</statistics-enabled>
+                       </map>
+        </hazelcast>
+        '
+----
+We receive a response code OK (200) and the following body:
+[source,json]
+----
+{
+  "addedConfigs": [
+    {
+      "sectionName": "map",
+      "configName": "my-duplicate-map"
+    }
+  ],
+  "ignoredConfigs": []
+}
+----
+As you see from the response, only one MapConfig is added since the duplicate one has exactly the same configuration.
+
+=== Try Adding Non-dynamic Static Configuration
+You can try to change a static config, for example the `cluster-name` and observe that it is ignored silently. Since it is not a dynamic configuration, it is neither in ignored nor in the added configs list.
+An example request:
+[source,shell]
+----
+curl -X 'POST' \
+  'http://localhost:8443/hazelcast/rest/api/v1/config/update' \
+  -H 'Content-Type: text/plain' \
+  -d '
+        <hazelcast xmlns="http://www.hazelcast.com/schema/config">
+                       <instance-name>newInstanceName</instance-name>
+        </hazelcast>
+        '
+----
+We receive a response code OK (200) and the following body:
+[source,json]
+----
+{
+  "addedConfigs": [],
+  "ignoredConfigs": []
+}
+----
+
+As you can see from the response, the static configuration is ignored but not listed in the ignored configurations list.

@@ -2,20 +2,497 @@
 
 == Intro
 
+The primary object for interacting with the database is a Vector Collection. This collection holds information about the vectors and metadata (value).
+
+A collection can consist of one or more indexes, all sharing a single storage metadata. Each index represents a distinct vector space. Vectors from different indexes are stored independently, and indexes can have different configurations.
+
+NOTE: At this point, each metadata object must correspond to exactly one vector in each index.
+
+NOTE: When working with multiple indexes in your collections, it's necessary to specify the index to search in your queries..
+
 == Configuration
 
+Collection configuration can be set dynamically during vector collection creation or statically during cluster configuration. Below is a table listing all available options:
 
-== Manage data
+.Collection configuration options
+[cols="1,2,1,1",options="header"]
+|===
+|Option|Description|Required|Default
+
+|name
+|The name of the vector collection.
+|Y
+|null
+
+|indexes
+|Information about indexes configuration
+|Y
+|null
+|===
+
+.Index configuration options
+[cols="1,2,1,1",options="header"]
+|===
+|Option|Description|Required|Default
+
+|name
+|The name of the vector index.
+|`N` - for single-index vector collections. `Y` - for multi-index collection
+|null
+
+|dimension
+|Vectors dimension
+|Y
+|null
+
+|metric
+|Distance metric used to calculate the distance between two vectors.
+See table Available distance metrics.
+|Y
+|null
+
+|max-degree
+|The maximum number of neighbors per node is calculated as max-degree * 2
+|Y
+|16
+
+|ef-construction
+|The size of the search queue to use when finding nearest neighbors.
+|Y
+|100
+
+|use-deduplication
+|The option for vector deduplication.
+When disabled, a new node will be created for each vector, even if it is the same as an existing one.
+|true
+
+|===
+
+.Available distance metrics
+[cols="2,2,2",options="header"]
+|===
+|Name|Description| Score definition
+
+|EUCLIDEAN
+|euclidean distance
+|1 / (1 + squareDistance(v1, v2))
+
+|COSINE
+|cosine of the angle between the vectors
+|(1 + cos(v1, v2)) / 2
+
+|DOT
+|dot product of the vectors
+|(1 + dotProduct(v1, v2)) / 2
+
+|===
+
+WARNING: The recommended method for computing cosine similarity is to normalize all vectors to unit length and utilize the DOT metric instead.
+
+
+Configuration example:
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+    <vector-collection name="vector-collection-name">
+        <indexes>
+            <index name="index-1">
+                <dimension>2</dimension>
+                <metric>DOT</metric>
+            </index>
+            <index name="index-2">
+                <dimension>2</dimension>
+                <metric>DOT</metric>
+                <max-degree>10</max-degree>
+                <ef-construction>20</ef-construction>
+                <use-deduplication>false</use-deduplication>
+            </index>
+        </indexes>
+    </vector-collection>
+</hazelcast>
+----
+--
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  vector-collection:
+    vector-collection-name:
+      indexes:
+        - name: index-1
+          dimension: 2
+          metric: DOT
+        - name: index-2
+          dimension: 2
+          metric: DOT
+          max-degree: 10
+          ef-construction: 20
+          use-deduplication: false
+----
+--
+Java::
++
+--
+[source,java]
+----
+Config config = new Config();
+VectorCollectionConfig collectionConfig = new VectorCollectionConfig("vector-collection-name")
+    .addVectorIndexConfig(
+            new VectorIndexConfig()
+                .setName("index-1")
+                .setDimension(2)
+                .setMetric(Metric.DOT)
+    ).addVectorIndexConfig(
+            new VectorIndexConfig()
+                .setName("index-2")
+                .setDimension(2)
+                .setMetric(Metric.DOT)
+                .setMaxDegree(10)
+                .setEfConstruction(20)
+                .setUseDeduplication(false)
+    );
+config.addVectorCollectionConfig(collectionConfig);
+----
+--
+====
+
+== Manage collection
 
 === Create collection
 
-=== Create objects
+To create a vector collection, use the static method `getCollection(HazelcastInstance instance, VectorCollectionConfig collectionConfig)` of the `VectorCollection` class.
+
+Example:
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorCollection vectorCollection = VectorCollection.getCollection(hazelcastInstance, vectorCollectionConfig);
+----
+--
+====
+
+=== Get existing vector collection
+
+To get a vector collection, use the static method `getCollection(HazelcastInstance instance, String collectionName)` of the `VectorCollection` class.
+
+Example:
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorCollection vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionName);
+----
+--
+====
+
+=== Optimize collection
+
+An optimization operation may be needed in the following cases:
+
+* To permanently delete nodes from the graph that were marked for removal.
+* After adding a significant number of vectors.
+* If some nodes become unreachable and the search results return fewer vectors than expected.
+
+NOTE: The optimization operation is time-consuming process, and no mutable operations are allowed during this process.
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorCollection vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionName);
+CompletionStage<Void> result = vectorCollection.optimizeAsync("index_name");
+----
+--
+====
+
+== Manage data
+All methods of `VectorCollection` that work with collection data are asynchronous. The result is returned as a `CompletionStage`. A collection interacts with objects in the form of documents (`VectorDocument`). Each document comprises a value and one or more vectors associated with that value.
+
+=== Create document
+To create a document use statics the methods of `VectorDocument` and `VectorValues` classes.
+
+Example single index vector collection:
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorDocument<String> document = VectorDocument.of(
+        "document value",
+        VectorValues.of(
+                new float[]{0.2f, 0.9f, -1.2f}
+        )
+);
+----
+--
+====
+
+For multi-index collections, specify the names of the indexes to which the vectors belong:
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorDocument<String> document = VectorDocument.of(
+        "some document value",
+        VectorValues.of(
+                Map.of(
+                        "index1", new float[] {1.2f, -0.3f, 2.2f},
+                        "index2", new float[] {0.2f, 1.3f, -0.2f}
+                )
+        )
+);
+----
+--
+====
+
+
+=== Put objects
+To put single document to a vector collection, use the method `putAsync`, `putIfAbsent` or `setAsync` of the `VectorCollection` class.
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorCollection<String, String> vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionName);
+VectorDocument<String> document = VectorDocument.of("document value", VectorValues.of(new float[] {0.2f, 0.9f, -1.2f}));
+CompletionStage<VectorDocument<String>> result = vectorCollection.putAsync("1", document);
+----
+--
+====
+
+To put several documents to a vector collection, use the method `putAllAsync` of the `VectorCollection` class.
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorCollection<String, String> vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionName);
+VectorDocument<String> document1 = VectorDocument.of("some document1 value", VectorValues.of(new float[] {0.2f, 0.9f, -1.2f}));
+VectorDocument<String> document2 = VectorDocument.of("some document2 value", VectorValues.of(new float[] {1.2f, -0.3f, 2.2f}));
+CompletionStage<Void> result = vectorCollection.putAllAsync(Map.of("1", document1, "2", document2));
+----
+--
+====
 
 === Read objects
+To get document from a vector collection, use the method `getAsync` of the `VectorCollection` class.
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorCollection<String, String> vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionName);
+CompletionStage<VectorDocument<String>> result = vectorCollection.getAsync("1");
+----
+--
+====
 
 === Update objects
+To update single document in a vector collection, use the method `putAsync` or `setAsync` of the `VectorCollection` class.
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorCollection<String, String> vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionName);
+VectorDocument<String> document = VectorDocument.of("some document value", VectorValues.of(new float[] {0.2f, 0.9f, -1.2f}));
+CompletionStage<Void> result = vectorCollection.setAsync("1", document);
+----
+--
+====
 
 === Delete objects
+To delete document from a vector collection, use the method `deleteAsync` or `removeAsync` of the `VectorCollection` class.
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorCollection<String, String> vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionName);
+CompletionStage<Void> resultDelete = vectorCollection.deleteAsync("1");
+CompletionStage<VectorDocument<String>> resultRemove = vectorCollection.removeAsync("2");
+----
+--
+====
+
+NOTE: These methods do not delete index nodes but mark them as deleted. This may impact search speed and memory usage. To permanently remove nodes from the index, you must run index optimization after deletion. See <<optimize-collection, optimize method>>
+
+== Similarity search
+
+Vector search returns objects with vectors that are most similar to that of the query, based on specified metrics.
+When submitting a search query, you have the option to include one vector values representing your query embeddings and specify a limit on the number of results to retrieve.
+
+=== Single-index vector collection search
+
+For similarity search, use the `searchAsync` method of the `VectorCollection`.
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+CompletionStage<SearchResults<String, String>> results = vectorCollection.searchAsync(
+        VectorValues.of(new float[] {0, 0}),
+        SearchOptions.builder()
+            .limit(10)
+            .includeVectors()
+            .includeValue()
+            .build()
+);
+----
+--
+====
+
+=== Multi-index vector collection search
+
+For similarity search, use the `searchAsync` method of the `VectorCollection`, specifying the index name to search.
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+CompletionStage<SearchResults<String, String>> results = vectorCollection.searchAsync(
+        VectorValues.of("index_name", new float[] {0, 0}),
+        SearchOptions.builder()
+            .limit(10)
+            .includeVectors()
+            .includeValue()
+            .build()
+);
+----
+--
+====
+
+=== Similarity search options
+Search parameters are passed as an argument `searchOptions` to the searchAsync method.
+.Search options
+[cols="1,2,3a",options="header"]
+|===
+|Option|Description|Example
+
+|limit
+|How many vectors should be returned in search result
+|
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+var options = SearchOptions.builder().limit(10).build();
+----
+--
+====
+
+|includeValue
+|Include the user value in the search result.
+|
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+var options = SearchOptions.builder().includeValue().build();
+----
+--
+====
+
+|includeVectors
+|Include the vectors values in the search result.
+|
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+var options = SearchOptions.builder().includeVectors().build();
+----
+--
+====
+
+|hints
+|Extra hints for the search.
+|
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+var options = SearchOptions.builder().hint(Hints.PARTITION_LIMIT, 1).build();
+----
+--
+====
+
+|===
+
+.Available hints
+[cols="1,2",options="header"]
+|===
+|Hint|Description
+
+|Hints.PARTITION_LIMIT
+|Number of results to fetch from partition.
+
+|Hints.MEMBER_LIMIT
+|Number of results to fetch from member in 2-stage search.
+
+|Hints.FORCE_SINGLE_STAGE_SEARCH
+|Force use of 1-stage search.
+
+|===
+
+=== 1-stage and 2-stage search
 ...
 
-== Search

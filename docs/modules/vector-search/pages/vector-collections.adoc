@@ -228,7 +228,7 @@ CompletionStage<Void> result = vectorCollection.optimizeAsync("index_name");
 ====
 
 == Manage data
-All methods of `VectorCollection` that work with collection data are asynchronous. The result is returned as a `CompletionStage`. A collection interacts with objects in the form of documents (`VectorDocument`). Each document comprises a value and one or more vectors associated with that value.
+All methods of `VectorCollection` that work with collection data are asynchronous. The result is returned as a `CompletionStage`. A collection interacts with entries in the form of documents (`VectorDocument`). Each document comprises a value and one or more vectors associated with that value.
 
 === Create document
 To create a document use statics the methods of `VectorDocument` and `VectorValues` classes.
@@ -273,7 +273,7 @@ VectorDocument<String> document = VectorDocument.of(
 ====
 
 
-=== Put objects
+=== Put entries
 To put single document to a vector collection, use the method `putAsync`, `putIfAbsent` or `setAsync` of the `VectorCollection` class.
 [tabs]
 ====
@@ -305,7 +305,7 @@ CompletionStage<Void> result = vectorCollection.putAllAsync(Map.of("1", document
 --
 ====
 
-=== Read objects
+=== Read entries
 To get document from a vector collection, use the method `getAsync` of the `VectorCollection` class.
 
 [tabs]
@@ -321,8 +321,8 @@ CompletionStage<VectorDocument<String>> result = vectorCollection.getAsync("1");
 --
 ====
 
-=== Update objects
-To update single document in a vector collection, use the method `putAsync` or `setAsync` of the `VectorCollection` class.
+=== Update entries
+To update single entry in a vector collection, use the method `putAsync` or `setAsync` of the `VectorCollection` class.
 
 [tabs]
 ====
@@ -338,7 +338,7 @@ CompletionStage<Void> result = vectorCollection.setAsync("1", document);
 --
 ====
 
-=== Delete objects
+=== Delete entries
 To delete document from a vector collection, use the method `deleteAsync` or `removeAsync` of the `VectorCollection` class.
 
 [tabs]
@@ -359,12 +359,14 @@ NOTE: These methods do not delete index nodes but mark them as deleted. This may
 
 == Similarity search
 
-Vector search returns objects with vectors that are most similar to that of the query, based on specified metrics.
-When submitting a search query, you have the option to include one vector values representing your query embeddings and specify a limit on the number of results to retrieve.
-
-=== Single-index vector collection search
+Vector search returns entries with vectors that are most similar to the query vector, based on specified metrics. Any query consists of exactly one vector to search and search options, such as the limit of results to retrieve, etc. For more details about available options, refer to <<similarity-search-options, Similarity search options>>
 
 For similarity search, use the `searchAsync` method of the `VectorCollection`.
+
+In a single index vector collection, specifying the name of the index to search is not required.
+However, for a multi-index vector collection, specifying the name of the index to search in is necessary.
+
+Example for single-index vector collection:
 [tabs]
 ====
 Java::
@@ -384,9 +386,7 @@ CompletionStage<SearchResults<String, String>> results = vectorCollection.search
 --
 ====
 
-=== Multi-index vector collection search
-
-For similarity search, use the `searchAsync` method of the `VectorCollection`, specifying the index name to search.
+Example for multi-index vector collection:
 [tabs]
 ====
 Java::
@@ -410,75 +410,29 @@ CompletionStage<SearchResults<String, String>> results = vectorCollection.search
 Search parameters are passed as an argument `searchOptions` to the searchAsync method.
 
 .Search options
-[cols="1,2,3a",options="header"]
+[cols="1,2,1",options="header"]
 |===
-|Option|Description|Example
+|Option|Description|Default
 
 |limit
 |How many vectors should be returned in search result
-|
-
-[tabs]
-====
-Java::
-+
---
-[source,java]
-----
-var options = SearchOptions.builder().limit(10).build();
-----
---
-====
+|`1`
 
 |includeValue
 |Include the user value in the search result.
-|
+|`N`
 
-[tabs]
-====
-Java::
-+
---
-[source,java]
-----
-var options = SearchOptions.builder().includeValue().build();
-----
---
-====
 
 |includeVectors
 |Include the vectors values in the search result.
-|
-
-[tabs]
-====
-Java::
-+
---
-[source,java]
-----
-var options = SearchOptions.builder().includeVectors().build();
-----
---
-====
+|`N`
 
 |hints
 |Extra hints for the search.
-|
-
-[tabs]
-====
-Java::
-+
---
-[source,java]
-----
-var options = SearchOptions.builder().hint(Hints.PARTITION_LIMIT, 1).build();
-----
---
-====
+|`None`
 
 |===
+
 
 .Available hints
 [cols="1,2",options="header"]
@@ -495,6 +449,23 @@ var options = SearchOptions.builder().hint(Hints.PARTITION_LIMIT, 1).build();
 |Force use of 1-stage search.
 
 |===
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+var options = SearchOptions.builder()
+                .limit(10)
+                .includeValue()
+                .includeVectors()
+                .hint(Hints.PARTITION_LIMIT, 1)
+                .build();
+----
+--
+====
 
 === 1-stage and 2-stage search
 ...

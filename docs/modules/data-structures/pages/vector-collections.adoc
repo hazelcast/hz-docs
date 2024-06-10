@@ -35,38 +35,38 @@ Collection configuration can be set dynamically during vector collection creatio
 .Index configuration options
 [cols="1,2,1,1",options="header"]
 |===
-|Option|Description|Required|Default
+|Option|Description|Mandatory|Default
 
 |name
 |The name of the vector index.
-|`N` - for single-index vector collections. `Y` - for multi-index collection
+|`Required` - for single-index vector collections. `Optional` - for multi-index collection
 |null
 
 |dimension
 |Vectors dimension
-|Y
-|null
+|`Required`
+|N/A
 
 |metric
 |Distance metric used to calculate the distance between two vectors.
 See table <<available-metrics, Available distance metrics.>>
-|Y
-|null
+|`Required`
+|N/A
 
 |max-degree
 |The maximum number of neighbors per node is calculated as max-degree * 2
-|Y
+|`Required`
 |16
 
 |ef-construction
 |The size of the search queue to use when finding nearest neighbors.
-|Y
+|`Required`
 |100
 
 |use-deduplication
 |The option for vector deduplication.
-When disabled, a new node will be created for each vector, even if it is the same as an existing one.
-|Y
+When disabled, each added vector will be treated as a distinct vector in the index, even if it is identical to an existing one. When deduplication is enabled, the index consumes less space, but the time required to add a vector increases.
+|`Required`
 |true
 
 |===
@@ -102,17 +102,17 @@ XML::
 [source,xml]
 ----
 <hazelcast>
-    <vector-collection name="vector-collection-name">
+    <vector-collection name="books">
         <indexes>
-            <index name="index-1">
-                <dimension>2</dimension>
+            <index name="word2vec-index">
+                <dimension>5</dimension>
                 <metric>DOT</metric>
             </index>
-            <index name="index-2">
-                <dimension>2</dimension>
+            <index name="glove-index">
+                <dimension>10</dimension>
                 <metric>DOT</metric>
-                <max-degree>10</max-degree>
-                <ef-construction>20</ef-construction>
+                <max-degree>32</max-degree>
+                <ef-construction>256</ef-construction>
                 <use-deduplication>false</use-deduplication>
             </index>
         </indexes>
@@ -129,14 +129,14 @@ hazelcast:
   vector-collection:
     vector-collection-name:
       indexes:
-        - name: index-1
-          dimension: 2
+        - name: word2vec-index
+          dimension: 5
           metric: DOT
-        - name: index-2
-          dimension: 2
+        - name: glove-index
+          dimension: 10
           metric: DOT
-          max-degree: 10
-          ef-construction: 20
+          max-degree: 32
+          ef-construction: 256
           use-deduplication: false
 ----
 --
@@ -146,19 +146,19 @@ Java::
 [source,java]
 ----
 Config config = new Config();
-VectorCollectionConfig collectionConfig = new VectorCollectionConfig("vector-collection-name")
+VectorCollectionConfig collectionConfig = new VectorCollectionConfig("books")
     .addVectorIndexConfig(
             new VectorIndexConfig()
-                .setName("index-1")
-                .setDimension(2)
+                .setName("word2vec-index")
+                .setDimension(5)
                 .setMetric(Metric.DOT)
     ).addVectorIndexConfig(
             new VectorIndexConfig()
-                .setName("index-2")
-                .setDimension(2)
+                .setName("glove-index")
+                .setDimension(10)
                 .setMetric(Metric.DOT)
-                .setMaxDegree(10)
-                .setEfConstruction(20)
+                .setMaxDegree(32)
+                .setEfConstruction(256)
                 .setUseDeduplication(false)
     );
 config.addVectorCollectionConfig(collectionConfig);
@@ -166,7 +166,7 @@ config.addVectorCollectionConfig(collectionConfig);
 --
 ====
 
-== Manage collection
+== Create collection
 
 === Get vector collection
 To get the collection, use one of the static methods of `VectorCollection`. Both methods will either create a new vector collection or return an existing one corresponding to the requested name.
@@ -183,13 +183,19 @@ Java::
 --
 [source,java]
 ----
+VectorCollectionConfig collectionConfig = new VectorCollectionConfig("books")
+    .addVectorIndexConfig(
+            new VectorIndexConfig()
+                .setDimension(5)
+                .setMetric(Metric.DOT)
+    );
 VectorCollection vectorCollection = VectorCollection.getCollection(hazelcastInstance, vectorCollectionConfig);
 ----
 --
 ====
 
 * Method `getCollection(HazelcastInstance instance, String collectionName)`.
-** If a collection with the provided name does not exist, the system will create the collection with the configuration created implicitly during static or dynamic configuration of the cluster. If the configuration does not exist, an error will be thrown.
+** If a collection with the provided name does not exist, the system will create the collection with the configuration created explicitly during static or dynamic configuration of the cluster. If the configuration does not exist, an error will be thrown.
 ** If a collection with the provided name exists, it will be returned.
 
 [tabs]
@@ -199,30 +205,7 @@ Java::
 --
 [source,java]
 ----
-VectorCollection vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionName);
-----
---
-====
-
-=== Optimize collection
-
-An optimization operation may be needed in the following cases:
-
-* To permanently delete nodes from the graph that were marked for removal.
-* After adding a significant number of vectors.
-* If some nodes become unreachable and the search results return fewer vectors than expected.
-
-WARNING: The optimization operation can be a time-consuming and resource-intensive process, and no mutating operations are allowed during this process.
-
-[tabs]
-====
-Java::
-+
---
-[source,java]
-----
-VectorCollection vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionName);
-CompletionStage<Void> result = vectorCollection.optimizeAsync("index_name");
+VectorCollection vectorCollection = VectorCollection.getCollection(hazelcastInstance, "books");
 ----
 --
 ====
@@ -242,9 +225,9 @@ Java::
 [source,java]
 ----
 VectorDocument<String> document = VectorDocument.of(
-        "document value",
+        "{'genre': 'novel', 'year': 1976}",
         VectorValues.of(
-                new float[]{0.2f, 0.9f, -1.2f}
+                new float[]{0.2f, 0.9f, -1.2f, 2.2f,  2.2f,  3.0f}
         )
 );
 ----
@@ -260,11 +243,11 @@ Java::
 [source,java]
 ----
 VectorDocument<String> document = VectorDocument.of(
-        "some document value",
+        "{'genre': 'fiction', 'year': 2022}",
         VectorValues.of(
                 Map.of(
-                        "index1", new float[] {1.2f, -0.3f, 2.2f},
-                        "index2", new float[] {0.2f, 1.3f, -0.2f}
+                        "word2vec-index", new float[] {0.2f, 0.9f, -1.2f, 2.2f,  2.2f,  3.0f},
+                        "glove-index", new float[] {2f, 3f, 2f, 10f, -2f}
                 )
         )
 );
@@ -282,8 +265,10 @@ Java::
 --
 [source,java]
 ----
-VectorCollection<String, String> vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionName);
-VectorDocument<String> document = VectorDocument.of("document value", VectorValues.of(new float[] {0.2f, 0.9f, -1.2f}));
+VectorDocument<String> document = VectorDocument.of(
+        "{'genre': 'novel', 'year': 1976}",
+        VectorValues.of(new float[] {0.2f, 0.9f, -1.2f, 2.2f,  2.2f,  3.0f})
+);
 CompletionStage<VectorDocument<String>> result = vectorCollection.putAsync("1", document);
 ----
 --
@@ -297,10 +282,11 @@ Java::
 --
 [source,java]
 ----
-VectorCollection<String, String> vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionName);
-VectorDocument<String> document1 = VectorDocument.of("some document1 value", VectorValues.of(new float[] {0.2f, 0.9f, -1.2f}));
-VectorDocument<String> document2 = VectorDocument.of("some document2 value", VectorValues.of(new float[] {1.2f, -0.3f, 2.2f}));
-CompletionStage<Void> result = vectorCollection.putAllAsync(Map.of("1", document1, "2", document2));
+VectorDocument<String> document1 = VectorDocument.of("{'genre': 'novel', 'year': 1976}", VectorValues.of(new float[] {1.2f, -0.3f, 2.2f, 0.4f, 0.3f}));
+VectorDocument<String> document2 = VectorDocument.of("{'genre': 'fiction', 'year': 2022}", VectorValues.of(new float[] {1.2f, -0.3f, 2.2f, 0.4f, 0.3f}));
+CompletionStage<Void> result = vectorCollection.putAllAsync(
+        Map.of("1", document1, "2", document2)
+);
 ----
 --
 ====
@@ -315,7 +301,6 @@ Java::
 --
 [source,java]
 ----
-VectorCollection<String, String> vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionName);
 CompletionStage<VectorDocument<String>> result = vectorCollection.getAsync("1");
 ----
 --
@@ -331,8 +316,7 @@ Java::
 --
 [source,java]
 ----
-VectorCollection<String, String> vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionName);
-VectorDocument<String> document = VectorDocument.of("some document value", VectorValues.of(new float[] {0.2f, 0.9f, -1.2f}));
+VectorDocument<String> document = VectorDocument.of("{'genre': 'fiction', 'year': 2022}", VectorValues.of(new float[] {1.2f, -0.3f, 2.2f, 0.4f, 0.3f}));
 CompletionStage<Void> result = vectorCollection.setAsync("1", document);
 ----
 --
@@ -348,14 +332,13 @@ Java::
 --
 [source,java]
 ----
-VectorCollection<String, String> vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionName);
 CompletionStage<Void> resultDelete = vectorCollection.deleteAsync("1");
 CompletionStage<VectorDocument<String>> resultRemove = vectorCollection.removeAsync("2");
 ----
 --
 ====
 
-NOTE: These methods do not delete index nodes but mark them as deleted. This may impact search speed and memory usage. To permanently remove nodes from the index, you must run index optimization after deletion. See <<optimize-collection, optimize method>>
+NOTE: These methods do not delete vectors but mark them as deleted. This may impact search speed and memory usage. To permanently remove vectors from the index, you must run index optimization after deletion. See <<optimize-collection, optimize method>>
 
 == Similarity search
 
@@ -375,9 +358,9 @@ Java::
 [source,java]
 ----
 CompletionStage<SearchResults<String, String>> results = vectorCollection.searchAsync(
-        VectorValues.of(new float[] {0, 0}),
+        VectorValues.of(new float[] {0f, 0f, 0.2f, -0.3f, 1.2f}),
         SearchOptions.builder()
-            .limit(10)
+            .limit(5)
             .includeVectors()
             .includeValue()
             .build()
@@ -395,9 +378,9 @@ Java::
 [source,java]
 ----
 CompletionStage<SearchResults<String, String>> results = vectorCollection.searchAsync(
-        VectorValues.of("index_name", new float[] {0, 0}),
+        VectorValues.of("glove-index", new float[] {0f, 0f, 0.2f, -0.3f, 1.2f}),
         SearchOptions.builder()
-            .limit(10)
+            .limit(5)
             .includeVectors()
             .includeValue()
             .build()
@@ -439,13 +422,13 @@ Search parameters are passed as an argument `searchOptions` to the searchAsync m
 |===
 |Hint|Description
 
-|Hints.PARTITION_LIMIT
+|`partitionLimit`
 |Number of results to fetch from partition.
 
-|Hints.MEMBER_LIMIT
+|`memberLimit`
 |Number of results to fetch from member in 2-stage search.
 
-|Hints.FORCE_SINGLE_STAGE_SEARCH
+|`singleStage`
 |Force use of 1-stage search.
 
 |===
@@ -461,11 +444,37 @@ var options = SearchOptions.builder()
                 .limit(10)
                 .includeValue()
                 .includeVectors()
-                .hint(Hints.PARTITION_LIMIT, 1)
+                .hint("partitionLimit", 1)
                 .build();
 ----
 --
 ====
+
+== Manage collection
+
+=== Optimize collection
+
+An optimization operation may be needed in the following cases:
+
+* To permanently delete vectors that were marked for removal.
+* After adding a significant number of vectors.
+* The collection returns fewer vectors than expected.
+
+WARNING: The optimization operation can be a time-consuming and resource-intensive process, and no mutating operations are allowed during this process.
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+CompletionStage<Void> result = vectorCollection.optimizeAsync("glove-index");
+----
+--
+====
+
+=== Clear collection
 
 === 1-stage and 2-stage search
 ...

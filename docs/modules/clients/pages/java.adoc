@@ -125,6 +125,20 @@ the client retries to connect as configured which is described in the
 The client executes each operation through the already established connection to the cluster.
 If this connection(s) disconnects or drops, the client tries to reconnect as configured.
 
+The initial connection of a client is established using one of the addresses you provide in the <<configuring-address-list, address list>>. 
+The client gets the addresses of other members in the cluster from the initially connected member.
+If your client is <<java-client-operation-modes, smart>>, the client tries to connect to them.
+If any of the other members have both private and public addresses, the client must decide
+which one to use when connecting to those members. You can override the `hazelcast.discovery.public.ip.enabled` property 
+to suit your setup. For further information on the `hazelcast.discovery.public.ip.enabled` property,
+see <<client-system-properties, Client System Properties>>.
+
+If you use a <<client-network,discovery mechanism>> to find the initial member for the connection instead of an address list,
+you can use the same property to configure whether the initial member connection uses the private or public address.
+
+For an example of this scenario, refer to
+link:https://docs.hazelcast.com/tutorials/hazelcast-platform-operator-expose-externally[Connect to Hazelcast from Outside Kubernetes, window=_blank] in the Operator documentation.
+
 **Handling Retry-able Operation Failure:**
 
 While sending the requests to related members, operations can fail due to various reasons.
@@ -2236,14 +2250,14 @@ will try write through and other optimizations even though the system is concurr
 See xref:extending-hazelcast:discovery-spi.adoc[Discovery SPI] for more information.
 
 |`hazelcast.discovery.public.ip.enabled`
-|false
+|null
 |bool
-|Enables the discovery joiner to use public IPs from `DiscoveredNode`.
-See xref:extending-hazelcast:discovery-spi.adoc[Discovery SPI] for more information.
+|Overrides client behavior when the member has both public and private addresses available.
 When set to `true`, the client assumes that it needs to use public IP addresses reported by the members.
 When set to `false`, the client always uses private addresses reported by the members. If it is `null`,
 the client will try to infer how the discovery mechanism should be based on the reachability of the members.
-This inference is not %100 reliable and may result in false-negatives.
+As the client's inference is not 100% reliable and can result in false-negatives, we recommend that it is overridden by
+setting to `true` when the client cannot connect to members using their public addresses.
 
 |`hazelcast.client.event.queue.capacity`
 |1000000

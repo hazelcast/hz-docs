@@ -113,7 +113,7 @@ XML::
     <vector-collection name="books">
         <indexes>
             <index name="word2vec-index">
-                <dimension>5</dimension>
+                <dimension>6</dimension>
                 <metric>DOT</metric>
             </index>
             <index name="glove-index">
@@ -138,7 +138,7 @@ hazelcast:
     vector-collection-name:
       indexes:
         - name: word2vec-index
-          dimension: 5
+          dimension: 6
           metric: DOT
         - name: glove-index
           dimension: 10
@@ -158,7 +158,7 @@ VectorCollectionConfig collectionConfig = new VectorCollectionConfig("books")
     .addVectorIndexConfig(
             new VectorIndexConfig()
                 .setName("word2vec-index")
-                .setDimension(5)
+                .setDimension(6)
                 .setMetric(Metric.DOT)
     ).addVectorIndexConfig(
             new VectorIndexConfig()
@@ -170,6 +170,18 @@ VectorCollectionConfig collectionConfig = new VectorCollectionConfig("books")
                 .setUseDeduplication(false)
     );
 config.addVectorCollectionConfig(collectionConfig);
+----
+--
+Python::
++
+--
+[source,python]
+----
+client.create_vector_collection_config("books", indexes=[
+    IndexConfig(name="word2vec-index", metric=Metric.DOT, dimension=6),
+    IndexConfig(name="glove-index", metric=Metric.DOT, dimension=10,
+                max_degree=32, ef_construction=256, use_deduplication=False),
+])
 ----
 --
 ====
@@ -194,10 +206,22 @@ Java::
 VectorCollectionConfig collectionConfig = new VectorCollectionConfig("books")
     .addVectorIndexConfig(
             new VectorIndexConfig()
-                .setDimension(5)
+                .setDimension(6)
                 .setMetric(Metric.DOT)
     );
 VectorCollection vectorCollection = VectorCollection.getCollection(hazelcastInstance, vectorCollectionConfig);
+----
+--
+Python::
++
+--
+[source,python]
+----
+# create configuration and get collection separately
+client.create_vector_collection_config("books", indexes=[
+    IndexConfig(name=None, metric=Metric.DOT, dimension=6)
+])
+vectorCollection = client.get_vector_collection("books").blocking()
 ----
 --
 ====
@@ -216,7 +240,17 @@ Java::
 VectorCollection vectorCollection = VectorCollection.getCollection(hazelcastInstance, "books");
 ----
 --
+Python::
++
+--
+[source,python]
+----
+vectorCollection = client.get_vector_collection("books").blocking()
+----
+--
 ====
+
+NOTE: Java Vector Collection API is only async, Python provides both async and sync API (via `blocking()`)
 
 == Manage data
 All methods of `VectorCollection` that work with collection data are asynchronous. The result is returned as a `CompletionStage`. A collection interacts with entries in the form of documents (`VectorDocument`). Each document comprises a value and one or more vectors associated with that value.
@@ -237,9 +271,22 @@ Java::
 VectorDocument<String> document = VectorDocument.of(
         "{'genre': 'novel', 'year': 1976}",
         VectorValues.of(
-                new float[]{0.2f, 0.9f, -1.2f, 2.2f,  2.2f,  3.0f}
+                new float[]{0.2f, 0.9f, -1.2f, 2.2f, 2.2f, 3.0f}
         )
 );
+----
+--
+Python::
++
+--
+[source,python]
+----
+document = Document(
+    "{'genre': 'novel', 'year': 1976}",
+    [
+        Vector("", Type.DENSE, [0.2, 0.9, -1.2, 2.2, 2.2, 3.0]),
+    ],
+)
 ----
 --
 ====
@@ -256,11 +303,25 @@ VectorDocument<String> document = VectorDocument.of(
         "{'genre': 'fiction', 'year': 2022}",
         VectorValues.of(
                 Map.of(
-                        "word2vec-index", new float[] {0.2f, 0.9f, -1.2f, 2.2f,  2.2f,  3.0f},
+                        "word2vec-index", new float[] {0.2f, 0.9f, -1.2f, 2.2f, 2.2f, 3.0f},
                         "glove-index", new float[] {2f, 3f, 2f, 10f, -2f}
                 )
         )
 );
+----
+--
+Python::
++
+--
+[source,python]
+----
+document = Document(
+    "{'genre': 'novel', 'year': 1976}",
+    [
+        Vector("word2vec-index", Type.DENSE, [0.2, 0.9, -1.2, 2.2, 2.2, 3.0]),
+        Vector("glove-index", Type.DENSE, [2, 3, 2, 10, -2]),
+    ],
+)
 ----
 --
 ====
@@ -277,9 +338,22 @@ Java::
 ----
 VectorDocument<String> document = VectorDocument.of(
         "{'genre': 'novel', 'year': 1976}",
-        VectorValues.of(new float[] {0.2f, 0.9f, -1.2f, 2.2f,  2.2f,  3.0f})
+        VectorValues.of(new float[] {0.2f, 0.9f, -1.2f, 2.2f, 2.2f, 3.0f})
 );
 CompletionStage<VectorDocument<String>> result = vectorCollection.putAsync("1", document);
+----
+--
+Python::
++
+--
+[source,python]
+----
+vectorCollection.put("1", Document(
+    "{'genre': 'novel', 'year': 1976}",
+    [
+        Vector("", Type.DENSE, [0.2, 0.9, -1.2, 2.2, 2.2, 3.0]),
+    ],
+))
 ----
 --
 ====
@@ -292,11 +366,32 @@ Java::
 --
 [source,java]
 ----
-VectorDocument<String> document1 = VectorDocument.of("{'genre': 'novel', 'year': 1976}", VectorValues.of(new float[] {1.2f, -0.3f, 2.2f, 0.4f, 0.3f}));
-VectorDocument<String> document2 = VectorDocument.of("{'genre': 'fiction', 'year': 2022}", VectorValues.of(new float[] {1.2f, -0.3f, 2.2f, 0.4f, 0.3f}));
+VectorDocument<String> document1 = VectorDocument.of("{'genre': 'novel', 'year': 1976}", VectorValues.of(new float[] {1.2f, -0.3f, 2.2f, 0.4f, 0.3f, 0.4f}));
+VectorDocument<String> document2 = VectorDocument.of("{'genre': 'fiction', 'year': 2022}", VectorValues.of(new float[] {1.2f, -0.3f, 2.2f, 0.4f, 0.3f, -2.0f}));
 CompletionStage<Void> result = vectorCollection.putAllAsync(
         Map.of("1", document1, "2", document2)
 );
+----
+--
+Python::
++
+--
+[source,python]
+----
+vectorCollection.put_all(
+    {
+        "1": Document(
+            "{'genre': 'novel', 'year': 1976}",
+            [
+                Vector("", Type.DENSE, [1.2, -0.3, 2.2, 0.4, 0.3, 0.4]),
+            ]),
+        "2": Document(
+            "{'genre': 'novel', 'year': 1976}",
+            [
+                Vector("", Type.DENSE, [1.2, -0.3, 2.2, 0.4, 0.3, -2.0]),
+            ]),
+    }
+)
 ----
 --
 ====
@@ -314,6 +409,14 @@ Java::
 CompletionStage<VectorDocument<String>> result = vectorCollection.getAsync("1");
 ----
 --
+Python::
++
+--
+[source,python]
+----
+vectorCollection.get("1")
+----
+--
 ====
 
 === Update entries
@@ -326,8 +429,20 @@ Java::
 --
 [source,java]
 ----
-VectorDocument<String> document = VectorDocument.of("{'genre': 'fiction', 'year': 2022}", VectorValues.of(new float[] {1.2f, -0.3f, 2.2f, 0.4f, 0.3f}));
+VectorDocument<String> document = VectorDocument.of("{'genre': 'fiction', 'year': 2022}", VectorValues.of(new float[] {1.2f, -0.3f, 2.2f, 0.4f, 0.3f, 0.4f}));
 CompletionStage<Void> result = vectorCollection.setAsync("1", document);
+----
+--
+Python::
++
+--
+[source,python]
+----
+vectorCollection.set("1", Document("{'genre': 'fiction', 'year': 2022}",
+    [
+        Vector("", Type.DENSE, [1.2, -0.3, 2.2, 0.4, 0.3, 0.4]),
+    ]
+))
 ----
 --
 ====
@@ -346,6 +461,15 @@ Java::
 ----
 CompletionStage<Void> resultDelete = vectorCollection.deleteAsync("1");
 CompletionStage<VectorDocument<String>> resultRemove = vectorCollection.removeAsync("2");
+----
+--
+Python::
++
+--
+[source,python]
+----
+vectorCollection.delete("1")
+vectorCollection.remove("2")
 ----
 --
 ====
@@ -370,13 +494,26 @@ Java::
 [source,java]
 ----
 CompletionStage<SearchResults<String, String>> results = vectorCollection.searchAsync(
-        VectorValues.of(new float[] {0f, 0f, 0.2f, -0.3f, 1.2f}),
+        VectorValues.of(new float[] {0f, 0f, 0.2f, -0.3f, 1.2f, -0.5f}),
         SearchOptions.builder()
             .limit(5)
             .includeVectors()
             .includeValue()
             .build()
 );
+----
+--
+Python::
++
+--
+[source,python]
+----
+results = vectorCollection.search_near_vector(
+    Vector("", Type.DENSE, [0, 0, 0.2, -0.3, 1.2, -0.5]),
+    limit=5,
+    include_value=True,
+    include_vectors=True,
+)
 ----
 --
 ====
@@ -390,13 +527,26 @@ Java::
 [source,java]
 ----
 CompletionStage<SearchResults<String, String>> results = vectorCollection.searchAsync(
-        VectorValues.of("glove-index", new float[] {0f, 0f, 0.2f, -0.3f, 1.2f}),
+        VectorValues.of("glove-index", new float[] {0f, 0f, 0.2f, -0.3f, 1.2f, -0.5f}),
         SearchOptions.builder()
             .limit(5)
             .includeVectors()
             .includeValue()
             .build()
 );
+----
+--
+Python::
++
+--
+[source,python]
+----
+results = vectorCollection.search_near_vector(
+    Vector("glove-index", Type.DENSE, [0, 0, 0.2, -0.3, 1.2, -0.5]),
+    limit=5,
+    include_value=True,
+    include_vectors=True,
+)
 ----
 --
 ====
@@ -486,6 +636,14 @@ Java::
 CompletionStage<Void> result = vectorCollection.optimizeAsync("glove-index");
 ----
 --
+Python::
++
+--
+[source,python]
+----
+vectorCollection.optimize("glove-index")
+----
+--
 ====
 
 === Clear collection
@@ -498,6 +656,14 @@ Java::
 [source,java]
 ----
 CompletionStage<Void> result = vectorCollection.clearAsync();
+----
+--
+Python::
++
+--
+[source,python]
+----
+vectorCollection.clear()
 ----
 --
 ====

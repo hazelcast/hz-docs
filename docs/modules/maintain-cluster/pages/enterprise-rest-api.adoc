@@ -12,7 +12,13 @@ In this section, we use cURL to provide the request examples.
 NOTE: REST API is only available in the {enterprise-product-name}.
 Hazelcast also offered a Community Edition REST API, but this has been deprecated and will be removed as of Hazelcast version 7.0. For more info, see xref:rest-api.adoc[Community Edition REST API].
 
+NOTE: When a request is sent to the REST server by a REST client, it will only be directed to the relevant member. The REST client is not partition-aware, so it cannot send requests to all cluster members or reach other members directly. If the request relates to a different member, it will be redirected, resulting in additional network hop and hence increased latency, in this case, the response will also have one more network hop.
+
 == Enabling REST API
+
+To use the REST API, you must have at least one server instance. Enabling the REST API provides access to various endpoints, allowing you to perform data retrieval, cluster and member actions, CP operations, configuration update and more by calling the appropriate endpoint.
+
+After enabling the REST API, please ensure the port for the API is not occupied. Additionally, configuring security is mandatory. You need to set up a security realm for the REST API. Please see the <<configuring-authentication, Configuring Authentication section>> for details.
 
 REST service is **disabled** in the configuration by default; enable it as shown in the following configuration.
 
@@ -21,8 +27,8 @@ NOTE: If you are using Hazelcast's xref:getting-started:editions.adoc#slim-distr
 [tabs] 
 ==== 
 XML:: 
-+ 
--- 
++
+--
 [source,xml]
 ----
 <hazelcast>
@@ -41,11 +47,22 @@ hazelcast:
   rest:
     enabled: true
 ----
+
+Java::
++
+[source,java]
+----
+Config config = new Config().setRestConfig(
+        new RestConfig().setEnabled(true);
+);
+----
 ====
 
 == Changing Default Port
 
 `8443` is the default port for REST API. To change it to another port, update the `rest` configuration as shown in the following example.
+
+NOTE: If the port is occupied, the server instance will fail to start immediately. To run multiple server instances in the same JVM with REST enabled, each instance should have a separate configuration file with a unique port assigned to it.
 
 [tabs] 
 ==== 
@@ -71,12 +88,24 @@ hazelcast:
     enabled: true
     port: 8080
 ----
+
+Java::
++
+[source,java]
+----
+Config config = new Config().setRestConfig(
+        new RestConfig()
+            .setEnabled(true)
+            .setPort(8080);
+);
+----
 ====
 
 == Authentication
 
 You must secure the communication with REST API by configuring its authentication and access control.
 
+[#configuring-authentication]
 === Configuring Authentication
 
 REST supports simple authentication based on username, password and user roles; see xref:security:simple-authentication.adoc[Simple Authentication]. To configure the simple authentication in the REST API, complete the following steps:
@@ -153,6 +182,30 @@ hazelcast:
                   - admin
         access-control-service: <1>
           factory-class-name: com.hazelcast.internal.rest.access.DefaultAccessControlServiceFactory
+----
+
+Java::
++
+[source,java]
+----
+Config config = new Config()
+	.setRestConfig(new RestConfig()
+		.setEnabled(true)
+		.setSecurityRealm("restRealm")
+	)
+	.setSecurityConfig(new SecurityConfig()
+		.setEnabled(true)
+		.addRealmConfig("restRealm", new RealmConfig()
+			.setSimpleAuthenticationConfig(
+				new SimpleAuthenticationConfig()
+					.addUser("restuser", "restpassword", "admin")
+			)
+			.setAccessControlServiceConfig(
+				new AccessControlServiceConfig()
+					.setFactoryClassName(DefaultAccessControlServiceFactory.class.getName())
+			)
+		)
+	);
 ----
 ====
 <1> To configure `AccessControlService`, you should provide a factory class that creates an instance of the service. `AccessControlService` delegates authentication to the configured security realm. You can either create a custom factory class, or use the default implementation. For the default implementation, you can use `DefaultAccessControlServiceFactory`, to produce `DefaultAccessControlService`. Authorization decisions in this service are based on three predefined roles: `reader`, who can make requests via GET endpoints only; `writer`, who can make requests including GET, POST, and DELETE; and `admin`, who can make all requests and access admin-specific endpoints.
@@ -233,6 +286,39 @@ hazelcast:
       trust-certificate: /path/to/trust-certificate
       trust-certificate-key: /path/to/trust-certificate-key
 ----
+
+Java::
++
+[source,java]
+----
+Config config = new Config()
+        .setRestConfig(
+                new RestConfig()
+                        .setEnabled(true)
+                        .setSsl(new RestConfig.Ssl()
+                                .setEnabled(true)
+                                .setClientAuth(RestConfig.Ssl.ClientAuth.NEED)
+                                .setCiphers("TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_128_CBC_SHA256")
+                                .setEnabledProtocols("TLSv1.2, TLSv1.3")
+                                .setKeyAlias("myKeyAlias")
+                                .setKeyPassword("myKeyPassword")
+                                .setKeyStore("/path/to/keystore")
+                                .setKeyPassword("myKeyStorePassword")
+                                .setKeyStoreType("JKS")
+                                .setKeyStoreProvider("SUN")
+                                .setTrustStore("/path/to/truststore")
+                                .setTrustStorePassword("myTrustStorePassword")
+                                .setTrustStoreType("JKS")
+                                .setTrustStoreProvider("SUN")
+                                .setProtocol("TLS")
+                                .setCertificate("/path/to/certificate")
+                                .setCertificatePrivateKey("/path/to/certificate-key")
+                                .setTrustCertificate("/path/to/trust-certificate")
+                                .setTrustCertificatePrivateKey("/path/to/trust-certificate-key")
+                        )
+
+        );
+----
 ====
 
 == JWT Based Authorization
@@ -266,6 +352,17 @@ hazelcast:
   rest:
     enabled: true
     token-validity-seconds: 300
+----
+
+Java::
++
+[source,java]
+----
+Config config = new Config().setRestConfig(
+        new RestConfig()
+            .setEnabled(true)
+            .setTokenValidityDuration(Duration.of(300, ChronoUnit.SECONDS));
+);
 ----
 ====
 

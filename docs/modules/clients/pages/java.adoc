@@ -67,23 +67,75 @@ client.shutdown();
 
 The above code line releases all the used resources and closes connections to the cluster.
 
-=== Java Client Operation Modes
+=== Java Cluster Routing Modes
 
-The client has two operation modes because of the distributed nature of the data and cluster.
+The Java cluster routing mode specifies how the client connects to the cluster.
 
-**Smart Client**: In the smart mode, the clients connect to each cluster member.
+NOTE: In previous releases, this functionality was known as the client operation mode and could be configured as smart or unisocket. 
+If the cluster routing mode is not configured in your client, the configured client operation mode is used.
+
+The mode that you use depends on your network requirements due to the distributed nature of the data and cluster.
+
+In all modes, the following information is provided to the client on initial connection:
+
+* Cluster version
+* Member details, including instance name, IP or UUID, partition group information, CP membership status, and type ({enterprise-product-name} only)
+* Partition group information ({enterprise-product-name} only)
+* CP group leader information ({enterprise-product-name} with `Advanced CP` enabled only) 
+
+The client is updated whenever the cluster version, partition groups, or CP group leader changes.
+
+From {enterprise-product-name} 5.5, you can use any of the following cluster routing modes:
+
+* Legacy **Smart** and **Unisocket** client operation modes. For information on these modes and their configuration, select **5.4** from the version picker at the top of the navigation pane. Ensure that the cluster routing mode is not configured to use the configured client operation mode
+
+* **ALL_MEMBERS** 
++
+The default mode, and is the equivalent of the legacy **Smart** client operation mode. 
++
+In `ALL_MEMBERS` cluster routing mode, clients connect to each cluster member. 
++
 Since each xref:overview:data-partitioning.adoc[data partition] uses the well known and consistent hashing algorithm,
 each client can send an operation to the cluster member that owns the partition that holds their data,
-which increases the overall throughput and efficiency. Smart mode is the default mode.
+which increases the overall throughput and efficiency.
 
-**Unisocket Client**: For some cases, the clients can be required to connect to
-a single member instead of to each member in the cluster. Firewalls, security, or
-some custom networking issues can be the reason for these cases.
+* **SINGLE_MEMBER** 
++
+In `SINGLE_MEMBER` cluster routing mode, clients only connect to one of the configured addresses. This is the equivalent of the legacy **Unisocket** client operation mode.
++
+In some environments, clients must connect to only a single member instead of to each member in the cluster; 
+for example, this can be enforced due to firewalls, security, or a custom network consideration.
+In these environments, `SINGLE_MEMBER` mode allows to you connect to a single member, while retaining the ability to work with other members in the cluster.
++
+The single connected member behaves as a gateway to the other members.
+When the client makes a request, the connected member redirects the request to the relevant member and
+returns the response from that member to the client.
 
-In the unisocket client mode, the clients only connect to one of the configured addresses.
-This single member behaves as a gateway to the other members.
-For any operation requested from the client, it redirects the request to the relevant member and
-returns the response back to the client returned from that member.
+* **MULTI_MEMBER** 
++
+This mode provides most of the functionality of `ALL_MEMBERS` mode over a single paritition group, falling back to the more restricted behavior
+of `SINGLE_MEMBER` mode for members outside that partition group as follows:
++
+** The client can connect to all members in the defined partition group
+** Outside the visible partition group, a member in the defined partition group acts as a gateway to the other members in the cluster
+
++
+--
+In `MULTI_MEMBER` cluster routing mode, the client connection flow is as follows:
+
+. Connect to the first member 
+The client then has visibility of the partition group associated with the first member. 
+
+. Read the partition group information
+. Connect to a limited subset of the cluster as defined by the partition grouping
+The client does not have visibility to any cluster members outside this partition group.
+--
+
+The following diagram shows how each mode connects to members in a cluster:
+
+image:ROOT:client-routing.png[Hazelcast Cluster Routing diagram]
+
+For information on configuring the cluster routing mode, see <<configure-cluster-routing-mode,Configure Cluster Routing Mode>>.
 
 === Handling Failures
 
@@ -100,19 +152,10 @@ the client retries to connect as configured which is described in the
 The client executes each operation through the already established connection to the cluster.
 If this connection(s) disconnects or drops, the client tries to reconnect as configured.
 
-The initial connection of a client is established using one of the addresses you provide in the <<configuring-address-list, address list>>. 
-The client gets the addresses of other members in the cluster from the initially connected member.
-If your client is <<java-client-operation-modes, smart>>, the client tries to connect to them.
-If any of the other members have both private and public addresses, the client must decide
-which one to use when connecting to those members. You can override the `hazelcast.discovery.public.ip.enabled` property 
-to suit your setup. For further information on the `hazelcast.discovery.public.ip.enabled` property,
-see <<client-system-properties, Client System Properties>>.
-
-If you use a <<client-network,discovery mechanism>> to find the initial member for the connection instead of an address list,
-you can use the same property to configure whether the initial member connection uses the private or public address.
-
-For an example of this scenario, refer to
-link:https://docs.hazelcast.com/tutorials/hazelcast-platform-operator-expose-externally[Connect to Hazelcast from Outside Kubernetes, window=_blank] in the Operator documentation.
+If using the `MULTI_MEMBER` cluster routing mode, and the cluster has multiple partition groups defined 
+and the client connection to a partition group fails, connectivity is maintained by failing over to an alternative partion group. 
+If the connection lost due to an offline member, there is no attempt to retry the connection before failing over to another partition group.
+For further information on Java cluster routing modes, see <<java-cluster-routing-modes,Java Cluster Routing Modes>>.
 
 **Handling Retry-able Operation Failure:**
 
@@ -521,7 +564,7 @@ XML::
             <ports>34600</ports>
             <ports>34700-34710</ports>
         </outbound-ports>
-        <smart-routing>true</smart-routing>
+        </cluster-routing mode="ALL_MEMBERS">
         <redo-operation>true</redo-operation>
         <connection-timeout>60000</connection-timeout>
         <socket-options>
@@ -583,7 +626,8 @@ hazelcast-client:
     outbound-ports:
       - 34600
       - 34700-34710
-    smart-routing: true
+    cluster-routing:
+     mode: ALL_MEMBERS
     redo-operation: true
     connection-timeout: 60000
     socket-options:
@@ -643,8 +687,8 @@ When an operation with sync backup is sent by a client to the Hazelcast member(s
 the acknowledgment of the operation's backup is sent to the client by the backup
 replica member(s). This improves the performance of the client operations.
 
-By default, backup acknowledgement to the client is enabled for smart clients
-(unisocket clients do not support it).
+If using the `ALL_MEMBERS` cluster routing mode, backup acknowledgement to the client is enabled by default.
+However, neither the `MULTI-MEMBER` nor the `SINGLE_MEMBER` cluster routing modes support backup acknowledgement to the client.
 
 Here is an example of configuring the backup acknowledgement for Java Client declaratively.
 
@@ -747,8 +791,8 @@ You can provide multiple addresses with ports provided or not, as seen above.
 The provided list is shuffled and tried in random order.
 Its default value is *localhost*.
 
-IMPORTANT:  If you have multiple members on a single machine and you are using
-<<java-client-operation-modes, unisocket clients>>, we recommend you to set explicit
+IMPORTANT:  If you have multiple members on a single machine and you are using the
+<<java-cluster-routing-modes, `SINGLE_MEMBER` cluster routing mode>>, we recommend that you set explicit
 xref:clusters:network-configuration.adoc#port[ports] for each member. Then you should provide those ports in your client configuration
 when you give the member addresses (using the `address` configuration element or
 `addAddress` method as exemplified above). This provides faster connections between clients and members. Otherwise,
@@ -820,12 +864,22 @@ add only one port. If you need to add a group of ports, then use the method `add
 In the declarative configuration, the element `ports` can be used for
 both single and multiple port definitions.
 
-==== Setting Smart Routing
+==== Configure Cluster Routing Mode
 
-Smart routing defines whether the client operation mode is smart or unisocket.
-See <<java-client-operation-modes, Java Client Operation Modes>> to learn about these modes.
+You can configure the cluster routing mode to suit your requirements, as described in <<java-cluster-routing-modes,Java Cluster Routing Modes>>.
 
-The following are example configurations.
+The following examples show the configuration for each cluster routing mode. 
+
+[NOTE]
+==== 
+* If you are using the `smart` or `unisocket` client operation modes, select **5.4** from the version picker above the navigation pane to see the configuration information. The cluster routing mode described below must not be present in your configuration
+* If your clients want to use temporary permissions defined in a member, see 
+xref:security:native-client-security.adoc#handling-permissions-when-a-new-member-joins[Handling Permissions]
+====
+
+**ALL_MEMBERS**
+
+To connect to all members, use the `ALL_MEMBERS` cluster routing mode, which can be defined as follows.
 
 Declarative Configuration:
 
@@ -839,7 +893,7 @@ XML::
 <hazelcast-client>
     ...
     <network>
-        <smart-routing>true</smart-routing>
+        </cluster-routing mode="ALL_MEMBERS">
     </network>
     ...
 </hazelcast-client>
@@ -852,7 +906,8 @@ YAML::
 ----
 hazelcast-client:
   network:
-    smart-routing: true
+    cluster-routing:
+      mode: ALL_MEMBERS
 ----
 ====
 
@@ -862,14 +917,120 @@ Programmatic Configuration:
 ----
 ClientConfig clientConfig = new ClientConfig();
 ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
-networkConfig.setSmartRouting(true);
+networkConfig.setClusterRoutingMode(ALL_MEMBERS);
 ----
 
-Its default value is `true` (smart client mode).
+**SINGLE_MEMBER**
 
-Note that you need to disable smart routing (`false`) for the clients which
-want to use temporary permissions defined in a member.
-See the xref:security:native-client-security.adoc#handling-permissions-when-a-new-member-joins[Handling Permissions section].
+To connect to a single member, which can be used as a gateway to the other members, use the `SINGLE_MEMBER` cluster routing mode, which can be defined as described below.
+
+When using the `SINGLE_MEMBER` cluster routing mode, consider the following:
+
+* The absence of <<configuring-backup-acknowledgement, backup acknowledgements>>, as the client does not have a view of the entire cluster
+* If you have multiple members on a single machine, we advise that <<configuring-address-list,explicit ports are set for each member>>
+* Connections to the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] are direct-to-leader, which can result in improved performance
+* <<configuring-load-balancer,`LoadBalancer`>> configuration is ignored
+
+Declarative Configuration:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast-client>
+    ...
+    <network>
+        </cluster-routing mode="SINGLE_MEMBER">
+    </network>
+    ...
+</hazelcast-client>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast-client:
+  network:
+    cluster-routing:
+      mode: SINGLE_MEMBER
+----
+====
+
+Programmatic Configuration:
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
+networkConfig.setClusterRoutingMode(SINGLE_MEMBER);
+----
+
+**MULTI_MEMBER**
+
+To connect to a subset partition grouping, which allows direct connection to the specified group and gateway connections to other members, use the `MULTI_MEMBER` cluster routing mode, which can be defined as follows.
+
+To use the `MULTI-MEMBER` cluster routing mode, you must also define the grouping strategy to apply. For further information on configuring partition groups, see xref:clusters:partition-group-configuration.adoc[]. 
+
+When using the `MULTI_MEMBER` cluster routing mode, consider the following:
+
+* The <<handling-client-configuration-failure,handling of connection failures>>, which failover to another partition group where one is available. 
+No retry attempt is made to connect to the lost member(s) 
++
+In a split and heal scenario, where the client has no access to other group members, the client is re-assigned to the initial group. 
++
+In a scenario where all group members are killed alomost simultateously, the client loses connection but reconnects when a member starts again.
+
+* The absence of <<configuring-backup-acknowledgement, backup acknowledgements>>, as the client does not have a view of the entire cluster
+* Connections to the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] are direct-to-leader, which can result in improved performance
+* Best efforts are made to route operations to the required member, but if this cannot be done operations are routed as defined in the <<configuring-load-balancer,`LoadBalancer`>>
+
+Declarative Configuration:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast-client>
+    ...
+    <network>
+        <cluster-routing mode="MULTI_MEMBER">
+          <grouping-strategy>PARTITION_GROUPS</grouping-strategy>
+        </cluster-routing>
+    </network>
+    ...
+</hazelcast-client>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast-client:
+  network:
+    cluster-routing:
+      mode: MULTI_MEMBER
+      grouping-strategy: PARTITION_GROUPS
+----
+====
+
+Programmatic Configuration:
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
+networkConfig.setClusterRoutingMode(MULTI_MEMBER);
+networkConfig.setClusterRoutingGroupingStrategy(PARTITION_GROUPS);
+----
 
 ==== Enabling Redo Operation
 
@@ -1206,9 +1367,16 @@ Its main purpose is to determine the next `Member` if queried.
 It is up to your implementation to use different load balancing policies.
 You should implement the interface `com.hazelcast.client.LoadBalancer` for that purpose.
 
-If it is a <<java-client-operation-modes, smart client>>, only the operations that are not
-key-based are routed to the endpoint that is returned by the `LoadBalancer`.
-If it is not a smart client, `LoadBalancer` is ignored.
+For <<java-cluster-routing-modes, Java cluster routing modes>>, the behaviour is as follows:
+
+* If set to `ALL_MEMBERS` only the operations that are not
+key-based are routed to the endpoint that is returned by the `LoadBalancer`
+* If set to `SINGLE_MEMBER`, `LoadBalancer` is ignored
+* If set to `MULTI_MEMBER`, best efforts are made to route operations to the required member.
+If this cannot be done for any reason,  operations are routed as defined in the `LoadBalancer`
+
+NOTE: If you are using the smart or unisocket client operation modes, select 5.4 from the version picker 
+above the navigation pane to see the relevant information. 
 
 The following are example configurations.
 
@@ -2228,14 +2396,14 @@ will try write through and other optimizations even though the system is concurr
 See xref:extending-hazelcast:discovery-spi.adoc[Discovery SPI] for more information.
 
 |`hazelcast.discovery.public.ip.enabled`
-|null
+|false
 |bool
-|Overrides client behavior when the member has both public and private addresses available.
+|Enables the discovery joiner to use public IPs from `DiscoveredNode`.
+See xref:extending-hazelcast:discovery-spi.adoc[Discovery SPI] for more information.
 When set to `true`, the client assumes that it needs to use public IP addresses reported by the members.
 When set to `false`, the client always uses private addresses reported by the members. If it is `null`,
 the client will try to infer how the discovery mechanism should be based on the reachability of the members.
-As the client's inference is not 100% reliable and can result in false-negatives, we recommend that it is overridden by
-setting to `true` when the client cannot connect to members using their public addresses.
+This inference is not %100 reliable and may result in false-negatives.
 
 |`hazelcast.client.event.queue.capacity`
 |1000000
@@ -2294,13 +2462,13 @@ A value smaller than 1 disables the balancer.
 |-1
 |int
 |Controls the number of I/O input threads. Defaults to -1, i.e., the system decides.
-If the client is a smart client, it defaults to 3, otherwise it defaults to 1.
+If the client is using either the `ALL_MEMBERS` or the `MULTI_MEMBER` cluster routing mode, it defaults to 3, otherwise it defaults to 1.
 
 |`hazelcast.client.io.output.thread.count`
 |-1
 |int
 |Controls the number of I/O output threads. Defaults to -1, i.e., the system decides.
-If the client is a smart client, it defaults to 3, otherwise it defaults to 1.
+If the client is using either the `ALL_MEMBERS` or the `MULTI_MEMBER` cluster routing mode, it defaults to 3, otherwise it defaults to 1.
 
 |`hazelcast.client.io.write.through`
 |true

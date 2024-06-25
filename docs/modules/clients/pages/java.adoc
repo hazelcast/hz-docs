@@ -69,7 +69,7 @@ The above code line releases all the used resources and closes connections to th
 
 === Java Cluster Routing Modes
 
-The Java cluster routing mode specifies how the client connects to the cluster.
+The Java cluster routing mode specifies how the client connects to the cluster. It can currently be used only with Java clients.
 
 NOTE: In previous releases, this functionality was known as the client operation mode and could be configured as smart or unisocket. 
 If the cluster routing mode is not configured in your client, the configured client operation mode is used.
@@ -86,8 +86,6 @@ In all modes, the following information is provided to the client on initial con
 The client is updated whenever the cluster version, partition groups, or CP group leader changes.
 
 From {enterprise-product-name} 5.5, you can use any of the following cluster routing modes:
-
-* Legacy **Smart** and **Unisocket** client operation modes. For information on these modes and their configuration, select **5.4** from the version picker at the top of the navigation pane. Ensure that the cluster routing mode is not configured to use the configured client operation mode
 
 * **ALL_MEMBERS** 
 +
@@ -137,6 +135,8 @@ image:ROOT:client-routing.png[Hazelcast Cluster Routing diagram]
 
 For information on configuring the cluster routing mode, see <<configure-cluster-routing-mode,Configure Cluster Routing Mode>>.
 
+If already using the legacy **Smart** and **Unisocket** client operation modes, these remain supported. However, we recommend that you update your configuration to use the appropriate cluster routing mode. For information on these modes and their configuration, select **5.4** from the version picker at the top of the navigation pane. Ensure that the cluster routing mode is not configured to use the configured client operation mode
+
 === Handling Failures
 
 There are two main failure cases and configurations you can perform to achieve proper behavior.
@@ -154,7 +154,7 @@ If this connection(s) disconnects or drops, the client tries to reconnect as con
 
 If using the `MULTI_MEMBER` cluster routing mode, and the cluster has multiple partition groups defined 
 and the client connection to a partition group fails, connectivity is maintained by failing over to an alternative partion group. 
-If the connection lost due to an offline member, there is no attempt to retry the connection before failing over to another partition group.
+If the connection lost, which occurs only if all members of the partition group become unavailable, there is no attempt to retry the connection before failing over to another partition group.
 For further information on Java cluster routing modes, see <<java-cluster-routing-modes,Java Cluster Routing Modes>>.
 
 **Handling Retry-able Operation Failure:**
@@ -688,7 +688,7 @@ the acknowledgment of the operation's backup is sent to the client by the backup
 replica member(s). This improves the performance of the client operations.
 
 If using the `ALL_MEMBERS` cluster routing mode, backup acknowledgement to the client is enabled by default.
-However, neither the `MULTI-MEMBER` nor the `SINGLE_MEMBER` cluster routing modes support backup acknowledgement to the client.
+However, neither the `MULTI_MEMBER` nor the `SINGLE_MEMBER` cluster routing modes support backup acknowledgement to the client.
 
 Here is an example of configuring the backup acknowledgement for Java Client declaratively.
 
@@ -870,12 +870,8 @@ You can configure the cluster routing mode to suit your requirements, as describ
 
 The following examples show the configuration for each cluster routing mode. 
 
-[NOTE]
-==== 
-* If you are using the `smart` or `unisocket` client operation modes, select **5.4** from the version picker above the navigation pane to see the configuration information. The cluster routing mode described below must not be present in your configuration
-* If your clients want to use temporary permissions defined in a member, see 
-xref:security:native-client-security.adoc#handling-permissions-when-a-new-member-joins[Handling Permissions]
-====
+NOTE: If your clients want to use temporary permissions defined in a member, see 
+xref:security:native-client-security.adoc#handling-permissions-when-a-new-member-joins[Handling Permissions].
 
 **ALL_MEMBERS**
 
@@ -928,7 +924,7 @@ When using the `SINGLE_MEMBER` cluster routing mode, consider the following:
 
 * The absence of <<configuring-backup-acknowledgement, backup acknowledgements>>, as the client does not have a view of the entire cluster
 * If you have multiple members on a single machine, we advise that <<configuring-address-list,explicit ports are set for each member>>
-* Connections to the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] are direct-to-leader, which can result in improved performance
+* It is not possible to accurately predict which member will be a CP group leader. However, if the client is explicitly set to a CP group leader, and CP group leaders are defined algorithmically at runtime, connections to the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] are direct-to-leader, which can result in improved performance
 * <<configuring-load-balancer,`LoadBalancer`>> configuration is ignored
 
 Declarative Configuration:
@@ -972,9 +968,9 @@ networkConfig.setClusterRoutingMode(SINGLE_MEMBER);
 
 **MULTI_MEMBER**
 
-To connect to a subset partition grouping, which allows direct connection to the specified group and gateway connections to other members, use the `MULTI_MEMBER` cluster routing mode, which can be defined as follows.
+To connect to a subset partition grouping of members, which allows direct connection to the specified group and gateway connections to other members, use the `MULTI_MEMBER` cluster routing mode, which can be defined as follows.
 
-To use the `MULTI-MEMBER` cluster routing mode, you must also define the grouping strategy to apply. For further information on configuring partition groups, see xref:clusters:partition-group-configuration.adoc[]. 
+To use the `MULTI_MEMBER` cluster routing mode, you must also define the grouping strategy to apply. For further information on configuring partition groups, see xref:clusters:partition-group-configuration.adoc[]. 
 
 When using the `MULTI_MEMBER` cluster routing mode, consider the following:
 
@@ -983,10 +979,10 @@ No retry attempt is made to connect to the lost member(s)
 +
 In a split and heal scenario, where the client has no access to other group members, the client is re-assigned to the initial group. 
 +
-In a scenario where all group members are killed alomost simultateously, the client loses connection but reconnects when a member starts again.
+In a scenario where all group members are killed almost simultateously, the client loses connection but reconnects when a member starts again.
 
 * The absence of <<configuring-backup-acknowledgement, backup acknowledgements>>, as the client does not have a view of the entire cluster
-* Connections to the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] are direct-to-leader, which can result in improved performance
+* It is not possible to accurately predict which member will be a CP group leader. However, if the client is explicitly set to a CP group leader, and CP group leaders are defined algorithmically at runtime, connections to the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] are direct-to-leader, which can result in improved performance
 * Best efforts are made to route operations to the required member, but if this cannot be done operations are routed as defined in the <<configuring-load-balancer,`LoadBalancer`>>
 
 Declarative Configuration:
@@ -1031,6 +1027,8 @@ ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
 networkConfig.setClusterRoutingMode(MULTI_MEMBER);
 networkConfig.setClusterRoutingGroupingStrategy(PARTITION_GROUPS);
 ----
+
+TIP: If you are using the `smart` or `unisocket` client operation modes, select **5.4** from the version picker above the navigation pane to see the configuration information. The cluster routing mode described above must not be present in your configuration.
 
 ==== Enabling Redo Operation
 
@@ -2403,7 +2401,7 @@ See xref:extending-hazelcast:discovery-spi.adoc[Discovery SPI] for more informat
 When set to `true`, the client assumes that it needs to use public IP addresses reported by the members.
 When set to `false`, the client always uses private addresses reported by the members. If it is `null`,
 the client will try to infer how the discovery mechanism should be based on the reachability of the members.
-This inference is not %100 reliable and may result in false-negatives.
+This inference is not 100% reliable and may result in false-negatives.
 
 |`hazelcast.client.event.queue.capacity`
 |1000000

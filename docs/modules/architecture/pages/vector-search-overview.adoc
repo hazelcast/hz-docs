@@ -88,6 +88,60 @@ This improves the overall quality of the results but can have a significant perf
 NOTE: Consider tuning `partitionLimit` based on quality and latency requirements. It should be adjusted alongside number of partitions.
 `memberLimit` is less critical for overall behavior if there are only a few members.
 
+[graphviz]
+....
+digraph twoStageSearch {
+  subgraph cluster_M_1 {
+    M_1 [label=""];
+    M_1_aggregate [label="member aggregate"];
+
+    M_1 -> P_1;
+    P_1 -> M_1_aggregate [label="partitionLimit"];
+    M_1 -> P_4;
+    P_4 -> M_1_aggregate; // [label="partitionLimit"];
+
+    label = "member 1";
+  }
+
+  subgraph cluster_M_2 {
+    M_2 [label=""];
+    M_2_aggregate [label="member aggregate"];
+
+    M_2 -> P_2;
+    P_2 -> M_2_aggregate [label="partitionLimit"];
+    M_2 -> P_5;
+    P_5 -> M_2_aggregate; // [label="partitionLimit"];
+
+    label = "member 2";
+  }
+
+  subgraph cluster_M_3 {
+    M_3 [label=""];
+    M_3_aggregate [label="member aggregate"];
+
+    M_3 -> P_3;
+    P_3 -> M_3_aggregate [label="partitionLimit"];
+    M_3 -> P_6;
+    P_6 -> M_3_aggregate; // [label="partitionLimit"];
+
+    label = "member 3";
+  }
+
+  request -> coordinator;
+
+  coordinator -> M_1;
+  M_1_aggregate -> aggregate [label="memberLimit"];
+  coordinator -> M_2;
+  M_2_aggregate -> aggregate [label="memberLimit"];
+  coordinator -> M_3;
+  M_3_aggregate -> aggregate [label="memberLimit"];
+
+  aggregate -> result [label="topK"];
+
+  label="Two-stage search execution (partition retries not shown).\nP_1 ... P_6 are partitions with example assignment to members.\nEdge labels show the cardinality of the result.";
+}
+....
+
 === Single-stage search
 
 A simplified search algorithm can be used, which does not perform intermediate aggregation of results at member level.
@@ -97,6 +151,51 @@ A single-stage search request is executed in parallel on all partitions (on thei
 and partition results are aggregated directly on the coordinator member to produce the final result.
 
 This search algorithm uses the `partitionLimit` parameter, which behaves in the same way as for two-stage search.
+
+[graphviz]
+....
+digraph singleStageSearch {
+  subgraph cluster_M_1 {
+    P_1;
+    P_4;
+    label = "member 1";
+  }
+
+  subgraph cluster_M_2 {
+    P_2;
+    P_5;
+    label = "member 2";
+  }
+
+  subgraph cluster_M_3 {
+    P_3;
+    P_6;
+    label = "member 3";
+  }
+
+  request -> coordinator;
+
+  coordinator -> P_1;
+  P_1 -> aggregate [label="partitionLimit"];
+  coordinator -> P_4;
+  P_4 -> aggregate; // [label="partitionLimit"];
+
+  coordinator -> P_2;
+  P_2 -> aggregate [label="partitionLimit"];
+  coordinator -> P_5;
+  P_5 -> aggregate; // [label="partitionLimit"];
+
+  coordinator -> P_3;
+  P_3 -> aggregate [label="partitionLimit"];
+  coordinator -> P_6;
+  P_6 -> aggregate; // [label="partitionLimit"];
+
+  aggregate -> result [label="topK"];
+
+  label="Single-stage search execution.\nP_1 ... P_6 are partitions with example assignment to members.\nEdge labels show the cardinality of the result.";
+}
+....
+
 
 == Partition count impact
 

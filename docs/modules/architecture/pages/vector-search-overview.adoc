@@ -61,18 +61,18 @@ It is important to understand the impact of that process on search performance a
 
 === Two-stage search
 
-The default search algorithm is two-stage search which works as follows:
+The default search algorithm is a two-stage search which works as follows:
 
-1. Member that received the query is a coordinator.
-2. Coordinator fans out search request to each member (including self). Each member is tasked with returning results from partitions it owns.
-3. Each member executes search on owned partitions in parallel and aggregates the partition results.
-4. Partially aggregated results are returned to coordinator.
-5. Coordinator aggregates partial results and generates final results.
-   If necessary, searches on some partitions can be retried individually, for example in case of migrations, members leaving the cluster or other errors.
+1. The member that received the query beomes a coordinator.
+2. The coordinator distributes the search request to each member (including the coordinator member). Each member is tasked with returning results from partitions it owns.
+3. Each member executes the search on owned partitions in parallel and aggregates the partition results.
+4. Each member returns the partially aggregated results to the coordinator.
+5. The coordinator aggregates the partial results and generates the final result.
+   If required, searches on some partitions can be retried individually. For example, this can be useful for migrations, when members leave the cluster, or to resolve errors.
 
 Aggregation at each stage is done based on score and only the best results are kept.
 
-There are 2 important parameters in this search algorithm that determine amount of data sent between the members and quality of the final result:
+Two important parameters in this search algorithm determine the amount of data sent between the members and the quality of the final result. These parameters are as follows:
 
 - `partitionLimit` - number of search results obtained from each partition
 - `memberLimit` - number of search results returned from member to coordinator
@@ -90,28 +90,28 @@ NOTE: Consider tuning `partitionLimit` based on quality and latency requirements
 
 === Single-stage search
 
-A simplified search algorithm exists which does not perform intermediate aggregation of results on member level.
+A simplified search algorithm can be used, which does not perform intermediate aggregation of results at member level.
 It is used if the cluster has only a single member. It can be also enabled using search hint in other cases.
 
-In this case search request is executed in parallel on all partitions (on their owners)
+A single-stage search request is executed in parallel on all partitions (on their owners)
 and partition results are aggregated directly on the coordinator member to produce the final result.
 
-This search algorithm has `partitionLimit` parameter which behaves in the same way as for two-stage search.
+This search algorithm uses the `partitionLimit` parameter, which behaves in the same way as for two-stage search.
 
 == Partition count impact
 
 Number of partitions has big impact on the performance of the vector collection. There are numerous conflicting factors impacting selection of optimal partition count:
 
-- *data ingestion*: more partitions give better parallelism, up to some point, around total number of partition threads in the cluster.
-  Having more partitions than that will not improve ingestion speed significantly.
-- *similarity search*: fewer partitions in general results in better search performance and latency.
+- *data ingestion*: a greater number of partitions results in improved parallelism, up to around the total number of partition threads in the cluster.
+  After this point, more partitions will not significantly improve ingestion speed.
+- *similarity search*: in general, having fewer partitions results in better search performance and reduced latency.
   However, the impact on quality/recall is complicated and depends also on `partitionLimit`.
 - *migration*: very big partitions (in terms of memory size) should be avoided. Note that both metadata, vectors and vector index internal representation count.
-  Current general recommendation for partition size is around 50-100MB per partition, which results in fast migrations and small pressure on heap during migration.
-  However, for vector search use case the partition size may be increased above that limit provided that there is enough heap for migrations (see below).
+  In general, the recommendation is for a partition size of around 50-100MB per partition, which results in fast migrations and small pressure on heap during migration.
+  However, for vector search, the partition size can be increased above that general recommendation provided that there is enough heap memory for migrations (see below).
 - *other data structures*: number of partitions is a cluster-wide setting shared by all data structures. If the needs are vastly different, you might consider creating separate clusters.
 
-NOTE: It is not possible to change number of partitions for an existing cluster.
+NOTE: It is not possible to change the number of partitions for an existing cluster.
 
 WARNING: Default value of 271 partitions may result in inefficient vector similarity search.
 Tuning the number of partitions for use in clusters with vector collections is highly recommended.

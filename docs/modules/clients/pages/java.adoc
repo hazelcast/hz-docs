@@ -7,10 +7,10 @@
 To get started, include the `hazelcast.jar` dependency in your classpath. Once included, you can start using this client as if
 you are using the Hazelcast API. The differences are discussed in the below sections.
 
-NOTE: If you have a Hazelcast Enterprise license, you do not need to set the license key in your Hazelcast Java clients to use the xref:getting-started:editions.adoc#features-in-hazelcast-enterprise[enterprise features] - setting it on the member side is enough. In this case, you only need to include the `hazelcast-enterprise.jar` dependency in your classpath.
+NOTE: If you have a Hazelcast {enterprise-product-name} license, you do not need to set the license key in your Hazelcast Java clients to use the xref:getting-started:editions.adoc#features-in-hazelcast-enterprise[{enterprise-product-name} features] - setting it on the member side is enough. In this case, you only need to include the `hazelcast-enterprise.jar` dependency in your classpath.
 
 If you prefer to use Maven, simply add the `hazelcast` dependency
-to your `pom.xml` (or the `hazelcast-enterprise` dependency, if you want the client to use enterprise features provided that you have the Hazelcast Enterprise license),
+to your `pom.xml` (or the `hazelcast-enterprise` dependency, if you want the client to use {enterprise-product-name} features provided that you have the Hazelcast {enterprise-product-name} license),
 which you may already have done to start using Hazelcast:
 
 [source,xml,subs="attributes+"]
@@ -99,6 +99,20 @@ the client retries to connect as configured which is described in the
 
 The client executes each operation through the already established connection to the cluster.
 If this connection(s) disconnects or drops, the client tries to reconnect as configured.
+
+The initial connection of a client is established using one of the addresses you provide in the <<configuring-address-list, address list>>. 
+The client gets the addresses of other members in the cluster from the initially connected member.
+If your client is <<java-client-operation-modes, smart>>, the client tries to connect to them.
+If any of the other members have both private and public addresses, the client must decide
+which one to use when connecting to those members. You can override the `hazelcast.discovery.public.ip.enabled` property 
+to suit your setup. For further information on the `hazelcast.discovery.public.ip.enabled` property,
+see <<client-system-properties, Client System Properties>>.
+
+If you use a <<client-network,discovery mechanism>> to find the initial member for the connection instead of an address list,
+you can use the same property to configure whether the initial member connection uses the private or public address.
+
+For an example of this scenario, refer to
+link:https://docs.hazelcast.com/tutorials/hazelcast-platform-operator-expose-externally[Connect to Hazelcast from Outside Kubernetes, window=_blank] in the Operator documentation.
 
 **Handling Retry-able Operation Failure:**
 
@@ -393,7 +407,7 @@ See xref:transactions:providing-xa-transactions.adoc[Transactions] for more deta
 [CAUTION]
 .Deprecation Notice for Transactions
 ====
-Hazelcast will deprecate transactions in the upcoming release (5.4). An improved version of this feature is under consideration. If you are already using transactions, get in touch and share your use case. Your feedback will help us to develop a solution that meets your needs.
+Transactions have been deprecated, and will be removed as of Hazelcast version 7.0. An improved version of this feature is under consideration. If you are already using transactions, get in touch and share your use case. Your feedback will help us to develop a solution that meets your needs.
 ====
 
 === Async Start and Reconnect Modes
@@ -949,7 +963,7 @@ Its default value is *5000* milliseconds.
 
 ==== Setting a Socket Interceptor
 
-[blue]*Hazelcast Enterprise*
+[blue]*Hazelcast {enterprise-product-name}*
 
 Following is a client configuration to set a socket intercepter.
 Any class implementing `com.hazelcast.nio.SocketInterceptor` is a socket interceptor.
@@ -1025,7 +1039,7 @@ socketOptions.setBufferSize(32)
 
 ==== Enabling Client TLS/SSL
 
-[blue]*Hazelcast Enterprise*
+[blue]*Hazelcast {enterprise-product-name}*
 
 You can use TLS/SSL to secure the connection between the client and the members.
 If you want TLS/SSL enabled for the client-cluster connection, you should set `SSLConfig`.
@@ -1097,6 +1111,8 @@ See xref:cloud:ROOT:overview.adoc[Hazelcast {hazelcast-cloud}] for more informat
 
 NOTE: Since this is a REST based discovery, you need to enable the REST listener service.
 See the xref:clients:rest.adoc#using-the-rest-endpoint-groups[REST Endpoint Groups section] on how to enable REST endpoints.
+
+include::partial$rest-deprecation.adoc[]
 
 [NOTE]
 ====
@@ -1526,7 +1542,7 @@ and for each connection we have a connection timeout; see the
 
 === Blue-Green Deployment
 [[blue-green-mechanism]]
-[blue]*Hazelcast Enterprise Feature*
+[blue]*Hazelcast {enterprise-product-name} Feature*
 
 Blue-green deployment refers to a client connection technique that reduces system downtime by deploying two mirrored clusters: blue (active) and green (idle). One of these clusters is running in production while the other is on standby.
 
@@ -2212,14 +2228,14 @@ will try write through and other optimizations even though the system is concurr
 See xref:extending-hazelcast:discovery-spi.adoc[Discovery SPI] for more information.
 
 |`hazelcast.discovery.public.ip.enabled`
-|false
+|null
 |bool
-|Enables the discovery joiner to use public IPs from `DiscoveredNode`.
-See xref:extending-hazelcast:discovery-spi.adoc[Discovery SPI] for more information.
+|Overrides client behavior when the member has both public and private addresses available.
 When set to `true`, the client assumes that it needs to use public IP addresses reported by the members.
 When set to `false`, the client always uses private addresses reported by the members. If it is `null`,
 the client will try to infer how the discovery mechanism should be based on the reachability of the members.
-This inference is not %100 reliable and may result in false-negatives.
+As the client's inference is not 100% reliable and can result in false-negatives, we recommend that it is overridden by
+setting to `true` when the client cannot connect to members using their public addresses.
 
 |`hazelcast.client.event.queue.capacity`
 |1000000
@@ -2390,9 +2406,9 @@ If both are configured, this one is ignored.
 
 == Using High-Density Memory Store with Java Client
 
-[navy]*Hazelcast Enterprise*
+[navy]*Hazelcast {enterprise-product-name}*
 
-If you have [navy]*Hazelcast Enterprise*, your Hazelcast Java client's Near Cache
+If you have [navy]*Hazelcast {enterprise-product-name}*, your Hazelcast Java client's Near Cache
 can benefit from the High-Density Memory Store.
 
 Let's recall the Java client's Near Cache configuration

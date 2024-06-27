@@ -48,7 +48,7 @@ HazelcastInstance instance = createHazelcastInstance(config);
 ====
 
 Note that, Hazelcast's Jet engine is disabled by default when you use Hazelcast
-within the Java context, i.e., `hazelcast.jar`. When using Hazelcast ZIP/TAR distributions
+within the Java context; that is, `hazelcast.jar`. When using Hazelcast ZIP/TAR distributions
 or Docker and Kubernetes distribution, Jet engine is enabled by default. See the
 xref:secure-cluster:security-defaults.adoc[Security Defaults section] for information about
 the enabled/disabled features for different Hazelcast distributions.
@@ -101,20 +101,17 @@ By default, resource uploading for Jet engine jobs is disabled.
 
 == List of Configuration Options
 
-The Hazelcast full example configuration files (https://github.com/hazelcast/hazelcast/blob/master/hazelcast/src/main/resources/hazelcast-full-example.yaml#L3509[YAML],
-https://github.com/hazelcast/hazelcast/blob/master/hazelcast/src/main/resources/hazelcast-full-example.xml#L3612[XML]) in your distribution
-includes a description of all configuration options.
-Jet engine configuration options are listed below:
+The _hazelcast-full-example_ configuration files (available as YAML or XML) available in your distribution and linked from xref:configuration:configuring-declaratively.adoc[] include a description of all configuration options. The configuration options for Jet engine are also listed below:
 
 [cols="4a,2a,4a"]
 |===
 |Option|Default|Description
 
-|`instance/cooperative-thread-count`
+|`cooperative-thread-count`
 |number of cores
 |The number of threads Jet creates in its cooperative multithreading pool.
 
-|`instance/flow-control-period-ms`
+|`flow-control-period-ms`
 |100
 |The Jet engine uses a flow control mechanism between cluster members to prevent a
 slower vertex from getting overflowed with data from a faster upstream
@@ -122,27 +119,27 @@ vertex. Each receiver regularly reports to each sender how much more data
 it may send over a given DAG edge. This method sets the duration (in milliseconds)
 of the interval between flow-control packets.
 
-|`instance/backup-count`
+|`backup-count`
 |1
 |The number of synchronous backups to configure on the IMap that
 Jet needs internally to store job metadata and snapshots. The
 maximum allowed value is 6.
 
-|`instance/scale-up-delay-millis`
+|`scale-up-delay-millis`
 |10,000
 |The delay after which the auto-scaled jobs restart if a new member
 joins the cluster. It has no effect on jobs with auto-scaling disabled.
 
-|`instance/lossless-restart-enabled`
+|`lossless-restart-enabled`
 |false
 |Specifies whether the Lossless Cluster Restart feature is enabled.
 With this feature, you can restart the whole cluster without losing the
 jobs and their state. It is implemented on top of Hazelcast's Persistence
 feature, which persists the data to disk. You need to have
-the Hazelcast Enterprise edition and configure Hazelcast's Persistence to
+the Hazelcast {enterprise-product-name} and configure Hazelcast's Persistence to
 use this feature. The default value is `false`, i.e., disabled.
 
-|`instance/max-processor-accumulated-records`
+|`max-processor-accumulated-records`
 |`Long.MAX_VALUE`
 |Specifies the maximum number of records that can be accumulated by any single
 processor instance. Operations like grouping, sorting or joining require certain amount of
@@ -191,14 +188,12 @@ XML::
 ----
 <hazelcast>
     <jet enabled="true" resource-upload-enabled="true">
-        <instance>
-            <cooperative-thread-count>4</cooperative-thread-count>
-            <flow-control-period>100</flow-control-period>
-            <backup-count>1</backup-count>
-            <scale-up-delay-millis>10000</scale-up-delay-millis>
-            <lossless-restart-enabled>false</lossless-restart-enabled>
-            <max-processor-accumulated-records>1000000000</max-processor-accumulated-records>
-        </instance>
+        <cooperative-thread-count>4</cooperative-thread-count>
+        <flow-control-period>100</flow-control-period>
+        <backup-count>1</backup-count>
+        <scale-up-delay-millis>10000</scale-up-delay-millis>
+        <lossless-restart-enabled>false</lossless-restart-enabled>
+        <max-processor-accumulated-records>1000000000</max-processor-accumulated-records>
         <edge-defaults>
             <queue-size>1024</queue-size>
             <packet-size-limit>16384</packet-size-limit>
@@ -218,13 +213,12 @@ hazelcast:
   jet:
     enabled: true
     resource-upload-enabled: true
-    instance:
-      cooperative-thread-count: 4
-      flow-control-period: 100
-      backup-count: 1
-      scale-up-delay-millis: 10000
-      lossless-restart-enabled: false
-      max-processor-accumulated-records: 1000000000
+    cooperative-thread-count: 4
+    flow-control-period: 100
+    backup-count: 1
+    scale-up-delay-millis: 10000
+    lossless-restart-enabled: false
+    max-processor-accumulated-records: 1000000000
     edge-defaults:
       queue-size: 1024
       packet-size-limit: 16384
@@ -303,6 +297,18 @@ The most important properties are listed here:
 Each job has job-specific configuration options. These are covered
 in detail in xref:pipelines:configuring-jobs.adoc[].
 
+=== Job Placement Control
+
+To activate job placement control, your license key must include `Advanced Compute`.
+
+Job placement control allows you to define the members to use for Jet job processing. For example, you can manage your workload without worrying that the Jet processing jobs starve resources from your storage components.
+
+NOTE: Your storage components still need to serve the data and this has some impact on their resources. Before using job placement control to manage the workload, ensure that the processing element of the job is substantially more resource-intensive than the data retrieval element. 
+
+You can control the placement of the job using the `JetMemberSelector` parameter of the `JobBuilder` API. For further information on `JobBuilder`, refer to the link:https://docs.hazelcast.org/docs/latest/javadoc/com/hazelcast/jet/JetService.JobBuilder.html[API Reference, window=_blank].
+
+You can resubmit the selector configuration when you submit your job from the Hazelcast client. For more information on submitting a job on specific members, see xref:pipelines:submitting-jobs.adoc#isolated-jobs[Submitting Jobs].
+
 == Client Configuration
 
 When using a Hazelcast client to access Jet engine services, the easiest way to
@@ -319,7 +325,7 @@ JetService jetFromClient = client.getJet();
 Alternatively, you can add `hazelcast-client.yaml/xml` to the classpath or
 working directory which will be picked up automatically. The location of
 the file can also be given using the `hazelcast.client.config` system
-property, i.e., `-Dhazelcast.client.config=C:/myhazelcast-client.yaml/xml`.
+property; that is, `-Dhazelcast.client.config=C:/myhazelcast-client.yaml/xml`.
 
 A sample client YAML file is given below:
 

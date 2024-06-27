@@ -18,7 +18,7 @@ The Kafka connector is compatible with Kafka version equal to
 or greater than 1.0.0.
 
 == Permissions
-[.enterprise]*Enterprise*
+[.enterprise]*{enterprise-product-name}*
 
 If xref:security:enabling-jaas.adoc[security] is enabled, your clients may need permissions to use this connector. For details, see xref:pipelines:job-security.adoc[].
 
@@ -30,17 +30,19 @@ To create a mapping to a Kafka topic in SQL, you must use the `CREATE MAPPING` s
 - The address of the Kafka broker
 - Client authentication details
 - How to serialize/deserialize the keys and values in messages
+- The preferred number of parallel consumer processors on each member for input mappings
 
 ```sql
 CREATE MAPPING my_topic <1>
 TYPE Kafka <2>
 OPTIONS (
     'bootstrap.servers' = '127.0.0.1:9092', <3>
-    'security.protocol'='SASL_SSL', 
-    'sasl.jaas.config'='org.apache.kafka.common.security.plain.PlainLoginModule
+    'security.protocol' = 'SASL_SSL',
+    'sasl.jaas.config' = 'org.apache.kafka.common.security.plain.PlainLoginModule
     required username="<my_api_key>"
     password="<my_api_secret>";',
-    'sasl.mechanism'='PLAIN', <4>
+    'sasl.mechanism' = 'PLAIN', <4>
+    'preferredLocalParallelism' = '2' <5>
 );
 ```
 
@@ -48,8 +50,15 @@ OPTIONS (
 <2> The name of the connector.
 <3> The address of the Kafka broker.
 <4> The SASL configuration used to authenticate client connections, where the API key provides the username and the API secret key provides the password. Note that the clause must end with a semi-colon, as shown in the example above.
+<5> The preferred number of parallel consumer processors on each member for input mappings. If not specified, the default is `4`. For output mappings, the parallelism is always `1` and this option is ignored.
 
 NOTE: Any key/value pairs in the `OPTIONS()` function that are not recognized by Hazelcast are passed directly to the Kafka consumer/producer.
+
+Each member of the Hazelcast cluster has a processor running a Kafka connector for the mapping.
+For input mappings, preferred local parallelism is the number of parallel consumer processors you would prefer on each member.
+For balanced distributed processing, ensure that the local parallelism multiplied by the number of members in the cluster is a divisor of the total number of partitions in the input Kafka topic.
+If this is not done, some processors will be assigned more input Kafka topic partitions than others.
+Where there are more processors in the Hazelcast cluster than partitions in the input Kafka topic, the additional processors will be idle and waste resources.
 
 When creating a Kafka mapping, you must tell the Kafka connector how to serialize/deserialize the keys and values in Kafka messages.
 To read Kafka messages, the Kafka connector must be able to deserialize them. Similarly, to publish messages to Kafka topics, the Kafka connector must be able to serialize them. You can tell Hazelcast how to serialize/deserialize keys and values by specifying the `keyFormat` and `valueFormat` fields in the `OPTIONS()` function.

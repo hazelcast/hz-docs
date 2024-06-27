@@ -67,9 +67,9 @@ cooperative worker threads.
 .Streaming Engine Job-specific Metrics
 [%collapsible]
 ====
-All job specific metrics have their `job=<jobId>` and
-`exec=<executionId>` tags set and most also have the
-`vertex=<vertexName>` tag set (with very few exceptions). This means
+[[job-metrics]]All job specific metrics have their `job` (name and ID of the job) and
+`exec`(job execution ID) tags set, and most also have the
+`vertex` (vertex name) tag set (with very few exceptions). This means
 that most of these metrics will have at least one instance for each
 vertex of each current job execution.
 
@@ -94,19 +94,23 @@ in milliseconds).
 
 |status
 |Information regarding the job's status. Potential values:
-0 - submitted;
-1 - initialization phase;
-2 - running;
-3 - suspended;
-4 - exporting snapshot;
-5 - completing phase;
-6 - failed;
-7 - completed successfully;
+
+* 0 - submitted
+* 1 - initialization phase
+* 2 - running
+* 3 - suspended
+* 4 - exporting snapshot
+* 5 - completing phase
+* 6 - failed
+* 7 - completed successfully
 
 |userCancelled
-|Details on whether the user canceled the job. Potential values: 1 - canceled by the user, 0 - otherwise.
-Exposed via xref:maintain-cluster:monitoring.adoc#via-job-api[Job API] only.
+|Details on whether the user canceled the job. Potential values:
 
+* 1 - canceled by the user
+* 0 - means the job is either running, completed successfully, or failed due to an error other than user cancellation
+
+Exposed via xref:maintain-cluster:monitoring.adoc#via-job-api[Job API] only.
 
 |snapshotBytes
 |Total number of bytes written out in the last snapshot.
@@ -273,7 +277,7 @@ the watermark already having passed their windows.
 
 |`map.getCount`
 |count
-|Number of local get operations on the map
+|Number of local get operations on the map; it is incremented for every get operation even the entries do not exist.
 
 |`map.heapCost`
 |count
@@ -281,7 +285,7 @@ the watermark already having passed their windows.
 
 |`map.hits`
 |count
-|Number of reads of the locally owned entries
+|Number of reads of the locally owned entries; it is incremented for every read by any type of operation (get, set, put). So, the entries should exists.
 
 |`map.indexedQueryCount`
 |count
@@ -366,6 +370,18 @@ the watermark already having passed their windows.
 |`map.totalSetLatency`
 |ms
 |Total latency of local set operations on the map
+
+3+a|
+The above `*latency` metrics are only measured for the members and they are not representing the overall performance of the cluster.
+We recommend monitoring the average latency for each operation, for example, `map.totalGetLatency` / `map.getCount` and `map.totalSetLatency` / `map.setCount`.
+Increased average latency is a sign that the cluster would experience performance problems, or there is a spike in the load.
+The following may be the reasons:
+
+* Increase in the load on the cluster: If the cluster is under heavy load, this can lead to increased latency for all operations, slowing down the overall performance.
+* Increasing member count in the cluster: As the number of cluster members increases, the total latency for operations can also increase.
+This is because the cluster has to communicate with more members, which can add to the overall latency. This might be a data architecture problem.
+* Increasing the data set size: This causes the cluster to search through more data to find the requested data, which can slow down the overall performance. Creating indexes may solve these kind of problems.
+* Increasing the number of concurrent operations: This causes the cluster to process more requests at the same time, which can slow down the overall performance. This is a potential bottleneck on resources (CPU, memory, network).
 
 |`map.index.averageHitLatency`
 |ns
@@ -1349,6 +1365,33 @@ the watermark already having passed their windows.
 |===
 ====
 
+.High-Density (HD) Memory Store
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`usedMemory`
+|bytes
+|Cost of HD memory for the map to determine whether eviction of map entries is needed
+
+|`forceEvictionCount`
+|bytes
+|Number of evictions performed for the HD memory store (when your eviction policy does not free enough native memory, operations that add entries to a map or cache such as `map.put()` trigger the forced eviction process.)
+
+|`forceEvictedEntryCount`
+|bytes
+|Number of entries removed from the HD memory store
+
+|`entryCount`
+|bytes
+|Number of entries in the HD memory store
+|===
+====
+
 .Near Cache
 [%collapsible]
 ====
@@ -1419,6 +1462,10 @@ the watermark already having passed their windows.
 .Operations
 [%collapsible]
 ====
+
+NOTE: Within Hazelcast context, the **priority** operations are the ones that are important for the stability of cluster, for example heartbeats and migration requests.
+The **normal** operations are the ones that manipulate the data, for example `map.get` and `map.put`.
+
 [cols="4,1,6a"]
 |===
 | Name
@@ -1527,11 +1574,16 @@ the watermark already having passed their windows.
 
 |`operation.queueSize`
 |count
-|Number of normal operations pending (normal partition ops. + normal generic ops.)
+|Number of normal operations pending (normal partition operations + normal generic operations).
+
+It refers to the number of operations sent to the member that have yet to be consumed for processing by the partition operation threads.
+This is the most critical queue for partition aware operations such as `map.put` and `map.remove`.
+This value should be zero or very close to zero.
+Based on your latency tolerance in your business use case, you can define a threshold for alerts with your preferred alerting mechanism. For instance, triggering an alert if this value is above 100 for 15 seconds would be useful.
 
 |`operation.responseQueueSize`
 |count
-|Total number of pending responses to be processed
+|Total number of pending responses (work queue for the response threads) to be processed.
 
 |`operation.responses.backupCount`
 |count
@@ -1709,7 +1761,7 @@ the watermark already having passed their windows.
 
 |`partitions.migrationActive`
 |boolean
-|Number of active migration tasks
+|Whether there are any currently active migration tasks
 
 |`partitions.migrationQueueSize`
 |count
@@ -2489,5 +2541,40 @@ the watermark already having passed their windows.
 |`wan.updateCount`
 |count
 |Number of entry update events
+
+|`wan.connectionHealth`
+|boolean
+|The health of an individual WAN target endpoint, where 1 is healthy and 0 is not
+
+|`wan.failedTransmitCount`
+|count
+|Number of attempted WAN replication transmissions that have failed
+|===
+====
+
+.User Code Namespaces
+[%collapsible]
+====
+[cols="4,1,6a"]
+|===
+| Name
+| Unit
+| Description
+
+|`ucn.updateTime`
+|ms
+|Update time of a user code namespace configuration
+
+|`ucn.resourceCount`
+|count
+|Number of resources contained in a namespace
+
+|`ucn.resource.resourceType`
+|enum
+|The Ordinal of the enum type of the resource contained in a namespace
+
+|`ucn.resource.resourceSizeBytes`
+|bytes
+|The size in bytes of a resource contained in a namespace
 |===
 ====

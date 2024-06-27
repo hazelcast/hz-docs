@@ -183,7 +183,7 @@ CP members. This flexibility provides a good degree of fault tolerance at
 runtime.
 
 === Persistence
-[.enterprise]*Enterprise*
+[.enterprise]*{enterprise-product-name}*
 
 By default, CP Subsystem works in memory without persisting any state
 to disk. As a result, a crashed CP member cannot recover by
@@ -273,3 +273,69 @@ group is not available anymore, no management tasks can be performed on the CP
 Subsystem. For instance, a new CP group cannot be created. In this case,
 the only solution is to wipe-out the whole CP Subsystem state by performing
 a force-reset. See xref:management.adoc#cp-subsystem-management-apis[CP Subsystem Management].
+
+== Kubernetes
+
+IMPORTANT: We strongly encourage using xref:kubernetes:deploying-in-kubernetes.adoc#hazelcast-platform-operator-for-kubernetesopenshift[Hazelcast Platform Operator,window=_blank] for deployments into Kubernetes. If you choose to use Helm, use the official 
+`hazelcast/hazelcast-enterprise` xref:kubernetes:deploying-in-kubernetes.adoc#helm-chart[Helm Chart,window=_blank]
+and configure within the limitations described in this section. 
+
+Deployment of CP within Kubernetes is supported from Hazelcast Enterprise 5.5 and covers the 
+following scenarios when using xref:kubernetes:deploying-in-kubernetes.adoc#hazelcast-platform-operator-for-kubernetesopenshift[Hazelcast Platform Operator,window=_blank] or our `hazelcast/hazelcast-enterprise` xref:kubernetes:deploying-in-kubernetes.adoc#helm-chart[Helm Chart,window=_blank].
+
+- Deployment: see xref:kubernetes:deploying-in-kubernetes.adoc[Deploying in Kubernetes,window=_blank].
+- Pause: scaling of pods to `0`
+- Resume: scaling of pods back to the same number of pods defined at the point of _Deployment_
+- Rolling Update
+- Spurious pod restarts
+
+We support 3, 5- and 7-CP member deployments under the constraints discussed in this section.
+
+The method by which deployment, pause, resume and rolling update are performed will vary according
+to the way that CP was deployed. See xref:kubernetes:deploying-in-kubernetes.adoc[Deploying in Kubernetes,window=_blank]
+for more information. 
+
+[NOTE]
+==== 
+* CP is only supported on Kubernetes with CP xref:cp-subsystem:configuration.adoc#persistence[persistence enabled,window=_blank].
+Hazelcast Enterprise is therefore a requirement.
+
+* The current limitation on CP in Kubernetes is that we do not support dynamic scaling of the cluster.
+The number of members defined at the time of deployment is static and the CP members and CP group size 
+are expected to be equal to the total number of members (the cluster size) at the time of deployment. 
+Explicit removal and promotion of a CP member is not supported: Kubernetes has the responsibility of 
+restarting CP members should they be terminated. These restrictions will be removed in a subsequent
+release of Hazelcast Enterprise.
+====
+
+We recommend setting xref:cp-subsystem:configuration.adoc#data-load-timeout-seconds[data-load-timeout-seconds,window=_blank]
+to a value that spans the duration from when the first pod is running to when last pod is running and has completed its CP 
+intialisation procedure. This is particularly important if you intend to perform _resume_ scenarios. Currently the only way to determine when a CP member has completed its initialisation is to consult the logs. Therefore, we recommend the following to determine a reasonable value for `data-load-timeout-seconds`:
+
+1. Load CP with an amount of data that is representative of your production use case
+2. Pause the cluster
+3. Resume the cluster and determine the duration in seconds between when first pod in the `StatefulSet` running and when the last pod in the `StatefulSet` is running and outputted an `INFO` level log message that matches the pattern `CP restore completed...in` as described shortly.
+
+If you are using a log aggregation service and want to filter key startup events within CP, you can use the `INFO` level patterns emitted by `CPPersistenceServiceImpl` as detailed below.
+
+[cols="1,1,1"]
+|===
+|Phrase|Example Match|Description
+
+|`CP restore starting...in`
+|`CP restore starting...in /data/cp-data/0e667605-c650-42b7-9625-376a213008a6; Timeout(s): 120`
+| Point at which the entire CP restoration process started.
+
+|`CP restore completed...in`
+|`CP restore completed...in /data/cp-data/0e667605-c650-42b7-9625-376a213008a6; Took(ms): 50387`
+| Point at which the entire CP restoration process completed, including notifying other CP members that the member has rejoined and the loading of its persisted data.
+
+|`CP restore starting(CPGroupId`
+|`CP restore starting(CPGroupId{name='METADATA', seed=0, groupId=0})...in /data/persistence/cp/212561fb-c2d5-442a-a4e0-a863fdf7074b/METADATA@0@0`
+| Point at which a particular CP Group's data started loading. 
+
+|`CP restore completed(CPGroupId`
+|`CP restore completed(CPGroupId{name='METADATA', seed=0, groupId=0})...in /data/persistence/cp/212561fb-c2d5-442a-a4e0-a863fdf7074b/METADATA@0@0; Took(ms): 29`
+| Point at which a particular CP Group's data completed loading. 
+ 
+|===

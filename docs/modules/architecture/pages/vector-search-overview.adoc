@@ -57,7 +57,10 @@ In version 5.5, there is no automatic data restoration in the event of an unexpe
 == Partitioned similarity search
 
 Vector indexes are partitioned, so when you execute similarity search all partitions need to be searched and partial results aggregated.
-It is important to understand the impact of that process on search performance and recall.
+This process impacts search performance and recall:
+
+- considering more candidate results usually yields better recall but uses more resources,
+- staged execution affects latency because there is more communication and some stages need to wait for all partial results before proceeding.
 
 === Two-stage search
 
@@ -92,6 +95,7 @@ NOTE: Consider tuning `partitionLimit` based on quality and latency requirements
 ....
 digraph twoStageSearch {
   subgraph cluster_M_1 {
+    coordinator;
     M_1 [label=""];
     M_1_aggregate [label="member aggregate"];
 
@@ -100,6 +104,7 @@ digraph twoStageSearch {
     M_1 -> P_4;
     P_4 -> M_1_aggregate; // [label="partitionLimit"];
 
+    aggregate;
     label = "member 1";
   }
 
@@ -138,7 +143,7 @@ digraph twoStageSearch {
 
   aggregate -> result [label="topK"];
 
-  label="Two-stage search execution (partition retries not shown).\nP_1 ... P_6 are partitions with example assignment to members.\nEdge labels show the cardinality of the result.";
+  label="Two-stage search execution (partition retries not shown).\nMember 1 is query coordinator, P_1 ... P_6 are partitions with example assignment to members.\nEdge labels show the cardinality of the result.";
 }
 ....
 
@@ -156,8 +161,10 @@ This search algorithm uses the `partitionLimit` parameter, which behaves in the 
 ....
 digraph singleStageSearch {
   subgraph cluster_M_1 {
+    coordinator;
     P_1;
     P_4;
+    aggregate;
     label = "member 1";
   }
 
@@ -192,7 +199,7 @@ digraph singleStageSearch {
 
   aggregate -> result [label="topK"];
 
-  label="Single-stage search execution.\nP_1 ... P_6 are partitions with example assignment to members.\nEdge labels show the cardinality of the result.";
+  label="Single-stage search execution.\nMember 1 is query coordinator, P_1 ... P_6 are partitions with example assignment to members.\nEdge labels show the cardinality of the result.";
 }
 ....
 

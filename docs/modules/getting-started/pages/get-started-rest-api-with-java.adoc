@@ -1,0 +1,178 @@
+= Getting Started with REST API Using Java
+:description: This tutorial introduces you to enabling, running and using the REST API.
+
+:page-enterprise: true
+
+{description}
+
+== Before You Begin
+
+To complete this tutorial, you need the following:
+
+[cols="1a,1a"]
+|===
+|Prerequisites|Useful resources
+
+|Any supported JDK
+|
+xref:deploy:versioning-compatibility.adoc#supported-java-virtual-machines[Supported Java Virtual Machines]
+
+|Maven
+|link:https://maven.apache.org/download.cgi[Download Maven]
+
+|===
+
+== Set Up the Java Maven Project
+
+You need to set up a Java project that you can later execute to start a Hazelcast member with REST API. Add the following dependencies to your `pom.xml` file.
+
+[source,xml,subs="attributes+"]
+----
+<dependencies>
+    <dependency>
+        <groupId>com.hazelcast</groupId>
+        <artifactId>hazelcast-enterprise-rest</artifactId>
+        <version>{full-version}</version>
+    </dependency>
+    <dependency>
+        <groupId>com.hazelcast</groupId>
+        <artifactId>hazelcast-enterprise</artifactId>
+        <version>{full-version}</version>
+    </dependency>
+</dependencies>
+----
+
+== Run REST With Minimum Configuration
+
+== Step 1. Prepare Your Java Code
+
+Add the following code to your `RestApi.java` file.
+
+[source,java]
+----
+package org.example;
+
+import com.hazelcast.config.Config;
+import com.hazelcast.config.SecurityConfig;
+import com.hazelcast.config.rest.RestConfig;
+import com.hazelcast.config.security.AccessControlServiceConfig;
+import com.hazelcast.config.security.RealmConfig;
+import com.hazelcast.config.security.SimpleAuthenticationConfig;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.internal.rest.access.DefaultAccessControlServiceFactory;
+
+public class RestApi {
+    public static void main(String[] args) {
+        //Configure your member to enable REST.
+        Config config = new Config()
+                .setLicenseKey("<your license key>")
+                .setRestConfig(new RestConfig()
+                        .setEnabled(true)
+                        .setSecurityRealm("restRealm")
+                )
+                .setSecurityConfig(new SecurityConfig()
+                        .setEnabled(true)
+                        .addRealmConfig("restRealm", new RealmConfig()
+                                .setSimpleAuthenticationConfig(
+                                        new SimpleAuthenticationConfig()
+                                                .addUser("restuser", "restpassword", "admin")
+                                )
+                                .setAccessControlServiceConfig(
+                                        new AccessControlServiceConfig()
+                                                .setFactoryClassName(DefaultAccessControlServiceFactory.class.getName())
+                                )
+                        )
+                );
+
+        //Start a member in your JVM by creating a instance of Hazelcast.
+        Hazelcast.newHazelcastInstance(config);
+    }
+}
+----
+
+Replace the `<your license key>` placeholder with your Hazelcast {enterprise-product-name} license key.
+
+== Step 2. Execute the Program
+
+Use Maven to compile and execute your Java project.
+
+[source,bash]
+----
+mvn compile exec:java -Dexec.mainClass="org.example.RestApi"
+----
+
+You should see a message in the console indicating that the REST service is enabled, similar to the following:
+
+[source,shell,subs="attributes+"]
+----
+com.hazelcast.internal.rest.init.RestServiceImpl
+INFO: [192.168.0.24]:5701 [dev] [5.5.0-SNAPSHOT] Hazelcast REST Service is enabled on port: 8443 with security realm: restRealm and access control service: com.hazelcast.internal.rest.access.DefaultAccessControlService
+----
+
+== Step 3. Access the REST API and Swagger UI
+
+The REST API is running on port 8443.
+You can access the Swagger UI at: http://localhost:8443/swagger-ui/index.html
+
+== Step 4. Obtain a Token to Access All Endpoints
+To obtain a token, send a POST request to the endpoint at /hazelcast/rest/api/v1/token.
+
+*Using Swagger UI:*
+
+- Open the Swagger UI at http://localhost:8443/swagger-ui/index.html.
+- Navigate to the token endpoint under the *JWT Token Controller* section.
+- Click the `Try it out` button.
+- Set the request body as follows:
+
+[source,json]
+----
+{
+  "username": "restuser",
+  "password": "restpassword"
+}
+----
+
+- Click the `Execute` button.
+
+*Using cURL:*
+
+- Run the following command in your terminal.
+
+[source,shell]
+----
+curl -X 'POST' \
+  'http://localhost:8443/hazelcast/rest/api/v1/token' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "username": "restuser",
+  "password": "restpassword"
+}'
+----
+
+== Step 5. Use the Token For Authorization
+
+Add the token as an Authorization header in all requests.
+
+*Using Swagger UI:* Click the `Authorize` button and enter the token in the provided field.
+
+*Using cURL:* Add the token to your requests as follows, replacing <add token here> placeholder with your actual token.
+[source,shell]
+----
+-H 'Authorization: Bearer <add token here>'
+----
+
+Example request with cURL:
+
+[source,shell]
+----
+curl -X 'GET' \
+'http://localhost:8443/hazelcast/rest/api/v1/cluster' \
+-H 'Authorization: Bearer <add token here>'
+----
+
+== Next Steps
+
+If you're interested in learning more about the topics introduced in this tutorial, see:
+
+* xref:maintain-cluster:enterprise-rest-api.adoc[Enterprise REST API].
+

@@ -26,12 +26,12 @@ inventory database:
 ```bash
 docker run -it --rm --name mysql -p 3306:3306 \
     -e MYSQL_ROOT_PASSWORD=debezium -e MYSQL_USER=mysqluser \
-    -e MYSQL_PASSWORD=mysqlpw debezium/example-mysql:1.2
+    -e MYSQL_PASSWORD=mysqlpw debezium/example-mysql:2.6
 ```
 
-This runs a new container using version `1.2` of the
+This runs a new container using version `2.6` of the
 link:https://hub.docker.com/r/debezium/example-mysql[debezium/example-mysql]
-image (based on link:https://hub.docker.com/_/mysql[mysql:5.7]. It defines
+image (based on link:https://hub.docker.com/_/mysql[mysql 8.2]. It defines
 and populates a sample "inventory" database and creates a `debezium`
 user with password `dbz` that has the minimum privileges required by
 Debezium’s MySQL connector.
@@ -84,7 +84,8 @@ specifies the correct options so that it can connect properly.
 
 The container should output lines similar to the following:
 
-```
+[source]
+----
 mysql: [Warning] Using a password on the command line interface can be insecure.
 Welcome to the MySQL monitor.  Commands end with ; or \g.
 Your MySQL connection id is 4
@@ -99,25 +100,28 @@ owners.
 Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
 
 mysql>
-```
+----
 
 Unlike the other containers, this container runs a process that produces
 a prompt. We’ll use the prompt to interact with the database. First,
 switch to the "inventory" database:
 
-```sql
+[source,sql]
+----
 mysql> use inventory;
-```
+----
 
 and then list the tables in the database:
 
-```sql
+[source,sql]
+----
 mysql> show tables;
-```
+----
 
 which should then display:
 
-```
+[source]
+----
 +---------------------+
 | Tables_in_inventory |
 +---------------------+
@@ -129,14 +133,15 @@ which should then display:
 | products_on_hand    |
 +---------------------+
 6 rows in set (0.01 sec)
-```
+----
 
 Use the MySQL command line client to explore the database and view the
 preloaded data. For example:
 
-```sql
+[source,sql]
+----
 mysql> SELECT * FROM customers;
-```
+----
 
 == Step 4. Start Hazelcast
 
@@ -145,33 +150,35 @@ mysql> SELECT * FROM customers;
 If you already have Hazelcast and you skipped the above steps, make sure to
 follow from here on.
 
-. Make sure the MySQL CDC plugin is in `lib/` directory.
+. Make sure the MySQL CDC plugin is in `lib/` directory. You need to manually download the MySQL CDC plugin from Hazelcast's Maven  https://repo1.maven.org/maven2/com/hazelcast/jet/hazelcast-enterprise-cdc-mysql/{full-version}/hazelcast-enterprise-cdc-mysql-{full-version}-jar-with-dependencies.jar[repository] and then copy it to the `lib/` directory.
 +
-```bash
+[source,bash]
+----
 ls lib/
-```
+----
 +
 You should see the following jars:
 +
-* hazelcast-jet-cdc-debezium-{full-version}.jar
-* hazelcast-jet-cdc-mysql-{full-version}.jar
-* hazelcast-jet-cdc-postgres-{full-version}.jar
-+
-WARNING: If you have Hazelcast Enterprise Edition, you need to manually download the MySQL CDC plugin from Hazelcast's Maven  https://repo1.maven.org/maven2/com/hazelcast/jet/hazelcast-jet-cdc-mysql/{full-version}/hazelcast-jet-cdc-mysql-{full-version}-jar-with-dependencies.jar[repository] and then copy it to the `lib/` directory.
+* hazelcast-enterprise-cdc-debezium-{full-version}-jar-with-dependencies.jar
+* hazelcast-enterprise-cdc-mysql-{full-version}-jar-with-dependencies.jar
+* hazelcast-enterprise-cdc-postgres-{full-version}-jar-with-dependencies.jar
+
 
 . Start Hazelcast.
 +
-```bash
+[source,bash]
+----
 bin/hz-start
-```
+----
 
 . When you see output like this, Hazelcast is up:
 +
-```
+[source]
+----
 Members {size:1, ver:1} [
     Member [192.168.1.5]:5701 - e7c26f7c-df9e-4994-a41d-203a1c63480e this
 ]
-```
+----
 
 == Step 5. Create a New Java Project
 
@@ -197,8 +204,8 @@ repositories.mavenCentral()
 
 dependencies {
     implementation 'com.hazelcast:hazelcast:{full-version}'
-    implementation 'com.hazelcast.jet:hazelcast-jet-cdc-debezium:{full-version}'
-    implementation 'com.hazelcast.jet:hazelcast-jet-cdc-mysql:{full-version}'
+    implementation 'com.hazelcast.jet:hazelcast-enterprise-cdc-debezium:{full-version}'
+    implementation 'com.hazelcast.jet:hazelcast-enterprise-cdc-mysql:{full-version}'
     implementation 'com.fasterxml.jackson.core:jackson-annotations:2.11.0'
 }
 
@@ -220,8 +227,7 @@ Maven::
    <version>1.0-SNAPSHOT</version>
 
    <properties>
-       <maven.compiler.target>1.8</maven.compiler.target>
-       <maven.compiler.source>1.8</maven.compiler.source>
+       <maven.compiler.release>17</maven.compiler.target>
    </properties>
 
    <dependencies>
@@ -232,12 +238,12 @@ Maven::
        </dependency>
        <dependency>
            <groupId>com.hazelcast.jet</groupId>
-           <artifactId>hazelcast-jet-cdc-debezium</artifactId>
+           <artifactId>hazelcast-enterprise-cdc-debezium</artifactId>
            <version>{full-version}</version>
        </dependency>
        <dependency>
            <groupId>com.hazelcast.jet</groupId>
-           <artifactId>hazelcast-jet-cdc-mysql</artifactId>
+           <artifactId>hazelcast-enterprise-cdc-mysql</artifactId>
            <version>{full-version}</version>
        </dependency>
        <dependency>
@@ -280,7 +286,8 @@ customer with a specific ID.
 
 This is how the code doing this looks like:
 
-```java
+[source,java]
+----
 package org.example;
 
 import com.hazelcast.core.Hazelcast;
@@ -296,13 +303,11 @@ public class JetJob {
 
     public static void main(String[] args) {
         StreamSource<ChangeRecord> source = MySqlCdcSources.mysql("source")
-                .setDatabaseAddress("127.0.0.1")
-                .setDatabasePort(3306)
-                .setDatabaseUser("debezium")
-                .setDatabasePassword("dbz")
+                .setDatabaseAddress("127.0.0.1", 3306)
+                .setDatabaseCredentials("debezium", "dbz")
                 .setClusterName("dbserver1")
-                .setDatabaseWhitelist("inventory")
-                .setTableWhitelist("inventory.customers")
+                .setDatabaseIncludeList("inventory")
+                .setTableIncludeList("inventory.customers")
                 .build();
 
         Pipeline pipeline = Pipeline.create();
@@ -319,11 +324,12 @@ public class JetJob {
     }
 
 }
-```
+----
 
 The `Customer` class we map change events to is quite simple too:
 
-```java
+[source,java]
+----
 package org.example;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -381,14 +387,15 @@ public class Customer implements Serializable {
         return "Customer {id=" + id + ", firstName=" + firstName + ", lastName=" + lastName + ", email=" + email + '}';
     }
 }
-```
+----
 
 To make it evident that our pipeline serves the purpose of building an
 up-to-date cache of customers, which can be interrogated at any time
 let's add one more class. This code can be executed at any time in your
 IDE and will print the current content of the cache.
 
-```java
+[source,java]
+----
 package org.example;
 
 import com.hazelcast.client.HazelcastClient;
@@ -406,7 +413,7 @@ public class CacheRead {
     }
 
 }
-```
+----
 
 == Step 7. Package the Pipeline into a JAR
 
@@ -422,9 +429,10 @@ need to do is to run the build command:
 Gradle:: 
 + 
 -- 
-```bash
+[source,bash]
+----
 gradle build
-```
+----
 
 This will produce a JAR file called `cdc-tutorial-1.0-SNAPSHOT.jar`
 in the `build/libs` directory of our project.
@@ -433,9 +441,10 @@ Maven::
 + 
 -- 
 
-```bash
+[source,bash]
+----
 mvn package
-```
+----
 
 This will produce a JAR file called `cdc-tutorial-1.0-SNAPSHOT.jar`
 in the `target` directory or our project.
@@ -452,16 +461,18 @@ issue is following command:
 Gradle:: 
 + 
 -- 
-```bash
+[source,bash]
+----
 bin/hz-cli submit build/libs/cdc-tutorial-1.0-SNAPSHOT.jar
-```
+----
 --
 Maven:: 
 + 
 -- 
-```bash
+[source,bash]
+----
 bin/hz-cli submit target/cdc-tutorial-1.0-SNAPSHOT.jar
-```
+----
 --
 ====
 
@@ -469,95 +480,106 @@ The output in the Hazelcast member's log should look something like this (we
 also log what we put in the `IMap` sink thanks to the `peek()` stage
 we inserted):
 
-```
+[source]
+----
 ... Completed snapshot in 00:00:01.519
 ... Output to ordinal 0: key:{{"id":1001}}, value:{{"id":1001,"first_name":"Sally","last_name":"Thomas",...
 ... Output to ordinal 0: key:{{"id":1002}}, value:{{"id":1002,"first_name":"George","last_name":"Bailey",...
 ... Output to ordinal 0: key:{{"id":1003}}, value:{{"id":1003,"first_name":"Edward","last_name":"Walker",...
 ... Output to ordinal 0: key:{{"id":1004}}, value:{{"id":1004,"first_name":"Anne","last_name":"Kretchmar",...
 ... Transitioning from the snapshot reader to the binlog reader
-```
+----
 
 == Step 9. Track Updates
 
 Let's see how our cache looks like at this time. If we execute the
  `CacheRead` code <<6-define-jet-job, defined above>>, we'll get:
 
-```text
+[source,text]
+----
 Currently there are following customers in the cache:
     Customer {id=1002, firstName=George, lastName=Bailey, email=gbailey@foobar.com}
     Customer {id=1003, firstName=Edward, lastName=Walker, email=ed@walker.com}
     Customer {id=1004, firstName=Anne, lastName=Kretchmar, email=annek@noanswer.org}
     Customer {id=1001, firstName=Sally, lastName=Thomas, email=sally.thomas@acme.com}
-```
+----
 
 Let's do some updates in our database. Go to the MySQL CLI
 <<step-3-start-the-mysql-command-line-client, we've started earlier>> and run
 following update statement:
 
-```
+[source,bash]
+----
 mysql> UPDATE customers SET first_name='Anne Marie' WHERE id=1004;
 Query OK, 1 row affected (0.00 sec)
 Rows matched: 1  Changed: 1  Warnings: 0
-```
+----
 
 In the log of the Hazelcast member we should immediately see the effect:
 
-```
+[source]
+----
 ... Output to ordinal 0: key:{{"id":1004}}, value:{{"id":1004,"first_name":"Anne Marie","last_name":"Kretchmar",...
-```
+----
 
 If we check the cache with `CacheRead` we get:
 
-```
+[source]
+----
 Currently there are following customers in the cache:
     Customer {id=1002, firstName=George, lastName=Bailey, email=gbailey@foobar.com}
     Customer {id=1003, firstName=Edward, lastName=Walker, email=ed@walker.com}
     Customer {id=1004, firstName=Anne Marie, lastName=Kretchmar, email=annek@noanswer.org}
     Customer {id=1001, firstName=Sally, lastName=Thomas, email=sally.thomas@acme.com}
-```
+----
 
 One more:
 
-```
+[source,bash]
+----
 mysql> UPDATE customers SET email='edward.walker@walker.com' WHERE id=1003;
 Query OK, 1 row affected (0.00 sec)
 Rows matched: 1  Changed: 1  Warnings: 0
-```
+----
 
-```
+[source]
+----
 Currently there are following customers in the cache:
     Customer {id=1002, firstName=George, lastName=Bailey, email=gbailey@foobar.com}
     Customer {id=1003, firstName=Edward, lastName=Walker, email=edward.walker@walker.com}
     Customer {id=1004, firstName=Anne Marie, lastName=Kretchmar, email=annek@noanswer.org}
     Customer {id=1001, firstName=Sally, lastName=Thomas, email=sally.thomas@acme.com}
-```
+----
 
 == Step 10. Clean up
 
 . Cancel the job.
 +
-```bash
+[source,bash]
+----
 bin/hz-cli cancel mysql-monitor
-```
+----
 +
 Shut down the Hazelcast cluster.
 +
-```bash
+[source,bash]
+----
 bin/hz-stop
-```
+----
 . Use Docker to stop the running container (this will kill the
 command-line client too, since it's running in the same container):
 +
-```bash
+[source,bash]
+----
 docker stop mysql
-```
+----
 +
 Since we've used the `--rm` flag when starting the connectors,
 Docker should remove them right after we stop them.
 We can verify that all processes are stopped and removed with following
 command:
 +
-```bash
+[source,bash]
+----
 docker ps -a
-```
+----

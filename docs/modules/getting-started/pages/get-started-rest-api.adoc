@@ -13,22 +13,8 @@ To complete this tutorial, you need the following:
 |===
 |Prerequisites|Useful resources
 
-|Install Hazelcast {enterprise-product-name}
-|xref:getting-started:install-enterprise.adoc[]
-
-|If you are using Hazelcast's slim distribution, you must add `hazelcast-enterprise-rest-{full-version}.jar` to your member's classpath to use the REST API. If you are working with the full distribution, this additional step is not needed.
-|xref:getting-started:editions.adoc#slim-distribution[Slim Distribution]
-
-|If you installed Hazelcast with Java using Maven, add the following dependency to your pom.xml file.
-[source,xml,subs="attributes+"]
-----
-<dependency>
-    <groupId>com.hazelcast</groupId>
-    <artifactId>hazelcast-enterprise-rest</artifactId>
-    <version>{full-version}</version>
-</dependency>
-----
-|xref:getting-started:install-enterprise.adoc#using-maven[Using Maven]
+|Docker image for Hazelcast {enterprise-product-name} and an {enterprise-product-name} license
+|xref:getting-started:enterprise-overview.adoc[]
 
 |===
 
@@ -36,7 +22,7 @@ To complete this tutorial, you need the following:
 
 == Step 1. Prepare The Configuration File
 
-The following presents the content of the file:
+Create a hazelcast.yaml (or xml) configuration file with the following content and place it in the ~/config directory on your local machine.
 
 [tabs]
 ====
@@ -46,6 +32,7 @@ XML::
 [source,xml]
 ----
 <hazelcast>
+    <license-key>your license key</license-key> <1>
     <rest enabled="true">
         <security-realm>restRealm</security-realm>
     </rest>
@@ -74,6 +61,7 @@ YAML::
 [source,yaml]
 ----
 hazelcast:
+  license-key: <your license key> <1>
   rest:
     enabled: true
     security-realm: restRealm
@@ -91,47 +79,32 @@ hazelcast:
         access-control-service:
           factory-class-name: com.hazelcast.internal.rest.access.DefaultAccessControlServiceFactory
 ----
-
-Java::
-+
-[source,java]
-----
-Config config = new Config()
-	.setRestConfig(new RestConfig()
-		.setEnabled(true)
-		.setSecurityRealm("restRealm")
-	)
-	.setSecurityConfig(new SecurityConfig()
-		.setEnabled(true)
-		.addRealmConfig("restRealm", new RealmConfig()
-			.setSimpleAuthenticationConfig(
-				new SimpleAuthenticationConfig()
-					.addUser("restuser", "restpassword", "admin")
-			)
-			.setAccessControlServiceConfig(
-				new AccessControlServiceConfig()
-					.setFactoryClassName(DefaultAccessControlServiceFactory.class.getName())
-			)
-		)
-	);
-----
 ====
+<1> Replace the `<your license key>` placeholder with your Hazelcast {enterprise-product-name} license key.
 
 == Step 2. Start Hazelcast {enterprise-product-name} Server
 
-To start the Hazelcast {enterprise-product-name} server, follow these steps:
+To start the Hazelcast {enterprise-product-name} server, run the following command:
 
-*Using Hazelcast Distribution*
-
-- Navigate to the unzipped folder `hazelcast-enterprise-5.5.0-SNAPSHOT`.
-- Start the Hazelcast server with the following command:
-
-[source,shell]
+If you have XML config file:
+[source,shell,subs="attributes+"]
 ----
-HAZELCAST_CONFIG=path/to/config/file/your-config-file HAZELCAST_LICENSE_KEY=<PUT YOUR LICENSE KEY> ./bin/hz start
+docker run \
+    -p 5701:5701 \
+    -e JAVA_OPTS="-Dhazelcast.config=/opt/hazelcast/config_ext/hazelcast.xml" -v ~/config:/opt/hazelcast/config_ext hazelcast/hazelcast-enterprise:{full-version}
 ----
 
-NOTE: Make sure to replace the `<PUT YOUR LICENSE KEY>` placeholder with your Hazelcast {enterprise-product-name} license key and path/to/config/file/your-config-file with the actual path to your configuration file.
+If you have YAML config file:
+[source,shell,subs="attributes+"]
+----
+docker run \
+    -p 5701:5701 \
+    -e JAVA_OPTS="-Dhazelcast.config=/opt/hazelcast/config_ext/hazelcast.yaml" -v ~/config:/opt/hazelcast/config_ext hazelcast/hazelcast-enterprise:{full-version}
+----
+
+This command starts the member and configures it, using your configuration file.
+Here, `~/config` is the path to the directory in which you saved the configuration file.
+If you saved the configuration file somewhere else, you should replace this path.
 
 You should see a message in the console indicating that the REST service is enabled, similar to the following:
 
@@ -151,15 +124,19 @@ To obtain a token, send a POST request to the endpoint at /hazelcast/rest/api/v1
 
 *Using Swagger UI:*
 
-- Open Swagger UI.
+- Open the Swagger UI at http://localhost:8443/swagger-ui/index.html.
 - Navigate to the token endpoint under the *JWT Token Controller* section.
+- Click the *Try it out* button.
 - Set the request body as follows:
-```
+
+[source,json]
+----
 {
   "username": "restuser",
   "password": "restpassword"
 }
-```
+----
+
 - Click the *Execute* button.
 
 *Using cURL:*
@@ -183,7 +160,13 @@ Add the token as an Authorization header in all requests.
 
 *Using Swagger UI:* Click the *Authorize* button and enter the token in the provided field.
 
-*Using cURL:* Add the token as follows, replacing <add token here> placeholder with your actual token.
+*Using cURL:* Add the token to your requests as follows, replacing <add token here> placeholder with your actual token.
+[source,shell]
+----
+-H 'Authorization: Bearer <add token here>'
+----
+
+Example request with cURL:
 
 [source,shell]
 ----

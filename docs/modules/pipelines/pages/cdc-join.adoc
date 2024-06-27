@@ -45,7 +45,8 @@ They differ slightly depending on which database you use:
 
 Let's write the code for the processing we want to accomplish:
 
-```java
+[source,java]
+----
 package org.example;
 
 import com.hazelcast.core.Hazelcast;
@@ -64,13 +65,11 @@ private static final int MAX_CONCURRENT_OPERATIONS = 1;
 
 public static void main(String[] args) {
   StreamSource<ChangeRecord> source = MySqlCdcSources.mysql("source")
-    .setDatabaseAddress("127.0.0.1")
-    .setDatabasePort(3306)
-    .setDatabaseUser("debezium")
-    .setDatabasePassword("dbz")
+    .setDatabaseAddress("127.0.0.1", 3306)
+    .setDatabaseCredentials("debezium", "dbz")
     .setClusterName("dbserver1")
-    .setDatabaseWhitelist("inventory")
-    .setTableWhitelist("inventory.customers", "inventory.orders")
+    .setDatabaseIncludeList("inventory")
+    .setTableIncludeList("inventory.customers", "inventory.orders")
     .build();
 
   Pipeline pipeline = Pipeline.create();
@@ -98,25 +97,25 @@ public static void main(String[] args) {
     hz.getJet().newJob(pipeline, cfg);
   }
 }
-```
+----
 
 If using Postgres, only the source would need to change, like this:
 
-```java
+[source,java]
+----
 StreamSource<ChangeRecord> source = PostgresCdcSources.postgres("source")
-  .setDatabaseAddress("127.0.0.1")
-  .setDatabasePort(5432)
-  .setDatabaseUser("postgres")
-  .setDatabasePassword("postgres")
+  .setDatabaseAddress("127.0.0.1", 5432)
+  .setDatabaseCredentials("postgres", "postgres")
   .setDatabaseName("postgres")
-  .setTableWhitelist("inventory.customers", "inventory.orders")
+  .setTableIncludeList("inventory.customers", "inventory.orders")
   .build();
-```
+----
 
 As we can see from the pipeline code, our `Sink` is `EntryProcessor`
 based. The two `EntryProcessors` we use are:
 
-```java
+[source,java]
+----
 package org.example;
 
 import com.hazelcast.jet.cdc.ChangeRecord;
@@ -158,9 +157,10 @@ public class CustomerEntryProcessor implements EntryProcessor<Integer, OrdersOfC
     return null;
   }
 }
-```
+----
 
-```java
+[source,java]
+----
 package org.example;
 
 import com.hazelcast.jet.cdc.ChangeRecord;
@@ -203,13 +203,14 @@ public class OrderEntryProcessor implements EntryProcessor<Integer, OrdersOfCust
     return null;
   }
 }
-```
+----
 
 In them we use the `Customer` and the `Order` classes to achieve
 convenient data parsing with the help of data to object
 mapping.
 
-```java
+[source,java]
+----
 package org.example;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -259,9 +260,10 @@ public class Customer implements Serializable {
         return "Customer {id=" + id + ", firstName=" + firstName + ", lastName=" + lastName + ", email=" + email + '}';
     }
 }
-```
+----
 
-```java
+[source,java]
+----
 package org.example;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -328,22 +330,24 @@ public class Order implements Serializable {
     }
 
 }
-```
+----
 
 Watch out, in the Postgres database the order number column has a
 different name, `id`, so the first field in `Order` needs to be changed
 to:
 
-```java
+[source,java]
+----
 @JsonProperty("id")
 public int orderNumber;
-```
+----
 
 Besides these two data classes we also need to define our enriched
 structure, called `OrdersOfCustomers`, which will be stored in the
 target `IMap`:
 
-```java
+[source,java]
+----
 package org.example;
 
 import java.io.Serializable;
@@ -396,7 +400,7 @@ public class OrdersOfCustomer implements Serializable {
     return String.format("Customer: %s, Orders: %s", customer, orders);
   }
 }
-```
+----
 
 There is also another element in the pipeline, an extra processing stage
 which handles and fixes event reordering that might happen due to
@@ -405,7 +409,8 @@ sources and so can be used only for these kinds of pipelines. Hopefully
 a future version of Hazelcast will introduce a generic solution for the
 reordering problem.
 
-```java
+[source,java]
+----
 package org.example;
 
 import com.hazelcast.jet.accumulator.LongAccumulator;
@@ -436,14 +441,15 @@ public class Ordering {
     }
 
 }
-```
+----
 
 To make it evident that our pipeline serves the purpose of building an
 up-to-date cache of "orders of customers", which can be interrogated at
 any time, let's add one more class. This code can be executed at will in
 your IDE and prints the current content of the cache.
 
-```java
+[source,java]
+----
 package org.example;
 
 import com.hazelcast.client.HazelcastClient;
@@ -460,7 +466,7 @@ public class CacheRead {
     instance.shutdown();
   }
 }
-```
+----
 
 == Step 6. Package the Pipeline into a JAR
 
@@ -477,9 +483,10 @@ need to do is to run the build command:
 Gradle:: 
 + 
 --
-```bash
+[source,bash]
+----
 gradle build
-```
+----
 
 This will produce a JAR file called `cdc-tutorial-1.0-SNAPSHOT.jar`
 in the `build/libs` directory of our project.
@@ -487,9 +494,10 @@ in the `build/libs` directory of our project.
 Maven:: 
 + 
 --
-```bash
+[source,bash]
+----
 mvn package
-```
+----
 
 This will produce a JAR file called `cdc-tutorial-1.0-SNAPSHOT.jar`
 in the `target` directory or our project.
@@ -502,15 +510,16 @@ in the `target` directory or our project.
 
 . Make sure the CDC plugin for the database is in the `lib/` directory.
 +
-```bash
+[source,bash]
+----
 ls lib/
-```
+----
 +
 You should see the following jars:
 +
-* hazelcast-jet-cdc-debezium-{full-version}.jar
-* hazelcast-jet-cdc-mysql-{full-version}.jar (for MySQL)
-* hazelcast-jet-cdc-postgres-{full-version}.jar (for Postgres)
+* hazelcast-enterprise-cdc-debezium-{full-version}.jar
+* hazelcast-enterprise-cdc-mysql-{full-version}.jar (for MySQL)
+* hazelcast-enterprise-cdc-postgres-{full-version}.jar (for Postgres)
 
 . Enable user code deployment:
 +
@@ -520,11 +529,12 @@ some extra changes in order for the Hazelcast cluster to be aware of the custom 
 Please append following config lines to the `config/hazelcast.yaml`
 file, at the end of the `hazelcast` block:
 +
-```yaml
+[source,yaml]
+----
   user-code-deployment:
     enabled: true
     provider-mode: LOCAL_AND_CACHED_CLASSES
-```
+----
 +
 Also add these config lines to the `config/hazelcast-client.yaml` file,
 at the end of the `hazelcast-client` block:
@@ -534,22 +544,24 @@ at the end of the `hazelcast-client` block:
 Gradle:: 
 + 
 --
-```yaml
+[source,yaml]
+----
   user-code-deployment:
     enabled: true
     jarPaths:
       - <path_to_project>/build/libs/cdc-tutorial-1.0-SNAPSHOT.jar
-```
+----
 --
 Maven:: 
 + 
 --
-```yaml
+[source,yaml]
+----
   user-code-deployment:
     enabled: true
     jarPaths:
       - <path_to_project>/target/cdc-tutorial-1.0-SNAPSHOT.jar
-```
+----
 --
 ====
 +
@@ -558,17 +570,19 @@ you created the project for this tutorial.
 
 . Start Hazelcast.
 +
-```bash
+[source,bash]
+----
 bin/hz-start
-```
+----
 
 . When you see output like this, Hazelcast is up:
 +
-```
+[source]
+----
 Members {size:1, ver:1} [
     Member [192.168.1.5]:5701 - e7c26f7c-df9e-4994-a41d-203a1c63480e this
 ]
-```
+----
 
 == Step 8. Submit the Job for Execution
 
@@ -581,77 +595,85 @@ following command:
 Gradle:: 
 + 
 --
-```bash
+[source,bash]
+----
 bin/hz-cli submit build/libs/cdc-tutorial-1.0-SNAPSHOT.jar
-```
+----
 --
 Maven:: 
 + 
 --
 
-```bash
+[source,bash]
+----
 bin/hz-cli submit target/cdc-tutorial-1.0-SNAPSHOT.jar
-```
+----
 --
 ====
 
 The output in the Hazelcast member's log should look something like this (we
 see these lines due to the `peek()` stages we've inserted):
 
-```
+[source,text]
+----
 ........
 ... Output to ordinal 0: key:{{"order_number":10002}}, value:{{"order_number":10002,"order_date":16817,"purchaser":1002,"quantity":2,"product_id":105,"__op":"c","__db":"inventory","__table":"orders","__ts_ms":1593681751174,"__deleted":"false"}} (eventTime=12:22:31.174)
 ... Output to ordinal 0: key:{{"order_number":10003}}, value:{{"order_number":10003,"order_date":16850,"purchaser":1002,"quantity":2,"product_id":106,"__op":"c","__db":"inventory","__table":"orders","__ts_ms":1593681751174,"__deleted":"false"}} (eventTime=12:22:31.174)
 ... Output to ordinal 0: key:{{"id":1003}}, value:{{"id":1003,"first_name":"Edward","last_name":"Walker","email":"ed@walker.com","__op":"c","__db":"inventory","__table":"customers","__ts_ms":1593681751161,"__deleted":"false"}} (eventTime=12:22:31.161)
 ........
-```
+----
 
 == Step 9. Track Updates
 
 Let's see how our cache looks like at this time. If we execute the
  `CacheRead` code <<5-define-jet-job, defined above>>, we'll get:
 
-```
+[source]
+----
 Currently there are following customers in the cache:
     Customer: Customer {id=1002, firstName=George, lastName=Bailey, email=gbailey@foobar.com}, Orders: {10002=Order {orderNumber=10002, orderDate=Sun Jan 17 02:00:00 EET 2016, purchaser=1002, quantity=2, productId=105}, 10003=Order {orderNumber=10003, orderDate=Fri Feb 19 02:00:00 EET 2016, purchaser=1002, quantity=2, productId=106}}
     Customer: Customer {id=1003, firstName=Edward, lastName=Walker, email=ed@walker.com}, Orders: {10004=Order {orderNumber=10004, orderDate=Sun Feb 21 02:00:00 EET 2016, purchaser=1003, quantity=1, productId=107}}
     Customer: Customer {id=1004, firstName=Anne, lastName=Kretchmar, email=annek@noanswer.org}, Orders: {}
     Customer: Customer {id=1001, firstName=Sally, lastName=Thomas, email=sally.thomas@acme.com}, Orders: {10001=Order {orderNumber=10001, orderDate=Sat Jan 16 02:00:00 EET 2016, purchaser=1001, quantity=1, productId=102}}
-```
+----
 
 Let's do some updates in our database. Go to the database CLI
 <<3-start-command-line-client, we've started earlier>> and run
 following commands:
 
-```bash
+[source,sql]
+----
 INSERT INTO inventory.customers VALUES (1005, 'Jason', 'Bourne', 'jason@bourne.org');
 DELETE FROM inventory.orders WHERE order_number=10002;
-```
+----
 
 If we check the cache with `CacheRead` we get:
 
-```
+[source]
+----
 Currently there are following customers in the cache:
     Customer: Customer {id=1005, firstName=Jason, lastName=Bourne, email=jason@bourne.org}, Orders: {}
     Customer: Customer {id=1002, firstName=George, lastName=Bailey, email=gbailey@foobar.com}, Orders: {10003=Order {orderNumber=10003, orderDate=Fri Feb 19 02:00:00 EET 2016, purchaser=1002, quantity=2, productId=106}}
     Customer: Customer {id=1003, firstName=Edward, lastName=Walker, email=ed@walker.com}, Orders: {10004=Order {orderNumber=10004, orderDate=Sun Feb 21 02:00:00 EET 2016, purchaser=1003, quantity=1, productId=107}}
     Customer: Customer {id=1004, firstName=Anne, lastName=Kretchmar, email=annek@noanswer.org}, Orders: {}
     Customer: Customer {id=1001, firstName=Sally, lastName=Thomas, email=sally.thomas@acme.com}, Orders: {10001=Order {orderNumber=10001, orderDate=Sat Jan 16 02:00:00 EET 2016, purchaser=1001, quantity=1, productId=102}}
-```
+----
 
 == Step 10. Clean up
 
 . Cancel the job.
 +
-```bash
+[source,bash]
+----
 bin/hz-cli cancel postgres-monitor
-```
+----
 
 Shut down the Hazelcast cluster.
 +
-```bash
+[source,bash]
+----
 bin/hz-stop
-```
+----
 
 . Use Docker to stop the running container (this will kill the
 command-line client too, since it's running in the same container):
@@ -663,9 +685,10 @@ MySQL::
 --
 You can use Docker to stop all running containers:
 
-```bash
+[source,bash]
+----
 docker stop mysqlterm mysql
-```
+----
 --
 Postgres:: 
 + 
@@ -674,9 +697,10 @@ Postgres::
 You can use Docker to stop the running container (this will kill the
 command-line client too, since it's running in the same container):
 
-```bash
+[source,bash]
+----
 docker stop postgres
-```
+----
 --
 ====
 +
@@ -685,6 +709,7 @@ Docker should remove them right after we stop them.
 We can verify that all processes are stopped and removed with following
 command:
 
-```bash
+[source,bash]
+----
 docker ps -a
-```
+----

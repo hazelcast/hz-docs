@@ -1,12 +1,135 @@
-= Performance Tuning
+= Performance Tips
+:description: The production checklist provides a set of best practices and recommendations to ensure a smooth transition to a production environment which runs a Hazelcast cluster.
+[[production-checklist]]
 
 To achieve good performance in your Hazelcast deployment, it is crucial to tune your
 production environment. This section provides guidelines for tuning the performance though we also 
 recommend to run performance and stress tests to evaluate the application performance.
 
-== Operating System Tuning
+[[basic-recs]]
+== Basic Recommendations
 
-=== Disabling Transparent Huge Pages (THP)
+* Eight cores per Hazelcast server instance
+* Minimum of 8 GB RAM per Hazelcast member (if not using the High-Density Memory Store)
+* Dedicated NIC for each Hazelcast member
+* Linux—any distribution
+* Run all members within the same subnet
+* Attach all members to the same network switch
+
+=== Using Operation Threads Efficiently
+
+By default, Hazelcast uses the machine's core count to determine the number of operation threads. Creating more
+operation threads than this core count is highly unlikely to lead to an improved performance since there will be more context
+switching, more thread notification, and so on.
+
+Especially if you have a system that does simple operations like put and get,
+it is better to use a lower thread count than the number of cores.
+The reason behind the increased performance
+by reducing the core count is that the operations executed on the operation threads normally execute very fast and there can
+be a very significant amount of overhead caused by thread parking and unparking. If there are fewer threads, a thread needs
+to do more work, will block less and therefore needs to be notified less.
+
+=== Avoiding Random Changes
+
+Tweaking can be very rewarding because significant performance improvements are possible. By default, Hazelcast tries 
+to behave at its best for all situations, but this doesn't always lead to the best performance. So if you know what
+you are doing and what to look for, it can be very rewarding to tweak. However, it is also important that tweaking should
+be done with proper testing to see if there is actually an improvement. Tweaking without proper benchmarking
+is likely going to lead to confusion and could cause all kinds of problems. In case of doubt, we recommend not to tweak.
+
+=== Creating the Right Benchmark Environment
+
+When benchmarking, it is important that the benchmark reflects your production environment. Sometimes with a calculated
+guess, a representative smaller environment can be set up; but if you want to use the benchmark statistics to infer
+how your production system is going to behave, you need to make sure that you get as close as your production setup as
+possible. Otherwise, you are at risk of spotting the issues too late or focusing on the things which are not relevant.
+
+== Hardware
+
+**Uniform Hardware:**
+
+To maximize the efficiency and performance of Hazelcast, it's crucial to ensure that all cluster members are equipped with equal CPU, memory, and network resources. This uniformity prevents any single slow member from impeding the overall cluster performance. One effective strategy in achieving this is to allocate dedicated machine resources exclusively for Hazelcast services.
+
+By providing properly sized hardware or virtual hardware to each member, Hazelcast ensures that all members have ample resources without competing with other processes or services. This approach allows Hazelcast to distribute load evenly across all members and maintain predictable performance. In heterogeneous clusters where some machines are more powerful than others, weaker members can create bottlenecks, leading to underutilization of stronger members. Therefore, for optimal performance, it's advisable to use equivalent hardware for all Hazelcast members.
+
+**Minimal Recommendation:**
+
+Hazelcast is a lightweight framework and is reported to run well on devices
+such as the Raspberry Pi Zero (1GHz single-core CPU, 512MB RAM).
+
+**Recommended Configuration:**
+
+We suggest at least 8 CPU cores or equivalent per member, as well as running a single Hazelcast member for each host.
+
+NOTE: For environments with _either_ fewer or more cores than 8 CPU, we recommend enabling Thread-Per-Core (TPC). For more info, see xref:cluster-performance:thread-per-core-tpc.adoc[].
+
+As a starting point for data-intensive operations, consider machines  such as AWS https://aws.amazon.com/ec2/instance-types/c5/[c5.2xlarge]
+with:
+
+* 8 CPU cores
+* 16 GB RAM
+* 10 Gbps network
+
+**Single Member per Machine:**
+
+A Hazelcast member assumes it is alone on a machine, so we recommend not running multiple
+Hazelcast members on a machine. Having multiple
+members on a single machine is likely to result in worse performance than
+running a single member, since there will be more
+context switching, less batching, and so on. So unless it is proven that running multiple members on each machine does give a better
+performance/behavior in your particular setup, it is best to run a single member per machine.
+
+**CPU:**
+
+Hazelcast can use hundreds of CPU cores efficiently by exploiting data and
+task parallelism. Adding more CPU can therefore help with scaling the
+CPU-bound computations. If you're using jobs and pipelines, read about the
+xref:architecture:distributed-computing.adoc#cooperative-execution-engine[Execution model]
+to understand how Hazelcast makes the computation parallel and design your pipelines according to it.
+
+By default, Hazelcast uses all available CPU. Starting two Hazelcast
+instances on one machine therefore doesn't bring any performance benefit
+as the instances would compete for the same CPU resources.
+
+Don't rely just on CPU usage when benchmarking your cluster. Simulate
+production workload and measure the throughput and latency instead. The
+task manager of Hazelcast can be configured to use the CPU aggressively.
+As an example, see https://hazelcast.com/blog/idle-green-threads-in-jet/[this benchmark]: the CPU usage was close to 20% with just 1000 events/s. At 1m items/s
+the CPU usage was 100% even though Jet still could push around 5 million
+items/s on that machine.
+
+**Disk:**
+
+Hazelcast is an in-memory framework. Cluster disks aren't involved in regular
+operations except for logging and thus are not critical for the cluster
+performance. There are optional features of Hazelcast (such as Persistence and 
+CP Persistence) which can use disk space, but even when they are in use a 
+Hazelcast system is primarily in-memory.
+
+Consider using more performant disks if you use the following Hazelcast features:
+
+* xref:pipelines:sources-sinks.adoc[The file connector] for reading or writing to files on the cluster's file system.
+* xref:storage:persistence.adoc[Persistence] for saving map data to disk.
+* xref:cp-subsystem:persistence.adoc[CP Persistence] for strong resiliency guarantees when using the CP Subsystem.
+
+== Operating System
+
+Hazelcast works in many operating environments and some environments
+have unique considerations. These are highlighted below.
+
+As a general suggestion, we recommend turning off the swapping at operating system level; see <<disabling-swap-usage, Disable Swap Usage>>.
+
+[[solaris]]**Solaris:**
+
+Hazelcast is certified for Solaris SPARC.
+
+However, the following modules are not supported for the Solaris operating system:
+
+- `hazelcast-jet-grpc`
+- `hazelcast-jet-protobuf`
+- `hazelcast-jet-python`
+
+**Disable Transparent Huge Pages (THP):**
 
 Transparent Huge Pages (THP) is the Linux Memory Management
 feature which aims to improve the application performance by
@@ -34,7 +157,8 @@ To disable it permanently, please see the corresponding documentation
 for the Linux distribution that you use. Here is an example of the instructions
 for RHEL: https://access.redhat.com/solutions/46111.
 
-=== Disabling Swap Usage
+[[disabling-swap-usage]]
+**Disable Swap Usage:**
 
 Swapping behavior can be configured by setting the kernel parameter
 (`/proc/sys/vm/swappiness`) and can be turned off completely by executing
@@ -56,7 +180,59 @@ to start swapping memory to disk way too early.
 sudo sysctl vm.swappiness=10
 ```
 
-== Network Tuning
+**VMWare ESX:**
+
+Hazelcast is certified on VMWare VSphere 5.5/ESXi 6.0.
+Generally speaking, Hazelcast can use all the resources on a full machine.
+Splitting a single physical machine into multiple virtual machines and
+thereby dividing resources is not required.
+
+Consider the following for VMWare ESX:
+
+* Avoid sharing one Network Interface Card (NIC) between multiple virtual machine environments. A Hazelcast cluster is a distributed system and can be very network-intensive. Trying to share one physical NIC between multiple VMs may cause network-related performance problems.
+* Avoid over-committing memory. Always use dedicated physical memory for guests running Hazelcast.
+* Do not use memory ballooning.
+* Be careful overcommitting CPU cores. Monitor CPU steal time metrics.
+* Do not move guests while Hazelcast is running - for ESX this means disabling vMotion. If you want to use vMotion (live migration), first stop the Hazelcast cluster then restart it after the migration completes.
+* Always enable verbose garbage collection (GC) logs in the Java Virtual Machine. When "Real" time is higher than "User" time, this may indicate virtualization issues. The JVM is not using the CPU to execute application code during garbage collection, and is probably waiting on input/output (I/O) operations.
+* Note VMWare guests network types.
+* Use pass-through hard disks/partitions; do not use image files.
+* Configure partition groups to use a separate underlying physical machine for partition backups.
+* If you want to use automatic snapshots, first stop the Hazelcast cluster then restart it after the snapshot.
+* Network performance issues, including timeouts, might occur with LRO (Large Receive Offload)
+enabled on Linux virtual machines and ESXi/ESX hosts. We have specifically had
+this reported in VMware environments, but it could potentially impact other environments as well.
+We strongly recommend disabling LRO when running in virtualized environments, see https://kb.vmware.com/s/article/1027511.
+
+**Windows:**
+
+According to a reported rare case, I/O threads can consume a lot of CPU cycles
+unexpectedly, even in an idle state. This can lead to CPU usage going up to 100%.
+This is reported not only for Hazelcast but for other GitHub projects as well.
+The workaround for such cases is to supply the system property `-Dhazelcast.io.selectorMode=selectwithfix` on JVM startup.
+See the related https://github.com/hazelcast/hazelcast/issues/7943#issuecomment-218586767[GitHub^] issue for more details.
+
+[[network-tuning]]
+== Network
+
+Hazelcast uses the network internally to shuffle data and to replicate the
+backups. The network is also used to read input data from and to write
+results to remote systems or to do RPC calls when enriching. In fact a
+lot of Hazelcast jobs are network-bound. A 1 Gbit network connection is a 
+recommended minimum, but using a 10 Gbit or faster network
+can improve application performance. Also consider scaling the cluster
+out (adding more members to the cluster) to distribute the load.
+
+Consider collocating a Hazelcast cluster with the data source and sink to avoid
+moving data back and forth over the wire. If you must choose between colocating 
+Hazelcast with the source or sink, choose the source. Processed results are often
+aggregated, so the size is reduced.
+
+A Hazelcast cluster is designed to run in a single LAN and can encounter unexpected 
+performance problems if a single cluster is split across multiple different networks. 
+Latency is the strongest constraint in most network scenarios, so deploying Hazelcast 
+clusters to a network with high or varying latencies (even on the same LAN) can lead 
+to unpredictable performance results.
 
 === Dedicated Network Interface Controller for Hazelcast Members
 
@@ -120,17 +296,33 @@ net.ipv4.tcp_rmem = 8192 131072 6291456
 
 Check your Linux distribution's documentation for more information about configuring kernel parameters.
 
-== Virtual Machine Tuning
+== JVM
+
+Here are the essential tips:
+
+* Enable garbage collection (GC) logs; since Java is getting better and better at GC, use the latest LTS version. G1GC is the default recommended GC policy.
+* Use High-Density Memory Store and a small heap; minimum and maximum heap size should be equal.
+* Applications that do a lot of querying or data updates need more headroom.
+* A basic tuning brings a huge benefit whereas more tuning may bring almost nothing else except complexity; no tuning is recommended unless needed.
+* Tuning, if done, should be reviewed periodically.
 
 === Garbage Collection
 
-Keeping track of garbage collection (GC) statistics is vital to optimum performance,
+Keeping track of GC statistics is vital to optimum performance,
 especially if you run the JVM with large heap sizes. Tuning the garbage collector
 for your use case is often a critical performance practice prior to deployment.
 Likewise, knowing what baseline GC behavior looks like and
 monitoring for behavior outside normal tolerances will keep you aware of
-potential memory leaks and other pathological memory usage. Hazelcast provides a basic
-GC recommendation in our xref:ROOT:production-checklist.adoc#jvm-recommendations[JVM Recommendations].
+potential memory leaks and other pathological memory usage.
+
+To avoid long GC pauses and latencies from the Java Virtual Machine (JVM), we recommend 16 GB or less of maximum JVM heap. If xref:storage:high-density-memory.adoc[High-Density Memory] is enabled, no more than 8 GB of maximum JVM heap is recommended. Horizontal scaling of JVM memory is recommended over vertical scaling if you want to exceed these numbers.
+
+Enabling GC logs allows troubleshooting if performance problems occur. To enable GC
+logging, use the following JVM arguments:
+
+```
+-Xlog:gc=debug:file=/tmp/gc.log:time,uptime,level,tags:filesize=100m,filecount=10
+```
 
 === Minimize Heap Usage
 
@@ -140,16 +332,6 @@ hours of GC tuning and provides improved stability
 and predictability across your entire application.
 Even if your application uses very large amounts of data, you can still keep
 your heap small by using Hazelcast's High-Density Memory Store.
-
-=== Enable GC Logging
-
-We xref:ROOT:production-checklist.adoc#jvm-recommendations[recommend] enabling
-GC logs to allow troubleshooting if performance problems occur. To enable GC
-logging, use the following JVM arguments:
-
-```
--Xlog:gc=debug:file=/tmp/gc.log:time,uptime,level,tags:filesize=100m,filecount=10
-```
 
 === Azul Zing® and Zulu® Support
 
@@ -162,7 +344,7 @@ latency, high transaction rates, large working memory, and/or consistent
 response times. Zulu and Zulu Enterprise are Azul’s certified, freely available
 open source builds of OpenJDK with a variety of flexible support options,
 available in configurations for the enterprise as well as custom and embedded systems. 
-Azul Zing is certified and supported in Hazelcast {enterprise-product-name}. When deployed with Zing,
+Azul Zing is certified and supported in Hazelcast Enterprise. When deployed with Zing,
 Hazelcast gains performance, capacity, and operational efficiency within the same infrastructure.
 Additionally, you can directly use Hazelcast with Zulu without making any changes to your code.
 
@@ -197,13 +379,6 @@ Setting the queried entries' in-memory format to `OBJECT` forces the objects
 to be always kept in object format, resulting in faster access for queries, but also in
 higher heap usage. It will also incur an object serialization step on every remote get operation. See the xref:data-structures:setting-data-format.adoc[Setting In-Memory Format section].
 
-=== Portable Interface on Queried Objects
-
-The Portable interface allows individual fields to be accessed without
-the overhead of deserialization or reflection and supports query and
-indexing support without full-object deserialization.
-See the related https://hazelcast.com/blog/for-faster-hazelcast-queries/[Hazelcast Blog] and the xref:serialization:implementing-portable-serialization.adoc[Portable Serialization  section].
-
 == Serialization Tuning
 
 Hazelcast supports a range of object serialization mechanisms,
@@ -234,7 +409,7 @@ even if they point to the same instance. The default configuration is false.
 See also the xref:serialization:serialization-configuration.adoc[Serialization Configuration Wrap-Up section] for details.
 
 [[exec-svc-opt]]
-== Compute Tuning
+== Executor Service
 
 Hazelcast executor service is an extension of Java’s built-in executor service
 that allows distributed execution and control of tasks. There are a number of
@@ -376,7 +551,7 @@ client machine, the internal executor service will have 20 threads.
 In some cases, increasing that thread pool size may increase performance.
 
 [[ep]]
-=== Entry Processors Performance Tuning
+== Entry Processors
 
 Hazelcast allows you to update the whole or a
 part of map or cache entries in an efficient and a lock-free way using
@@ -413,7 +588,13 @@ These optimizations apply to the following map methods only:
 See the xref:computing:entry-processor.adoc[Entry Processors section].
 
 [[tls-ssl-perf]]
-== TLS/SSL Tuning
+== Security
+
+Here are the essential tips:
+
+* Security probably won’t be the first thing built
+* But it needs to be considered from the outset, as it affects architecture, performance and coding
+* Security can then be added before go-live without rework
 
 TLS/SSL can have a significant impact on performance. There are a few ways to
 increase the performance.
@@ -462,7 +643,7 @@ instead of the JVM heap. This allows you to keep data in the memory without
 incurring the overhead of garbage collection (GC). HDMS capabilities are supported by
 the map structure, JCache implementation, Near Cache, Hibernate caching, and Web Session replications.
 
-Available to Hazelcast {enterprise-product-name} customers, HDMS is an ideal solution
+Available to Hazelcast Enterprise customers, HDMS is an ideal solution
 for those who want the performance of in-memory data, need the predictability
 of well-behaved Java memory management, and don’t want to spend time
 and effort on meticulous and fragile GC tuning.
@@ -475,8 +656,18 @@ be sure to profile the data load time and to take that startup time into account
 
 See the xref:storage:high-density-memory.adoc[HDMS section] to learn more.
 
+== Cluster Size
+
+Here are the essential tips:
+
+* Split-brain is a network break, it affects hosts
+* You can’t stop a network from a physical or logical break
+* If you have an even number of hosts, you make the problem worse
+* If you have an odd number of hosts, you make the solution simpler
+* Use an odd number of CP groups
+
 [[many-members]]
-== Clusters with Huge Amount of Members/Clients
+=== Clusters with Huge Amount of Members/Clients
 
 Very large clusters of hundreds of members are possible with Hazelcast,
 but stability depends heavily on your network infrastructure and
@@ -492,20 +683,32 @@ and members in the same zone is beneficial. Using Near Cache on read-mostly
 data sets reduces server load and network overhead. You may also try increasing
 the number of threads in the client executor pool.
 
-[[int-response-queue]]
-== Setting Internal Response Queue Idle Strategies
+=== Data Amount
 
-You can set the response thread for internal operations both on the members and clients.
-By setting the backoff mode on and depending on the use case, you can get a
-5-10% performance improvement. However, this increases the CPU utilization.
-To enable backoff mode please set the following property for Hazelcast cluster members: 
+Total data size should be calculated based on the combination of primary data and backup data. For example, if you have configured your cluster with a backup count of 2, then total memory consumed is actually 3x larger than the primary data size (primary + backup + backup). Partition sizes of 50MB or less are recommended.
 
-```
--Dhazelcast.operation.responsequeue.idlestrategy=backoff  
-```
+=== Map Entries
 
-For Hazelcast clients, please use the following property to enable backoff:
+Since entries with large size can bloat the network when deserialized,
+we recommend keeping each map entry's size below 1 MB, and keeping the sizes of map entries relatively equal to each other.
 
-```
--Dhazelcast.client.responsequeue.idlestrategy=backoff
-```
+Hazelcast Platform can store terabytes of data, but having a single entry with a large size may cause stability issues. If you have such entries, you should redesign your domain objects and break them into smaller ones.
+
+=== Partitions
+
+The number of internal partitions a Hazelcast member uses can be xref:ROOT:capacity-planning.adoc#partition-count[configured], but must be uniform across all members in the cluster.
+An optimal partition count and size establish a balance between the
+number of partitions on each member and the data amount on each partition.
+You can consider the following when deciding on a partition count.
+
+* The partition count should be a prime number. This helps to minimize the collision of keys across
+partitions, ensuring more consistent lookup times.
+* A partition count which is too low constrains the cluster. The count should
+be large enough for a balanced data or task distribution so that each member
+does not manage too few partitions.
+* A partition size of 50MB or less typically ensures good performance. Larger clusters may be able to use up to 100MB partition sizes, but will likely also require larger JVM heap sizes to accomodate the increase in data flow.
+
+If you are a Hazelcast Enterprise customer using the High-Density Data Store with large data sizes,
+we recommend a large increase in partition count, starting with 5009 or higher.
+
+The partition count cannot be easily changed after a cluster is created, so if you have a large cluster be sure to test and set an optimum partition count prior to deployment. If you need to change the partition count after a cluster is already running, you will need to schedule a maintenance window to entirely bring the cluster down. If your cluster uses the xref:storage:persistence.adoc[Persistence] or xref:cp-subsystem:persistence.adoc[CP Persistence] features, those persistent files will need to be removed after the cluster is shut down, as they contain references to the previous partition count. Once all member configurations are updated, and any persistent data structure files are removed, the cluster can be safely restarted.

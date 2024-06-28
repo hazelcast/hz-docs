@@ -1,4 +1,5 @@
-= Legacy CDC Connector
+= CDC Connector
+[.enterprise]*Enterprise*
 
 Change Data Capture (CDC) refers to the process of observing changes
 made to a database and extracting them in a form usable by other
@@ -8,15 +9,49 @@ Change Data Capture is especially important to Hazelcast, because it allows
 for the _streaming of changes from databases_, which can be efficiently
 processed by the Jet engine.
 
-Implementation of CDC in Hazelcast is based on
-link:https://debezium.io/[Debezium]. Hazelcast offers a generic Debezium source
-which can handle CDC events from link:https://debezium.io/documentation/reference/stable/connectors/index.html[any database supported by Debezium],
+Implementation of CDC in Hazelcast Enterprise is based on
+link:https://debezium.io/[Debezium 2.x]. Hazelcast offers a generic Debezium source
+which can handle CDC events from link:https://debezium.io/documentation/reference/2.7/connectors/index.html[any database supported by Debezium],
 but we're also striving to make CDC sources first class citizens in Hazelcast.
 The ones for MySQL and PostgreSQL already are.
 
 == Installing the Connector
 
-This connector is included in the full distribution of Open Source Hazelcast.
+This connector is included in the full distribution of Hazelcast Enterprise.
+
+=== Maven
+For using this connector inside Maven project you can add following entries into `pom.xml`'s `<dependencies>` section:
+
+Generic connector:
+```xml
+<dependency>
+    <groupId>com.hazelcast.jet</groupId>
+    <artifactId>hazelcast-enterprise-cdc-debezium</artifactId>
+    <version>{full-version}</version>
+    <classifier>jar-with-dependencies</classifier>
+</dependency>
+```
+
+MySQL-specific connector:
+```xml
+<dependency>
+    <groupId>com.hazelcast.jet</groupId>
+    <artifactId>hazelcast-enterprise-cdc-mysql</artifactId>
+    <version>{full-version}</version>
+    <classifier>jar-with-dependencies</classifier>
+</dependency>
+```
+Note: MySQL connector does not include MySQL driver as a dependency.
+
+PostgreSQL-specific connector:
+```xml
+<dependency>
+    <groupId>com.hazelcast.jet</groupId>
+    <artifactId>hazelcast-enterprise-cdc-postgres</artifactId>
+    <version>{full-version}</version>
+    <classifier>jar-with-dependencies</classifier>
+</dependency>
+```
 
 == CDC as a Source
 
@@ -39,19 +74,53 @@ For the setting up a streaming source of CDC data is just the matter of pointing
 Pipeline pipeline = Pipeline.create();
 pipeline.readFrom(
     MySqlCdcSources.mysql("customers")
-            .setDatabaseAddress("127.0.0.1")
-            .setDatabasePort(3306)
-            .setDatabaseUser("debezium")
-            .setDatabasePassword("dbz")
+            .setDatabaseAddress("127.0.0.1", 3306)
+            .setDatabaseCredentials("debezium", "dbz")
             .setClusterName("dbserver1")
-            .setDatabaseWhitelist("inventory")
-            .setTableWhitelist("inventory.customers")
+            .setDatabaseIncludeList("inventory")
+            .setTableIncludeList("inventory.customers")
             .build())
     .withNativeTimestamps(0)
     .writeTo(Sinks.logger());
 ```
 
+MySQL- and PostgreSQL-specific source builders contain methods for all major configuration setting and it guards if
+e.g. mutually exclusive options are not used. For generic source builder user must rely on Debezium's documentation
+to provide all necessary options.
+
 For an example of how to use CDC data see xref:pipelines:cdc.adoc[our tutorial].
+
+=== Common source builder functions
+[cols="m,a"]
+|===
+|Method name|Description
+
+|changeRecord()
+| Sets output type to ChangeRecord - a wrapper, providing most of the fields in
+strongly-typed manner.
+
+| json()
+| Sets output type to JSON - result stage will have `Map<String, String>` as it's type,
+where key is SourceRecord's key in json format and value is whole SourceRecord's value in json string.
+
+|customMapping(RecordMappingFunction<T>)
+| Sets output type to some arbitrary user type `T`. Mapping from `SourceRecord` to `T` will
+be done using provided function.
+
+|withDefaultEngine()
+|Sets preferred engine to default (non-async) one. This engine is single-threaded,
+but also older and more tested. For most stable results (e.g. no async offset restore) this engine should be preferred. For MySQL and PostgreSQL especially this engine makes the most sense, as MySQL and PostgreSQL Debezium connectors are single-threaded only.
+
+|withAsyncEngine()
+|Sets preferred engine to async one. This engine is multithreaded (if connector supports
+it), but you must be aware of it's async nature, e.g. offset restore after restart is done
+asynchronously as well, leading to sometimes confusing results.
+
+|setProperty(String, String)
+|Sets connector property to given value. There are multiple overloads, allowing to
+sets value to some `long`, `String` or `boolean`.
+
+|===
 
 === Fault Tolerance
 
@@ -60,7 +129,7 @@ periodically saves the database write ahead log offset for which it had
 dispatched events and in case of a failure/restart it will replay all
 events since the last successfully saved offset.
 
-Unfortunately, however, there is no guarantee that the last saved offset
+Unfortunately, however, there is no guaran`tee that the last saved offset
 is still in the database changelog. Such logs are always finite and
 depending on the DB configuration can be relatively short, so if the CDC
 source has to replay data for a long period of inactivity, then there
@@ -93,6 +162,4 @@ p.readFrom(source)
 The key and value functions have certain limitations. They can be used to map only to objects which the Hazelcast member can deserialize, which unfortunately doesn't include user code submitted as a part of the job. So in the above example it's OK to have `String` email values, but we wouldn't be able to use `Customer` directly.
 
 If user code has to be used, then the problem can be solved with the help of the User Code Deployment feature. Example configs for that can be seen in our xref:pipelines:cdc-join.adoc#7-start-hazelcast-jet[CDC Join tutorial].
-
-Although User Code Deployment has been deprecated, the replacement User Code Namespaces feature does not yet support Jet jobs or pipelines. For now, continue to use the User Code Deployment solution in this scenario. 
 ====

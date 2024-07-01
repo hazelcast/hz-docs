@@ -185,7 +185,7 @@ be sure to use a prime number of partitions. This helps minimize
 the collision of keys across partitions, ensuring more consistent lookup
 times.
 
-NOTE: If you are an Enterprise customer using the High-Density Memory Store
+NOTE: If you are an {enterprise-product-name} customer using the High-Density Memory Store
 with large data sizes, we recommend a large increase in partition count, starting with 5009 or higher.
 
 NOTE: The partition count cannot be easily changed after a cluster is created, so if you have a large cluster 
@@ -226,82 +226,6 @@ use higher limits.
 Multi-socket clients are the smart clients which maintain a connection to each member.
 Unisocket clients have a single connection to the entire cluster.
 You can find more information about these two modes here: xref:clients:java.adoc#java-client-operation-modes[Java Client Operation Modes].
-
-== Uniform Hardware
-
-Hazelcast is designed to run efficiently on homogeneous clusters. All JVM
-processes that participate in the cluster should have equal CPU, memory
-and network resources. One slow cluster member can kill the performance
-of the whole cluster.
-
-=== Minimal Configuration
-
-Hazelcast is a lightweight framework and is reported to run well on devices
-such as the Raspberry Pi Zero (1GHz single-core CPU, 512MB RAM).
-
-=== Recommended Configuration
-
-As a starting point for data-intensive operations, consider machines
-such as AWS https://aws.amazon.com/ec2/instance-types/c5/[c5.2xlarge]
-with:
-
-* 8 CPU cores
-* 16 GB RAM
-* 10 Gbps network
-
-=== CPU
-
-Hazelcast can use hundreds of CPU cores efficiently by exploiting data and
-task parallelism. Adding more CPU can therefore help with scaling the
-CPU-bound computations. If you're using jobs and pipelines, read about the
-xref:architecture:distributed-computing.adoc#cooperative-execution-engine[Execution model]
-to understand how Hazelcast makes the computation parallel and design your pipelines according to it.
-
-By default, Hazelcast uses all available CPU. Starting two Hazelcast
-instances on one machine therefore doesn't bring any performance benefit
-as the instances would compete for the same CPU resources.
-
-Don't rely just on CPU usage when benchmarking your cluster. Simulate
-production workload and measure the throughput and latency instead. The
-task manager of Hazelcast can be configured to use the CPU aggressively.
-As an example, see https://hazelcast.com/blog/idle-green-threads-in-jet/[this benchmark]: the CPU usage was close to 20% with just 1000 events/s. At 1m items/s
-the CPU usage was 100% even though Jet still could push around 5 million
-items/s on that machine.
-
-=== Network
-
-Hazelcast uses the network internally to shuffle data and to replicate the
-backups. The network is also used to read input data from and to write
-results to remote systems or to do RPC calls when enriching. In fact a
-lot of Hazelcast jobs are network-bound. A 1 Gbit network connection is a 
-recommended minimum, but using a 10 Gbit or faster network
-can improve application performance. Also consider scaling the cluster
-out (adding more members to the cluster) to distribute the load.
-
-Consider collocating a Hazelcast cluster with the data source and sink to avoid
-moving data back and forth over the wire. If you must choose between colocating 
-Hazelcast with the source or sink, choose the source. Processed results are often
-aggregated, so the size is reduced.
-
-A Hazelcast cluster is designed to run in a single LAN and can encounter unexpected 
-performance problems if a single cluster is split across multiple different networks. 
-Latency is the strongest constraint in most network scenarios, so deploying Hazelcast 
-clusters to a network with high or varying latencies (even on the same LAN) can lead 
-to unpredictable performance results.
-
-=== Disk
-
-Hazelcast is an in-memory framework. Cluster disks aren't involved in regular
-operations except for logging and thus are not critical for the cluster
-performance. There are optional features of Hazelcast (such as Persistence and 
-CP Persistence) which may utilize disk space, but even when they are in use a 
-Hazelcast system is primarily in-memory.
-
-Consider using more performant disks if you use the following Hazelcast features:
-
-* xref:pipelines:sources-sinks.adoc[The file connector] for reading or writing to files on the cluster's file system.
-* xref:storage:persistence.adoc[Persistence] for saving map data to disk.
-* xref:cp-subsystem:persistence.adoc[CP Persistence] for strong resiliency guarantees when using the CP Subsystem.
 
 == Size for Failures
 

@@ -14,7 +14,7 @@ To complete this tutorial, you need the following:
 |Prerequisites|Useful resources
 
 |Make sure you've already completed either the Docker or Java "Getting Started" guides
-|xref:#TODO()
+|xref:getting-started:get-started-rest-api-with-docker.adoc[]
 
 |===
 
@@ -41,6 +41,10 @@ curl -X POST \
         <statistics-enabled>true</statistics-enabled>
         <backup-count>2</backup-count>
     </map>
+    <queue name="my-queue">
+        <max-size>10</max-size>
+        <backup-count>2</backup-count>
+    </queue>
 </hazelcast>'
 ----
 --
@@ -49,7 +53,7 @@ cURL with YAML::
 +
 [source,shell]
 ----
-curl -X 'POST' \
+curl -X POST \
   'http://localhost:8443/hazelcast/rest/api/v1/cluster/config/update' \
   -H 'Authorization: Bearer '"$JWT_TOKEN"'' \ <1>
   -H 'Content-Type: application/json' \
@@ -58,6 +62,10 @@ curl -X 'POST' \
     my-map:
       in-memory-format: BINARY
       statistics-enabled: true
+      backup-count: 2
+  queue:
+    my-queue:
+      max-size: 10
       backup-count: 2'
 ----
 
@@ -77,6 +85,10 @@ hazelcast:
       in-memory-format: BINARY
       statistics-enabled: true
       backup-count: 2
+  queue:
+    my-queue:
+      max-size: 10
+      backup-count: 2
 ----
 +
 - Click the `Execute` button.
@@ -91,6 +103,10 @@ Here is the expected response body:
     {
       "sectionName": "map",
       "configName": "my-map"
+    },
+    {
+      "sectionName": "queue",
+      "configName": "my-queue"
     }
   ],
   "ignoredConfigs": []
@@ -108,7 +124,7 @@ Using cURL::
 --
 [source,shell]
 ----
-curl -X 'POST' \
+curl -X POST \
   'http://localhost:8443/hazelcast/rest/api/v1/map/my-map/1' \
   -H 'Authorization: Bearer '"$JWT_TOKEN"'' \
   -H 'Content-Type: text/plain' \
@@ -121,8 +137,8 @@ Using Swagger UI::
 - Open the Swagger UI at http://localhost:8443/swagger-ui/index.html.
 - Navigate to the `/map/{mapName}/{key}` POST endpoint under the *Data Controller* section.
 - Click the `Try it out` button.
-- Enter `my-map` and `1` in the 'mapName' and `key` fields respectively:
-- Enter the value in the request body section
+- Enter `my-map` and `1` in the 'mapName' and `key` fields respectively.
+- Enter the value in the request body section:
 +
 [source,txt]
 ----
@@ -135,9 +151,47 @@ This action will create the map named `my-map` which matches the dynamically add
 
 You can use https://docs.hazelcast.com/management-center/latest/data-structures/map[Management Center] to verify that the map was successfully created with the expected configuration properties.
 
-=== Step 3 (Optional). Dynamically Add a New Map by Reloading the Configuration from Disk
+== Step 3. Create a Queue with the New Configuration
 
-Modify the declarative configuration file to add a new map config and reload it using the `/cluster/config/reload` endpoint. For this tutorial our config is located at `~/config`
+Access the `/queue/{queueName}` POST endpoint to create the queue and add an item:
+
+[tabs]
+====
+Using cURL::
++
+--
+[source,shell]
+----
+curl -X POST \
+  'http://localhost:8443/hazelcast/rest/api/v1/queue/my-queue' \
+  -H 'Authorization: Bearer '"$JWT_TOKEN"'' \
+  -H 'Content-Type: text/plain' \
+  -d 'item-1'
+----
+--
+
+Using Swagger UI::
++
+- Open the Swagger UI at http://localhost:8443/swagger-ui/index.html.
+- Navigate to the `/queue/{queueName}` POST endpoint under the *Data Controller* section.
+- Click the `Try it out` button.
+- Enter `my-queue` in the 'queueName' field.
+- Enter the item value in the request body section:
++
+[source,txt]
+----
+item-1
+----
+- Click the `Execute` button.
+====
+
+This action will create the queue named `my-queue` which matches the dynamically added config from the previous step.
+
+You can use https://docs.hazelcast.com/management-center/latest/data-structures/queue[Management Center] to verify that the queue was successfully created with the expected configuration properties.
+
+== Step 4 (Optional). Dynamically Add a New Map by Reloading the Configuration from Disk
+
+Modify the declarative configuration file to add a new map config and reload it using the `/cluster/config/reload` endpoint. For this tutorial, our config is located at `~/config`
 
 [tabs]
 ====

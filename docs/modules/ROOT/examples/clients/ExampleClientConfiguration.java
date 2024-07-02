@@ -12,7 +12,7 @@ public class ExampleClientConfiguration {
         clientConfig.getConnectionStrategyConfig().getConnectionRetryConfig().setMaxBackoffMillis(5000);
         ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
         networkConfig.addAddress("10.1.1.21", "10.1.1.22:5703")
-                .setSmartRouting(true)
+                .setClusterRoutingMode("ALL_MEMBERS")
                 .addOutboundPortDefinition("34700-34710")
                 .setRedoOperation(true)
                 .setConnectionTimeout(5000);

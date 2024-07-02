@@ -31,18 +31,17 @@ cURL with XML::
 --
 [source,shell]
 ----
-curl -X 'POST' \
-    'http://localhost:8443/hazelcast/rest/api/v1/config/update' \
-    -H 'Authorization: Bearer ${JWT_TOKEN}' \ <1>
-    -d '
-        <hazelcast xmlns="http://www.hazelcast.com/schema/config">
-            <map name="my-map">
-                <in-memory-format>BINARY</in-memory-format>
-                <statistics-enabled>true</statistics-enabled>
-                <backup-count>2</backup-count>
-            </map>
-        </hazelcast>
-    '
+curl -X POST \
+'http://localhost:8443/hazelcast/rest/api/v1/cluster/config/update' \
+-H 'Content-Type: application/json' \
+-H 'Authorization: Bearer '"$JWT_TOKEN"'' \ <1>
+-d '<hazelcast xmlns="http://www.hazelcast.com/schema/config">
+    <map name="my-map">
+        <in-memory-format>BINARY</in-memory-format>
+        <statistics-enabled>true</statistics-enabled>
+        <backup-count>2</backup-count>
+    </map>
+</hazelcast>'
 ----
 --
 
@@ -52,15 +51,14 @@ cURL with YAML::
 ----
 curl -X 'POST' \
   'http://localhost:8443/hazelcast/rest/api/v1/cluster/config/update' \
-  -H 'Authorization: Bearer ${JWT_TOKEN}' \ <1>
-  -d '
-  hazelcast:
-    map:
-      my-map:
-        in-memory-format: BINARY
-        statistics-enabled: true
-        backup-count: 2
-  '
+  -H 'Authorization: Bearer '"$JWT_TOKEN"'' \ <1>
+  -H 'Content-Type: application/json' \
+  -d 'hazelcast:
+  map:
+    my-map:
+      in-memory-format: BINARY
+      statistics-enabled: true
+      backup-count: 2'
 ----
 
 Using Swagger UI::
@@ -85,6 +83,20 @@ hazelcast:
 ====
 <1> Set the JWT_TOKEN as environment variable or replace it with you token directly in the command.
 
+Here is the expected response body:
+[source,json]
+----
+{
+  "addedConfigs": [
+    {
+      "sectionName": "map",
+      "configName": "my-map"
+    }
+  ],
+  "ignoredConfigs": []
+}
+----
+
 == Step 2. Create a Map with the New Configuration
 
 Access the `/map/{mapName}/{key}` POST endpoint to create the map and put an entry:
@@ -96,10 +108,11 @@ Using cURL::
 --
 [source,shell]
 ----
-curl -X POST \
-  --location 'http://localhost:8443/hazelcast/rest/api/v1/map/my-map/1' \
-  --header 'Authorization: Bearer ${JWT_TOKEN}' \
-  --data 'my-value'
+curl -X 'POST' \
+  'http://localhost:8443/hazelcast/rest/api/v1/map/my-map/1' \
+  -H 'Authorization: Bearer '"$JWT_TOKEN"'' \
+  -H 'Content-Type: text/plain' \
+  -d 'my-value'
 ----
 --
 
@@ -124,7 +137,7 @@ You can use https://docs.hazelcast.com/management-center/latest/data-structures/
 
 === Step 3 (Optional). Dynamically Add a New Map by Reloading the Configuration from Disk
 
-Modify the declarative configuration file to add a new map config and reload it using the `/cluster/config/reload` endpoint.
+Modify the declarative configuration file to add a new map config and reload it using the `/cluster/config/reload` endpoint. For this tutorial our config is located at `~/config`
 
 [tabs]
 ====
@@ -133,9 +146,9 @@ Using cURL::
 --
 [source,shell]
 ----
-curl -X POST \
-  --location 'http://localhost:8443/hazelcast/rest/api/v1/cluster/config/reload' \
-  --header 'Authorization: Bearer ${JWT_TOKEN}'
+curl -X 'POST' \
+  'http://localhost:8443/hazelcast/rest/api/v1/cluster/config/reload' \
+  -H 'Authorization: Bearer '"$JWT_TOKEN"''
 ----
 --
 

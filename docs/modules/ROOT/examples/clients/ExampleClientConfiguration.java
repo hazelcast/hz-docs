@@ -1,6 +1,8 @@
 package com.hazelcast.client.config;
 
 import com.hazelcast.client.HazelcastClient;
+import com.hazelcast.client.config.ClusterRoutingConfig;
+import com.hazelcast.client.impl.connection.tcp.RoutingMode;
 import com.hazelcast.config.AwsConfig;
 import com.hazelcast.core.HazelcastInstance;
 
@@ -12,7 +14,7 @@ public class ExampleClientConfiguration {
         clientConfig.getConnectionStrategyConfig().getConnectionRetryConfig().setMaxBackoffMillis(5000);
         ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
         networkConfig.addAddress("10.1.1.21", "10.1.1.22:5703")
-                .setClusterRoutingMode("ALL_MEMBERS")
+                .setClusterRoutingConfig(new ClusterRoutingConfig().setRoutingMode(RoutingMode.ALL_MEMBERS))
                 .addOutboundPortDefinition("34700-34710")
                 .setRedoOperation(true)
                 .setConnectionTimeout(5000);

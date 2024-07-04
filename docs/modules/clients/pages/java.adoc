@@ -96,6 +96,10 @@ In `ALL_MEMBERS` cluster routing mode, clients connect to each cluster member.
 Since each xref:overview:data-partitioning.adoc[data partition] uses the well known and consistent hashing algorithm,
 each client can send an operation to the cluster member that owns the partition that holds their data,
 which increases the overall throughput and efficiency.
++
+If <<configuring-direct-to-leader-routing, CP direct-to-leader routing>> is enabled on your clients, and the `ADVANCED_CP`
+license is present on your Enterprise cluster, then clients in this routing mode can use this to send CP operations
+directly to group leaders wherever possible, even after leadership changes.
 
 * **SINGLE_MEMBER** 
 +
@@ -564,7 +568,7 @@ XML::
             <ports>34600</ports>
             <ports>34700-34710</ports>
         </outbound-ports>
-        </cluster-routing mode="ALL_MEMBERS">
+        <cluster-routing mode="ALL_MEMBERS"/>
         <redo-operation>true</redo-operation>
         <connection-timeout>60000</connection-timeout>
         <socket-options>
@@ -889,7 +893,7 @@ XML::
 <hazelcast-client>
     ...
     <network>
-        </cluster-routing mode="ALL_MEMBERS">
+        <cluster-routing mode="ALL_MEMBERS"/>
     </network>
     ...
 </hazelcast-client>
@@ -913,7 +917,7 @@ Programmatic Configuration:
 ----
 ClientConfig clientConfig = new ClientConfig();
 ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
-networkConfig.setClusterRoutingMode(ALL_MEMBERS);
+networkConfig.getClusterRoutingConfig().setRoutingMode(RoutingMode.ALL_MEMBERS);
 ----
 
 **SINGLE_MEMBER**
@@ -924,7 +928,9 @@ When using the `SINGLE_MEMBER` cluster routing mode, consider the following:
 
 * The absence of <<configuring-backup-acknowledgement, backup acknowledgements>>, as the client does not have a view of the entire cluster
 * If you have multiple members on a single machine, we advise that <<configuring-address-list,explicit ports are set for each member>>
-* It is not possible to accurately predict which member will be a CP group leader. However, if the client is explicitly set to a CP group leader, and CP group leaders are defined algorithmically at runtime, connections to the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] are direct-to-leader, which can result in improved performance
+* If CP group leader priority is assigned appropriately, and the client is explicitly set to connect to a CP group leader,
+connections to the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] are direct-to-leader, which can result in improved performance.
+If leadership is reassigned while using `SINGLE_MEMBER` cluster routing, then this benefit may be lost.
 * <<configuring-load-balancer,`LoadBalancer`>> configuration is ignored
 
 Declarative Configuration:
@@ -939,7 +945,7 @@ XML::
 <hazelcast-client>
     ...
     <network>
-        </cluster-routing mode="SINGLE_MEMBER">
+        <cluster-routing mode="SINGLE_MEMBER"/>
     </network>
     ...
 </hazelcast-client>
@@ -963,7 +969,7 @@ Programmatic Configuration:
 ----
 ClientConfig clientConfig = new ClientConfig();
 ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
-networkConfig.setClusterRoutingMode(SINGLE_MEMBER);
+networkConfig.getClusterRoutingConfig().setRoutingMode(RoutingMode.SINGLE_MEMBER);
 ----
 
 **MULTI_MEMBER**
@@ -982,7 +988,9 @@ In a split and heal scenario, where the client has no access to other group memb
 In a scenario where all group members are killed almost simultateously, the client loses connection but reconnects when a member starts again.
 
 * The absence of <<configuring-backup-acknowledgement, backup acknowledgements>>, as the client does not have a view of the entire cluster
-* It is not possible to accurately predict which member will be a CP group leader. However, if the client is explicitly set to a CP group leader, and CP group leaders are defined algorithmically at runtime, connections to the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] are direct-to-leader, which can result in improved performance
+If <<configuring-direct-to-leader-routing, CP direct-to-leader routing>> is enabled on your clients, and the `ADVANCED_CP` license
+is present on your Enterprise cluster, then clients in this routing mode can use this to send CP operations directly
+to group leaders wherever possible, even after leadership changes.
 * Best efforts are made to route operations to the required member, but if this cannot be done operations are routed as defined in the <<configuring-load-balancer,`LoadBalancer`>>
 
 Declarative Configuration:
@@ -1024,8 +1032,9 @@ Programmatic Configuration:
 ----
 ClientConfig clientConfig = new ClientConfig();
 ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
-networkConfig.setClusterRoutingMode(MULTI_MEMBER);
-networkConfig.setClusterRoutingGroupingStrategy(PARTITION_GROUPS);
+networkConfig.getClusterRoutingConfig().setRoutingMode(RoutingMode.MULTI_MEMBER);
+// PARTITION_GROUPS is the default strategy, so it does not need to be explicitly defined
+networkConfig.getClusterRoutingConfig().setRoutingStrategy(RoutingStrategy.PARTITION_GROUPS);
 ----
 
 TIP: If you are using the `smart` or `unisocket` client operation modes, select **5.4** from the version picker above the navigation pane to see the configuration information. The cluster routing mode described above must not be present in your configuration.
@@ -1444,7 +1453,7 @@ increase the performance of local read operations. Since the client always reque
 the cluster members, it can be helpful in some use cases to configure a Near Cache on the client side.
 See the xref:performance:near-cache.adoc[Near Cache section] for a detailed explanation of the Near Cache feature and its configuration.
 
-=== Configuring Client Cluster
+=== Configuring Client Cluster Name
 
 Clients should provide a cluster name in order to connect to the cluster.
 You can configure it using `ClientConfig`, as shown below.
@@ -1532,6 +1541,65 @@ hazelcast-client:
     default:
       topic-overload-policy: BLOCK
       read-batch-size: 10
+----
+====
+
+[[configuring-direct-to-leader-routing]]
+=== Configuring CP direct-to-leader Operation Routing For Clients
+
+When operating a Hazelcast Enterprise cluster with the `ADVANCED_CP` license it is possible to configure clients to
+leverage direct to leader routing for xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] operations. When enabled,
+this functionality allows clients to receive a mapping of CP group leadership from the cluster and use it to send
+CP data structure operations directly to the relevant group leader. This leadership mapping is also updated whenever
+leadership changes occur.
+
+CP data structure reads and writes must be actioned by the CP leader responsible for the group involved. By leveraging
+direct to leader routing for CP operations, clients will be able to send all operations directly to their group leaders,
+cutting out the need for intermediate hops through other cluster members. This allows clients to achieve lower latency and
+higher throughput for their CP operations, while also reducing the pressure on the internal cluster network, resulting in
+greater cluster stability.
+
+This functionality is disabled by default and must be explicitly enabled. This is done because you should consider your
+specific use-case for CP operation sending and assess the impact of direct to leader routing on your topology. In scenarios
+where clients have increased latency to CP group leaders, it may be detrimental to route all operations directly to them
+instead of using a faster internal cluster link and routing through another member. It should also be considered that
+direct to leader routing can put uneven pressure on the cluster if CP group leaders receive substantially more load than
+other members of the cluster - this is particularly problematic when only one CP group leader is present.
+
+CP direct to leader routing can be enabled on clients with a single configuration option. Here is an example programmatic
+configuration snippet:
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+clientConfig.setCPDirectToLeaderRoutingEnabled(true);
+----
+
+The following is the declarative configuration equivalent of the above example:
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast-client>
+    ...
+    <cp-direct-to-leader-routing>true</cp-direct-to-leader-routing>
+    ...
+</hazelcast-client>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast-client:
+  ...
+  cp-direct-to-leader-routing: true
+  ...
 ----
 ====
 

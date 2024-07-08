@@ -1,0 +1,1130 @@
+= Thin Java Client
+:page-api-reference: https://docs.hazelcast.org/docs/{page-latest-supported-java-client}/javadoc
+:url-cloud-signup: https://cloud.hazelcast.com/sign-up
+:page-toclevels: 3 
+[[java-client]]
+
+== Getting Started
+
+To get started, include the `hazelcast-java-client-{full-version}.jar` dependency in your classpath. Once included, you can start using this client as if
+you are using the Hazelcast API. The differences are discussed in the below sections.
+
+NOTE: If you have a Hazelcast {enterprise-product-name} license, you do not need to set the license key in your Hazelcast Thin Java Clients to use the xref:getting-started:editions.adoc#features-in-hazelcast-enterprise[{enterprise-product-name} features] - setting it on the member side is enough. In this case, you only need to include the `hazelcast-enterprise-java-client-{full-version}.jar` dependency in your classpath.
+
+If you prefer to use Maven, simply add the `hazelcast` dependency
+to your `pom.xml` (or the `hazelcast-enterprise` dependency, if you want the client to use {enterprise-product-name} features provided that you have the Hazelcast {enterprise-product-name} license),
+which you may already have done to start using Hazelcast:
+
+[source,xml,subs="attributes+"]
+----
+<dependency>
+    <groupId>com.hazelcast</groupId>
+    <artifactId>hazelcast-java-client</artifactId>
+    <version>{full-version}</version>
+</dependency>
+----
+
+
+== Client API
+
+The client API is your gateway to access your Hazelcast cluster, including distributed objects and data pipelines (jobs).
+
+The first step is the configuration. Currently, the Java client supports only programmatic configuration. Future releases will also support the declarative configuration approach.
+
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+clientConfig.setClusterName("dev");
+clientConfig.getNetworkConfig().addAddress("10.90.0.1", "10.90.0.2:5702");
+----
+
+See the <<configuring-java-client, Configuring Java Client section>> for more information.
+
+The second step is initializing the `HazelcastInstance` to be connected to the cluster.
+
+```java
+HazelcastInstance client = HazelcastClient.newHazelcastClient(clientConfig);
+```
+
+To create a map and populate it with some data:
+
+[source,java]
+----
+IMap<String, Customer> mapCustomers = client.getMap("customers"); //creates the map proxy
+
+mapCustomers.put("1", new Customer("Joe", "Smith"));
+mapCustomers.put("2", new Customer("Ali", "Selam"));
+mapCustomers.put("3", new Customer("Avi", "Noyan"));
+----
+
+For details about using maps, see xref:data-structures:map.adoc[].
+
+As the final step, if and when you are done with your client, you can shut it down as shown below:
+
+```java
+client.shutdown();
+```
+Configuring Java Client
+The above code line releases all the used resources and closes connections to the cluster.
+
+[[handling-failures]]
+=== Handling Failures
+
+There are two main failure cases and configurations you can perform to achieve proper behavior.
+
+**Handling Client Connection Failure:**
+
+While the client is trying to connect initially to one of the members in the
+`ClientNetworkConfig.addressList`, all the members might be not available.
+Instead of giving up, throwing an exception and stopping the client,
+the client retries to connect as configured which is described in the
+<<configuring-client-connection-retry, Configuring Client Connection Retry section>>.
+
+The client executes each operation through the already established connection to the cluster.
+If this connection(s) disconnects or drops, the client tries to reconnect as configured.
+
+The initial connection of a client is established using one of the addresses you provide in the <<configuring-address-list, address list>>. 
+The client gets the addresses of other members in the cluster from the initially connected member.
+If your client is <<java-client-operation-modes, smart>>, the client tries to connect to them.
+If any of the other members have both private and public addresses, the client must decide
+which one to use when connecting to those members. You can override the `hazelcast.discovery.public.ip.enabled` property 
+to suit your setup. For further information on the `hazelcast.discovery.public.ip.enabled` property,
+see <<client-system-properties, Client System Properties>>.
+
+If you use a <<client-network,discovery mechanism>> to find the initial member for the connection instead of an address list,
+you can use the same property to configure whether the initial member connection uses the private or public address.
+
+For an example of this scenario, refer to
+link:https://docs.hazelcast.com/tutorials/hazelcast-platform-operator-expose-externally[Connect to Hazelcast from Outside Kubernetes, window=_blank] in the Operator documentation.
+
+**Handling Retry-able Operation Failure:**
+
+While sending the requests to related members, operations can fail due to various reasons.
+Read-only operations are retried by default. If you want to enable retry for the other operations,
+you can set the `redoOperation` to `true`. See the <<enabling-redo-operation, Enabling Redo Operation section>>.
+
+You can set a timeout for retrying the operations sent to a member.
+This can be provided by using the property `hazelcast.client.invocation.timeout.seconds` in `ClientProperties`.
+The client retries an operation within this given period, of course, if it is a read-only operation or
+you enabled the `redoOperation` as stated in the above paragraph.
+This timeout value is important when there is a failure resulted by either of the following causes:
+
+* Member throws an exception.
+* Connection between the client and member is closed.
+* Client's heartbeat requests are timed out.
+
+See the <<client-system-properties, Client System Properties section>>
+for the description of the `hazelcast.client.invocation.timeout.seconds` property.
+
+When any failure happens between a client and member
+(such as an exception on the member side or connection issues), an operation is retried if:
+
+* it is certain that it has not run on the member yet
+* or if it is idempotent such as a read-only operation, i.e., retrying does not have a side effect.
+
+If it is not certain whether the operation has run on the member,
+then the non-idempotent operations are not retried.
+However, as explained in the first paragraph of this section,
+you can force all client operations to be retried (`redoOperation`)
+when there is a failure between the client and member.
+But in this case, you should know that some operations may run multiple times causing conflicts.
+For example, assume that your client sent a `queue.offer` operation to the member and
+then the connection is lost. Since there will be no respond for this operation,
+you will not know whether it has run on the member or not. If you enabled `redoOperation`,
+that `queue.offer` operation may rerun and this causes the same objects to be offered twice in the member's queue.
+
+=== Using Supported Distributed Data Structures
+
+[NOTE]
+====
+Currently, the Thin Java Client only implements distributed map. Support for other data structures will be added in future versions.
+====
+
+==== Using Map with Java Client
+
+You can use any distributed map object with the client, as shown below.
+
+[source,java]
+----
+Imap<Integer, String> map = client.getMap("myMap");
+
+map.put(1, "John");
+String value= map.get(1);
+map.remove(1);
+----
+
+Locality is ambiguous for the client, so `addLocalEntryListener()` and
+`localKeySet()` methods are not supported. See xref:data-structures:map.adoc[]
+for more information.
+
+=== Using Client Services
+
+Thin Java Client provides the services discussed below for some common functionalities on the client side.
+
+==== Using Distributed Executor Service
+
+The distributed executor service is for distributed computing.
+It can be used to execute tasks on the cluster on a designated partition or on all the partitions.
+It can also be used to process entries. See xref:computing:executor-service.adoc[] for more information.
+
+```java
+IExecutorService executorService = client.getExecutorService("default");
+```
+
+After getting an instance of `IExecutorService`, you can use the instance as
+the interface with the one provided on the server side. See
+xref:computing:distributed-computing.adoc[] for detailed usage.
+
+==== Finding the Partition of a Key
+
+You use partition service to find the partition of a key.
+It returns all partitions. See the example code below.
+
+[source,java]
+----
+PartitionService partitionService = client.getPartitionService();
+
+//partition of a key
+Partition partition = partitionService.getPartition(key);
+
+//all partitions
+Set<Partition> partitions = partitionService.getPartitions();
+----
+
+==== Handling Lifecycle
+
+Lifecycle handling performs:
+
+* checking if the client is running
+* shutting down the client gracefully
+* terminating the client ungracefully (forced shutdown)
+* adding/removing lifecycle listeners.
+
+[source,java]
+----
+LifecycleService lifecycleService = client.getLifecycleService();
+
+if(lifecycleService.isRunning()){
+    //it is running
+}
+
+//shutdown client gracefully
+lifecycleService.shutdown();
+----
+
+
+=== Client Listeners
+
+You can configure listeners to listen to various event types on the client side.
+You can configure global events not relating to any distributed object through
+<<configuring-client-listeners, Client ListenerConfig>>.
+You should configure distributed object listeners like map entry listeners or
+list item listeners through their proxies. See the related sections under
+each distributed data structure in this Reference Manual.
+
+=== Async Start and Reconnect Modes
+
+Java client can be configured to connect to a cluster in an async manner during the
+client start and reconnecting after a cluster disconnect.
+Both of these options are configured via `ClientConnectionStrategyConfig`.
+
+Async client start is configured by setting the configuration element `async-start` to `true`.
+This configuration changes the behavior of `HazelcastClient.newHazelcastClient()` call.
+It returns a client instance without waiting to establish a cluster connection.
+Until the client connects to cluster, it throws `HazelcastClientOfflineException`
+on any network dependent operations hence they won't block.
+If you want to check or wait the client to complete its cluster connection,
+you can use the built-in lifecycle listener:
+
+
+[source,java]
+----
+ClientStateListener clientStateListener = new ClientStateListener(clientConfig);
+HazelcastInstance client = HazelcastClient.newHazelcastClient(clientConfig);
+
+//Client started but may not be connected to cluster yet.
+
+//check connection status
+clientStateListener.isConnected();
+
+//blocks until client completes connect to cluster
+if (clientStateListener.awaitConnected()) {
+	//connected successfully
+} else {
+	//client failed to connect to cluster
+}
+----
+
+The Java client can also be configured to specify
+how it reconnects after a cluster disconnection.
+The following are the options:
+
+* A client can reject to reconnect to the cluster and trigger the client shutdown process.
+* Client can open a connection to the cluster by blocking all waiting invocations.
+* Client can open a connection to the cluster without blocking the waiting invocations.
+All invocations receive `HazelcastClientOfflineException` during the establishment of cluster connection.
+If cluster connection is failed to connect, then client shutdown is triggered.
+
+See the <<java-client-connection-strategy>> section to learn how to configure
+these.
+
+[[configuring-java-client]]
+== Configuring Java Client
+
+=== Declarative vs. Programmatic Configuration
+
+You can configure Hazelcast Thin Java Client declaratively (XML), programmatically (API), or
+using client system properties.
+
+In the declarative configuration approach, settings are defined in configuration files, in XML or YAML format. This method allows for a clear separation of configuration from the application code, making it easier to manage and modify configurations without altering the codebase. 
+
+[NOTE]
+====
+The Thin Java Client currently does not support declarative configuration. This support will be added in future releases.
+====
+
+The programmatic configuration approach involves setting configurations directly within the application code using the provided API. Using this method, configurations can be dynamically adjusted at runtime based on the application's needs. For programmatic configuration of the Hazelcast Thin Java Client, just instantiate a `ClientConfig` object and configure the desired aspects. An example is shown below:
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+clientConfig.setClusterName("dev");
+clientConfig.setLoadBalancer(yourLoadBalancer);
+----
+
+[NOTE]
+====
+In the subsequent sections, all examples will be provided using the programmatic approach.
+====
+
+[[client-network]]
+=== Client Network
+
+All network related configuration of Hazelcast Thin Java Client is performed in the class
+`ClientNetworkConfig` when using programmatic configuration.
+
+Below are some examples of configuring network for Java Client programmatically.
+
+[[configuring-address-list]]
+==== Configuring Address List
+
+Address List is the initial list of cluster addresses to which the client will connect.
+The client uses this list to find an alive member. Although it may be enough to give
+only one address of a member in the cluster (since all members communicate with each other),
+it is recommended that you give the addresses for all the members.
+
+Example:
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
+networkConfig.addAddress("10.1.1.21", "10.1.1.22:5703");
+----
+
+[[setting-connection-timeout]]
+==== Setting Connection Timeout
+
+Connection timeout is the timeout value in milliseconds for members to
+accept client connection requests. The following are the example configurations.
+
+Example:
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+clientConfig.getNetworkConfig().setConnectionTimeout(5000);
+----
+
+Its default value is *5000* milliseconds.
+
+==== Setting Outbound Ports
+
+You may want to restrict outbound ports to be used by Hazelcast-enabled applications.
+To fulfill this requirement, you can configure Hazelcast Thin Java Client to use only defined outbound ports.
+
+Example:
+
+[source,java]
+----
+NetworkConfig networkConfig = config.getNetworkConfig();
+// ports between 34700 and 34710
+networkConfig.addOutboundPortDefinition("34700-34710");
+// comma separated ports
+networkConfig.addOutboundPortDefinition("34700,34701,34702,34703");
+networkConfig.addOutboundPort(34705);
+----
+
+[[java-client-operation-modes]]
+==== Setting Smart Routing
+
+Hazelcast clients have two operation modes because of the distributed nature of the data and cluster.
+
+**Smart Client**: In the smart mode, the clients connect to each cluster member.
+Since each xref:overview:data-partitioning.adoc[data partition] uses the well known and consistent hashing algorithm,
+each client can send an operation to the cluster member that owns the partition that holds their data,
+which increases the overall throughput and efficiency.
+
+[NOTE]
+====
+The **Smart Client** mode is currently not implemented in the Thin Java Client. Support for Smart Client will be added in the future versions.
+====
+
+**Unisocket Client**:  In the unisocket client mode, the clients only connect to one of the configured addresses.
+This single member behaves as a gateway to the other members.
+For any operation requested from the client, it redirects the request to the relevant member and
+returns the response back to the client returned from that member.
+
+Using a unisocket client is necessary in scenarios where clients are required to connect to only a single member rather than to each member in the cluster. This requirement may arise due to firewalls, security considerations, or specific networking issues.
+
+Since the Thin Java Client currently only supports the unisocket client mode, you need to disable smart routing in the client network configuration as follows:
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
+networkConfig.setSmartRouting(false);
+----
+
+Note that you need also to disable smart routing for the clients which
+want to use temporary permissions defined in a member.
+See the xref:security:native-client-security.adoc#handling-permissions-when-a-new-member-joins[Handling Permissions section].
+
+[[enabling-redo-operation]]
+==== Enabling Redo Operation
+
+It enables/disables redo-able operations as described in
+<<handling-failures, Handling Retry-able Operation Failure>>.
+The following is an example configuration.
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
+networkConfig().setRedoOperation(true);
+----
+
+Its default value is `false` (disabled).
+
+==== Setting a Socket Interceptor
+
+[blue]*Hazelcast {enterprise-product-name}*
+
+Following is a client configuration to set a socket intercepter.
+Any class implementing `com.hazelcast.nio.SocketInterceptor` is a socket interceptor.
+
+
+[source,java]
+----
+public interface SocketInterceptor {
+    void init(Properties properties);
+    void onConnect(Socket connectedSocket) throws IOException;
+}
+----
+
+`SocketInterceptor` has two steps. First, it is initialized by the configured properties.
+Second, it is informed just after the socket is connected using the `onConnect` method.
+
+
+[source,java]
+----
+SocketInterceptorConfig socketInterceptorConfig = clientConfig
+               .getNetworkConfig().getSocketInterceptorConfig();
+
+MyClientSocketInterceptor myClientSocketInterceptor = new MyClientSocketInterceptor();
+
+socketInterceptorConfig.setEnabled(true);
+socketInterceptorConfig.setImplementation(myClientSocketInterceptor);
+----
+
+If you want to configure the socket interceptor with a class name instead of an instance,
+see the example below.
+
+[source,java]
+----
+SocketInterceptorConfig socketInterceptorConfig = clientConfig
+            .getNetworkConfig().getSocketInterceptorConfig();
+
+socketInterceptorConfig.setEnabled(true);
+
+//These properties are provided to interceptor during init
+socketInterceptorConfig.setProperty("kerberos-host","kerb-host-name");
+socketInterceptorConfig.setProperty("kerberos-config-file","kerb.conf");
+
+socketInterceptorConfig.setClassName(MyClientSocketInterceptor.class.getName());
+----
+
+NOTE: See the xref:security:socket-interceptor.adoc[Socket Interceptor section] for more information.
+
+==== Configuring Network Socket Options
+
+You can configure the network socket options using `SocketOptions`. It has the following methods:
+
+* `socketOptions.setKeepAlive(x)`: Enables/disables the *SO_KEEPALIVE* socket option.
+Its default value is `true`.
+* `socketOptions.setTcpNoDelay(x)`: Enables/disables the *TCP_NODELAY* socket option.
+Its default value is `true`.
+* `socketOptions.setReuseAddress(x)`: Enables/disables the *SO_REUSEADDR* socket option.
+Its default value is `true`.
+* `socketOptions.setLingerSeconds(x)`: Enables/disables *SO_LINGER* with the specified linger time in seconds.
+Its default value is `3`.
+* `socketOptions.setBufferSize(x)`: Sets the *SO_SNDBUF* and *SO_RCVBUF* options to the specified value in KB for this Socket.
+Its default value is `32`.
+
+
+[source,java]
+----
+SocketOptions socketOptions = clientConfig.getNetworkConfig().getSocketOptions();
+socketOptions.setBufferSize(32)
+             .setKeepAlive(true)
+             .setTcpNoDelay(true)
+             .setReuseAddress(true)
+             .setLingerSeconds(3);
+----
+
+==== Enabling Client TLS/SSL
+
+[blue]*Hazelcast {enterprise-product-name}*
+
+You can use TLS/SSL to secure the connection between the client and the members.
+If you want TLS/SSL enabled for the client-cluster connection, you should set `SSLConfig`.
+Once set, the connection (socket) is established out of an TLS/SSL factory defined either by
+a factory class name or factory implementation. See the xref:security:tls-ssl.adoc[TLS/SSL section].
+
+As explained in the TLS/SSL section, Hazelcast members have keyStores used to
+identify themselves (to other members) and Hazelcast clients have trustStore used to
+define which members they can trust. The clients also have their keyStores and
+members have their trustStores so that the members can
+know which clients they can trust: see the xref:security:tls-ssl.adoc#mutual-authentication[Mutual Authentication section].
+
+[TODO]
+====
+Do we have TLS/SSL in the thin clent? Provide details on the programmatic config
+====
+
+=== Configuring Client Cluster
+
+Clients should provide a cluster name in order to connect to the cluster.
+You can configure it using `ClientConfig`, as shown below.
+
+```java
+clientConfig.setClusterName("dev");
+```
+
+[[configuring-client-listeners]]
+=== Configuring Client Listeners
+
+You can configure global event listeners not related to any distributed object using `ListenerConfig` as shown below.
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+ListenerConfig listenerConfig = new ListenerConfig(LifecycleListenerImpl);
+clientConfig.addListenerConfig(listenerConfig);
+----
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+ListenerConfig listenerConfig = new ListenerConfig("com.hazelcast.example.MembershipListenerImpl");
+clientConfig.addListenerConfig(listenerConfig);
+----
+
+You can add the following types of event listeners:
+
+* LifecycleListener
+* MembershipListener
+* DistributedObjectListener
+
+[[client-security-configuration]]
+=== Configuring Client Security
+
+In the cases where the security established with `Config` is not enough and
+you want your clients connecting securely to the cluster, you can use `ClientSecurityConfig`.
+This configuration has a `credentials` parameter to set the IP address and UID.
+See the https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/client/config/ClientSecurityConfig.html[ClientSecurityConfig Javadoc^].
+
+[[client-serialization-configuration]]
+=== Client Serialization Configuration
+
+For the client side serialization, use the Hazelcast configuration.
+See the xref:serialization:serialization.adoc[Serialization chapter].
+
+=== Defining Client Labels
+
+You can define labels in your Java client, similar to the way it can
+be done for the xref:management:cluster-utilities.adoc[members].
+Through the client labels, you can assign special roles for your clients and
+use these roles to perform some actions specific to those client connections.
+
+You can also group your clients using the client labels.
+These client groups can be blacklisted in the Hazelcast Management Center so that
+they can be prevented from connecting to a cluster. See the related section in the
+Hazelcast Management Center Reference Manual for more information about this topic.
+
+Example:
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+clientConfig.setInstanceName("ExampleClientName");
+clientConfig.addLabel("user");
+clientConfig.addLabel("bar");
+
+HazelcastClient.newHazelcastClient(clientConfig);
+----
+
+[[java-client-connection-strategy]]
+=== Java Client Connection Strategy
+
+You can configure the client's starting mode as async or sync using
+the configuration element `async-start`. When it is set to `true` (async),
+Hazelcast creates the client without waiting a connection to the cluster.
+In this case, the client instance throws an exception until it connects to the cluster.
+If it is `false`, the client is not created until the cluster is ready to use clients and
+a connection with the cluster is established. Its default value is `false` (sync)
+
+You can also configure how the client reconnects to the cluster after a disconnection.
+This is configured using the configuration element `reconnect-mode`; it has three options
+(`OFF`, `ON` or `ASYNC`). The option `OFF` disables the reconnection.
+`ON` enables reconnection in a blocking manner where all the waiting invocations are blocked until
+a cluster connection is established or failed.
+The option `ASYNC` enables reconnection in a non-blocking manner where
+all the waiting invocations receive a `HazelcastClientOfflineException`.
+Its default value is `ON`.
+
+The below example of programmatic configuration shows how to configure
+a Java client's starting and reconnecting modes.
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+clientConfig.getConnectionStrategyConfig()
+            .setAsyncStart(true)
+            .setReconnectMode(ClientConnectionStrategyConfig.ReconnectMode.ASYNC);
+----
+
+[[configuring-client-connection-retry]]
+=== Configuring Client Connection Retry
+
+When the client is disconnected from the cluster or trying to connect to a one
+for the first time, it searches for new connections. You can configure the frequency
+of the connection attempts and client shutdown behavior using
+`ConnectionRetryConfig` (programmatical approach).
+
+[source,java]
+----
+ClientConfig config = new ClientConfig();
+ClientConnectionStrategyConfig connectionStrategyConfig = config.getConnectionStrategyConfig();
+ConnectionRetryConfig connectionRetryConfig = connectionStrategyConfig.getConnectionRetryConfig();
+connectionRetryConfig.setInitialBackoffMillis(1000)
+                     .setMaxBackoffMillis(60000)
+                     .setMultiplier(2)
+                     .setClusterConnectTimeoutMillis(50000)
+                     .setJitter(0.2);
+
+----
+
+The following are configuration element descriptions:
+
+* `initial-backoff-millis`: Specifies how long to wait (backoff), in milliseconds, after the first failure before retrying.
+Its default value is 1000 ms.
+* `max-backoff-millis`: Specifies the upper limit for the backoff in milliseconds.
+Its default value is 30000 ms.
+* `multiplier`: Factor to multiply the backoff after a failed retry.
+Its default value is 1.05.
+* `cluster-connect-timeout-millis`: Timeout value in milliseconds for the client to give up
+to connect to the current cluster. Its default value is `-1`, i.e., infinite.
+For the default value, client will not stop trying to
+connect to the target cluster (infinite timeout). If the failover client is used
+with the default value of this configuration element, the failover client will try
+to connect alternative clusters after 120000 ms (2 minutes). For any other value,
+both the client and the failover client will use this as it is.
+* `jitter`: Specifies by how much to randomize backoffs. Its default value is 0.
+
+A pseudo-code is as follows:
+
+[source,java]
+----
+ begin_time = getCurrentTime()
+ current_backoff_millis = INITIAL_BACKOFF_MILLIS
+ while (TryConnect(connectionTimeout)) != SUCCESS) {
+    if (getCurrentTime() - begin_time >= CLUSTER_CONNECT_TIMEOUT_MILLIS) {
+         // Give up to connecting to the current cluster and switch to another if exists.
+         // For the default values, CLUSTER_CONNECT_TIMEOUT_MILLIS is infinite for the
+         // client and equal to the 120000 ms (2 minutes) for the failover client.
+    }
+    Sleep(current_backoff_millis + UniformRandom(-JITTER * current_backoff_millis, JITTER * current_backoff_millis))
+    current_backoff = Min(current_backoff_millis * MULTIPLIER, MAX_BACKOFF_MILLIS)
+}
+----
+
+Note that, `TryConnect` above tries to connect to any member that the client knows,
+and for each connection we have a connection timeout; see the
+<<setting-connection-timeout, Setting Connection Timeout section>>.
+
+[[blue-green-deployment-and-disaster-recovery]]
+== Blue-Green Deployment
+[[blue-green-mechanism]]
+[blue]*Hazelcast {enterprise-product-name} Feature*
+
+Blue-green deployment refers to a client connection technique that reduces system downtime by deploying two mirrored clusters: blue (active) and green (idle). One of these clusters is running in production while the other is on standby.
+
+Using the blue-green mechanism, clients can connect to another cluster automatically when they are blacklisted from their currently connected cluster. See the xref:{page-latest-supported-mc}@management-center:monitor-imdg:monitor-clients.adoc#changing-cluster-client-filtering[Hazelcast Management Center Reference Manual] for information about blacklisting the clients.
+
+The client's behavior after this disconnection depends on its
+<<java-client-connection-strategy, `reconnect-mode`>>.
+The following are the options when you are using the blue-green mechanism, i.e.,
+you have alternative clusters for your clients to connect:
+
+* If `reconnect-mode` is set to `ON`, the client changes the cluster and
+blocks the invocations while doing so.
+* If `reconnect-mode` is set to `ASYNC`, the client changes the cluster
+in the background and throws `ClientOfflineException` while doing so.
+* If `reconnect-mode` is set to `OFF`, the client does not change the cluster; it shuts down immediately.
+
+NOTE: Here it could be the case that the whole cluster is restarted.
+In this case, the members in the restarted cluster
+reject the client's connection request, since the client is trying to connect to the old cluster.
+So, the client needs to search for a new cluster, if available and
+according to the blue-green configuration (see the following configuration related sections in this section).
+
+Consider the following notes for the blue-green mechanism (also valid for the disaster
+recovery mechanism described in the next section):
+
+* When a client disconnects from a cluster and
+connects to a new one the `InitialMemberEvent` and `CLIENT_CHANGED_CLUSTER` events are fired.
+* When switching clusters, the client reuses its UUID.
+* The client's listener service re-registers its listeners on the new cluster;
+the listener service opens a new connection to all members in the current
+<<client-network, member list>> and registers the listeners for each connection.
+* The client's Near Caches and Continuous Query Caches are cleared when
+the client joins a new cluster successfully.
+* If the new cluster's partition size is different, the client is rejected by the cluster.
+The client is not able to connect to a cluster with different partition count.
+* The state of any running job on the original cluster will be undefined. * Streaming jobs may continue running on the original cluster if the cluster is still alive and the switching happened due to a network problem. If you try to query the state of the job using the Job interface, you’ll get a `JobNotFoundException`.
+
+=== Disaster Recovery Mechanism
+
+When one of your clusters is gone due to a failure, the connection between
+your clients and members in that cluster is gone too.
+When a client is disconnected because of a failure in the cluster,
+it first tries to reconnect to the same cluster.
+
+The client's behavior after this disconnection depends on its
+<<java-client-connection-strategy, `reconnect-mode`>>, and it has the same options
+that are described in the above section (Blue-Green Mechanism).
+
+If you have provided alternative clusters for your clients to connect,
+the client tries to connect to those alternative clusters (depending on the `reconnect-mode`).
+
+When a failover starts, i.e., the client is disconnected and was configured
+to connect to alternative clusters, the current <<client-network, member list>> is not considered;
+the client cuts all the connections before attempting to connect to a new cluster and tries the clusters as configured.
+See the below configuration related sections.
+
+=== Configuring Without CNAME
+
+Let's first give example configurations and describe the configuration elements.
+
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+clientConfig.setClusterName("cluster-a");
+ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
+networkConfig.addAddress("10.216.1.18", "10.216.1.19");
+
+ClientConfig clientConfig2 = new ClientConfig();
+clientConfig2.setClusterName("cluster-b");
+ClientNetworkConfig networkConfig2 = clientConfig2.getNetworkConfig();
+networkConfig2.addAddress( "10.214.2.10", "10.214.2.11");
+
+ClientFailoverConfig clientFailoverConfig = new ClientFailoverConfig();
+clientFailoverConfig.addClientConfig(clientConfig).addClientConfig(clientConfig2).setTryCount(10)
+HazelcastInstance client = HazelcastClient.newHazelcastFailoverClient(clientFailoverConfig);
+----
+
+The following are the descriptions for the configuration elements:
+
+* `try-count`: Count of connection retries by the client to the alternative clusters.
+When this value is reached and the client still could not connect to a cluster, the client
+shuts down. Note that this value applies to the alternative clusters whose configurations are provided
+with the `client` element. For the above example, two alternative clusters are given
+with the `try-count` set as `4`. This means the number of connection attempts is
+4 x 2 = 8.
+* `client`: Path to the client configuration that corresponds to an alternative cluster that the client will try to connect.
+
+The client configurations must be exactly the same except the following configuration options:
+
+* `SecurityConfig`
+* `NetworkConfig.Addresses`
+* `NetworkConfig.SocketInterceptorConfig`
+* `NetworkConfig.SSLConfig`
+* `NetworkConfig.AwsConfig`
+* `NetworkConfig.GcpConfig`
+* `NetworkConfig.AzureConfig`
+* `NetworkConfig.KubernetesConfig`
+* `NetworkConfig.EurekaConfig`
+* `NetworkConfig.CloudConfig`
+* `NetworkConfig.DiscoveryConfig`
+
+
+== Java Client Failure Detectors
+
+The client failure detectors are responsible to determine if a member in the cluster is unreachable or crashed.
+The most important problem in the failure detection is to distinguish
+whether a member is still alive but slow, or has crashed.
+But according to the famous http://dl.acm.org/citation.cfm?doid=3149.214121[FLP result^],
+it is impossible to distinguish a crashed member from a slow one in an asynchronous system.
+A workaround to this limitation is to use unreliable failure detectors.
+An unreliable failure detector allows a member to suspect that others have failed,
+usually based on liveness criteria but it can make mistakes to a certain degree.
+
+Hazelcast Java client has two built-in failure detectors: Deadline Failure Detector and
+Ping Failure Detector. These client failure detectors work independently from
+the member failure detectors, e.g., you do not need to enable the member failure detectors
+to benefit from the client ones.
+
+=== Client Deadline Failure Detector
+
+_Deadline Failure Detector_ uses an absolute timeout for missing/lost heartbeats.
+After timeout, a member is considered as crashed/unavailable and marked as suspected.
+
+_Deadline Failure Detector_ has two configuration properties:
+
+* `hazelcast.client.heartbeat.interval`: This is the interval at which client sends
+heartbeat messages to members.
+* `hazelcast.client.heartbeat.timeout`: This is the timeout which defines when
+a cluster member is suspected, because it has not sent any response back to client requests.
+
+NOTE: The value of `hazelcast.client.heartbeat.interval` should be smaller than
+that of `hazelcast.client.heartbeat.timeout`. In addition, the value of system property
+xref:ROOT:system-properties.adoc#client-max-no[`hazelcast.client.max.no.heartbeat.seconds`], which is set on the member side,
+should be larger than that of `hazelcast.client.heartbeat.interval`.
+
+The following is a programmatic configuration example showing how you can configure the Deadline Failure Detector
+for your client:
+
+
+[source,java]
+----
+ClientConfig config = ...;
+config.setProperty("hazelcast.client.heartbeat.timeout", "60000");
+config.setProperty("hazelcast.client.heartbeat.interval", "5000");
+[...]
+----
+
+=== Client Ping Failure Detector
+
+In addition to the Deadline Failure Detector, the Ping Failure Detector may be configured on your client.
+Please note that this detector is disabled by default. The Ping Failure Detector
+operates at Layer 3 of the OSI protocol and provides much quicker and more deterministic
+detection of hardware and other lower level events.
+When the JVM process has enough permissions to create RAW sockets, the implementation
+chooses to rely on ICMP Echo requests. This is preferred.
+
+If there are not enough permissions, it can be configured to fallback on attempting
+a TCP Echo on port 7. In the latter case, both a successful connection or an explicit rejection
+is treated as "Host is Reachable". Or, it can be forced to use only RAW sockets.
+This is not preferred as each call creates a heavyweight socket and moreover the Echo service is typically disabled.
+
+For the Ping Failure Detector to rely **only** on the ICMP Echo requests,
+the following criteria need to be met:
+
+* Supported OS: as of Java 1.8 only Linux/Unix environments are supported.
+* The Java executable must have the `cap_net_raw` capability.
+* The file `ld.conf` must be edited to overcome the rejection by the dynamic
+linker when loading libs from untrusted paths.
+* ICMP Echo Requests must not be blocked by the receiving hosts.
+
+The details of these requirements are explained in the
+xref:clusters:failure-detector-configuration.adoc#requirements-and-linuxunix-configuration[Requirements section] of
+Hazelcast members' xref:clusters:failure-detector-configuration.adoc#ping-failure-detector[Ping Failure Detector].
+
+If any of the above criteria isn't met, then `isReachable` will always
+fallback on TCP Echo attempts on port 7.
+
+An example programmatic configuration to use the Ping Failure Detector is
+as follows:
+
+[source,java]
+----
+ClientConfig config = ...;
+
+ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
+ClientIcmpPingConfig clientIcmpPingConfig = networkConfig.getClientIcmpPingConfig();
+clientIcmpPingConfig.setIntervalMilliseconds(1000)
+        .setTimeoutMilliseconds(1000)
+        .setTtl(255)
+        .setMaxAttempts(2)
+        .setEchoFailFastOnStartup(false)
+        .setEnabled(true);
+----
+
+The following are the descriptions of configuration elements and attributes:
+
+* `enabled`: Enables the legacy ICMP detection mode, works cooperatively with
+the existing failure detector and only kicks-in after a pre-defined period
+has passed with no heartbeats from a member. Its default value is `false`.
+* `timeout-milliseconds`: Number of milliseconds until a ping attempt is
+considered failed if there was no reply. Its default value is *1000* milliseconds.
+* `max-attempts`: Maximum number of ping attempts before the member gets
+suspected by the detector. Its default value is *3*.
+* `interval-milliseconds`: Interval, in milliseconds, between each ping attempt.
+1000ms (1 sec) is also the minimum interval allowed. Its default value is *1000* milliseconds.
+* `ttl`: Maximum number of hops the packets should go through.
+Its default value is *255*. You can set to *0* to use your system's default TTL.
+
+In the above example configuration, the Ping Failure Detector attempts 2 pings,
+one every second, and waits up to 1 second for each to complete.
+If there is no successful ping after 2 seconds, the member gets suspected.
+
+To enforce the xref:clusters:failure-detector-configuration.adoc#requirements-and-linuxunix-configuration[Requirements],
+the property `echo-fail-fast-on-startup` can also be set to `true`, in which case Hazelcast fails to start if any of the requirements
+isn't met.
+
+Unlike the Hazelcast members, Ping Failure Detector works always in parallel with
+Deadline Failure Detector on the clients.
+Below is a summary table of all possible configuration combinations of the Ping Failure Detector.
+
+|===
+| ICMP| Fail-Fast| Description| Linux| Windows | macOS
+
+| true
+| false
+| Parallel ping detector, works in parallel with the configured failure detector.
+Checks periodically if members are live (OSI Layer 3) and suspects them immediately,
+regardless of the other detectors.
+| Supported ICMP Echo if available - Falls back on TCP Echo on port 7
+| Supported TCP Echo on port 7
+| Supported ICMP Echo if available - Falls back on TCP Echo on port 7
+
+| true
+| true
+| Parallel ping detector, works in parallel with the configured failure detector.
+Checks periodically if members are live (OSI Layer 3) and suspects them immediately,
+regardless of the other detectors.
+| Supported - Requires OS Configuration Enforcing ICMP Echo if available - No start up if not available
+| Not Supported
+| Not Supported - Requires root privileges
+|===
+
+[[client-system-properties]]
+== Client System Properties
+
+There are some advanced client configuration properties to tune some aspects of Hazelcast Client.
+You can set them as property name and value pairs through declarative configuration,
+programmatic configuration, or JVM system property. See the xref:ROOT:system-properties.adoc[System Properties appendix]
+to learn how to set these properties.
+
+NOTE: When you want to reconfigure a system property, you need to restart the clients for
+which the property is modified.
+
+The table below lists the client configuration properties with their descriptions.
+
+[cols="4a,1,1,4a"]
+.Client System Properties
+|===
+|Property Name | Default Value | Type | Description
+
+|`hazelcast.client.cloud.discovery.token`
+|
+|long
+|Token to use when discovering the cluster via {hazelcast-cloud}.
+
+|`hazelcast.client.concurrent.window.ms`
+|100
+|int
+|Property needed for concurrency detection so that write through and dynamic response handling
+can be done correctly. This property sets the window for a concurrency detection (duration when it signals
+that a concurrency has been detected), even if there are no further updates in that window.
+Normally in a concurrent system the windows keeps sliding forward so it always remains concurrent.
+Setting it too high effectively disables the optimization because once concurrency has been detected
+it will keep that way. Setting it too low could lead to suboptimal performance because the system
+will try write through and other optimizations even though the system is concurrent.
+
+|`hazelcast.discovery.enabled`
+|false
+|bool
+|Enables/disables the Discovery SPI lookup over the old native implementations.
+See xref:extending-hazelcast:discovery-spi.adoc[Discovery SPI] for more information.
+
+|`hazelcast.discovery.public.ip.enabled`
+|null
+|bool
+|Overrides client behavior when the member has both public and private addresses available.
+When set to `true`, the client assumes that it needs to use public IP addresses reported by the members.
+When set to `false`, the client always uses private addresses reported by the members. If it is `null`,
+the client will try to infer how the discovery mechanism should be based on the reachability of the members.
+As the client's inference is not 100% reliable and can result in false-negatives, we recommend that it is overridden by
+setting to `true` when the client cannot connect to members using their public addresses.
+
+|`hazelcast.client.event.queue.capacity`
+|1000000
+|int
+|Default value of the capacity of executor that handles the incoming event packets.
+
+|`hazelcast.client.event.thread.count`
+|5
+|int
+|Thread count for handling the incoming event packets.
+
+|`hazelcast.client.heartbeat.interval`
+|5000
+|int
+|Frequency of the heartbeat messages sent by the clients to members.
+
+|`hazelcast.client.heartbeat.timeout`
+|60000
+|int
+|Timeout for the heartbeat messages sent by the client to members.
+If no messages pass between the client and member within the given time via
+this property in milliseconds, the connection will be closed.
+
+|`hazelcast.client.invocation.backoff.timeout.millis`
+|-1
+|int
+|Controls the maximum timeout, in milliseconds, to wait for an invocation space to be available.
+If an invocation cannot be made because there are too many pending invocations,
+then an exponential backoff is done to give the system time to deal with
+the backlog of invocations. This property controls how long an invocation is
+allowed to wait before getting a `HazelcastOverloadException`.
+When set to -1 then `HazelcastOverloadException` is thrown immediately without any waiting.
+
+|`hazelcast.client.invocation.retry.pause.millis`
+|1000
+|int
+|Pause time between each retry cycle of an invocation in milliseconds.
+
+|`hazelcast.client.invocation.timeout.seconds`
+|120
+|int
+|Period, in seconds, to give up the invocation when a member in the member list is not reachable,
+or the member fails with an exception, or the client's heartbeat requests are timed out.
+
+|`hazelcast.client.io.balancer.interval.seconds`
+|20
+|int
+|Interval in seconds between each `IOBalancer`
+execution. By default Hazelcast uses 3 threads to read
+data from TCP connections and 3 threads to write data to connections.
+`IOBalancer` detects and fixes the fluctuations when these threads are not
+utilized equally. The shorter intervals catch I/O imbalances faster, but they cause higher overhead.
+A value smaller than 1 disables the balancer.
+
+|`hazelcast.client.io.input.thread.count`
+|-1
+|int
+|Controls the number of I/O input threads. Defaults to -1, i.e., the system decides.
+If the client is a smart client, it defaults to 3, otherwise it defaults to 1.
+
+|`hazelcast.client.io.output.thread.count`
+|-1
+|int
+|Controls the number of I/O output threads. Defaults to -1, i.e., the system decides.
+If the client is a smart client, it defaults to 3, otherwise it defaults to 1.
+
+|`hazelcast.client.io.write.through`
+|true
+|bool
+|Optimization that allows sending of packets over the network to be done on the calling thread if the
+conditions are right. This can reduce the latency and increase the performance for low threaded environments.
+
+|`hazelcast.client.max.concurrent.invocations`
+|Integer.MAX_VALUE
+|int
+|Maximum allowed number of concurrent invocations. You can apply a constraint on
+the number of concurrent invocations in order to prevent the system from overloading.
+If the maximum number of concurrent invocations is exceeded and a new invocation comes in,
+Hazelcast throws `HazelcastOverloadException`.
+
+|`hazelcast.client.metrics.collection.frequency`
+| 5
+| int
+| Frequency, in seconds, of the xref:maintain-cluster:monitoring.adoc#metrics[metrics] collection cycle. Note that
+the preferred way for controlling this setting is xref:maintain-cluster:monitoring.adoc#metrics#metrics-configuration[Metrics Configuration].
+
+|`hazelcast.client.metrics.debug.enabled`
+| false
+| bool
+| Enables collecting debug metrics if set to `true`, disables it otherwise.
+Note that this is meant to be enabled only if diagnostics is enabled, since currently only diagnostics consumes the debug metrics.
+
+|`hazelcast.client.metrics.enabled`
+| true
+| bool
+| Enables the xref:maintain-cluster:monitoring.adoc#metrics[metrics collection] if set to `true`, disables it otherwise. Note that the preferred way for
+controlling this setting is xref:maintain-cluster:monitoring.adoc#metrics#metrics-configuration[Metrics Configuration].
+When it is `true` you can monitor metrics of the clients that are connected to your Hazelcast 
+cluster, using Hazelcast Management Center. See
+xref:{page-latest-supported-mc}@management-center:monitor-imdg:monitor-clients.adoc[here] for more information.
+
+|`hazelcast.client.metrics.jmx.enabled`
+| true
+| bool
+| Enables exposing the collected xref:maintain-cluster:monitoring.adoc#metrics[metrics] over JMX if set to `true`, disables it otherwise. Note that
+the preferred way for controlling this setting is xref:maintain-cluster:monitoring.adoc#metrics#metrics-configuration[Metrics Configuration].
+
+|`hazelcast.client.operation.backup.timeout.millis`
+|5000
+|int
+|If an operation has sync backups, this property specifies how long the invocation will wait for acks from the backup replicas.
+If acks are not received from some backups, there will not be any rollback on other successful replicas.
+
+|`hazelcast.client.operation.fail.on.indeterminate.state`
+|false
+|bool
+|When this configuration is enabled, if an operation has sync backups and acks are not received from backup replicas
+in time, or the member which owns primary replica of the target partition leaves the cluster, then the invocation fails
+with `IndeterminateOperationStateException`. However, even if the invocation fails,
+there will not be any rollback on other successful replicas.
+
+|`hazelcast.client.response.thread.count`
+|2
+|int
+|Number of the response threads.
+By default, there are two response threads; this gives stable and good performance.
+If set to 0, the response threads are bypassed and the response handling is done
+on the I/O threads. Under certain conditions this can give a higher throughput, but
+setting to 0 should be regarded as an experimental feature.
+If set to 0, the IO_OUTPUT_THREAD_COUNT is really going to matter because the
+inbound thread will have more work to do. By default when TLS is not enabled,
+there is just one inbound thread.
+
+|`hazelcast.client.response.thread.dynamic`
+|true
+|bool
+|Enables dynamic switching between processing the responses on the I/O threads and offloading the response threads.
+Under certain conditions (single threaded clients) processing on the I/O
+thread can increase the performance because useless handover to the response
+thread is removed. Also the response thread is not created until it is needed.
+Especially for ephemeral clients, reducing the threads can lead to
+increased performance and reduced memory usage.
+
+|`hazelcast.client.shuffle.member.list`
+|true
+|string
+|The client shuffles the given member list to prevent all the clients to connect
+to the same member when this property is `true`. When it is set to `false`,
+the client tries to connect to the members in the given order.
+
+|`hazelcast.client.statistics.enabled`
+|false
+|bool
+|If set to `true`, it enables collecting the client statistics and sending them to the cluster.
+This property is deprecated, use `hazelcast.client.metrics.enabled` instead. 
+If both are configured, this one is ignored.
+Note that since this is replaced with `hazelcast.client.metrics.enabled`, the default behavior
+is also changed: it is enabled by default.
+
+|`hazelcast.client.statistics.period.seconds`
+|3
+|int
+|Period in seconds the client statistics are collected and sent to the cluster.
+This property is deprecated, use `hazelcast.client.metrics.collection.frequency` instead. 
+The value set here is used as `hazelcast.client.metrics.collection.frequency`.
+If both are configured, this one is ignored.
+|===
+

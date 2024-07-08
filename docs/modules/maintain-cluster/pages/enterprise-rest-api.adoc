@@ -2,27 +2,25 @@
 [[enterprise-rest-api]]
 :page-enterprise: true
 
-== Quick Start
-To quickly learn how to run a REST API with minimal configuration, see the xref:getting-started:get-started-rest-api-with-docker.adoc[] or xref:getting-started:get-started-rest-api-with-java.adoc[] tutorials.
+Tip: To get started with the REST API using Docker or Java, see xref:getting-started:get-started-rest-api-with-docker.adoc[] or xref:getting-started:get-started-rest-api-with-java.adoc[] tutorials.
 
 == Introduction
 
-Hazelcast provides a REST API that allows you to access your data
-structures and cluster using the HTTP/HTTPS protocols.
+Hazelcast provides a REST API that allows you to access your data structures and cluster using HTTP/HTTPS protocols.
 
-The REST API comes with a Swagger UI that offers an easy navigation and testing the API calls. See <<accessing-the-swagger-ui, Accessing the Swagger UI>>.
+The REST API comes with an integrated Swagger UI for learning about the API and trying out API calls. For more info, see <<accessing-the-swagger-ui, Accessing the Swagger UI>>.
 
-NOTE: Hazelcast also offered a Community Edition REST API, but this has been deprecated and will be removed as of Hazelcast version 7.0. For more info, see xref:rest-api.adoc[Community Edition REST API].
+include::partial$rest-deprecation.adoc[]
 
-== Enabling REST API
+== Enable REST API
 
-To use the REST API, you must have at least one running server instance with REST enabled. Enabling the REST API provides access to various endpoints, allowing you to perform data retrieval, cluster and member actions, CP operations, configuration update and more by calling the appropriate endpoint.
+To use the REST API, you must have at least one running server instance with REST enabled. Enabling the REST API provides access to various endpoints, which means you can perform data retrieval, cluster and member actions, CP operations, configuration updates and more, by calling the appropriate endpoint.
 
-After enabling the REST API, please ensure the port for the API is not occupied, otherwise REST web server can not start.
+You must configure security when you enable REST. You need to set up a security realm for the REST API. For more info, see <<configuring-authentication, Configuring Authentication section>>.
 
-Configuring security is mandatory when you enable REST. You need to set up a security realm for the REST API. Please see the <<configuring-authentication, Configuring Authentication section>> for details.
+NOTE: After enabling the REST API, you must ensure the port for the API is not occupied, or the REST web server will not be able to start.
 
-REST service is **disabled** in the configuration by default; enable it as shown in the following configuration.
+REST service is disabled by default; to enable the REST service you must change the configuration as follows:
 
 [tabs] 
 ==== 
@@ -33,7 +31,7 @@ XML::
 ----
 <hazelcast>
     <rest enabled="true">
-        ...
+        # Several lines of code are omitted here.
     </rest>
 </hazelcast>
 ----
@@ -58,11 +56,11 @@ Config config = new Config().setRestConfig(
 ----
 ====
 
-== Changing Default Port
+== Change default port
 
-`8443` is the default port for REST API. To change it to another port, update the `rest` configuration as shown in the following example.
+The default port for the REST API is `8443`. To change it to another port, update the `rest` configuration as shown in the following example.
 
-NOTE: If the port is occupied, the server instance will fail to start immediately. To run multiple server instances in the same machine with REST enabled, each instance should have a separate configuration file with a unique port assigned to it.
+NOTE: If the port is occupied, the server instance will fail to start. To run multiple server instances with REST on the same machine, each instance should have a separate configuration file with a unique port assigned to it.
 
 [tabs] 
 ==== 
@@ -101,34 +99,39 @@ Config config = new Config().setRestConfig(
 ----
 ====
 
-== Authentication
+== Enable authentication
 
-You must secure the communication with REST API by configuring its authentication and access control.
+You must secure REST API communication by configuring authentication and access control.
 
 [#configuring-authentication]
 === Configuring Authentication
 
-REST supports simple authentication based on username, password and user roles; see xref:security:simple-authentication.adoc[Simple Authentication]. To configure the simple authentication in the REST API, complete the following steps:
+The REST API supports simple authentication based on username, password and user roles. For more info, see xref:security:simple-authentication.adoc[Simple Authentication]. To configure simple authentication for the REST API, complete the following steps:
 
-* **#Enable REST API:#**
+. **Enable REST API:**
 You need to enable the REST API.
 
-* **#Define A Security Realm:#**
-You need to define the security realm within the rest configuration.
+. **#Define A Security Realm:#**
+You need to define the security realm within the REST configuration.
 
-* **#Enable Security:#**
-You need to enable the security to use REST API.
+. **#Enable Security:#**
+You need to enable security to use REST API.
 
-* **#Configure Rest Realm:#**
+. **#Configure Rest Realm:#**
 You need to introduce a REST realm as the authentication mechanism. This realm will handle user authentication using a simple method based on username and password.
 
-* **#Setup Users and Roles:#**
+. **#Setup Users and Roles:#**
 You should identify users and their roles within the REST realm.
 
 * **#Configure AccessControlService:#**
-To configure `AccessControlService`, you should provide a factory class that creates an instance of the service. `AccessControlService` delegates authentication to the configured security realm. You can either create a custom factory class, or use the default implementation. For the default implementation, you can use `DefaultAccessControlServiceFactory`, to produce `DefaultAccessControlService`. Authorization decisions in this service are based on three predefined roles: `reader`, who can make requests via GET endpoints only; `writer`, who can make requests including GET, POST, and DELETE; and `admin`, who can make all requests and access admin-specific endpoints.
+To configure `AccessControlService`, you should provide a factory class that creates an instance of the service. `AccessControlService` delegates authentication to the configured security realm. You can either create a custom factory class, or use the default implementation. 
 
-The following configuration example includes all the steps listed above.
+For the default implementation, you can use `DefaultAccessControlServiceFactory` to produce `DefaultAccessControlService`. Authorization decisions in this service are based on three predefined roles: 
+- `reader`: can make requests via GET endpoints only
+- `writer`: can make requests including GET, POST, and DELETE
+- `admin`: can make all requests and access admin-specific endpoints
+
+The following configuration example includes all the steps listed above:
 
 [tabs]
 ====
@@ -151,7 +154,7 @@ XML::
                         </user>
                     </simple>
                 </authentication>
-                <access-control-service> <1>
+                <access-control-service> 
                     <factory-class-name>com.hazelcast.internal.rest.access.DefaultAccessControlServiceFactory</factory-class-name>
                 </access-control-service>
             </realm>
@@ -180,7 +183,7 @@ hazelcast:
                 password: 'restpassword'
                 roles:
                   - admin
-        access-control-service: <1>
+        access-control-service: 
           factory-class-name: com.hazelcast.internal.rest.access.DefaultAccessControlServiceFactory
 ----
 
@@ -208,19 +211,17 @@ Config config = new Config()
 	);
 ----
 ====
-<1> To configure `AccessControlService`, you should provide a factory class that creates an instance of the service. `AccessControlService` delegates authentication to the configured security realm. You can either create a custom factory class, or use the default implementation. For the default implementation, you can use `DefaultAccessControlServiceFactory`, to produce `DefaultAccessControlService`. Authorization decisions in this service are based on three predefined roles: `reader`, who can make requests via GET endpoints only; `writer`, who can make requests including GET, POST, and DELETE; and `admin`, who can make all requests and access admin-specific endpoints.
 
-=== Authentication Process
+=== Authentication process
 
-In order to authenticate against the REST server, you must obtain a token. See the <<obtaining-a-token, Obtaining a Token section>> for details. The token request requires a username and password and the role(s) assigned to the user are included in the token as claims. You can use the token until it expires. You use the token at the `Authorization` header for each subsequent REST API call so that the call is authorized appropriately. If a valid token is not included in the header, the API will respond with a `401 Unauthorized` error.
+You must obtain a token to authenticate against the REST server. For more info, see <<obtaining-a-token, Obtaining a Token>>. The token request requires a username and password, and the role(s) assigned to the user are included in the token as claims. You can use the token until it expires. You need to use the token in the `Authorization` header for each subsequent REST API call to ensure the call is authorized appropriately. If a valid token is not included in the header, the API will respond with a `401 Unauthorized` error.
 
 == HTTPS Support
 
-You can configure TLS/SSL in the REST API. We use Spring Boot underneath to enable Spring web services, and all the TLS/SSL related options correspond to the underlying Spring Boot TLS/SSL support capabilities.
+You can configure TLS/SSL in the REST API. We use Spring Boot underneath to enable Spring web services, and the TLS/SSL related options correspond to the underlying Spring Boot TLS/SSL support capabilities.
 
-The TLS/SSL configuration of the REST server is completely different from Hazelcast TLS/SSL configuration which has different configuration settings.
-The configuration settings are available to set up TLS/SSL as shown in
-the below example:
+The TLS/SSL configuration for the REST server is configured differently to the normal Hazelcast TLS/SSL configuration.
+For an example of the TLS/SSL configuration settings for REST, see the following code sample:
 
 [tabs]
 ====
@@ -319,13 +320,13 @@ Config config = new Config()
 ----
 ====
 
-== JWT Based Authorization
+== JWT-based authorization
 
-After a successful authentication by making request to the token endpoint (see <<obtaining-a-token, Obtaining a Token section>>), you will receive a short-living JWT token with assigned role names as a claim for authorization checks in subsequent REST calls.
+After successfully authenticating by making a request to the token endpoint (see <<obtaining-a-token, Obtaining a Token>>), you will receive a short-lived JWT token with assigned role names as a claim for authorization checks in subsequent REST calls.
 
-Token issued by one member is not trusted by other members.
+NOTE: A token issued by one member is not trusted by other members.
 
-Tokens are valid for 15 minutes by default. You can update the expiry duration using the `token-validity-seconds` configuration element as shown in the following example.
+Tokens are valid for 15 minutes by default. You can update this duration using the `token-validity-seconds` configuration element as shown in the following example:
 
 [tabs]
 ====
@@ -365,11 +366,9 @@ Config config = new Config().setRestConfig(
 ====
 
 [#obtaining-a-token]
-== Obtaining a Token
+== Obtain a Token
 
-To obtain a token, you send a `POST` request to the token endpoint at `/hazelcast/rest/api/v1/token`. The request must include JSON-formatted `username` and `password` which you <<configuring-authentication, already configured>>. If the authentication is successful, you get a response which contains a valid token for the expiry duration.
-
-Example request using cURL:
+To obtain a token, you must send a `POST` request to the token endpoint at `/hazelcast/rest/api/v1/token`. The request must include JSON-formatted `username` and `password` which you <<configuring-authentication, have already configured>>. If the authentication request is successful, you will get a response which contains a valid token for the duration period. For an example, see the following cURL request and response:
 
 [source,shell]
 ----
@@ -382,7 +381,7 @@ curl -X 'POST' \
 }'
 ----
 
-It returns the following response if successful:
+If successful, the following response is returned:
 
 [source,json]
 ----
@@ -391,7 +390,7 @@ It returns the following response if successful:
 }
 ----
 
-It returns the following response if the provided credentials are incorrect:
+If unsuccessful, the following response is returned:
 
 [source,json]
 ----
@@ -401,33 +400,33 @@ It returns the following response if the provided credentials are incorrect:
 }
 ----
 
-== Accessing the Swagger UI
+== Access the Swagger UI
 
-Hazelcast REST API's Swagger UI provides information about each endpoint, including required parameters, request and response structures and types, potential response codes, and example responses. You can use this UI to easily navigate and test different API calls directly from the interface. To access it:
+The REST API's Swagger UI provides information about each endpoint, including required parameters, request and response structures and types, potential response codes, and example responses. You can use this UI to easily navigate and test different API calls directly from the interface. To access the Swagger UI:
 
-. Enable the REST API.
-. Start a Hazelcast member.
-. Go to `http://<host>:<port>/swagger-ui/index.html` where <host> and <port> are the running member's IP address/hostname and port, respectively.
+. Enable the REST API
+. Start a Hazelcast member
+. Go to `http://<host>:<port>/swagger-ui/index.html`, replacing <host> and <port> with the running member's IP address/hostname and port.
 
-The following is an example view:
+On successfully opening the UI, you will see a view such as the following:
 
-image::rest-api-swagger-listed-endpoints.png[]
+image::rest-api-swagger-listed-endpoints.png[Example Swagger UI view]
 
-On the Swagger page, each endpoint is listed with a caret icon on the right side. Click the caret icon to expand the details for an endpoint. For this example, let's expand the `GET /hazelcast/rest/api/v1/cluster` endpoint.
+On the Swagger page, each endpoint is listed with a caret icon on the right side. Click the caret icon to expand the details for an endpoint. For this example, let's expand the `GET /hazelcast/rest/api/v1/cluster` endpoint:
 
-image::rest-api-swagger-expanding-an-endpoint.png[]
+image::rest-api-swagger-expanding-an-endpoint.png[Example Swagger UI showing cluster endpoint]
 
-After expanding the endpoint, let's proceed to send a request. Click the `Try it out` button, enter the parameters (if any). There are no parameters for this example.
+After expanding the endpoint, let's send a request. Click **Try it out**. There are no parameters for this example but if there were you could enter these here. Click  **Execute** to send the request. 
 
 image::rest-api-swagger-clicking-execute-button.png[]
 
-Click the `Execute` button to send the request. You can see the response in the **Server response** section as shown below. You can also see the executed cURL command in the **Curl** section.
+You can see the response in the **Server response** section shown below. You can also see the executed cURL command in the **Curl** section.
 
 image::rest-api-swagger-clicking-try-it-out-button.png[]
 
 == GET/POST/DELETE HTTP Request Examples
 
-All the requests in the REST API can return one of the following response types.
+All REST API requests return one of the following response types:
 
 * Successful void/boolean response which does not have a body.
 
@@ -452,11 +451,9 @@ All the requests in the REST API can return one of the following response types.
 }
 ----
 
-=== Retrieving Cluster Status
+=== Retrieve cluster status
 
-You can send a `GET` request to the endpoint at `/hazelcast/rest/api/v1/cluster` to retrieve the status of your cluster.
-
-Example request using cURL:
+You can send a `GET` request to the endpoint at `/hazelcast/rest/api/v1/cluster` to retrieve the cluster status. For example, using cURL:
 
 [source,shell]
 ----
@@ -465,7 +462,7 @@ curl -X 'GET' \
   -H 'Authorization: Bearer <JWT Token>'
 ----
 
-It returns the following response if successful:
+If successful the following response is returned:
 
 [source,json]
 ----
@@ -486,11 +483,9 @@ It returns the following response if successful:
 }
 ----
 
-=== Retrieving Cluster State
+=== Retrieve cluster state
 
-You can send a `GET` request to the endpoint at `/hazelcast/rest/api/v1/cluster/state` to retrieve the state of your cluster.
-
-Example request using cURL:
+You can send a `GET` request to the endpoint at `/hazelcast/rest/api/v1/cluster/state` to retrieve the cluster state. For example, using cURL:
 
 [source,shell]
 ----
@@ -499,7 +494,7 @@ curl -X 'GET' \
   -H 'Authorization: Bearer <JWT Token>'
 ----
 
-It returns the following response if successful:
+If successful the following response is returned:
 
 [source,json]
 ----
@@ -508,9 +503,9 @@ It returns the following response if successful:
 }
 ----
 
-=== Changing Cluster State
+=== Change cluster state
 
-You can send a `POST` request to the endpoint at `/hazelcast/rest/api/v1/cluster/state` to change the state of your cluster. You must provide the new state within the request body in the JSON format. Valid states are `ACTIVE`, `NO_MIGRATION`, `FROZEN`, `PASSIVE`.
+You can send a `POST` request to the endpoint at `/hazelcast/rest/api/v1/cluster/state` to change the cluster state. You must provide the new state within the request body in JSON format; valid states are `ACTIVE`, `NO_MIGRATION`, `FROZEN`, `PASSIVE`.
 
 Example request using cURL:
 
@@ -525,8 +520,8 @@ curl -X 'POST' \
 }'
 ----
 
-* It returns 200 response without body if successful.
-* It returns 400 response if provided state is not a valid cluster state. For example:
+* If successful, it will return a `200` response without body.
+* If the provided state is not a valid cluster state, it will return a `400` response with a message. For example:
 
 [source,json]
 ----
@@ -536,11 +531,9 @@ curl -X 'POST' \
 }
 ----
 
-=== Destroying a CP Group
+=== Destroy a CP Group
 
-You can send a `DELETE` request to the endpoint at `/hazelcast/rest/api/v1/cp/groups/{group-name}` to unconditionally destroy the given active CP group.
-
-Example request using cURL:
+You can send a `DELETE` request to the endpoint at `/hazelcast/rest/api/v1/cp/groups/{group-name}` to unconditionally destroy the given active CP group. For example, using cURL:
 
 [source,shell]
 ----
@@ -549,8 +542,8 @@ curl -X 'DELETE' \
   -H 'Authorization: Bearer Bearer <JWT Token>'
 ----
 
-* It returns 200 response without body if successful.
-* It returns 400 response if you try to destroy METADATA group. For example:
+* If successful, it will return a `200` response without body.
+* If you try to destroy METADATA group, it will return a `400` response: 
 
 [source,json]
 ----
@@ -560,7 +553,7 @@ curl -X 'DELETE' \
 }
 ----
 
-* It returns 500 response if CP subsystem is not enabled:
+* If CP subsystem is not enabled, it will return a `500` response:
 
 [source,json]
 ----
@@ -570,16 +563,19 @@ curl -X 'DELETE' \
 }
 ----
 
-== Dynamic Configuration Update REST Endpoint
-You can use the `/hazelcast/rest/api/v1/config/update` REST endpoint to change dynamic server configurations (for more info, see xref:configuration:dynamic-config.adoc[Dynamic Configuration for Members]). With dynamic configuration you can change existing configurations dynamically, as well as add new configurations for Hazelcast data structures.
+== Update dynamic configuration using REST
+You can use the `/hazelcast/rest/api/v1/config/update` REST endpoint to change dynamic server configurations (for more info, see xref:configuration:dynamic-config.adoc[Dynamic Configuration for Members]). With dynamic configuration you can dynamically change existing configurations, or add new configurations for Hazelcast data structures.
 
-The endpoint requires that you send a XML/YAML server configuration file with the changes required. The response will be two lists in JSON format. The first list includes the newly added configuration among the configurations sent to the server. The second list includes ignored configurations which were in the sent configuration list but could not be applied at the server (examples of these could include static rather than dynamic configurations, which can not therefore be applied dynamically, or duplicate configurations already added).
+The endpoint requires that you send a XML/YAML server configuration file with the required changes. The response will be two lists in JSON format:
 
-Whether a dynamic configuration can be applied or not depends on the request. For some updates, it is allowed to change configuration parameters of an existing configuration while for some others you are not allowed to change the configuration. Please see the xref:configuration:dynamic-config.adoc[Dynamic Configuration for Members] section on details about which configuration parameters can be changed dynamically and which can not be changed.
+- The first list includes the newly added configuration among the configurations sent to the server. 
+- The second list includes ignored configurations which were in the sent configuration list but could not be applied by the server. These could include duplicates, or static configurations (which cannot be applied dynamically).
+
+Whether a dynamic configuration can be applied or not depends on the type of request. For some updates, you can change configuration parameters for an existing configuration; for other updates, you cannot change the configuration dynamically. For more detail on which configuration parameters can be changed dynamically and which cannot, see xref:configuration:dynamic-config.adoc[Dynamic Configuration for Members].
 
 Let's walk through some example requests and responses.
 
-=== Add New MapConfig Using XML Configuration
+=== Add new MapConfig using XML configuration
 Here is an example POST request for adding a new `MapConfig` for my-map:
 
 [source,shell]
@@ -598,7 +594,7 @@ curl -X 'POST' \
         '
 ----
 
-This request creates a configuration for a new map named `my-map`. The in-memory format is set to `BINARY`, while statistics are enabled and the backup count is set to `2`.
+This request creates a configuration for a new map named `my-map`. The in-memory format is set to `BINARY`, statistics are enabled, and the backup count is set to `2`.
 
 In response to this request we should receive a response body such as:
 
@@ -616,8 +612,8 @@ In response to this request we should receive a response body such as:
 ----
 As the response indicates, a new map config is added to the `map` section with the name `my-map` and the requested dynamic configurations are applied.
 
-=== Add New MapConfig Using YAML Configuration
-Here is an example POST request for adding a new `MapConfig` for my-map-yaml using the YAML configuration:
+=== Add new MapConfig using YAML configuration
+Here is an example POST request for adding a new `MapConfig` for `my-map-yaml` using YAML configuration:
 
 [source,shell]
 ----
@@ -634,9 +630,9 @@ curl -X 'POST' \
       backup-count: 2'
 ----
 
-We send a request to create a new config for the new map to be created named `my-map-yaml`. The in-memory format is set to BINARY while the statistics is enabled and the backup count is set to 2.
+This request creates a new map config named `my-map-yaml`. The in-memory format is set to `BINARY`, statistics are enabled, and the backup count is set to `2`.
 
-When we send this request we receive the response body similar to this:
+In response to this request we should receive a response body such as:
 
 [source,json]
 ----
@@ -650,10 +646,10 @@ When we send this request we receive the response body similar to this:
   "ignoredConfigs": []
 }
 ----
-As you can observe from the response, a new map config is added for map with name my-map-yaml and all the requested dynamic configurations are applied.
+As the response shows, a new map config is added for map with name `my-map-yaml` and all the requested dynamic configurations are applied.
 
-=== Add New Conflicting MapConfig For An Existing Map
-If you like to add the config with the same map name and a different configuration, then you get response code 400 meaning an invalid configuration is provided since you can not change an existing map configuration. Let's try this:
+=== Add new conflicting MapConfig for an existing map
+If you try to add a config with the same map name and a different configuration, then you get a `400` response code indicating an invalid configuration, because you cannot change an existing map configuration. This example would look like the following:
 [source,shell]
 ----
 curl -X 'POST' \
@@ -667,7 +663,7 @@ curl -X 'POST' \
         </hazelcast>
         '
 ----
-The response has a `statusCode` of 400, and the error message adds further detail:
+The response has a `statusCode` of `400`, and the response body adds further detail. including the explanation `as there is already a conflicting configuration 'MapConfig{name='my-map'"`:
 [source,json]
 ----
 {
@@ -675,10 +671,9 @@ The response has a `statusCode` of 400, and the error message adds further detai
   "message": "Cannot add a dynamic configuration 'MapConfig{name='my-map', inMemoryFormat='BINARY', metadataPolicy=CREATE_ON_UPDATE, backupCount=1, asyncBackupCount=0, timeToLiveSeconds=0, maxIdleSeconds=0, readBackupData=false, evictionConfig=EvictionConfig{size=2147483647, maxSizePolicy=PER_NODE, evictionPolicy=NONE, comparatorClassName=null, comparator=null}, merkleTree=MerkleTreeConfig{enabled=null, depth=10}, eventJournal=EventJournalConfig{enabled=false, capacity=10000, timeToLiveSeconds=0}, hotRestart=HotRestartConfig{enabled=false, fsync=false}, dataPersistenceConfig=DataPersistenceConfig{enabled=false, fsync=false}, nearCacheConfig=null, mapStoreConfig=MapStoreConfig{enabled=false, className='null', factoryClassName='null', writeDelaySeconds=0, writeBatchSize=1, implementation=null, factoryImplementation=null, properties={}, initialLoadMode=LAZY, writeCoalescing=true, offload=true}, mergePolicyConfig=MergePolicyConfig{policy='com.hazelcast.spi.merge.PutIfAbsentMergePolicy', batchSize=100}, wanReplicationRef=null, entryListenerConfigs=null, indexConfigs=null, attributeConfigs=null, splitBrainProtectionName=null, queryCacheConfigs=null, cacheDeserializedValues=INDEX_ONLY, statisticsEnabled=false, entryStatsEnabled=false, tieredStoreConfig=TieredStoreConfig{enabled=false, memoryTierConfig=MemoryTierConfig{capacity=256 MEGABYTES}, diskTierConfig=DiskTierConfig{enabled=false, deviceName='default-tiered-store-device'}}, partitioningAttributeConfigs=null, userCodeNamespace=null}' as there is already a conflicting configuration 'MapConfig{name='my-map', inMemoryFormat='BINARY', metadataPolicy=CREATE_ON_UPDATE, backupCount=2, asyncBackupCount=0, timeToLiveSeconds=0, maxIdleSeconds=0, readBackupData=false, evictionConfig=EvictionConfig{size=2147483647, maxSizePolicy=PER_NODE, evictionPolicy=NONE, comparatorClassName=null, comparator=null}, merkleTree=MerkleTreeConfig{enabled=null, depth=10}, eventJournal=EventJournalConfig{enabled=false, capacity=10000, timeToLiveSeconds=0}, hotRestart=HotRestartConfig{enabled=false, fsync=false}, dataPersistenceConfig=DataPersistenceConfig{enabled=false, fsync=false}, nearCacheConfig=null, mapStoreConfig=MapStoreConfig{enabled=false, className='null', factoryClassName='null', writeDelaySeconds=0, writeBatchSize=1, implementation=null, factoryImplementation=null, properties={}, initialLoadMode=LAZY, writeCoalescing=true, offload=true}, mergePolicyConfig=MergePolicyConfig{policy='com.hazelcast.spi.merge.PutIfAbsentMergePolicy', batchSize=100}, wanReplicationRef=null, entryListenerConfigs=null, indexConfigs=null, attributeConfigs=null, splitBrainProtectionName=null, queryCacheConfigs=null, cacheDeserializedValues=INDEX_ONLY, statisticsEnabled=true, entryStatsEnabled=false, tieredStoreConfig=TieredStoreConfig{enabled=false, memoryTierConfig=MemoryTierConfig{capacity=256 MEGABYTES}, diskTierConfig=DiskTierConfig{enabled=false, deviceName='default-tiered-store-device'}}, partitioningAttributeConfigs=null, userCodeNamespace=null}'"
 }
 ----
-Within the response body you can see the explanation "as there is already a conflicting configuration 'MapConfig{name='my-map'".
 
-=== Add New MapConfig For An Existing Map But With No Configuration Change
-As detailed above, you cannot add a map configuration with the same map name. If you send an update request with the same configuration and map name, this request will be ignored as there is no change. Let's look at this as an example:
+=== Add new MapConfig without configuration change for an existing map
+As detailed above, you cannot add a map configuration with the same map name. If you send an update request with the same configuration and map name, this request will be ignored as there is no change. This example would look like the following:
 [source,shell]
 ----
 curl -X 'POST' \
@@ -709,8 +704,8 @@ This request receives an `OK (200)` response code and the following body:
 ----
 As the response confirms, no configs are added and the provided config is ignored.
 
-=== Add New MapConfig With Duplicate Configs
-As you can see, you can not try adding a map config with the same map name. You can send an update request with the same configuration and map name, and you will observe that this update will be ignored since there is no change. Let's try the request again:
+=== Add new MapConfig with duplicate config
+You can send an update request with the same configuration and map name, but this update will be ignored because there is no change. This example would look like the following:
 [source,shell]
 ----
 curl -X 'POST' \
@@ -727,7 +722,7 @@ curl -X 'POST' \
         </hazelcast>
         '
 ----
-We receive a response code OK (200) and the following body:
+This request receives an `OK (200)` response code and the following body:
 [source,json]
 ----
 {
@@ -740,11 +735,10 @@ We receive a response code OK (200) and the following body:
   "ignoredConfigs": []
 }
 ----
-As you see from the response, only one MapConfig is added since the duplicate one has exactly the same configuration.
+As you can see from the response, only one MapConfig is added because the duplicate has exactly the same configuration.
 
-=== Try Adding Non-dynamic Static Configuration
-You can try to change a static config, for example the `cluster-name` and observe that it is ignored silently. Since it is not a dynamic configuration, it is neither in ignored nor in the added configs list.
-An example request:
+=== Try adding non-dynamic static configuration
+You can try to change a static configuration and you will observe that it is ignored silently. An example using `cluster-name` would look like the following:
 [source,shell]
 ----
 curl -X 'POST' \
@@ -756,7 +750,7 @@ curl -X 'POST' \
         </hazelcast>
         '
 ----
-We receive a response code OK (200) and the following body:
+This request receives an `OK (200)` response code and the following body, with no entries under either the added or ignored section:
 [source,json]
 ----
 {
@@ -764,5 +758,3 @@ We receive a response code OK (200) and the following body:
   "ignoredConfigs": []
 }
 ----
-
-As you can see from the response, the static configuration is ignored but not listed in the ignored configurations list.

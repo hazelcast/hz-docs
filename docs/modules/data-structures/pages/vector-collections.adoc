@@ -1,0 +1,684 @@
+= Vector Collection
+:description: The primary object for interacting with vector storage is a Vector Collection. A Vector Collection holds information about the vectors and associated metadata (user values).
+:page-enterprise: true
+:page-beta: true
+
+{description}
+
+For further information on the architecture and considerations for the Beta version of the Vector Collection data structure, see xref:data-structures:vector-search-overview.adoc[].
+
+
+A collection consists of one or more indexes, all sharing a common metadata storage. Each index represents a distinct vector space. Vectors from different indexes are stored independently, and indexes can have different configurations.
+
+Conceptually, a vector collection resembles a key-value store. Here, the key is a user-defined unique identifier, and the value is an object containing metadata alongside several vectors — one for each index.
+
+Users can store any value they require as metadata. This could be additional characteristics of the source data or even the source data itself.
+
+== Configuration
+Collection configuration can be set dynamically during vector collection creation or statically during cluster configuration. Unlike other data structures, the configuration must be set up before the collection can be used.
+There is no default configuration for the vector collection. If no matching configuration is found for the specified vector collection, the system raises an error.
+
+The configuration supports wildcards. To retrieve a vector collection, the system can search for an exact match of the specified collection name in the configuration, or use a wildcard match from the existing configurations.
+
+The following tables list all available options:
+
+.Collection configuration options
+[cols="1,2,1,1",options="header"]
+|===
+|Option|Description|Required|Default
+
+|name
+|The name of the vector collection.
+Can include letters, numbers, and the symbols `-`, `_`, `*`.
+|Required
+|`NULL`
+
+|indexes
+|Information about indexes configuration
+|Required
+|`NULL`
+|===
+
+.Index configuration options
+[cols="1,2,1,1",options="header"]
+|===
+|Option|Description|Required|Default
+
+|name
+|The name of the vector index.
+Can include letters, numbers, and the symbols `-` and `_`.
+|Required for single-index vector collections. Optional for multi-index collection
+|`NULL`
+
+|dimension
+|Vectors dimension
+|Required
+|`N/A`
+
+|metric
+|Used to calculate the distance between two vectors.
+For further information on distance metrics, see the <<available-metrics, Available distance metrics>> table.
+|Required
+|`N/A`
+
+|max-degree
+|Used to calculate the maximum number of neighbors per node. The calculation used is max-degree * 2
+|Required
+|`16`
+
+|ef-construction
+|The size of the search queue to use when finding nearest neighbors.
+|Required
+|`100`
+
+|use-deduplication
+|Whether or not to use vector deduplication.
+When disabled, each added vector is treated as a distinct vector in the index, even if it is identical to an existing one. When enabled, the index consumes less space as duplicates share a vector, but the time required to add a vector increases.
+|Required
+|`TRUE`
+
+|===
+
+[#available-metrics]
+.Available distance metrics
+[cols="2,2,4a",options="header"]
+|===
+|Name|Description| Score definition
+
+|EUCLIDEAN
+|Euclidean distance
+|`1 / (1 + squareDistance(v1, v2))`
+
+|COSINE
+|Cosine of the angle between the vectors
+|`(1 + cos(v1, v2)) / 2`
+
+|DOT
+|Dot product of the vectors
+|`(1 + dotProduct(v1, v2)) / 2`
+|===
+
+NOTE: The recommended method for computing cosine similarity is to normalize all vectors to unit length and use the DOT metric instead.
+
+
+Configuration example:
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+    <vector-collection name="books">
+        <indexes>
+            <index name="word2vec-index">
+                <dimension>6</dimension>
+                <metric>DOT</metric>
+            </index>
+            <index name="glove-index">
+                <dimension>10</dimension>
+                <metric>DOT</metric>
+                <max-degree>32</max-degree>
+                <ef-construction>256</ef-construction>
+                <use-deduplication>false</use-deduplication>
+            </index>
+        </indexes>
+    </vector-collection>
+</hazelcast>
+----
+--
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  vector-collection:
+    vector-collection-name:
+      indexes:
+        - name: word2vec-index
+          dimension: 6
+          metric: DOT
+        - name: glove-index
+          dimension: 10
+          metric: DOT
+          max-degree: 32
+          ef-construction: 256
+          use-deduplication: false
+----
+--
+Java::
++
+--
+[source,java]
+----
+Config config = new Config();
+VectorCollectionConfig collectionConfig = new VectorCollectionConfig("books")
+    .addVectorIndexConfig(
+            new VectorIndexConfig()
+                .setName("word2vec-index")
+                .setDimension(6)
+                .setMetric(Metric.DOT)
+    ).addVectorIndexConfig(
+            new VectorIndexConfig()
+                .setName("glove-index")
+                .setDimension(10)
+                .setMetric(Metric.DOT)
+                .setMaxDegree(32)
+                .setEfConstruction(256)
+                .setUseDeduplication(false)
+    );
+config.addVectorCollectionConfig(collectionConfig);
+----
+--
+Python::
++
+--
+[source,python]
+----
+client.create_vector_collection_config("books", indexes=[
+    IndexConfig(name="word2vec-index", metric=Metric.DOT, dimension=6),
+    IndexConfig(name="glove-index", metric=Metric.DOT, dimension=10,
+                max_degree=32, ef_construction=256, use_deduplication=False),
+])
+----
+--
+====
+
+== Create collection
+
+You can use either of the `VectorCollection` static methods to get the vector collection. Both methods either create a vector collection, or return an existing one that corresponds to the requested name.
+The methods are as follows:
+
+* `getCollection(HazelcastInstance instance, VectorCollectionConfig collectionConfig)`
+** If a collection with the provided name does not exist, a new collection is created with the given configuration. If the configuration for the collection already exists, the provided configuration must match the existing configuration; if the configuration does not match, an error is thrown.
+** If a collection with the same name and configuration already exists, it is returned.
+** If a collection with the same name but a different configuration exists, an error is thrown.
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorCollectionConfig collectionConfig = new VectorCollectionConfig("books")
+    .addVectorIndexConfig(
+            new VectorIndexConfig()
+                .setDimension(6)
+                .setMetric(Metric.DOT)
+    );
+VectorCollection vectorCollection = VectorCollection.getCollection(hazelcastInstance, vectorCollectionConfig);
+----
+--
+Python::
++
+--
+[source,python]
+----
+# create configuration and get collection separately
+client.create_vector_collection_config("books", indexes=[
+    IndexConfig(name=None, metric=Metric.DOT, dimension=6)
+])
+vectorCollection = client.get_vector_collection("books").blocking()
+----
+--
+====
+
+* `getCollection(HazelcastInstance instance, String collectionName)`.
+** If a collection with the provided name does not exist, the system creates the collection with the configuration created explicitly during static or dynamic configuration of the cluster. If the configuration does not exist, an error is thrown.
+** If a collection with the provided name exists, it is returned.
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorCollection vectorCollection = VectorCollection.getCollection(hazelcastInstance, "books");
+----
+--
+Python::
++
+--
+[source,python]
+----
+vectorCollection = client.get_vector_collection("books").blocking()
+----
+--
+====
+
+NOTE: The Java Vector Collection API is only asynchronous, Python provides both asynchronous and synchronous APIs (using `blocking()`)
+
+== Manage data
+All methods of `VectorCollection` that work with collection data are asynchronous. The result is returned as a `CompletionStage`. A collection interacts with entries in the form of documents (`VectorDocument`). Each document comprises a value and one or more vectors associated with that value.
+
+WARNING: When using the asynchronous methods, clients must carefully control the number of requests and their concurrency. A large number of requests can potentially overwhelm both the server and the client by consuming significant heap memory during processing.
+
+=== Create document
+To create a document, use the static factory methods of the `VectorDocument` and `VectorValues` classes.
+
+Example document for single-index vector collection:
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorDocument<String> document = VectorDocument.of(
+        "{'genre': 'novel', 'year': 1976}",
+        VectorValues.of(
+                new float[]{0.2f, 0.9f, -1.2f, 2.2f, 2.2f, 3.0f}
+        )
+);
+----
+--
+Python::
++
+--
+[source,python]
+----
+document = Document(
+    "{'genre': 'novel', 'year': 1976}",
+    [
+        Vector("", Type.DENSE, [0.2, 0.9, -1.2, 2.2, 2.2, 3.0]),
+    ],
+)
+----
+--
+====
+
+For multi-index collections, specify the names of the indexes to which the vectors belong:
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorDocument<String> document = VectorDocument.of(
+        "{'genre': 'fiction', 'year': 2022}",
+        VectorValues.of(
+                Map.of(
+                        "word2vec-index", new float[] {0.2f, 0.9f, -1.2f, 2.2f, 2.2f, 3.0f},
+                        "glove-index", new float[] {2f, 3f, 2f, 10f, -2f}
+                )
+        )
+);
+----
+--
+Python::
++
+--
+[source,python]
+----
+document = Document(
+    "{'genre': 'novel', 'year': 1976}",
+    [
+        Vector("word2vec-index", Type.DENSE, [0.2, 0.9, -1.2, 2.2, 2.2, 3.0]),
+        Vector("glove-index", Type.DENSE, [2, 3, 2, 10, -2]),
+    ],
+)
+----
+--
+====
+
+
+=== Put entries
+To put a single document to a vector collection, use the `putAsync`, `putIfAbsent` or `setAsync` method of the `VectorCollection` class.
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorDocument<String> document = VectorDocument.of(
+        "{'genre': 'novel', 'year': 1976}",
+        VectorValues.of(new float[] {0.2f, 0.9f, -1.2f, 2.2f, 2.2f, 3.0f})
+);
+CompletionStage<VectorDocument<String>> result = vectorCollection.putAsync("1", document);
+----
+--
+Python::
++
+--
+[source,python]
+----
+vectorCollection.put("1", Document(
+    "{'genre': 'novel', 'year': 1976}",
+    [
+        Vector("", Type.DENSE, [0.2, 0.9, -1.2, 2.2, 2.2, 3.0]),
+    ],
+))
+----
+--
+====
+
+To put several documents to a vector collection, use the `putAllAsync` method of the `VectorCollection` class.
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorDocument<String> document1 = VectorDocument.of("{'genre': 'novel', 'year': 1976}", VectorValues.of(new float[] {1.2f, -0.3f, 2.2f, 0.4f, 0.3f, 0.4f}));
+VectorDocument<String> document2 = VectorDocument.of("{'genre': 'fiction', 'year': 2022}", VectorValues.of(new float[] {1.2f, -0.3f, 2.2f, 0.4f, 0.3f, -2.0f}));
+CompletionStage<Void> result = vectorCollection.putAllAsync(
+        Map.of("1", document1, "2", document2)
+);
+----
+--
+Python::
++
+--
+[source,python]
+----
+vectorCollection.put_all(
+    {
+        "1": Document(
+            "{'genre': 'novel', 'year': 1976}",
+            [
+                Vector("", Type.DENSE, [1.2, -0.3, 2.2, 0.4, 0.3, 0.4]),
+            ]),
+        "2": Document(
+            "{'genre': 'novel', 'year': 1976}",
+            [
+                Vector("", Type.DENSE, [1.2, -0.3, 2.2, 0.4, 0.3, -2.0]),
+            ]),
+    }
+)
+----
+--
+====
+
+=== Read entries
+To get a document from a vector collection, use the `getAsync` method of the `VectorCollection` class.
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+CompletionStage<VectorDocument<String>> result = vectorCollection.getAsync("1");
+----
+--
+Python::
++
+--
+[source,python]
+----
+vectorCollection.get("1")
+----
+--
+====
+
+=== Update entries
+To update a single entry in a vector collection, use the `putAsync` or `setAsync` method of the `VectorCollection` class.
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+VectorDocument<String> document = VectorDocument.of("{'genre': 'fiction', 'year': 2022}", VectorValues.of(new float[] {1.2f, -0.3f, 2.2f, 0.4f, 0.3f, 0.4f}));
+CompletionStage<Void> result = vectorCollection.setAsync("1", document);
+----
+--
+Python::
++
+--
+[source,python]
+----
+vectorCollection.set("1", Document("{'genre': 'fiction', 'year': 2022}",
+    [
+        Vector("", Type.DENSE, [1.2, -0.3, 2.2, 0.4, 0.3, 0.4]),
+    ]
+))
+----
+--
+====
+
+NOTE: When you update an entry, you have to provide both `VectorDocument` and `VectorValues` even if only one of them is changed for the entry.
+
+=== Delete entries
+To delete a document from a vector collection, use the `deleteAsync` or `removeAsync` method of the `VectorCollection` class.
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+CompletionStage<Void> resultDelete = vectorCollection.deleteAsync("1");
+CompletionStage<VectorDocument<String>> resultRemove = vectorCollection.removeAsync("2");
+----
+--
+Python::
++
+--
+[source,python]
+----
+vectorCollection.delete("1")
+vectorCollection.remove("2")
+----
+--
+====
+
+NOTE: These methods do not delete vectors but do mark them as deleted. This can impact search speed and memory usage. To permanently remove vectors from the index, you must run index optimization after deletion. For further information on running index optimization, see <<optimize-collection, optimize method>>.
+
+== Similarity search
+
+Vector search returns entries with vectors that are most similar to the query vector, based on specified metrics. Any query consists of a single vector to search and the search options, such as the limit of results to retrieve. For more information on the available options, see <<similarity-search-options, Similarity search options>>.
+
+For a similarity search, use the `searchAsync` method of the `VectorCollection`.
+
+In a single index vector collection, you do not need to specify the name of the index to search.
+However, for a multi-index vector collection, you must specify the name of the index to search.
+
+Example for single-index vector collection:
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+CompletionStage<SearchResults<String, String>> results = vectorCollection.searchAsync(
+        VectorValues.of(new float[] {0f, 0f, 0.2f, -0.3f, 1.2f, -0.5f}),
+        SearchOptions.builder()
+            .limit(5)
+            .includeVectors()
+            .includeValue()
+            .build()
+);
+----
+--
+Python::
++
+--
+[source,python]
+----
+results = vectorCollection.search_near_vector(
+    Vector("", Type.DENSE, [0, 0, 0.2, -0.3, 1.2, -0.5]),
+    limit=5,
+    include_value=True,
+    include_vectors=True,
+)
+----
+--
+====
+
+Example for multi-index vector collection:
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+CompletionStage<SearchResults<String, String>> results = vectorCollection.searchAsync(
+        VectorValues.of("glove-index", new float[] {0f, 0f, 0.2f, -0.3f, 1.2f, -0.5f}),
+        SearchOptions.builder()
+            .limit(5)
+            .includeVectors()
+            .includeValue()
+            .build()
+);
+----
+--
+Python::
++
+--
+[source,python]
+----
+results = vectorCollection.search_near_vector(
+    Vector("glove-index", Type.DENSE, [0, 0, 0.2, -0.3, 1.2, -0.5]),
+    limit=5,
+    include_value=True,
+    include_vectors=True,
+)
+----
+--
+====
+
+=== Similarity search options
+Search parameters are passed as a `searchOptions` argument to the searchAsync method.
+
+.Search options
+[cols="1,2,1",options="header"]
+|===
+|Option|Description|Default
+
+|limit
+|The number of results to return in a search result
+|`10`
+
+|includeValue
+|Whether to include the user value in the search result. 
+By default, the user value is not included. To include the user value, set to `TRUE`
+|`FALSE`
+
+
+|includeVectors
+|Whether to include the vector values in the search result. 
+By default, the vector values are not included. To include the vector values, set to `TRUE`
+|`FALSE`
+
+|hints
+|Extra hints for the search.
+|`NULL`
+
+|===
+
+
+.Available hints
+[cols="1,2",options="header"]
+|===
+|Hint|Description
+
+|partitionLimit
+|Number of results to fetch from each partition.
+
+|memberLimit
+|Number of results to fetch from member in two-stage search.
+
+|singleStage
+|Force use of single stage search.
+
+|===
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+var options = SearchOptions.builder()
+                .limit(10)
+                .includeValue()
+                .includeVectors()
+                .hint("partitionLimit", 1)
+                .build();
+----
+--
+====
+
+INFORMATION: Hints allow fine-tuning for some aspects of search execution but are subject to change and may be removed in future versions.
+
+== Manage collection
+
+This section provides additional methods for managing the vector collection.
+
+=== Optimize collection
+
+An optimization operation could be needed in the following cases:
+
+* To permanently delete vectors that were marked for removal.
+* After adding a significant number of vectors.
+* When the collection returns fewer vectors than expected.
+
+WARNING: The optimization operation can be a time-consuming and resource-intensive process, and no mutating operations are allowed during this process.
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+CompletionStage<Void> result = vectorCollection.optimizeAsync("glove-index");
+----
+--
+Python::
++
+--
+[source,python]
+----
+vectorCollection.optimize("glove-index")
+----
+--
+====
+
+=== Clear collection
+To remove all vectors and values from the vector collection use the `clearAsync()` method .
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+CompletionStage<Void> result = vectorCollection.clearAsync();
+----
+--
+Python::
++
+--
+[source,python]
+----
+vectorCollection.clear()
+----
+--
+====
+
+== Limitations in beta version
+
+As this is a beta version, Vector Collection has some limitations; the most significant of which are as follows:
+
+1. The API could change in future versions
+2. The rolling-upgrade compatibility guarantees do not apply for vector collections. You might need to delete existing vector collections before migrating to a future version of Hazelcast
+3. The lack of fault tolerance, as backups cannot yet be configured. However, data in collections is migrated to other cluster members on graceful shutdown and a new member joining the cluster, which means that normal cluster maintenance (such as a rolling restart) is possible without data loss.
+4. Only on-heap storage of vector collections is available
+

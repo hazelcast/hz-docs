@@ -60,10 +60,10 @@ having some extra cores available for I/O can make a significant
 difference. If less than 20 cores are detected, 3+3 IO threads are used
 and the behavior remains the same as Hazelcast IMDG 3.x series.
 
-A smart client, by default, gets 3+3 (3 input and 3 output) I/O threads to
+A client using either the `ALL_MEMBERS` or `MULTI_MEMBER` cluster routing mode, by default, gets 3+3 (3 input and 3 output) I/O threads to
 speed up the performance. Previously, this was
 1+1. However, the client I/O can become a bottleneck with too few threads.
-If TLS/SSL is enabled, then by default a smart client
+If TLS/SSL is enabled, then by default a client using either the `ALL_MEMBERS` or `MULTI_MEMBER` cluster routing mode
 makes use of 3+3 I/O threads which was already the case with previous versions.
 
 There has been a new performance feature since IMDG 4.0 called
@@ -85,7 +85,7 @@ for your specific situation. If you are doing lots of queries or other tasks
 which are CPU-bound, e.g., aggregations, you probably want to have as many cores available to partition
 operations as possible.
 
-See xref:cluster-performance:best-practices.adoc#threading-model[Threading Model] for more information on Hazelcast's threading model.
+See xref:cluster-performance:threading.adoc[Threading Model] for more information on Hazelcast's threading model.
 
 == Optimizing for Single Threaded Usages
 
@@ -327,6 +327,7 @@ IMap map;
 
 map.addIndex(new IndexConfig(IndexType.HASH, "name", "age"));
 ----
+
 |===
 
 == Changes in Custom Attributes
@@ -414,6 +415,7 @@ mapConfig.addAttributeConfig(attributeConfig);
     ...
 </hazelcast>
 ----
+
 |===
 
 
@@ -458,6 +460,7 @@ public static class PortableNameExtractor implements ValueExtractor<ValueReader,
     }
 }
 ----
+
 |===
 
 == Removal of MapReduce
@@ -513,6 +516,7 @@ hazelcastInstance.getJet().newJob(p).join();
 
 printResults(hz.getMap(COUNTS));
 ----
+
 |===
 
 See the xref:architecture:distributed-computing.adoc#the-word-count-task[Word Count Task] for a full insight.
@@ -607,6 +611,7 @@ public class ClusterMigrationListener implements MigrationListener {
     }
 }
 ----
+
 |===
 
 See the https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/partition/MigrationListener.html[MigrationListener^] Javadoc
@@ -681,6 +686,7 @@ configProd.setClusterName( "production" );
 Config configDev = new Config();
 configDev.setClusterName( "development" );
 ----
+
 |===
 
 === Member Authentication and Identity Configuration
@@ -755,6 +761,7 @@ See the following table for the before/after sample configurations.
     <client-authentication realm="realm1"/>
 </security>
 ----
+
 |===
 
 === Client Identity Configuration
@@ -790,6 +797,7 @@ See the following table for the before/after sample configurations.
     <username-password username="johndoe" password="s3crEt"/>
 </security>
 ----
+
 |===
 
 == JAAS Authentication Cleanups
@@ -850,6 +858,7 @@ public PermissionCollection getPermissions(Subject subject, Class<? extends Perm
     return collection;
 }
 ----
+
 |===
 
 === Changes in ClusterLoginModule
@@ -895,7 +904,7 @@ See the following table for the before/after sample implementations.
 
 [source,java,options="nowrap"]
 ----
-// Adds a single "foo" ClusterPrincipal to the JAAS Subject if credentials match.
+ // Adds a single "foo" ClusterPrincipal to the JAAS Subject if credentials match.
 public class TestLoginModule extends ClusterLoginModule {
 
     @Override
@@ -930,8 +939,8 @@ public class TestLoginModule extends ClusterLoginModule {
 
 [source,java,options="nowrap"]
 ----
-// Adds 3 principals to the JAAS Subject if credentials match:
-// ClusterIdentityPrincipal "foo", ClusterRolePrincipal "admin" and a ClusterEndpointPrincipal
+ // Adds 3 principals to the JAAS Subject if credentials match:
+ // ClusterIdentityPrincipal "foo", ClusterRolePrincipal "admin" and a ClusterEndpointPrincipal
 public class TestLoginModule extends ClusterLoginModule {
 
     private String name;
@@ -960,6 +969,7 @@ public class TestLoginModule extends ClusterLoginModule {
     }
 }
 ----
+
 |===
 
 === Changes in Credentials for Client Protocol
@@ -1001,7 +1011,7 @@ See the following table for the before/after sample implementations.
 
 [source,java,options="nowrap"]
 ----
-// login module already gets a deserialized credentials object
+ // login module already gets a deserialized credentials object
 public boolean onLogin() throws LoginException {
     if (credentials == null \|\| !(credentials instanceof CustomCredentials)) {
         throw new FailedLoginException("No valid CustomCredentials found");
@@ -1018,13 +1028,13 @@ public boolean onLogin() throws LoginException {
 
 [source,java,options="nowrap"]
 ----
-// login module can ask for credentials, but it gets just a byte array "token"
-// wrapped in the SimpleTokenCredentials instance
+ // login module can ask for credentials, but it gets just a byte array "token"
+ // wrapped in the SimpleTokenCredentials instance
 public boolean onLogin() throws LoginException {
     CredentialsCallback cc = new CredentialsCallback();
     try {
         callbackHandler.handle(new Callback[] { cc });
-    } catch (IOException | UnsupportedCallbackException e) {
+    } catch (IOException \| UnsupportedCallbackException e) {
         throw new FailedLoginException("Unable to retrieve credentials. " + e.getMessage());
     }
     Credentials creds = cc.getCredentials();
@@ -1038,6 +1048,7 @@ public boolean onLogin() throws LoginException {
     return true;
 }
 ----
+
 |===
 
 
@@ -1138,6 +1149,7 @@ See the following table for a before/after sample.
     ...
 </hazelcast>
 ----
+
 |===
 
 See the xref:network-partitioning:split-brain-protection.adoc[Split-Brain Protection section] for more information on network partitioning.
@@ -1184,6 +1196,7 @@ public interface IdentifiedDataSerializable extends DataSerializable {
 }
 
 ----
+
 |===
 
 See xref:serialization:implementing-dataserializable.adoc#identifieddataserializable[here] for more information
@@ -1239,6 +1252,7 @@ map.executeOnKey(key,
             return null;
         });
 ----
+
 |===
 
 This should cover most cases. If you need to define a custom
@@ -1298,6 +1312,7 @@ Collection<String> keys = map.project(new Projection<Entry<String, Double>, Stri
 ----
 Collection<String> keys = map.project(Entry::getKey);
 ----
+
 |===
 
 == Expanding Nullable/Nonnull Annotations
@@ -1413,6 +1428,7 @@ public class Main {
     }
 }
 ----
+
 |===
 
 == WAN Replication Configuration Changes
@@ -1543,6 +1559,7 @@ WanBatchPublisherConfig publisherConfig = new WanBatchPublisherConfig()
         .setSnapshotEnabled(false);
 publisherConfig.getWanSyncConfig().setConsistencyCheckStrategy(ConsistencyCheckStrategy.NONE);
 ----
+
 |===
 
 See the following table for the before/after custom WAN publisher examples:
@@ -1607,6 +1624,7 @@ Map<String, Comparable> properties = publisherConfig.getProperties();
 properties.put("some.property", "some-value");
 properties.put("some.other.property", "some-other-value");
 ----
+
 |===
 
 See xref:wan:wan.adoc[WAN Replication] for more information.
@@ -1717,6 +1735,7 @@ See the following table for the before/after sample implementations.
         });
         hazelcastInstance.getClientService().removeClientListener(registrationId);
 ----
+
 |===
 
 == Removal of Deprecated Concurrency API Implementations
@@ -1811,6 +1830,7 @@ public class Main {
     }
 }
 ----
+
 |===
 
 == Removal of Legacy Merge Policies
@@ -1888,6 +1908,7 @@ config.setProperty("tag-value", "my-tag-value");
 ...
 config.setEnabled(true);
 ----
+
 |===
 
 == Removal of Deprecated System Properties
@@ -2022,6 +2043,7 @@ See the following table for the before/after samples.
     ...
 </hazelcast>
 ----
+
 |===
 
 == Changes in `IMap` Custom Eviction Policy Configuration
@@ -2063,6 +2085,7 @@ See the following table for the before/after samples.
     ...
 </hazelcast>
 ----
+
 |===
 
 == Changes in `EntryListenerConfig`
@@ -2092,6 +2115,7 @@ EntryListener listenerImpl = config.getImplementation();
 EntryListenerConfig config = new EntryListenerConfig();
 MapListener listenerImpl = config.getImplementation();
 ----
+
 |===
 
 == Changes in REST Endpoints
@@ -2219,6 +2243,7 @@ See the following table for the before/after snippets.
     ...
 </hazelcast>
 ----
+
 |===
 
 == Deprecation of User Code Deployment

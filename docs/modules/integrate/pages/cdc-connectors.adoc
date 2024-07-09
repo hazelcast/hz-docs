@@ -9,68 +9,73 @@ Change Data Capture is especially important to Hazelcast, because it allows
 for the _streaming of changes from databases_, which can be efficiently
 processed by the Jet engine.
 
-Implementation of CDC in Hazelcast Enterprise is based on
-link:https://debezium.io/[Debezium 2.x]. Hazelcast offers a generic Debezium source
-which can handle CDC events from link:https://debezium.io/documentation/reference/2.7/connectors/index.html[any database supported by Debezium],
-but we're also striving to make CDC sources first class citizens in Hazelcast.
-The ones for MySQL and PostgreSQL already are.
+Implementation of CDC in Hazelcast {enterprise-product-name} is based on
+link:https://debezium.io/[Debezium 2.x, window=_blank]. Hazelcast offers a generic Debezium source
+which can handle CDC events from link:https://debezium.io/documentation/reference/2.7/connectors/index.html[any database supported by Debezium, window=_blank],
+However, we're also striving to make CDC sources first class citizens in Hazelcast,
+as we have done already for MySQL and PostgreSQL already are.
 
 == Installing the Connector
 
-This connector is included in the full distribution of Hazelcast Enterprise.
+This connector is included in the full distribution of Hazelcast {enterprise-product-name}.
 
 === Maven
-For using this connector inside Maven project you can add following entries into `pom.xml`'s `<dependencies>` section:
+To use this connector in a Maven project, add the following entries to the `<dependency>` section of your `pom.xml` file:
 
 Generic connector:
-```xml
+
+[source,xml]
+----
 <dependency>
     <groupId>com.hazelcast.jet</groupId>
     <artifactId>hazelcast-enterprise-cdc-debezium</artifactId>
     <version>{full-version}</version>
     <classifier>jar-with-dependencies</classifier>
 </dependency>
-```
+----
 
 MySQL-specific connector:
-```xml
+
+[source,xml]
+----
 <dependency>
     <groupId>com.hazelcast.jet</groupId>
     <artifactId>hazelcast-enterprise-cdc-mysql</artifactId>
     <version>{full-version}</version>
     <classifier>jar-with-dependencies</classifier>
 </dependency>
-```
-Note: MySQL connector does not include MySQL driver as a dependency.
+----
+NOTE: MySQL connector does not include the MySQL driver as a dependency.
 
 PostgreSQL-specific connector:
-```xml
+
+[source,xml]
+----
 <dependency>
     <groupId>com.hazelcast.jet</groupId>
     <artifactId>hazelcast-enterprise-cdc-postgres</artifactId>
     <version>{full-version}</version>
     <classifier>jar-with-dependencies</classifier>
 </dependency>
-```
+----
 
 == CDC as a Source
 
-We have the following types of CDC sources:
+The Java API supports the following types of CDC source:
 
-* link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/cdc/DebeziumCdcSources.html[DebeziumCdcSources]:
-  generic source for all databases supported by Debezium
-* link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/cdc/mysql/MySqlCdcSources.html[MySqlCdcSources]:
-  specific, first class Jet CDC source for MySQL databases (also based
-  on Debezium, but benefiting the full range of convenience Jet can
-  additionally provide)
-* link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/cdc/postgres/PostgresCdcSources.html[PostgresCdcSources]:
-  specific, first class CDC source for PostgreSQL databases (also based
-  on Debezium, but benefiting the full range of convenience Hazelcast can
-  additionally provide)
+* link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/cdc/DebeziumCdcSources.html[DebeziumCdcSources, window=_blank]:
+  a generic source for all databases supported by Debezium
+* link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/cdc/mysql/MySqlCdcSources.html[MySqlCdcSources, window=_blank]:
+  a specific, first class Jet CDC source for MySQL databases (also based
+  on Debezium, but with the additional benefits provided by Hazelcast
+* link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/cdc/postgres/PostgresCdcSources.html[PostgresCdcSources, window=_blank]:
+  a specific, first class CDC source for PostgreSQL databases (also based
+on Debezium, but with the additional benefits provided by Hazelcast
 
-For the setting up a streaming source of CDC data is just the matter of pointing it at the right database via configuration:
+To set up a streaming source of CDC data, define it using the following configuration:
 
-```java
+[source,java]
+----
 Pipeline pipeline = Pipeline.create();
 pipeline.readFrom(
     MySqlCdcSources.mysql("customers")
@@ -82,13 +87,11 @@ pipeline.readFrom(
             .build())
     .withNativeTimestamps(0)
     .writeTo(Sinks.logger());
-```
+----
 
-MySQL- and PostgreSQL-specific source builders contain methods for all major configuration setting and it guards if
-e.g. mutually exclusive options are not used. For generic source builder user must rely on Debezium's documentation
-to provide all necessary options.
+MySQL- and PostgreSQL-specific source builders contain methods for all major configuration settings with protection if, for example, mutually exclusive options are not used. If using a generic source builder, refer to the link:https://debezium.io/documentation/reference/stable/index.html[Debezium, window=_blank] documentation
 
-For an example of how to use CDC data see xref:pipelines:cdc.adoc[our tutorial].
+Follow the provided xref:pipelines:cdc.adoc[] tutorial to see how CDC processes change events from a MySQL database.
 
 === Common source builder functions
 [cols="m,a"]
@@ -96,25 +99,22 @@ For an example of how to use CDC data see xref:pipelines:cdc.adoc[our tutorial].
 |Method name|Description
 
 |changeRecord()
-| Sets output type to ChangeRecord - a wrapper, providing most of the fields in
+| Sets output type to `ChangeRecord` - a wrapper, which provides most of the fields in
 strongly-typed manner.
 
 | json()
-| Sets output type to JSON - result stage will have `Map<String, String>` as it's type,
-where key is SourceRecord's key in json format and value is whole SourceRecord's value in json string.
+| Sets output type to `JSON` - in the result stage, the type will be set to `Map<String, String>`,
+where map entry's key is the key of `SourceRecord` in JSON format and value is whole `SourceRecord`'s value in JSON format.
 
 |customMapping(RecordMappingFunction<T>)
-| Sets output type to some arbitrary user type `T`. Mapping from `SourceRecord` to `T` will
-be done using provided function.
+| Sets the output type to an arbitrary user type, `T`. Mapping from `SourceRecord` to `T` is done using provided function by the connector.
 
 |withDefaultEngine()
-|Sets preferred engine to default (non-async) one. This engine is single-threaded,
-but also older and more tested. For most stable results (e.g. no async offset restore) this engine should be preferred. For MySQL and PostgreSQL especially this engine makes the most sense, as MySQL and PostgreSQL Debezium connectors are single-threaded only.
+|Sets the preferred engine to the default (non-async) one. This engine is single-threaded,
+but also older and more tested. Use this engine for most stable results (for example, no async offset restore). For MySQL and PostgreSQL especially this engine makes the most sense, as MySQL and PostgreSQL Debezium connectors are single-threaded only.
 
 |withAsyncEngine()
-|Sets preferred engine to async one. This engine is multithreaded (if connector supports
-it), but you must be aware of it's async nature, e.g. offset restore after restart is done
-asynchronously as well, leading to sometimes confusing results.
+|Sets the preferred engine to the async one. This engine is multithreaded (if supported by the connector), but you must be aware of the async nature; for example, offset restore may occur asynchronously after the restart is done, leading to sometimes confusing results.
 
 |setProperty(String, String)
 |Sets connector property to given value. There are multiple overloads, allowing to
@@ -148,14 +148,15 @@ For example, a sink mapping CDC data to a `Customer` class and
 maintaining a map view of latest known email addresses per customer
 (identified by ID) would look like this:
 
-```java
+[source,java]
+----
 Pipeline p = Pipeline.create();
 p.readFrom(source)
  .withoutTimestamps()
  .writeTo(CdcSinks.map("customers",
     r -> r.key().toMap().get("id"),
     r -> r.value().toObject(Customer.class).email));
-```
+----
 
 [NOTE]
 ====

@@ -45,6 +45,11 @@ They differ slightly depending on which database you use:
 
 Let's write the code for the processing we want to accomplish:
 
+[tabs]
+====
+{enterprise-product-name}::
++
+--
 [source,java]
 ----
 package org.example;
@@ -98,9 +103,72 @@ public static void main(String[] args) {
   }
 }
 ----
+--
+{open-source-product-name}::
++
+--
+[source,java]
+----
+package org.example;
+
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.jet.cdc.ChangeRecord;
+import com.hazelcast.jet.cdc.mysql.MySqlCdcSources;
+import com.hazelcast.jet.config.JobConfig;
+import com.hazelcast.jet.pipeline.Pipeline;
+import com.hazelcast.jet.pipeline.Sinks;
+import com.hazelcast.jet.pipeline.StreamSource;
+import com.hazelcast.jet.pipeline.StreamStage;
+
+public class JetJob {
+
+private static final int MAX_CONCURRENT_OPERATIONS = 1;
+
+public static void main(String[] args) {
+  StreamSource<ChangeRecord> source = MySqlCdcSources.mysql("source")
+    .setDatabaseAddress("127.0.0.1", 3306)
+    .setDatabaseCredentials("debezium", "dbz")
+    .setClusterName("dbserver1")
+    .setDatabaseWhitelist("inventory")
+    .setTableWhitelist("inventory.customers", "inventory.orders")
+    .build();
+
+  Pipeline pipeline = Pipeline.create();
+  StreamStage<ChangeRecord> allRecords = pipeline.readFrom(source)
+    .withNativeTimestamps(0);
+
+  allRecords.filter(r -> r.table().equals("customers"))
+    .apply(Ordering::fix)
+    .peek()
+    .writeTo(Sinks.mapWithEntryProcessor(MAX_CONCURRENT_OPERATIONS, "cache",
+            record -> (Integer) record.key().toMap().get("id"),
+            CustomerEntryProcessor::new
+    ));
+
+  allRecords.filter(r -> r.table().equals("orders"))
+    .apply(Ordering::fix)
+    .peek()
+    .writeTo(Sinks.mapWithEntryProcessor(MAX_CONCURRENT_OPERATIONS, "cache",
+            record -> (Integer) record.value().toMap().get("purchaser"),
+            OrderEntryProcessor::new
+    ));
+
+    JobConfig cfg = new JobConfig().setName("monitor");
+    HazelcastInstance hz = Hazelcast.bootstrappedInstance();
+    hz.getJet().newJob(pipeline, cfg);
+  }
+}
+----
+--
+====
 
 If using Postgres, only the source would need to change, like this:
 
+[tabs]
+====
+{enterprise-product-name}::
++
 [source,java]
 ----
 StreamSource<ChangeRecord> source = PostgresCdcSources.postgres("source")
@@ -110,6 +178,20 @@ StreamSource<ChangeRecord> source = PostgresCdcSources.postgres("source")
   .setTableIncludeList("inventory.customers", "inventory.orders")
   .build();
 ----
+{open-source-product-name}::
++
+[source,java]
+----
+StreamSource<ChangeRecord> source = PostgresCdcSources.postgres("source")
+  .setDatabaseAddress("127.0.0.1")
+  .setDatabasePort(5432)
+  .setDatabaseUser("postgres")
+  .setDatabasePassword("postgres")
+  .setDatabaseName("postgres")
+  .setTableIncludeList("inventory.customers", "inventory.orders")
+  .build();
+----
+====
 
 As we can see from the pipeline code, our `Sink` is `EntryProcessor`
 based. The two `EntryProcessors` we use are:
@@ -516,10 +598,25 @@ ls lib/
 ----
 +
 You should see the following jars:
+
+[tabs]
+====
+{enterprise-product-name}::
 +
+--
 * hazelcast-enterprise-cdc-debezium-{full-version}.jar
 * hazelcast-enterprise-cdc-mysql-{full-version}.jar (for MySQL)
 * hazelcast-enterprise-cdc-postgres-{full-version}.jar (for Postgres)
+--
+{open-source-product-name}::
++
+--
+* hazelcast-jet-cdc-debezium-{full-version}.jar
+* hazelcast-jet-cdc-mysql-{full-version}.jar (for MySQL)
+* hazelcast-jet-cdc-postgres-{full-version}.jar (for Postgres)
+--
+====
+
 
 . Enable user code deployment:
 +

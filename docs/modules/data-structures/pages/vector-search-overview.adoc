@@ -1,0 +1,233 @@
+= VectorCollection data structure design
+:description: A Hazelcast vector database engine is a specialized type of database, which is optimized for storing, searching, and managing vector embeddings and additional metadata. You can include values in the metadata to provide filtering, additional processing, or analysis of vectors.
+:page-enterprise: true
+:page-beta: true
+
+{description}
+
+For further information on the design of the Vector Collection data structure, see xref:data-structures:vector-collections.adoc[].
+
+== Architecture
+The main components of vector search are illustrated in the following high-level diagram:
+
+image:vector-search-components.png[The high-level diagram of the main components]
+
+The components shown in the diagram are as follows:
+
+* *Clients*: methods and libraries for connecting and working with the vector database. Currently, two language clients are available: Java and Python.
+
+* *Collections*: a set consisting of one or several indexes and a one metadata storage.
+For further information about vector collection, see xref:data-structures:vector-collections.adoc[Vector Collection].
+
+* *Indexes*: named sets of vectors. Vectors within the same index must have the same dimensions and be compared using the same metric. For further information on indexes, see <<index, Index Overview>>.
+
+* *Metadata storage*: key-value storage for storing metadata values.
+The key and value can be any objects; for example, JSON, unstructured text, or java-serialized POJO.
+For more information about the available storage types, see xref:serialization:serialization.adoc[Serializing Objects and Classes]
+
+An overview of vector collection is illustrated below:
+
+image:vector-collection.png[Vector collection overview]
+
+
+A user-defined key, which is assigned during the addition of the vector to the collection, establishes a link between the vector and the metadata. Each key corresponds to a single vector from each index.
+
+=== Index
+
+Essentially, each index serves as a distinct vector space.
+In terms of storage, the index is a graph where each node represents a vector, and the edges are organized to optimize search efficiency.
+
+The index is based on the link:https://github.com/jbellis/jvector[JVector] library, which implements a link:https://github.com/Microsoft/DiskANN[DiskANN] algorithm for similarity search.
+
+=== Partitioning and Replication
+
+Each collection is partitioned and replicated based on the system's general partitioning rules. Data partitioning is carried out using the collection key.
+
+For further information on Hazelcast partitioning, see xref:architecture:data-partitioning.adoc[Data Partitioning and Replication].
+
+NOTE: Version 5.5/beta supports partitioning and migration but does not include support for the backup process.
+
+=== Data store
+Hazelcast stores data in-memory (RAM) for faster access. Presently, the only available data storage option is the JVM heap store.
+
+=== Fault Tolerance
+Hazelcast distributes storage data across all cluster members.
+In the event of a graceful shutdown, the data is migrated to remaining active members.
+In version 5.5, there is no automatic data restoration in the event of an unexpected member loss.
+
+== Partitioned similarity search
+
+Vector indexes are partitioned, so when you execute similarity search all partitions need to be searched and partial results aggregated.
+This process impacts search performance and recall:
+
+- considering more candidate results usually yields better recall but uses more resources,
+- staged execution affects latency because there is more communication and some stages need to wait for all partial results before proceeding.
+
+=== Two-stage search
+
+The default search algorithm is a two-stage search which works as follows:
+
+1. The member that received the query becomes a coordinator.
+2. The coordinator distributes the search request to each member (including the coordinator member). Each member is tasked with returning results from partitions it owns.
+3. Each member executes the search on owned partitions in parallel and aggregates the partition results.
+4. Each member returns the partially aggregated results to the coordinator.
+5. The coordinator aggregates the partial results and generates the final result.
+   If required, searches on some partitions can be retried individually. For example, this can be useful for migrations, when members leave the cluster, or to resolve errors.
+
+At each stage, aggregation is based on score and only the best results are retained.
+
+Two important parameters in this search algorithm determine the amount of data sent between the members and the quality of the final result. These parameters are as follows:
+
+- `partitionLimit` - number of search results obtained from each partition
+- `memberLimit` - number of search results returned from member to coordinator
+
+To allow the system to return enough results, the following conditions must be satisfied where `topK` denotes the number of entries requested:
+
+- `partitionLimit * partitionCount >= topK`, `partitionLimit &lt;= topK`
+- `memberLimit * memberCount >= topK`, `memberLimit &lt;= topK`
+
+By default, `partitionLimit` and `memberLimit` are equal to `topK`. While this satisfies the inequalities given above, it can result in the processing of more results than requested.
+This improves the overall quality of the results but can have a significant performance overhead because more entries are fetched from each partition of the index and sent between the members.
+
+NOTE: Consider tuning `partitionLimit` based on quality and latency requirements. The number of partitions must also be considered and updated as required when making adjustments to `partitionLimit`. For further information on the implications of the partition count, see <<partition-count-impact, Partition Count Impact>>.
+`memberLimit` is less critical for overall behavior if there are only a few members.
+
+[graphviz]
+....
+digraph twoStageSearch {
+  subgraph cluster_M_1 {
+    coordinator;
+    M_1 [label=""];
+    M_1_aggregate [label="member aggregate"];
+
+    M_1 -> P_1;
+    P_1 -> M_1_aggregate [label="partitionLimit"];
+    M_1 -> P_4;
+    P_4 -> M_1_aggregate; // [label="partitionLimit"];
+
+    aggregate;
+    label = "member 1";
+  }
+
+  subgraph cluster_M_2 {
+    M_2 [label=""];
+    M_2_aggregate [label="member aggregate"];
+
+    M_2 -> P_2;
+    P_2 -> M_2_aggregate [label="partitionLimit"];
+    M_2 -> P_5;
+    P_5 -> M_2_aggregate; // [label="partitionLimit"];
+
+    label = "member 2";
+  }
+
+  subgraph cluster_M_3 {
+    M_3 [label=""];
+    M_3_aggregate [label="member aggregate"];
+
+    M_3 -> P_3;
+    P_3 -> M_3_aggregate [label="partitionLimit"];
+    M_3 -> P_6;
+    P_6 -> M_3_aggregate; // [label="partitionLimit"];
+
+    label = "member 3";
+  }
+
+  request -> coordinator;
+
+  coordinator -> M_1;
+  M_1_aggregate -> aggregate [label="memberLimit"];
+  coordinator -> M_2;
+  M_2_aggregate -> aggregate [label="memberLimit"];
+  coordinator -> M_3;
+  M_3_aggregate -> aggregate [label="memberLimit"];
+
+  aggregate -> result [label="topK"];
+
+  label="Two-stage search execution (partition retries not shown).\nMember 1 is selected as query coordinator.\nP_1 ... P_6 are partitions with example assignment to members.\nEdge labels show the cardinality of the result.";
+}
+....
+
+=== Single-stage search
+
+A simplified search algorithm can be used, which does not perform intermediate aggregation of results at member level.
+It is used where the cluster has only a single member, or can be enabled using search hint.
+
+A single-stage search request is executed in parallel on all partitions (on their owners)
+and partition results are aggregated directly on the coordinator member to produce the final result.
+
+This search algorithm uses the `partitionLimit` parameter, which behaves in the same way as for two-stage search.
+
+[graphviz]
+....
+digraph singleStageSearch {
+  subgraph cluster_M_1 {
+    coordinator;
+    P_1;
+    P_4;
+    aggregate;
+    label = "member 1";
+  }
+
+  subgraph cluster_M_2 {
+    P_2;
+    P_5;
+    label = "member 2";
+  }
+
+  subgraph cluster_M_3 {
+    P_3;
+    P_6;
+    label = "member 3";
+  }
+
+  request -> coordinator;
+
+  coordinator -> P_1;
+  P_1 -> aggregate [label="partitionLimit"];
+  coordinator -> P_4;
+  P_4 -> aggregate; // [label="partitionLimit"];
+
+  coordinator -> P_2;
+  P_2 -> aggregate [label="partitionLimit"];
+  coordinator -> P_5;
+  P_5 -> aggregate; // [label="partitionLimit"];
+
+  coordinator -> P_3;
+  P_3 -> aggregate [label="partitionLimit"];
+  coordinator -> P_6;
+  P_6 -> aggregate; // [label="partitionLimit"];
+
+  aggregate -> result [label="topK"];
+
+  label="Single-stage search execution.\nMember 1 is selected as query coordinator.\nP_1 ... P_6 are partitions with example assignment to members.\nEdge labels show the cardinality of the result.";
+}
+....
+
+
+== Partition count impact
+
+The number of partitions has a big impact on the performance of the vector collection. The conflicting factors that can impact the selection of an optimal partition count are as follows:
+
+- *data ingestion*: a greater number of partitions results in improved parallelism, up to around the total number of partition threads in the cluster.
+  After this point, more partitions will not significantly improve ingestion speed.
+- *similarity search*: in general, having fewer partitions results in better search performance and reduced latency.
+  However, the impact on quality/recall is complicated and depends also on `partitionLimit`.
+- *migration*: avoid partitions with a large memory size, including metadata, vectors and vector index internal representation.
+  In general, the recommendation is for a partition size of around 50-100MB per partition, which results in fast migrations and small pressure on heap during migration.
+  However, for vector search, the partition size can be increased above that general recommendation provided that there is enough heap memory for migrations (see below).
+- *other data structures*: number of partitions is a cluster-wide setting shared by all data structures. If the needs are vastly different, you might consider creating separate clusters.
+
+NOTE: It is not possible to change the number of partitions for an existing cluster.
+
+[CAUTION]
+.For this Beta version, the following apply:
+====
+. The default value of 271 partitions can result in inefficient vector similarity searches.
+We recommend that you tune the number of partitions for use in clusters with vector collections.
+
+. The entire collection partition is migrated as a single chunk.
+If using partitions that are larger than the recommended size, ensure that you have sufficient heap memory to run migrations. The amount of heap memory required is approximately the size of the vector collection partition multiplied by the number of parallel migrations.
+To decrease pressure on heap memory, you can decrease the number of parallel migrations using `hazelcast.partition.max.parallel.migrations` and `hazelcast.partition.max.parallel.replications`.
+====
+

@@ -1,0 +1,223 @@
+= Dynamic Configuration using the REST API
+:description: This tutorial provides a step-by-step guide to help you add a data structure dynamically using the REST API.
+
+:page-enterprise: true
+
+{description}
+
+== Before You Begin
+
+To complete this tutorial, you need the following:
+
+[cols="1a,1a"]
+|===
+|Prerequisites|Useful resources
+
+|Make sure you've already completed one of these tutorials
+|- xref:getting-started:get-started-rest-api-with-docker.adoc[]
+- xref:getting-started:get-started-rest-api-with-java.adoc[]
+
+|===
+
+== Step 1. Add new configuration using /hazelcast/rest/api/v1/config/update endpoint
+
+To update the configuration, send a POST request including the new data structure config in the request body as YAML or XML:
+
+TIP: You can also try this out using the Swagger UI. For more info, see the Swagger UI example below.
+
+[tabs]
+====
+cURL with XML::
++
+--
+[source,shell]
+----
+curl -X POST \
+'http://localhost:8443/hazelcast/rest/api/v1/cluster/config/update' \
+-H 'Content-Type: application/json' \
+-H 'Authorization: Bearer '"$JWT_TOKEN"'' \ <1>
+-d '<hazelcast xmlns="http://www.hazelcast.com/schema/config">
+    <map name="my-map">
+        <in-memory-format>BINARY</in-memory-format>
+        <statistics-enabled>true</statistics-enabled>
+        <backup-count>2</backup-count>
+    </map>
+    <queue name="my-queue">
+        <max-size>10</max-size>
+        <backup-count>2</backup-count>
+    </queue>
+</hazelcast>'
+----
+--
+
+cURL with YAML::
++
+[source,shell]
+----
+curl -X POST \
+  'http://localhost:8443/hazelcast/rest/api/v1/cluster/config/update' \
+  -H 'Authorization: Bearer '"$JWT_TOKEN"'' \ <1>
+  -H 'Content-Type: application/json' \
+  -d 'hazelcast:
+  map:
+    my-map:
+      in-memory-format: BINARY
+      statistics-enabled: true
+      backup-count: 2
+  queue:
+    my-queue:
+      max-size: 10
+      backup-count: 2'
+----
+
+Using Swagger UI::
++
+- Open the Swagger UI at http://localhost:8443/swagger-ui/index.html.
+- Navigate to the `/cluster/config/update` endpoint under the *Cluster Controller* section.
+- You must already have saved the authorization token as documented in xref:getting-started:get-started-rest-api-with-docker#step-4-obtain-a-token-to-access-all-endpoints[Step 4] of the REST API "Getting started" tutorials.
+- Click **Try it out**.
+- Set the request body as follows (YAML example shown but either YAML or XML can be used):
++
+[source,yaml]
+----
+hazelcast:
+  map:
+    my-map:
+      in-memory-format: BINARY
+      statistics-enabled: true
+      backup-count: 2
+  queue:
+    my-queue:
+      max-size: 10
+      backup-count: 2
+----
++
+- Click **Execute**.
+====
+<1> Set the JWT_TOKEN as environment variable or replace it with your token directly in the command.
+
+Here is the expected response body:
+[source,json]
+----
+{
+  "addedConfigs": [
+    {
+      "sectionName": "map",
+      "configName": "my-map"
+    },
+    {
+      "sectionName": "queue",
+      "configName": "my-queue"
+    }
+  ],
+  "ignoredConfigs": []
+}
+----
+
+== Step 2. Create map with new configuration
+
+Access the `/map/{mapName}/{key}` POST endpoint to create the map and add an entry:
+
+[tabs]
+====
+Using cURL::
++
+--
+[source,shell]
+----
+curl -X POST \
+  'http://localhost:8443/hazelcast/rest/api/v1/map/my-map/1' \
+  -H 'Authorization: Bearer '"$JWT_TOKEN"'' \
+  -H 'Content-Type: text/plain' \
+  -d 'my-value'
+----
+--
+
+Using Swagger UI::
++
+- Open the Swagger UI at http://localhost:8443/swagger-ui/index.html.
+- Navigate to the `/map/{mapName}/{key}` POST endpoint under the *Data Controller* section.
+- Click **Try it out**.
+- Enter `my-map` and `1` in the 'mapName' and `key` fields respectively.
+- Enter the value in the request body section:
++
+[source,txt]
+----
+my-value
+----
+- Click **Execute**.
+====
+
+This action will create the map named `my-map` which matches the dynamically added config from the previous step.
+
+You can use https://docs.hazelcast.com/management-center/latest/data-structures/map[Management Center] to verify that the map was successfully created with the expected configuration properties.
+
+== Step 3. Create queue with new configuration
+
+Access the `/queue/{queueName}` POST endpoint to create the queue and add an item:
+
+[tabs]
+====
+Using cURL::
++
+--
+[source,shell]
+----
+curl -X POST \
+  'http://localhost:8443/hazelcast/rest/api/v1/queue/my-queue' \
+  -H 'Authorization: Bearer '"$JWT_TOKEN"'' \
+  -H 'Content-Type: text/plain' \
+  -d 'item-1'
+----
+--
+
+Using Swagger UI::
++
+- Open the Swagger UI at http://localhost:8443/swagger-ui/index.html.
+- Navigate to the `/queue/{queueName}` POST endpoint under the *Data Controller* section.
+- Click **Try it out**.
+- Enter `my-queue` in the 'queueName' field.
+- Enter the item value in the request body section:
++
+[source,txt]
+----
+item-1
+----
+- Click **Execute**.
+====
+
+This step will create a queue named `my-queue` which matches the dynamically added config from the previous step.
+
+You can use https://docs.hazelcast.com/management-center/latest/data-structures/queue[Management Center] to verify that the queue was successfully created with the expected configuration properties.
+
+== Step 4 (Optional) Dynamically add new map by reloading configuration from disk
+
+Modify the declarative configuration file to add a new map config and reload it using the `/cluster/config/reload` endpoint. For this tutorial, our config is located at `~/config`
+
+[tabs]
+====
+Using cURL::
++
+--
+[source,shell]
+----
+curl -X 'POST' \
+  'http://localhost:8443/hazelcast/rest/api/v1/cluster/config/reload' \
+  -H 'Authorization: Bearer '"$JWT_TOKEN"''
+----
+--
+
+Using Swagger UI::
++
+- Open the Swagger UI at http://localhost:8443/swagger-ui/index.html.
+- Navigate to the `/map/{mapName}/{key}` POST endpoint under the *Config Controller* section.
+- Click **Try it out**.
+- Click **Execute**.
+====
+
+== Next Steps
+
+If you're interested in learning more about the topics introduced in this tutorial, see: 
+
+* xref:enterprise-rest-api.adoc#update-dynamic-configuration-using-rest[REST Dynamic Configuration]
+* xref:configuration:dynamic-config.adoc[Dynamic Configuration for Members]

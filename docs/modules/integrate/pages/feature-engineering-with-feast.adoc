@@ -1,0 +1,334 @@
+= Feature Engineering with Feast
+:description: This tutorial will get you started with featurw engineering using the Hazelcast integration with Feast.
+
+== What You'll Learn
+
+{description}
+
+== Before you Begin
+
+* Hazelcast CLC. link:https://docs.hazelcast.com/clc/latest/install-clc[Installation instructions]
+* A recent version of Docker and Docker Compose
+
+== Create the Project
+
+[source,shell]
+----
+clc project create -t feast-batch-demo
+----
+
+== Start Containers of the Project
+
+[source,shell]
+----
+docker-compose up
+----
+
+== Login to the Demo Container
+
+. Login to the demo container:
++
+[source,shell]
+----
+docker-compose exec demo /bin/bash
+----
+
+. In order to access PostgreSQL tables from Jet jobs, a data connection must be created. `etc/create_data_conneciton.sql`
++
+[source,shell]
+----
+cat etc/create_data_connection.sql
+----
++
+It looks like this:
++
+[source,sql]
+----
+CREATE DATA CONNECTION IF NOT EXISTS demo
+TYPE JDBC
+SHARED
+OPTIONS (
+  'jdbcUrl'='jdbc:postgresql://postgresql:5432/demo',
+  'user'='demo',
+  'password'='demo',
+  'maximumPoolSize'='50'
+);
+----
+
+. In order to access PostgreSQL tables from Jet jobs, a data connection must be created. You can do that by running an SQL script using CLC:
++
+[source,shell]
+----
+clc script run --echo etc/create_data_connection.sql
+----
+
+. You can verify that the data connection is active by running the following command:
++
+[source,shell]
+----
+clc sql "show resources for demo"
+----
++
+[source,output]
+----
+------------------------------------------------------
+ name                                         | type
+------------------------------------------------------
+ "public"."user_transaction_count_7d"         | Table
+------------------------------------------------------
+----
+
+== Feast Setup
+
+. The Feast project is in the `feature_repo` directory.
+You can take a look at the Feast configuration using the following command:
++
+[source,shell]
+----
+cat feature_repo/feature_store.yaml
+----
++
+[source,yaml]
+----
+project: feast_batch
+
+registry: /home/sam/feast/data/registry.db
+
+provider: local
+
+online_store:
+    type: hazelcast
+    cluster_name: dev
+    cluster_members: ["hazelcast:5701"]
+
+offline_store:
+  type: postgres
+  host: postgresql
+  port: 5432
+  database: demo
+  db_schema: public
+  user: demo
+  password: demo
+----
+
+. The feature views are defined in the `features.py`.
+Run the following command to see its contents:
++
+[source,shell]
+----
+cat feature_repo/features.py
+----
++
+[source,python]
+----
+from datetime import timedelta
+from feast import FeatureView, Entity, ValueType
+from feast.infra.offline_stores.contrib.postgres_offline_store.postgres_source import PostgreSQLSource
+
+user_entity = Entity(
+    name="user_id",
+    description="A user that has executed a transaction",
+    value_type=ValueType.STRING
+)
+
+user_transaction_count_7d_fv = FeatureView(
+    name="user_transaction_count_7d",
+    entities=[user_entity],
+    ttl=timedelta(weeks=1),
+    source=PostgreSQLSource(
+        table="user_transaction_count_7d",
+        timestamp_field="feature_timestamp"))
+----
+
+. Before being able to use features, you must run the following command:
++
+[source,shell]
+----
+feast -c feature_repo apply
+----
++
+Outputs:
++
+[source,output]
+----
+Deploying infrastructure for user_transaction_count_7d
+----
+
+== Feature Transformation Using Jet
+
+. The Jet job reads transactions from demo_data.jsonl, computes the number of transactions per user in 7 day buckets and populates the user_transaction_count_7d table in the PostgreSQL database. You can see how the pipeline is defined by running the following command:
++
+[source,shell]
+----
+cat jet/batch_features/src/main/java/com/example/Main.java
+----
++
+[source,java]
+----
+package com.example;
+
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.jet.aggregate.AggregateOperations;
+import com.hazelcast.jet.pipeline.DataConnectionRef;
+import com.hazelcast.jet.pipeline.Pipeline;
+import com.hazelcast.jet.pipeline.Sinks;
+import com.hazelcast.jet.pipeline.file.FileFormat;
+import com.hazelcast.jet.pipeline.file.FileSources;
+import com.hazelcast.map.impl.MapEntrySimple;
+
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.Map;
+
+public class Main {
+
+    public static Pipeline createPipeline(String dataSetPath, LocalDateTime endDate) {
+        var endDateEpoch = endDate.toEpochSecond(ZoneOffset.UTC);
+        var beginDate = endDate.minusDays(7);
+        var beginDateEpoch = beginDate.toEpochSecond(ZoneOffset.UTC);
+        var pipeline = Pipeline.create();
+        var source =
+        pipeline
+            .readFrom(FileSources.files(dataSetPath)
+                .glob("demo_data.jsonl")
+                .format(FileFormat.json(Transaction.class))
+                .build());
+
+        var last7Days = source
+                .filter(transaction -> {
+                    var transactionTime = transaction.getUnixTime();
+                    return transactionTime > beginDateEpoch && transactionTime <= endDateEpoch;
+                });
+
+        last7Days
+            .groupingKey((Transaction::getAccountNumber))
+            .aggregate((AggregateOperations.counting()))
+            .map(item -> {
+                var userId = item.getKey();
+                var utc = new UserTransactionCount(userId, item.getValue(), endDateEpoch);
+                return (Map.Entry<String, UserTransactionCount>) new MapEntrySimple(userId, utc);
+            })
+            .writeTo(Sinks.jdbc("INSERT INTO user_transaction_count_7d(user_id, transaction_count_7d, feature_timestamp) values(?, ?, ?) ON CONFLICT DO NOTHING",
+                    DataConnectionRef.dataConnectionRef("demo"),
+                    (stmt, item) -> {
+                        var utc = item.getValue();
+                        stmt.setString(1, utc.getUserId());
+                        stmt.setLong(2, utc.getTransactionCount7d());
+                        stmt.setTimestamp(3, Timestamp.from(Instant.ofEpochSecond(utc.getFeatureTimestamp())));
+                    }));
+
+        return pipeline;
+    }
+
+    public static void backfillFeatures(HazelcastInstance hz, String dataSetPath, LocalDateTime earliestEndDate) {
+        var endDate = earliestEndDate;
+        for (int i = 0; i < 8; i++) {
+            hz.getJet().newJob(createPipeline(dataSetPath, endDate));
+            endDate = endDate.minusDays(1);
+        }
+    }
+
+    public static void main(String[] args) {
+        if (args.length == 0) {
+            throw new RuntimeException("dataSetPath is required");
+        }
+        var hz = Hazelcast.bootstrappedInstance();
+        var endDate = LocalDateTime.now();
+        var dataSetPath = args[0];
+        backfillFeatures(hz, dataSetPath, endDate);
+    }
+}
+----
+
+. You have to compile the Java code that creates the Jet pipeline.
+We provided an easy-to-use script to do that from inside the demo container:
++
+[source,shell]
+----
+run build_jet batch_features
+----
+
+. You can now run create the Jet pipeline and run the jobs:
+[source,shell]
+----
+clc job submit build/jet/batch_features/libs/*.jar /home/hazelcast/data
+----
+
+. You can list the running jobs and verify that the jobs completed successfully using the following command:
+[source,shell]
+----
+clc job list
+----
+Outputs:
++
+[source,output]
+----
+------------------------------------------------------------------------------------
+ Job ID              | Name | Status    | Submitted           | Completed
+------------------------------------------------------------------------------------
+ 0c0d-c9a3-c14d-0001 | N/A  | COMPLETED | 2024-07-24 19:15:19 | 2024-07-24 19:15:19
+ 0c0d-c9a3-c14b-0001 | N/A  | COMPLETED | 2024-07-24 19:15:17 | 2024-07-24 19:15:17
+ 0c0d-c9a3-c149-0001 | N/A  | COMPLETED | 2024-07-24 19:15:15 | 2024-07-24 19:15:15
+ 0c0d-c9a3-c147-0001 | N/A  | COMPLETED | 2024-07-24 19:15:13 | 2024-07-24 19:15:13
+ 0c0d-c9a3-c145-0001 | N/A  | COMPLETED | 2024-07-24 19:15:11 | 2024-07-24 19:15:11
+ 0c0d-c9a3-c143-0001 | N/A  | COMPLETED | 2024-07-24 19:15:09 | 2024-07-24 19:15:09
+ 0c0d-c9a3-c141-0001 | N/A  | COMPLETED | 2024-07-24 19:15:07 | 2024-07-24 19:15:07
+ 0c0d-c9a3-c140-0001 | N/A  | COMPLETED | 2024-07-24 19:15:05 | 2024-07-24 19:15:06
+----
+
+== Materialization
+
+. Materialization is the process of transferring features from the offline store to the online store. That is from PostgreSQL to Hazelcast in this case.
+Run the following command to do that:
+[source,shell]
+----
+feast -c feature_repo materialize-incremental "2024-07-24T08:00:00"
+----
+
+. Running the command above created an IMap that corresponds to the "user_transaction_count_7d" feature in the Hazelcasst cluster. You can list it using the following command:
++
+[source,shell]
+----
+feast -c feature_repo materialize-incremental "2024-07-24T08:00:00"
+----
+
+. Running the command above created an IMap that corresponds to the "user_transaction_count_7d" feature in the Hazelcasst cluster.
+You can list it using the following command:
++
+[source,shell]
+----
+clc object list map
+----
+Outputs:
++
+[source,output]
+----
+---------------------------------------
+ Object Name
+---------------------------------------
+ feast_batch_user_transaction_count_7d
+---------------------------------------
+    OK Returned 1 row(s).
+----
+
+. Check the contents of the feature IMap to check the data written by Feast:
++
+[source,shell]
+----
+clc map -n feast_batch_user_transaction_count_7d entry-set | head -10
+----
+
+== Summary
+
+In this tutorial, you learned how to get started with the Hazelcast Go Client, connect to a Viridian instance and put data into a distributed map.
+
+== See Also
+
+There are a lot of things that you can do with the Go Client. For more, such as how you can query a map with predicates and SQL,
+check out our https://github.com/hazelcast/hazelcast-go-client[Go Client repository] and our https://pkg.go.dev/github.com/hazelcast/hazelcast-go-client[Go API documentation] to better understand what is possible.
+
+If you have any questions, suggestions, or feedback please do not hesitate to reach out to us via https://slack.hazelcast.com/[Hazelcast Community Slack].
+Also, please take a look at https://github.com/hazelcast/hazelcast-go-client/issues[the issue list] if you would like to contribute to the client.

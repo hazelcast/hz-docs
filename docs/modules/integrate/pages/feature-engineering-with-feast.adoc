@@ -1,81 +1,49 @@
 = Feature Engineering with Feast
-:description: This tutorial will get you started with featurw engineering using the Hazelcast integration with Feast.
+:description: This tutorial will get you started with feature engineering using the Hazelcast integration with Feast.
 
 == What You'll Learn
 
 {description}
 
+You will setup an offline feature store with PostgreSQL and an online feature store with Hazelcast.
+Then, populate the offline feature store using Jet jobs.
+Finally, you will transfer the features in the offline store to the online store.
+
 == Before you Begin
+
+You will need the following ready before starting the tutorial:
 
 * Hazelcast CLC. link:https://docs.hazelcast.com/clc/latest/install-clc[Installation instructions]
 * A recent version of Docker and Docker Compose
 
-== Create the Project
+== Project Setup
 
+. Create the sample project using the following command:
++
 [source,shell]
 ----
 clc project create -t feast-batch-demo
 ----
 
-== Start Containers of the Project
+. Switch to the project directory:
++
+[source,shell]
+----
+cd feast-batch-demo
+----
 
+. In the project directory, start the containers:
++
 [source,shell]
 ----
 docker-compose up
 ----
-
-== Login to the Demo Container
 
 . Login to the demo container:
 +
 [source,shell]
 ----
 docker-compose exec demo /bin/bash
-----
-
-. In order to access PostgreSQL tables from Jet jobs, a data connection must be created. `etc/create_data_conneciton.sql`
-+
-[source,shell]
-----
-cat etc/create_data_connection.sql
-----
-+
-It looks like this:
-+
-[source,sql]
-----
-CREATE DATA CONNECTION IF NOT EXISTS demo
-TYPE JDBC
-SHARED
-OPTIONS (
-  'jdbcUrl'='jdbc:postgresql://postgresql:5432/demo',
-  'user'='demo',
-  'password'='demo',
-  'maximumPoolSize'='50'
-);
-----
-
-. In order to access PostgreSQL tables from Jet jobs, a data connection must be created. You can do that by running an SQL script using CLC:
-+
-[source,shell]
-----
-clc script run --echo etc/create_data_connection.sql
-----
-
-. You can verify that the data connection is active by running the following command:
-+
-[source,shell]
-----
-clc sql "show resources for demo"
-----
-+
-[source,output]
-----
-------------------------------------------------------
- name                                         | type
-------------------------------------------------------
- "public"."user_transaction_count_7d"         | Table
-------------------------------------------------------
 ----
 
 == Feast Setup
@@ -156,7 +124,49 @@ Deploying infrastructure for user_transaction_count_7d
 
 == Feature Transformation Using Jet
 
-. The Jet job reads transactions from demo_data.jsonl, computes the number of transactions per user in 7 day buckets and populates the user_transaction_count_7d table in the PostgreSQL database. You can see how the pipeline is defined by running the following command:
+You will create several Jet jobs that read transactions from the data file, compute the number of transactions per user in 7 day buckets and populate the user_transaction_count_7d table in the PostgreSQL database.
+
+. In order to access PostgreSQL tables from Jet jobs, a data connection must be created. You can do that by running an SQL script using CLC:
++
+[source,shell]
+----
+clc script run --echo etc/create_data_connection.sql
+----
++
+Outputs:
++
+[source,output]
+----
+1: CREATE DATA CONNECTION IF NOT EXISTS demo
+TYPE JDBC
+SHARED
+OPTIONS (
+  'jdbcUrl'='jdbc:postgresql://postgresql:5432/demo',
+  'user'='demo',
+  'password'='demo',
+  'maximumPoolSize'='50'
+);
+    OK Executed the query.
+----
+
+. You can verify that the data connection is active by running the following command:
++
+[source,shell]
+----
+clc sql "show resources for demo"
+----
++
+[source,output]
+----
+------------------------------------------------------
+ name                                         | type
+------------------------------------------------------
+ "public"."user_transaction_count_7d"         | Table
+------------------------------------------------------
+----
+
+. You are ready to create the Jet jobs.
+Before that, you may want to see how the jobs are created by running the following command:
 +
 [source,shell]
 ----
@@ -243,7 +253,7 @@ public class Main {
 }
 ----
 
-. You have to compile the Java code that creates the Jet pipeline.
+. You have to compile the Java code that creates the Jet jobs.
 We provided an easy-to-use script to do that from inside the demo container:
 +
 [source,shell]
@@ -251,7 +261,7 @@ We provided an easy-to-use script to do that from inside the demo container:
 run build_jet batch_features
 ----
 
-. You can now run create the Jet pipeline and run the jobs:
+. You can now create the Jet jobs and run them:
 [source,shell]
 ----
 clc job submit build/jet/batch_features/libs/*.jar /home/hazelcast/data
@@ -281,15 +291,9 @@ Outputs:
 
 == Materialization
 
-. Materialization is the process of transferring features from the offline store to the online store. That is from PostgreSQL to Hazelcast in this case.
-Run the following command to do that:
-[source,shell]
-----
-feast -c feature_repo materialize-incremental "2024-07-24T08:00:00"
-----
+Materialization is the process of transferring features from the offline store to the online store. In this case, from PostgreSQL to Hazelcast.
 
-. Running the command above created an IMap that corresponds to the "user_transaction_count_7d" feature in the Hazelcasst cluster. You can list it using the following command:
-+
+. Run the following command to materialize the features:
 [source,shell]
 ----
 feast -c feature_repo materialize-incremental "2024-07-24T08:00:00"
@@ -323,12 +327,13 @@ clc map -n feast_batch_user_transaction_count_7d entry-set | head -10
 
 == Summary
 
-In this tutorial, you learned how to get started with the Hazelcast Go Client, connect to a Viridian instance and put data into a distributed map.
+In this tutorial, you learned how to setup a feature engineering project that uses Hazelcast as the online store and PostgreSQL as the offline store..
+You also learned how to write Jet jobs that transform data and store it in a PostgreSQL table to be used by the Feast offline store.
 
 == See Also
 
-There are a lot of things that you can do with the Go Client. For more, such as how you can query a map with predicates and SQL,
-check out our https://github.com/hazelcast/hazelcast-go-client[Go Client repository] and our https://pkg.go.dev/github.com/hazelcast/hazelcast-go-client[Go API documentation] to better understand what is possible.
+There is more to feature engineering with Hazelcast.
+
+Check out our documentation on Feast at: TODO lINK.
 
 If you have any questions, suggestions, or feedback please do not hesitate to reach out to us via https://slack.hazelcast.com/[Hazelcast Community Slack].
-Also, please take a look at https://github.com/hazelcast/hazelcast-go-client/issues[the issue list] if you would like to contribute to the client.

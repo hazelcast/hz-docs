@@ -67,9 +67,9 @@ client.shutdown();
 
 The above code line releases all the used resources and closes connections to the cluster.
 
-=== Java Client Cluster Routing Modes
+=== Client Cluster Routing Modes
 
-The Java cluster routing mode specifies how the client connects to the cluster. It can currently be used only with Java clients.
+The cluster routing mode specifies how the client connects to the cluster. It can currently be used only with Java and .NET clients.
 
 NOTE: In previous releases, this functionality was known as the client operation mode and could be configured as smart or unisocket. 
 If the cluster routing mode is not configured in your client, the configured client operation mode is used.
@@ -83,7 +83,7 @@ In all modes, the following information is provided to the client on initial con
 * Partition group information ({enterprise-product-name} only)
 * CP group leader information ({enterprise-product-name} with `Advanced CP` enabled only) 
 
-The client is updated whenever the cluster version, partition groups, or CP group leader changes.
+The client is updated whenever the cluster version, cluster topology, partition groups, or CP group leader changes.
 
 From {enterprise-product-name} 5.5, you can use any of the following cluster routing modes:
 
@@ -93,9 +93,8 @@ The default mode, and is the equivalent of the legacy **Smart** client operation
 +
 In `ALL_MEMBERS` cluster routing mode, clients connect to each cluster member. 
 +
-Since each xref:overview:data-partitioning.adoc[data partition] uses the well known and consistent hashing algorithm,
-each client can send an operation to the cluster member that owns the partition that holds their data,
-which increases the overall throughput and efficiency.
+Since clients are aware of xref:overview:data-partitioning.adoc[data partitions], they are able to send an operation directly
+to the cluster member that owns the partition holding their data, which increases the overall throughput and efficiency.
 +
 If <<configuring-direct-to-leader-routing, CP direct-to-leader routing>> is enabled on your clients, and the `ADVANCED_CP`
 license is present on your Enterprise cluster, then clients in this routing mode can use this to send CP operations
@@ -109,14 +108,14 @@ In some environments, clients must connect to only a single member instead of to
 for example, this can be enforced due to firewalls, security, or a custom network consideration.
 In these environments, `SINGLE_MEMBER` mode allows to you connect to a single member, while retaining the ability to work with other members in the cluster.
 +
-The single connected member behaves as a gateway to the other members.
+The single connected member behaves as a gateway to the other members of the cluster.
 When the client makes a request, the connected member redirects the request to the relevant member and
 returns the response from that member to the client.
 
 * **MULTI_MEMBER** 
 +
-This mode provides most of the functionality of `ALL_MEMBERS` mode over a single paritition group, falling back to the more restricted behavior
-of `SINGLE_MEMBER` mode for members outside that partition group as follows:
+This mode provides most of the functionality of `ALL_MEMBERS` routing over a single partition group, falling back to the more
+restricted behavior of `SINGLE_MEMBER` mode for members outside that partition group as follows:
 +
 ** The client can connect to all members in the defined partition group
 ** Outside the visible partition group, a member in the defined partition group acts as a gateway to the other members in the cluster
@@ -130,7 +129,7 @@ The client then has visibility of the partition group associated with the first 
 
 . Read the partition group information
 . Connect to a limited subset of the cluster as defined by the partition grouping
-The client does not have visibility to any cluster members outside this partition group.
+The client does not have a connection to any cluster members outside this partition group, but it will have knowledge of all cluster members
 --
 
 The following diagram shows how each mode connects to members in a cluster:
@@ -139,7 +138,7 @@ image:ROOT:client-routing.png[Hazelcast Cluster Routing diagram]
 
 For information on configuring the cluster routing mode, see <<configure-cluster-routing-mode,Configure Cluster Routing Mode>>.
 
-If already using the legacy **Smart** and **Unisocket** client operation modes, these remain supported. However, we recommend that you update your configuration to use the appropriate cluster routing mode. For information on these modes and their configuration, select **5.4** from the version picker at the top of the navigation pane. Ensure that the cluster routing mode is not configured to use the configured client operation mode
+If already using the legacy **Smart** and **Unisocket** client operation modes, these remain supported. However, we recommend that you update your configuration to use the appropriate cluster routing mode as these options will be removed in a future major version. For information on these modes and their configuration, select **5.4** from the version picker at the top of the navigation pane. Ensure that the cluster routing mode is not configured at the same time as the legacy client operation mode, only one should be defined.
 
 === Handling Failures
 
@@ -153,13 +152,13 @@ Instead of giving up, throwing an exception and stopping the client,
 the client retries to connect as configured which is described in the
 <<configuring-client-connection-retry, Configuring Client Connection Retry section>>.
 
-The client executes each operation through the already established connection to the cluster.
-If this connection(s) disconnects or drops, the client tries to reconnect as configured.
+The client executes each operation through the already established connection(s) to the cluster.
+If these connection(s) disconnect or drop, the client tries to reconnect as configured.
 
 If using the `MULTI_MEMBER` cluster routing mode, and the cluster has multiple partition groups defined 
-and the client connection to a partition group fails, connectivity is maintained by failing over to an alternative partion group. 
-If the connection lost, which occurs only if all members of the partition group become unavailable, there is no attempt to retry the connection before failing over to another partition group.
-For further information on Java cluster routing modes, see <<java-client-cluster-routing-modes,Java Cluster Routing Modes>>.
+and the client connection to a partition group fails, connectivity is maintained by failing over to an alternative partition group.
+If the connection is lost, which occurs only if all members of the partition group become unavailable, there is no attempt to retry the connection before failing over to another partition group.
+For further information on client cluster routing modes, see <<client-cluster-routing-modes,Client Cluster Routing Modes>>.
 
 **Handling Retry-able Operation Failure:**
 
@@ -718,7 +717,7 @@ hazelcast-client:
 ----
 ====
 
-And here is its equivalent programmatical configuration.
+And here is its equivalent programmatic configuration.
 
 [source,java]
 ----
@@ -796,7 +795,7 @@ The provided list is shuffled and tried in random order.
 Its default value is *localhost*.
 
 IMPORTANT:  If you have multiple members on a single machine and you are using the
-<<java-client-cluster-routing-modes, `SINGLE_MEMBER` cluster routing mode>>, we recommend that you set explicit
+<<client-cluster-routing-modes, `SINGLE_MEMBER` cluster routing mode>>, we recommend that you set explicit
 xref:clusters:network-configuration.adoc#port[ports] for each member. Then you should provide those ports in your client configuration
 when you give the member addresses (using the `address` configuration element or
 `addAddress` method as exemplified above). This provides faster connections between clients and members. Otherwise,
@@ -870,7 +869,7 @@ both single and multiple port definitions.
 
 ==== Configure Cluster Routing Mode
 
-You can configure the cluster routing mode to suit your requirements, as described in <<java-client-cluster-routing-modes,Java Cluster Routing Modes>>.
+You can configure the cluster routing mode to suit your requirements, as described in <<client-cluster-routing-modes,Client Cluster Routing Modes>>.
 
 The following examples show the configuration for each cluster routing mode. 
 
@@ -932,6 +931,7 @@ When using the `SINGLE_MEMBER` cluster routing mode, consider the following:
 connections to the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] are direct-to-leader, which can result in improved performance.
 If leadership is reassigned while using `SINGLE_MEMBER` cluster routing, then this benefit may be lost.
 * <<configuring-load-balancer,`LoadBalancer`>> configuration is ignored
+* xref:cluster-performance:thread-per-core-tpc.adoc[Thread-Per-Core] is not supported for `SINGLE_MEMBER` cluster routing and no benefit will be gained by enabling it with this routing mode.
 
 Declarative Configuration:
 
@@ -985,13 +985,15 @@ No retry attempt is made to connect to the lost member(s)
 +
 In a split and heal scenario, where the client has no access to other group members, the client is re-assigned to the initial group. 
 +
-In a scenario where all group members are killed almost simultateously, the client loses connection but reconnects when a member starts again.
+In a scenario where all group members are killed almost simultaneously, the client loses connection but reconnects when a member starts again.
 
 * The absence of <<configuring-backup-acknowledgement, backup acknowledgements>>, as the client does not have a view of the entire cluster
 If <<configuring-direct-to-leader-routing, CP direct-to-leader routing>> is enabled on your clients, and the `ADVANCED_CP` license
 is present on your Enterprise cluster, then clients in this routing mode can use this to send CP operations directly
 to group leaders wherever possible, even after leadership changes.
 * Best efforts are made to route operations to the required member, but if this cannot be done operations are routed as defined in the <<configuring-load-balancer,`LoadBalancer`>>
+
+* xref:cluster-performance:thread-per-core-tpc.adoc[Thread-Per-Core] is not supported for `MULTI_MEMBER` cluster routing and may lead to event inconsistency if used.
 
 Declarative Configuration:
 
@@ -1133,7 +1135,7 @@ Its default value is *5000* milliseconds.
 
 [blue]*Hazelcast {enterprise-product-name}*
 
-Following is a client configuration to set a socket intercepter.
+Following is a client configuration to set a socket interceptor.
 Any class implementing `com.hazelcast.nio.SocketInterceptor` is a socket interceptor.
 
 
@@ -1374,7 +1376,7 @@ Its main purpose is to determine the next `Member` if queried.
 It is up to your implementation to use different load balancing policies.
 You should implement the interface `com.hazelcast.client.LoadBalancer` for that purpose.
 
-For <<java-client-cluster-routing-modes, Java cluster routing modes>>, the behaviour is as follows:
+For <<client-cluster-routing-modes, Client cluster routing modes>>, the behaviour is as follows:
 
 * If set to `ALL_MEMBERS` only the operations that are not
 key-based are routed to the endpoint that is returned by the `LoadBalancer`
@@ -1566,6 +1568,11 @@ instead of using a faster internal cluster link and routing through another memb
 direct to leader routing can put uneven pressure on the cluster if CP group leaders receive substantially more load than
 other members of the cluster - this is particularly problematic when only one CP group leader is present.
 
+NOTE: If a client does not have an active connection to a known CP group leader then the client will be unable to leverage
+direct-to-leader CP operations and will fall back to default round-robin behaviour, sending the request to any available
+cluster member instead. This feature provides no benefit when `SINGLE_MEMBER` routing is used as the client only has 1
+available connection to use for all operation sending.
+
 CP direct to leader routing can be enabled on clients with a single configuration option. Here is an example programmatic
 configuration snippet:
 
@@ -1672,7 +1679,7 @@ clientConfig.getConnectionStrategyConfig()
 When the client is disconnected from the cluster or trying to connect to a one
 for the first time, it searches for new connections. You can configure the frequency
 of the connection attempts and client shutdown behavior using
-`ConnectionRetryConfig` (programmatical approach)/`connection-retry` (declarative approach).
+`ConnectionRetryConfig` (programmatic approach)/`connection-retry` (declarative approach).
 
 Below are the example configurations for each.
 
@@ -1748,7 +1755,7 @@ connect to the target cluster (infinite timeout). If the failover client is used
 with the default value of this configuration element, the failover client will try
 to connect alternative clusters after 120000 ms (2 minutes). For any other value,
 both the client and the failover client will use this as it is.
-* `jitter`: Specifies by how much to randomize backoffs. Its default value is 0.
+* `jitter`: Specifies by how much to randomize backoff periods. Its default value is 0.
 
 A pseudo-code is as follows:
 
@@ -2223,7 +2230,7 @@ An unreliable failure detector allows a member to suspect that others have faile
 usually based on liveness criteria but it can make mistakes to a certain degree.
 
 Hazelcast Java client has two built-in failure detectors: Deadline Failure Detector and
-Ping Failure Detector. These client failure detectors work independently from
+Ping Failure Detector. These client failure detectors work independently of
 the member failure detectors, e.g., you do not need to enable the member failure detectors
 to benefit from the client ones.
 
@@ -2314,7 +2321,7 @@ xref:clusters:failure-detector-configuration.adoc#requirements-and-linuxunix-con
 Hazelcast members' xref:clusters:failure-detector-configuration.adoc#ping-failure-detector[Ping Failure Detector].
 
 If any of the above criteria isn't met, then `isReachable` will always
-fallback on TCP Echo attempts on port 7.
+fall back on TCP Echo attempts on port 7.
 
 An example declarative configuration to use the Ping Failure Detector is
 as follows (in the client's configuration XML file, e.g., `hazelcast-client.xml`):
@@ -2453,7 +2460,7 @@ that a concurrency has been detected), even if there are no further updates in t
 Normally in a concurrent system the windows keeps sliding forward so it always remains concurrent.
 Setting it too high effectively disables the optimization because once concurrency has been detected
 it will keep that way. Setting it too low could lead to suboptimal performance because the system
-will try write through and other optimizations even though the system is concurrent.
+will try to use write-through and other optimizations even though the system is concurrent.
 
 |`hazelcast.discovery.enabled`
 |false
@@ -2619,6 +2626,15 @@ increased performance and reduced memory usage.
 |The client shuffles the given member list to prevent all the clients to connect
 to the same member when this property is `true`. When it is set to `false`,
 the client tries to connect to the members in the given order.
+
+|`hazelcast.client.connectivity.logging.delay.seconds`
+|10
+|int
+|Delay in seconds after which the client logs connectivity statistics after member connection changes.
+If a member connection state changes before the delay period has elapsed, the delay is reset.
+The delay reduces noise from frequent connection updates that
+can occur in bursts. Note that only the last connectivity view will be
+logged when the task is run after this delay.
 
 |`hazelcast.client.statistics.enabled`
 |false

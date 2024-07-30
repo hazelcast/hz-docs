@@ -932,6 +932,7 @@ connections to the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] are direct-
 If leadership is reassigned while using `SINGLE_MEMBER` cluster routing, then this benefit may be lost.
 * <<configuring-load-balancer,`LoadBalancer`>> configuration is ignored
 * xref:thread-per-core-tpc.adoc[Thread-Per-Core] is not supported for `SINGLE_MEMBER` cluster routing and no benefit will be gained by enabling it with this routing mode.
+* xref:thread-per-core-tpc.adoc[Thread-Per-Core] is not supported for `SINGLE_MEMBER` cluster routing and no benefit will gained by enabling it with this routing mode.
 
 Declarative Configuration:
 
@@ -992,6 +993,8 @@ If <<configuring-direct-to-leader-routing, CP direct-to-leader routing>> is enab
 is present on your Enterprise cluster, then clients in this routing mode can use this to send CP operations directly
 to group leaders wherever possible, even after leadership changes.
 * Best efforts are made to route operations to the required member, but if this cannot be done operations are routed as defined in the <<configuring-load-balancer,`LoadBalancer`>>
+
+* xref:thread-per-core-tpc.adoc[Thread-Per-Core] is not supported for `MULTI_MEMBER` cluster routing and may lead to event inconsistency if used.
 
 Declarative Configuration:
 
@@ -1565,6 +1568,11 @@ where clients have increased latency to CP group leaders, it may be detrimental 
 instead of using a faster internal cluster link and routing through another member. It should also be considered that
 direct to leader routing can put uneven pressure on the cluster if CP group leaders receive substantially more load than
 other members of the cluster - this is particularly problematic when only one CP group leader is present.
+
+NOTE: If a client does not have an active connection to a known CP group leader then the client will be unable to leverage
+direct-to-leader CP operations and will fall back to default round-robin behaviour, sending the request to any available
+cluster member instead. This feature provides no benefit when `SINGLE_MEMBER` routing is used as the client only has 1
+available connection to use for all operation sending.
 
 CP direct to leader routing can be enabled on clients with a single configuration option. Here is an example programmatic
 configuration snippet:

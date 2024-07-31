@@ -1,0 +1,60 @@
+= Best Practices For IMap Bulk Read Operations
+
+[[best-practices-for-imap-bulk-read-operations]]
+
+An Out of Memory Error (OOME) is something you want to avoid. There
+are many faces of its impact. Even if hazelcast tries its best to
+keep your data safe, availability of the cluster can be lost. Due to
+the triggered migrations, operation latencies increase. From your
+application perspective, an OOME can break your application as well.
+Some of the IMap api calls are dangerous from this perspective.
+
+Calling methods like entrySet and values can cause out of memory
+error (OOME). Though this depends on the size of your map and
+the available memory of each member, to make it less likely,
+confirming with some of the best practices can be helpful.
+
+=== Limit Query Result Size
+Limiting query result sizes can save your application
+from side effects of bulk data reading.
+
+[source,java]
+----
+Set<Map.Entry<K, V>> entrySet();
+Set<Map.Entry<K, V>> entrySet(Predicate<K, V> predicate);
+----
+See xref:data-structures:preventing-out-of-memory.adoc#configuring-query-result-size[Configuring Query Result Size]
+
+=== Use Iterator
+Iterator fetches data in batches for the constant heap utilization.
+The methods for it is in `IMap` api:
+
+[source,java]
+----
+Iterator<Entry<K, V>> iterator();
+Iterator<Entry<K, V>> iterator(int fetchSize);
+----
+
+=== Use PartitionPredicate
+- See xref:query:predicate-overview.adoc#filtering-with-partition-predicate[PartitionPredicate]
+
+=== Plan Capacity
+To provide sufficient system resources for the Hazelcast
+cluster, capacity planning is crucial. It involves estimating
+and validating the cluster's capacity (memory, CPU,
+disk, etc.) to determine which recommendations and best
+practices can help the cluster achieve optimal performance.
+
+See xref:ROOT:capacity-planning.adoc[Capacity Planning]
+
+=== Send Operation to Data
+In some cases, reversing the thinking can be better. Instead of
+reading all data into your local application, you can send operations
+to the data. With this approach, you can perform in-place processing
+more quickly. For this purpose, you can use EntryProcessor.
+
+See xref:computing:entry-processor.adoc[EntryProcessor]
+
+=== Use SqlService
+
+

@@ -22,7 +22,7 @@ vectors using the previously mentioned CLIP sentence transformer.
 . A sink which stores the image vectors, along with their URLs, in
 a Hazelcast `VectorCollection`.
 
-See the blueprint below.
+The diagram below shows you how the components fit together and the processing steps each component performs. 
 
 image:TutorialBlueprint.gif[Tutorial Blueprint]
 
@@ -59,12 +59,14 @@ This tutorial makes use of the Hazelcast Pipeline API. If you are not familiar w
 
 . Download the CLIP model
 +
+```sh
+docker compose run download-model
+```
++
 The model we will be using to perform embedding is almost 500M.  To speed
 up everything that uses the model, we can download it ahead of time.
 
-. Run `docker compose run download-model`
-+
-Verify that the _models_ folder of the project has been populated.
+. Verify that the _models_ folder of the project has been populated.
 
 . Install Hazelcast license
 +
@@ -121,7 +123,7 @@ This launches Hazelcast Platform, Hazelcast Management Center, and the Web serve
 . Test the pipeline
 +
 .. build the project: `mvn clean package`
-.. deploy the pipeline: `docker compose run deploy-image-loader`
+.. deploy the pipeline: `docker compose run submit-image-loader`
 .. monitor the logs: `docker compose logs --follow hz`
 .. to generate events, copy some images from the `images` folder
 into the `www` folder.  You will see a new pipeline event for each image.
@@ -130,7 +132,7 @@ to "Jobs" and select "Stop".
 +
 Iterate on the pipeline until you have finished the whole thing, and you are sinking vectors into Hazelcast with no errors.
 +
-Once you have the python service in your pipeline, it will take some time to initialize (up to 5 minutes) because it has to download and install many Python packages.  You will see something like the following in the hazelcast logs when the Python stream stage has initialized.
+Once you have deployed the pipeline, it will take a while to change from "Starting" to "Running" (up to 5 minutes) because Hazelcast has to download and install many Python packages to support the embedding.  You will see something like the following in the hazelcast logs when the Python stream stage has initialized.
 
 ```bash 
 hazelcast-image-search-hz-1  | 2024-07-17 19:18:41,881 [ INFO] [hz.magical_joliot.cached.thread-7] [c.h.j.python]: [172.25.0.3]:5701 [dev] [5.5.0-SNAPSHOT] Started Python process: 246
@@ -161,11 +163,6 @@ hazelcast-image-search-jupyter-1  |         http://localhost:8888/tree?token=7a4
 hazelcast-image-search-jupyter-1  |         http://127.0.0.1:8888/tree?token=7a4d2794d4135eaa88ee9e9642e80e7044cb5c213717e2be
 ```
 
-[NOTE]
-====
-Some errors in the log are expected and can be safely ignored.  The lines you are looking for should be near the top of the output.
-====
-
 . Copy the URL from the output and paste it into a browser window.  This should bring up a Jupyter notebook.  Double-click on the "Hazelcast Image Similarity" notebook to open it and follow the directions there.
 
 = Summary
@@ -177,5 +174,5 @@ collection and perform similarity searches.
 
 . If an image is removed from the `www` directory, it will not be removed from the vector collection. This is because the underlying Java WatcherService is not detecting the delete events.
 . If too many images are dumped into `www` at the same time, the pipeline will break with a 'grpc max message size exceeded' message. The solution can safely handle 200-250 images at the same time.  This is a known issue with the Python integration that will be addressed in a future release.
-. Deploying the pipeline can take 2-10 minutes depending on your internet
-connection.  This is due to the need to download many python packages.
+. Deploying the pipeline can take 2-10 minutes depending on your internet connection.  This is due to the need to download many Python packages.
+. Check the https://docs.hazelcast.com/hazelcast/5.5/release-notes/5-5-0#known-issues[Hazelcast Documentation release notes] for any additional known issues with 

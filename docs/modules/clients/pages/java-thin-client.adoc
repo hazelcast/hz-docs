@@ -1,19 +1,24 @@
-= Thin Java Client
+= Java Thin Client
 :page-api-reference: https://docs.hazelcast.org/docs/{page-latest-supported-java-client}/javadoc
 :url-cloud-signup: https://cloud.hazelcast.com/sign-up
-:page-toclevels: 3 
+:page-toclevels: 3
+:description: The Java Thin Client is a lightweight client that connects to the cluster and performs all operations through the connected node. It does not become a part of the cluster topology, never holds any data, and is not used as a destination for compute calculations. The Java Thin Client supports simplified maintenance, a clear separation of client and cluster codebases, optimization of deployment, and opportunities for further optimization specific to the Java Thin Client.
 [[java-client]]
+
+{description}
 
 == Getting Started
 
 To get started, include the `hazelcast-java-client-{full-version}.jar` dependency in your classpath. Once included, you can start using this client as if
-you are using the Hazelcast API. The differences are discussed in the below sections.
+you are using the Hazelcast API. The differences are discussed below.
 
-NOTE: If you have a Hazelcast {enterprise-product-name} license, you do not need to set the license key in your Hazelcast Thin Java Clients to use the xref:getting-started:editions.adoc#features-in-hazelcast-enterprise[{enterprise-product-name} features] - setting it on the member side is enough. In this case, you only need to include the `hazelcast-enterprise-java-client-{full-version}.jar` dependency in your classpath.
+NOTE: If you have a Hazelcast {enterprise-product-name} license, you do not need to set the license key in your clients to use the xref:getting-started:editions.adoc#features-in-hazelcast-enterprise[{enterprise-product-name} features]. It is sufficient to set the license on the member side, and include the `hazelcast-enterprise-java-client-{full-version}.jar` dependency in your classpath.
 
-If you prefer to use Maven, simply add the `hazelcast` dependency
-to your `pom.xml` (or the `hazelcast-enterprise` dependency, if you want the client to use {enterprise-product-name} features provided that you have the Hazelcast {enterprise-product-name} license),
-which you may already have done to start using Hazelcast:
+If using Maven, add the `hazelcast` dependency
+to your `pom.xml`, or to the `hazelcast-enterprise` dependency if you want the client to use {enterprise-product-name} features, and you have the Hazelcast {enterprise-product-name} license),
+which might have been done when starting using Hazelcast.
+
+The `pom.xml` file is updated as follows:
 
 [source,xml,subs="attributes+"]
 ----
@@ -29,7 +34,7 @@ which you may already have done to start using Hazelcast:
 
 The client API is your gateway to access your Hazelcast cluster, including distributed objects and data pipelines (jobs).
 
-The first step is the configuration. Currently, the Java client supports only programmatic configuration. Future releases will also support the declarative configuration approach.
+First, you must configure your client. Currently, the Java Thin Client supports only programmatic configuration, as follows:
 
 
 [source,java]
@@ -39,15 +44,15 @@ clientConfig.setClusterName("dev");
 clientConfig.getNetworkConfig().addAddress("10.90.0.1", "10.90.0.2:5702");
 ----
 
-See the <<configuring-java-client, Configuring Java Client section>> for more information.
+For further information, see <<configuring-the-java-client, Configuring the Java Thin Client >>.
 
-The second step is initializing the `HazelcastInstance` to be connected to the cluster.
+After completing the client configuration, you must initialize the `HazelcastInstance` that you want to connect to the cluster as follows:
 
 ```java
 HazelcastInstance client = HazelcastClient.newHazelcastClient(clientConfig);
 ```
 
-To create a map and populate it with some data:
+You can create a map and populate it with some data as follows:
 
 [source,java]
 ----
@@ -58,35 +63,35 @@ mapCustomers.put("2", new Customer("Ali", "Selam"));
 mapCustomers.put("3", new Customer("Avi", "Noyan"));
 ----
 
-For details about using maps, see xref:data-structures:map.adoc[].
+For further information about using maps, see xref:data-structures:map.adoc[].
 
-As the final step, if and when you are done with your client, you can shut it down as shown below:
+Lastly, after setting up your client, you can shut it down as follows:
 
 ```java
 client.shutdown();
 ```
-Configuring Java Client
-The above code line releases all the used resources and closes connections to the cluster.
+
+The code line provided above releases all used resources and closes all connections to the cluster.
 
 [[handling-failures]]
 === Handling Failures
 
-There are two main failure cases and configurations you can perform to achieve proper behavior.
+The main areas are around client connections and retry-able operations. Some approaches to avoiding such failures are provided below.
 
 **Handling Client Connection Failure:**
 
-While the client is trying to connect initially to one of the members in the
-`ClientNetworkConfig.addressList`, all the members might be not available.
-Instead of giving up, throwing an exception and stopping the client,
-the client retries to connect as configured which is described in the
-<<configuring-client-connection-retry, Configuring Client Connection Retry section>>.
+While the client initially tries to connect to one of the members in the
+`ClientNetworkConfig.addressList`, it is possible that not all members are available.
+Instead of giving up, throwing an exception and stopping,
+the client continues to attempt to connect as configured.
+For information on the available configuration, see <<configuring-client-connection-retry, Configuring Client Connection Retry>>.
 
 The client executes each operation through the already established connection to the cluster.
-If this connection(s) disconnects or drops, the client tries to reconnect as configured.
+If this connection disconnects or drops, the client tries to reconnect as configured.
 
-The initial connection of a client is established using one of the addresses you provide in the <<configuring-address-list, address list>>. 
-The client gets the addresses of other members in the cluster from the initially connected member.
-If your client is <<java-client-operation-modes, smart>>, the client tries to connect to them.
+The initial connection is established using one of the addresses provided in the <<configuring-address-list, address list>>.
+The client gets the addresses of other members in the cluster from the first connected member.
+If your client is <<java-client-operation-modes, Smart>>, the client tries to connect to them.
 If any of the other members have both private and public addresses, the client must decide
 which one to use when connecting to those members. You can override the `hazelcast.discovery.public.ip.enabled` property 
 to suit your setup. For further information on the `hazelcast.discovery.public.ip.enabled` property,
@@ -106,9 +111,9 @@ you can set the `redoOperation` to `true`. See the <<enabling-redo-operation, En
 
 You can set a timeout for retrying the operations sent to a member.
 This can be provided by using the property `hazelcast.client.invocation.timeout.seconds` in `ClientProperties`.
-The client retries an operation within this given period, of course, if it is a read-only operation or
+The client retries an operation within this given period, of course, if it is a read-only operation, or
 you enabled the `redoOperation` as stated in the above paragraph.
-This timeout value is important when there is a failure resulted by either of the following causes:
+This timeout value is important when there is a failure resulted by any of the following causes:
 
 * Member throws an exception.
 * Connection between the client and member is closed.
@@ -121,7 +126,7 @@ When any failure happens between a client and member
 (such as an exception on the member side or connection issues), an operation is retried if:
 
 * it is certain that it has not run on the member yet
-* or if it is idempotent such as a read-only operation, i.e., retrying does not have a side effect.
+* it is idempotent such as a read-only operation; that is, retrying does not have a side effect.
 
 If it is not certain whether the operation has run on the member,
 then the non-idempotent operations are not retried.
@@ -136,14 +141,11 @@ that `queue.offer` operation may rerun and this causes the same objects to be of
 
 === Using Supported Distributed Data Structures
 
-[NOTE]
-====
-Currently, the Thin Java Client only implements distributed map. Support for other data structures will be added in future versions.
-====
+NOTE: Currently, the Java Thin Client only implements distributed map.
 
-==== Using Map with Java Client
+==== Using Map with the Java Thin Client
 
-You can use any distributed map object with the client, as shown below.
+You can use any distributed map object with the client, as follows:
 
 [source,java]
 ----
@@ -154,13 +156,13 @@ String value= map.get(1);
 map.remove(1);
 ----
 
-Locality is ambiguous for the client, so `addLocalEntryListener()` and
+Locality is ambiguous for the client, so the `addLocalEntryListener()` and
 `localKeySet()` methods are not supported. See xref:data-structures:map.adoc[]
 for more information.
 
 === Using Client Services
 
-Thin Java Client provides the services discussed below for some common functionalities on the client side.
+The Java Thin Client provides the services discussed below for some common functionalities on the client side.
 
 ==== Using Distributed Executor Service
 
@@ -194,12 +196,12 @@ Set<Partition> partitions = partitionService.getPartitions();
 
 ==== Handling Lifecycle
 
-Lifecycle handling performs:
+Lifecycle handling does the following:
 
-* checking if the client is running
-* shutting down the client gracefully
-* terminating the client ungracefully (forced shutdown)
-* adding/removing lifecycle listeners.
+* Checks if the client is running
+* Shuts down the client gracefully
+* Terminates the client ungracefully (forced shutdown)
+* Adds or removes lifecycle listeners
 
 [source,java]
 ----
@@ -221,19 +223,19 @@ You can configure global events not relating to any distributed object through
 <<configuring-client-listeners, Client ListenerConfig>>.
 You should configure distributed object listeners like map entry listeners or
 list item listeners through their proxies. See the related sections under
-each distributed data structure in this Reference Manual.
+each distributed data structure in this documentation.
 
 === Async Start and Reconnect Modes
 
-Java client can be configured to connect to a cluster in an async manner during the
-client start and reconnecting after a cluster disconnect.
-Both of these options are configured via `ClientConnectionStrategyConfig`.
+The Java Thin Client can be configured to connect to a cluster asynchronously during
+client start-up and reconnection after a cluster disconnect.
+Both of these options are configured using `ClientConnectionStrategyConfig`.
 
-Async client start is configured by setting the configuration element `async-start` to `true`.
-This configuration changes the behavior of `HazelcastClient.newHazelcastClient()` call.
+You can configure asynchronous client start by setting the configuration element `async-start` to `true`.
+This configuration changes the behavior of the `HazelcastClient.newHazelcastClient()` call.
 It returns a client instance without waiting to establish a cluster connection.
 Until the client connects to cluster, it throws `HazelcastClientOfflineException`
-on any network dependent operations hence they won't block.
+on any network dependent operations to ensure that they won't cause a block.
 If you want to check or wait the client to complete its cluster connection,
 you can use the built-in lifecycle listener:
 
@@ -256,35 +258,29 @@ if (clientStateListener.awaitConnected()) {
 }
 ----
 
-The Java client can also be configured to specify
+The Java Thin Client can also be configured to specify
 how it reconnects after a cluster disconnection.
-The following are the options:
+The options are as follows:
 
-* A client can reject to reconnect to the cluster and trigger the client shutdown process.
+* Client can reject to reconnect to the cluster and trigger the client shutdown process.
 * Client can open a connection to the cluster by blocking all waiting invocations.
 * Client can open a connection to the cluster without blocking the waiting invocations.
 All invocations receive `HazelcastClientOfflineException` during the establishment of cluster connection.
-If cluster connection is failed to connect, then client shutdown is triggered.
+If cluster connection fails to connect, then client shutdown is triggered.
 
 See the <<java-client-connection-strategy>> section to learn how to configure
 these.
 
 [[configuring-java-client]]
-== Configuring Java Client
+== Configuring Java Thin Client
 
 === Declarative vs. Programmatic Configuration
 
-You can configure Hazelcast Thin Java Client declaratively (XML), programmatically (API), or
-using client system properties.
+In the declarative configuration approach, settings are defined in configuration files, in XML or YAML format. This method allows for a clear separation of configuration from the application code, making it easier to manage and modify configurations without altering the codebase.
 
-In the declarative configuration approach, settings are defined in configuration files, in XML or YAML format. This method allows for a clear separation of configuration from the application code, making it easier to manage and modify configurations without altering the codebase. 
+NOTE: The Java Thin Client currently does not support declarative configuration. This support will be added in future releases.
 
-[NOTE]
-====
-The Thin Java Client currently does not support declarative configuration. This support will be added in future releases.
-====
-
-The programmatic configuration approach involves setting configurations directly within the application code using the provided API. Using this method, configurations can be dynamically adjusted at runtime based on the application's needs. For programmatic configuration of the Hazelcast Thin Java Client, just instantiate a `ClientConfig` object and configure the desired aspects. An example is shown below:
+The programmatic configuration approach involves setting configurations directly within the application code using the provided API. Using this method, configurations can be dynamically adjusted at runtime based on the application's needs. For programmatic configuration of the Java Thin Client, instantiate a `ClientConfig` object and configure the desired aspects. An example is shown below:
 
 [source,java]
 ----
@@ -293,18 +289,15 @@ clientConfig.setClusterName("dev");
 clientConfig.setLoadBalancer(yourLoadBalancer);
 ----
 
-[NOTE]
-====
-In the subsequent sections, all examples will be provided using the programmatic approach.
-====
+NOTE: In the subsequent sections, all examples will be provided using the programmatic approach.
 
 [[client-network]]
 === Client Network
 
-All network related configuration of Hazelcast Thin Java Client is performed in the class
+All network related configuration of the Java Thin Client is performed in the class
 `ClientNetworkConfig` when using programmatic configuration.
 
-Below are some examples of configuring network for Java Client programmatically.
+Some examples of the programmatic configuration of the network for the Java Thin Client are provided below.
 
 [[configuring-address-list]]
 ==== Configuring Address List
@@ -314,7 +307,7 @@ The client uses this list to find an alive member. Although it may be enough to 
 only one address of a member in the cluster (since all members communicate with each other),
 it is recommended that you give the addresses for all the members.
 
-Example:
+For example:
 
 [source,java]
 ----
@@ -327,7 +320,7 @@ networkConfig.addAddress("10.1.1.21", "10.1.1.22:5703");
 ==== Setting Connection Timeout
 
 Connection timeout is the timeout value in milliseconds for members to
-accept client connection requests. The following are the example configurations.
+accept client connection requests. Example configurations are provided below.
 
 Example:
 
@@ -342,7 +335,7 @@ Its default value is *5000* milliseconds.
 ==== Setting Outbound Ports
 
 You may want to restrict outbound ports to be used by Hazelcast-enabled applications.
-To fulfill this requirement, you can configure Hazelcast Thin Java Client to use only defined outbound ports.
+To fulfill this requirement, you can configure the Java Thin Client to use only defined outbound ports.
 
 Example:
 
@@ -361,24 +354,21 @@ networkConfig.addOutboundPort(34705);
 
 Hazelcast clients have two operation modes because of the distributed nature of the data and cluster.
 
-**Smart Client**: In the smart mode, the clients connect to each cluster member.
+**Smart Client**: In the Smart mode, the clients connect to each cluster member.
 Since each xref:overview:data-partitioning.adoc[data partition] uses the well known and consistent hashing algorithm,
 each client can send an operation to the cluster member that owns the partition that holds their data,
 which increases the overall throughput and efficiency.
 
-[NOTE]
-====
-The **Smart Client** mode is currently not implemented in the Thin Java Client. Support for Smart Client will be added in the future versions.
-====
+NOTE: The **Smart Client** mode is currently not implemented in the Java Thin Client. Support for Smart Client will be added in the future versions.
 
-**Unisocket Client**:  In the unisocket client mode, the clients only connect to one of the configured addresses.
+**Unisocket Client**:  In the Unisocket mode, the clients only connect to one of the configured addresses.
 This single member behaves as a gateway to the other members.
 For any operation requested from the client, it redirects the request to the relevant member and
 returns the response back to the client returned from that member.
 
-Using a unisocket client is necessary in scenarios where clients are required to connect to only a single member rather than to each member in the cluster. This requirement may arise due to firewalls, security considerations, or specific networking issues.
+Using the Unisocket mode is necessary in scenarios where clients are required to connect to only a single member rather than to each member in the cluster. This requirement may arise due to firewalls, security considerations, or specific networking issues.
 
-Since the Thin Java Client currently only supports the unisocket client mode, you need to disable smart routing in the client network configuration as follows:
+Since the Java Thin Client currently only supports the Unisocket mode, you need to disable Smart routing in the client network configuration as follows:
 
 [source,java]
 ----
@@ -387,7 +377,7 @@ ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
 networkConfig.setSmartRouting(false);
 ----
 
-Note that you need also to disable smart routing for the clients which
+Note that you need also to disable Smart routing for the clients which
 want to use temporary permissions defined in a member.
 See the xref:security:native-client-security.adoc#handling-permissions-when-a-new-member-joins[Handling Permissions section].
 
@@ -493,14 +483,14 @@ Once set, the connection (socket) is established out of an TLS/SSL factory defin
 a factory class name or factory implementation. See the xref:security:tls-ssl.adoc[TLS/SSL section].
 
 As explained in the TLS/SSL section, Hazelcast members have keyStores used to
-identify themselves (to other members) and Hazelcast clients have trustStore used to
+identify themselves (to other members) and the clients have trustStore used to
 define which members they can trust. The clients also have their keyStores and
 members have their trustStores so that the members can
 know which clients they can trust: see the xref:security:tls-ssl.adoc#mutual-authentication[Mutual Authentication section].
 
 [TODO]
 ====
-Do we have TLS/SSL in the thin clent? Provide details on the programmatic config
+Do we have TLS/SSL in the Java Thin Client? Provide details on the programmatic config
 ====
 
 === Configuring Client Cluster
@@ -540,7 +530,7 @@ You can add the following types of event listeners:
 [[client-security-configuration]]
 === Configuring Client Security
 
-In the cases where the security established with `Config` is not enough and
+In the cases where the security established with `Config` is not enough, and
 you want your clients connecting securely to the cluster, you can use `ClientSecurityConfig`.
 This configuration has a `credentials` parameter to set the IP address and UID.
 See the https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/client/config/ClientSecurityConfig.html[ClientSecurityConfig Javadoc^].
@@ -553,7 +543,7 @@ See the xref:serialization:serialization.adoc[Serialization chapter].
 
 === Defining Client Labels
 
-You can define labels in your Java client, similar to the way it can
+You can define labels in your Java Thin Client, similar to the way it can
 be done for the xref:management:cluster-utilities.adoc[members].
 Through the client labels, you can assign special roles for your clients and
 use these roles to perform some actions specific to those client connections.
@@ -595,7 +585,7 @@ all the waiting invocations receive a `HazelcastClientOfflineException`.
 Its default value is `ON`.
 
 The below example of programmatic configuration shows how to configure
-a Java client's starting and reconnecting modes.
+the Java Thin Client's starting and reconnecting modes.
 
 [source,java]
 ----
@@ -611,7 +601,7 @@ clientConfig.getConnectionStrategyConfig()
 When the client is disconnected from the cluster or trying to connect to a one
 for the first time, it searches for new connections. You can configure the frequency
 of the connection attempts and client shutdown behavior using
-`ConnectionRetryConfig` (programmatical approach).
+`ConnectionRetryConfig` (programmatically).
 
 [source,java]
 ----
@@ -636,7 +626,7 @@ Its default value is 30000 ms.
 Its default value is 1.05.
 * `cluster-connect-timeout-millis`: Timeout value in milliseconds for the client to give up
 to connect to the current cluster. Its default value is `-1`, i.e., infinite.
-For the default value, client will not stop trying to
+For the default value, the client will not stop trying to
 connect to the target cluster (infinite timeout). If the failover client is used
 with the default value of this configuration element, the failover client will try
 to connect alternative clusters after 120000 ms (2 minutes). For any other value,
@@ -771,7 +761,7 @@ The client configurations must be exactly the same except the following configur
 * `NetworkConfig.DiscoveryConfig`
 
 
-== Java Client Failure Detectors
+== Java Thin Client Failure Detectors
 
 The client failure detectors are responsible to determine if a member in the cluster is unreachable or crashed.
 The most important problem in the failure detection is to distinguish
@@ -782,7 +772,7 @@ A workaround to this limitation is to use unreliable failure detectors.
 An unreliable failure detector allows a member to suspect that others have failed,
 usually based on liveness criteria but it can make mistakes to a certain degree.
 
-Hazelcast Java client has two built-in failure detectors: Deadline Failure Detector and
+The Java Thin Client has two built-in failure detectors: Deadline Failure Detector and
 Ping Failure Detector. These client failure detectors work independently from
 the member failure detectors, e.g., you do not need to enable the member failure detectors
 to benefit from the client ones.
@@ -914,7 +904,7 @@ regardless of the other detectors.
 [[client-system-properties]]
 == Client System Properties
 
-There are some advanced client configuration properties to tune some aspects of Hazelcast Client.
+There are some advanced client configuration properties to tune some aspects of the Java Thin Client.
 You can set them as property name and value pairs through declarative configuration,
 programmatic configuration, or JVM system property. See the xref:ROOT:system-properties.adoc[System Properties appendix]
 to learn how to set these properties.
@@ -1003,7 +993,7 @@ or the member fails with an exception, or the client's heartbeat requests are ti
 |20
 |int
 |Interval in seconds between each `IOBalancer`
-execution. By default Hazelcast uses 3 threads to read
+execution. By default, Hazelcast uses 3 threads to read
 data from TCP connections and 3 threads to write data to connections.
 `IOBalancer` detects and fixes the fluctuations when these threads are not
 utilized equally. The shorter intervals catch I/O imbalances faster, but they cause higher overhead.
@@ -1013,13 +1003,13 @@ A value smaller than 1 disables the balancer.
 |-1
 |int
 |Controls the number of I/O input threads. Defaults to -1, i.e., the system decides.
-If the client is a smart client, it defaults to 3, otherwise it defaults to 1.
+If the client is a Smart client, it defaults to 3, otherwise it defaults to 1.
 
 |`hazelcast.client.io.output.thread.count`
 |-1
 |int
 |Controls the number of I/O output threads. Defaults to -1, i.e., the system decides.
-If the client is a smart client, it defaults to 3, otherwise it defaults to 1.
+If the client is a Smart client, it defaults to 3, otherwise it defaults to 1.
 
 |`hazelcast.client.io.write.through`
 |true
@@ -1058,7 +1048,7 @@ If set to 0, the response threads are bypassed and the response handling is done
 on the I/O threads. Under certain conditions this can give a higher throughput, but
 setting to 0 should be regarded as an experimental feature.
 If set to 0, the IO_OUTPUT_THREAD_COUNT is really going to matter because the
-inbound thread will have more work to do. By default when TLS is not enabled,
+inbound thread will have more work to do. By default, when TLS is not enabled,
 there is just one inbound thread.
 
 |`hazelcast.client.response.thread.dynamic`
@@ -1067,7 +1057,7 @@ there is just one inbound thread.
 |Enables dynamic switching between processing the responses on the I/O threads and offloading the response threads.
 Under certain conditions (single threaded clients) processing on the I/O
 thread can increase the performance because useless handover to the response
-thread is removed. Also the response thread is not created until it is needed.
+thread is removed. Also, the response thread is not created until it is needed.
 Especially for ephemeral clients, reducing the threads can lead to
 increased performance and reduced memory usage.
 

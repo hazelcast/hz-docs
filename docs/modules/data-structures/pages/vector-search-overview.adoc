@@ -210,7 +210,8 @@ digraph singleStageSearch {
 The number of partitions has a big impact on the performance of the vector collection. The conflicting factors that can impact the selection of an optimal partition count are as follows:
 
 - *data ingestion*: a greater number of partitions results in improved parallelism, up to around the total number of partition threads in the cluster.
-  After this point, more partitions will not significantly improve ingestion speed.
+  After this point, more partitions will not significantly improve ingestion speed. 
+  If there are fewer partitions than number of cores, not all available resources will be utilized during ingestion because updates on given partition are executed by single thread. 
 - *similarity search*: in general, having fewer partitions results in better search performance and reduced latency.
   However, the impact on quality/recall is complicated and depends also on `partitionLimit`.
 - *migration*: avoid partitions with a large memory size, including metadata, vectors and vector index internal representation.
@@ -235,4 +236,45 @@ To decrease pressure on heap memory, you can decrease the number of parallel mig
 
 1. For searches with small `topK` (for example, 10) it may be beneficial to artificially increase `topK`, adjust `partitionLimit` accordingly, and discard extra results. If you need 10 results, a good starting point for tuning could be `topK=100` and a `partitionLimit` between 50 and 100. While this will make the search slower, it will also improve quality, sometimes significantly. Overall, this setup can be more efficient than increasing index build parameters (`max-degree`, `ef-construction`) which results in slower index builds and searches. With a very small `topK` or `paritionLimit`, the search algorithm is less able to escape local minima and find the best results.
 2. Vector deduplication does not incur significant overhead for uploads (usually less than 1%) and searches. You may consider disabling it to get slightly better performance and smaller memory usage if your dataset does not contain duplicated vectors. However, be aware that in the presence of many duplicated vectors with deduplication disabled, a  similarity search may return poor quality results.
+3. For given query each vector index partition is searched by 1 thread. Number of concurrent partition searches is configured by specifying pool size for `hz:query` executor, which by default has 16 threads. In server with many cores it can be increased to fully utilize all available cores as follows:
 
+[tabs] 
+==== 
+Java:: 
++ 
+--
+[source,java]
+----
+Config cfg = new Config();
+cfg.getExecutorConfig("hz:query").setPoolSize(100);
+----
+--
+
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <executor-service name="hz:query">
+        <pool-size>100</pool-size>
+    </executor-service>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  ...
+  executor-service:
+    "hz:query":
+      pool-size: 100
+----
+====
+
+4. If there are fewer partitions than available cores, not all cores will be used for single search execution. This can be fine if you are focused on throughput as in general less partitions need less resources (mainly CPU). However, if you want to achieve best latency for single client, it is better to distribute the search to as many cores as possible which requires having at least this many partitions as cores in the cluster.

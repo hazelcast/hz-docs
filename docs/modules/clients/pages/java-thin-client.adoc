@@ -91,11 +91,6 @@ If this connection disconnects or drops, the client tries to reconnect as config
 
 The initial connection is established using one of the addresses provided in the <<configuring-address-list, address list>>.
 The client gets the addresses of other members in the cluster from the first connected member.
-If your client is <<java-client-operation-modes, Smart>>, the client tries to connect to them.
-If any of the other members have both private and public addresses, the client must decide
-which one to use when connecting to those members. You can override the `hazelcast.discovery.public.ip.enabled` property 
-to suit your setup. For further information on the `hazelcast.discovery.public.ip.enabled` property,
-see <<client-system-properties, Client System Properties>>.
 
 If you use a <<client-network,discovery mechanism>> to find the initial member for the connection instead of an address list,
 you can use the same property to configure whether the initial member connection uses the private or public address.
@@ -488,10 +483,31 @@ define which members they can trust. The clients also have their keyStores and
 members have their trustStores so that the members can
 know which clients they can trust: see the xref:security:tls-ssl.adoc#mutual-authentication[Mutual Authentication section].
 
-[TODO]
-====
-Do we have TLS/SSL in the Java Thin Client? Provide details on the programmatic config
-====
+```java
+Properties properties = new Properties();
+properties.setProperty("protocol", "TLSv1.2");
+properties.setProperty("trustCertCollectionFile", "/path/server.crt");
+
+SSLConfig sslConfig = new SSLConfig().setEnabled(true)
+                                     .setProperties(properties);
+sslConfig.setFactoryClassName(BasicSSLContextFactory.class.getName())
+         .setFactoryImplementation(new BasicSSLContextFactory());
+ClientConfig clientConfig = new ClientConfig();
+clientConfig.getNetworkConfig().setSSLConfig(sslConfig);
+```
+Please note that the paths in the properties here are *absolute paths* to the resources in classpath.
+
+To enable mutual authentication on the client, add to the properties:
+```java
+properties.setProperty("keyFile", "/path/client.pem");
+properties.setProperty("keyCertChainFile", "/path/client.crt");
+```
+To use the OpenSSL engine instead of the Basic SSL context,
+replace the SSL context factory class name and implementation as follows:
+```java
+sslConfig.setFactoryClassName(OpenSSLEngineFactory.class.getName())
+        .setFactoryImplementation(new OpenSSLEngineFactory());
+```
 
 === Configuring Client Cluster
 

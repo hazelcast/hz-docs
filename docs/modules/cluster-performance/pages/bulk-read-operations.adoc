@@ -9,7 +9,7 @@ in increased operation latencies due to triggered migrations. From
 your application's perspective, an OOME could also cause a system
 crash. Certain IMap API calls are particularly risky in this regard.
 
-*Methods like `entrySet()` and `values()` can trigger an OOME*, depending
+*Methods like `IMap#entrySet()` and `IMap#values()` can trigger an OOME*, depending
 on the size of your map and the available memory on each member.
 To mitigate this risk, following best practices is essential.
 
@@ -46,7 +46,7 @@ utilization. The relevant methods in the IMap API include:
 Iterator<Entry<K, V>> iterator();
 Iterator<Entry<K, V>> iterator(int fetchSize);
 ----
-
+Here is an example usage of iterator api:
 [source,java]
 ----
 IMap<Integer, Integer> testMap = instance.getMap("test");
@@ -79,5 +79,27 @@ resources. *EntryProcessor* is an excellent tool for this purpose.
 See xref:data-structures:entry-processor.adoc[Entry Processor] for more details.
 
 === Use SqlService
+SQL was designed specifically for distributed computing use cases in mind :
+the DQL queries results are paged, what makes SQL a decent tool to fetch bulks of data.
+For example, a replacement for `IMap#values()`:
+
+
+[source,java]
+----
+String MAP_NAME = "...";
+HazelcastInstance client = HazelcastClient.newHazelcastClient();
+// Create a SQL mapping for IMap
+client.getSql().execute("CREATE MAPPING " + MAP_NAME + " (__key INT, this VARCHAR)");
+// Run query to replace IMap#values()
+SqlResult result = client.getSql().execute("SELECT this FROM " + MAP_NAME);
+// Process the data in paged fashion
+for (SqlRow row: result) {
+    /* do your processing */
+}
+----
+
+Caution: user must have Jet to be enabled to use SQL service.
+
+See: xref:query:sql-overview.adoc[SQL Overview] for more details
 
 

@@ -2,44 +2,20 @@
 [[tlsssl]]
 :page-enterprise: true
 
-NOTE: You cannot use TLS/SSL when xref:encryption.adoc[Symmetric Encryption]
-is enabled. Also note that the symmetric encryption feature has been deprecated.
-
 You can use the TLS (Transport Layer Security)
 protocol to establish an encrypted communication
 across your Hazelcast cluster with key stores and trust stores.
 
-NOTE: It is NOT recommended to reuse the key stores and trust stores
-for external applications.
-
-NOTE: Using TLS/SSL may have an impact on the cluster performance.
-See the xref:cluster-performance:performance-tuning.adoc#tls-ssl-perf[TLS/SSL Tuning section] for more information about the performance considerations. 
-
-== TLS/SSL for Hazelcast Members
-
 Hazelcast allows you to encrypt socket level communication between
-Hazelcast members and between Hazelcast clients and members, for end-to-end encryption. To use it, you need to implement
-`com.hazelcast.nio.ssl.SSLContextFactory` and configure the SSL section
-in the network configuration.
+Hazelcast members and between Hazelcast clients and members, for end-to-end encryption.
+To use it, you need configure the `ssl` section in the network configuration.
 
-The following is the implementation code snippet:
+NOTE: SSL (Secure Sockets Layer) is the predecessor protocol to TLS (Transport Layer Security).
+Both protocols designed to encrypt and secure data transmitted over networks,
+but SSL is now considered outdated and has been replaced by TLS for improved security.
+Hazelcast uses `ssl` naming for keeping backward compatibility in the configuration.
 
-[source,java]
-----
-public class MySSLContextFactory implements SSLContextFactory {
-    public void init( Properties properties ) throws Exception {
-    }
-
-    public SSLContext getSSLContext() {
-        ...
-        SSLContext sslCtx = SSLContext.getInstance( "the protocol to be used" );
-        return sslCtx;
-    }
-}
-----
-
-The following is the base declarative configuration for the
-implemented `SSLContextFactory`:
+== TLS for Hazelcast Members
 
 [tabs] 
 ==== 
@@ -50,56 +26,9 @@ XML::
 [source,xml]
 ----
 <hazelcast>
-    ...
+    <!-- ... -->
     <network>
         <ssl enabled="true">
-            <factory-class-name>
-                com.hazelcast.examples.MySSLContextFactory
-            </factory-class-name>
-            <properties>
-                <property name="foo">bar</property>
-            </properties>
-        </ssl>
-    </network>
-    ...
-</hazelcast>
-----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  network:
-    ssl:
-      enabled: true
-      factory-class-name: com.hazelcast.examples.MySSLContextFactory
-      properties:
-        foo: bar
-----
-====
-
-Hazelcast provides a default SSLContextFactory,
-`com.hazelcast.nio.ssl.BasicSSLContextFactory`, which uses the configured
-keystore to initialize `SSLContext`; see the following example configuration
-for TLS/SSL.
-
-[tabs] 
-==== 
-XML:: 
-+ 
--- 
-
-[source,xml]
-----
-<hazelcast>
-    ...
-    <network>
-        <ssl enabled="true">
-            <factory-class-name>
-                com.hazelcast.nio.ssl.BasicSSLContextFactory
-            </factory-class-name>
             <properties>
                 <property name="protocol">TLSv1.2</property>
                 <property name="mutualAuthentication">REQUIRED</property>
@@ -113,7 +42,7 @@ XML::
             </properties>
         </ssl>
     </network>
-    ...
+    <!-- ... -->
 </hazelcast>
 ----
 --
@@ -126,7 +55,6 @@ hazelcast:
   network:
     ssl:
       enabled: true
-      factory-class-name: com.hazelcast.nio.ssl.BasicSSLContextFactory
       properties:
         protocol: TLSv1.2
         mutualAuthentication: REQUIRED
@@ -169,7 +97,7 @@ require it
 See the <<mutual-authentication, Mutual Authentication section>>.
 * `ciphersuites`: Comma-separated list of cipher suite names allowed
 to be used. Its default value are all supported suites in your Java runtime.
-* `protocol`: Name of the algorithm which is used in your TLS/SSL. Its
+* `protocol`: Name of the algorithm which is used in your TLS. Its
 default value is `TLS`. Available values are:
 ** `TLS`
 ** `TLSv1` (deprecated)
@@ -189,7 +117,7 @@ A negative value such as `PT-1s` means the key material will be cached indefinit
 A zero-value duration expression such as `PT0s` means the key material will not be cached and will always be newly loaded for each TLS-protected connection.
 The key material is cached indefinitely if the new property is not specified (default value).
 
-== TLS/SSL for Hazelcast Clients
+== TLS for Hazelcast Clients
 
 The TLS configuration in Hazelcast clients is very similar to member configuration.
 
@@ -205,19 +133,16 @@ XML::
     ...
     <network>
         <ssl enabled="true">
-            <factory-class-name>
-                com.hazelcast.nio.ssl.BasicSSLContextFactory
-            </factory-class-name>
             <properties>
                 <property name="protocol">TLSv1.2</property>
-                <property name="trustStore">/opt/hazelcast-client.truststore</property>
+                <property name="trustStore">/opt/client-truststore.p12</property>
                 <property name="trustStorePassword">changeit</property>
-                <property name="trustStoreType">JKS</property>
+                <property name="trustStoreType">PKCS12</property>
 
                 <!-- Following properties are only needed when the mutual authentication is used. -->
-                <property name="keyStore">/opt/hazelcast-client.keystore</property>
-                <property name="keyStorePassword">clientsSecret</property>
-                <property name="keyStoreType">JKS</property>
+                <property name="keyStore">/opt/client-keystore.p12</property>
+                <property name="keyStorePassword">secret.123</property>
+                <property name="keyStoreType">PKCS12</property>
             </properties>
         </ssl>
     </network>
@@ -234,23 +159,20 @@ hazelcast-client:
   network:
     ssl:
       enabled: true
-      factory-class-name: com.hazelcast.nio.ssl.BasicSSLContextFactory
       properties:
         protocol: TLSv1.2
 
-        trustStore: /opt/hazelcast-client.truststore
+        trustStore: /opt/client-truststore.p12
         trustStorePassword: changeit
-        trustStoreType: JKS
+        trustStoreType: PKCS12
 
         # Following properties are only needed when the mutual authentication is used.
-        keyStore: /opt/hazelcast-client.keystore
+        keyStore: /opt/client-keystore.p12
         keyStorePassword: clientsSecret
-        keyStoreType: JKS
+        keyStoreType: PKCS12
 ----
 ====
 
-The same `BasicSSLContextFactory` properties used for members are available
-on clients.
 Clients don't need to set `mutualAuthentication` property as it's used in
 configuring the server side of TLS connections.
 
@@ -314,8 +236,8 @@ against member's truststore, the client is not authenticated.
 * `OPTIONAL`: Server asks for client certificate, but client is not
 required to provide any valid certificate.
 
-NOTE: When a new client is introduced with a new keystore, the
-truststore on the member side should be updated accordingly to
+NOTE: When a new client is introduced with a an untrusted certificate (e.g. a self-signed one),
+the truststore on the member side should be updated accordingly to
 include new clients' information to be able to accept it.
 
 See the below example snippet to see the full configuration on the
@@ -339,14 +261,92 @@ incoming TLS connections without verifying if the connecting side is trusted.
 Therefore, it's recommended to require the mutual authentication in Hazelcast
 members configuration.
 
-== TLS/SSL for WAN Replication
+== TLS for WAN Replication
 
 Hazelcast allows you to secure the communications between the
-WAN replicated clusters using TLS/SSL. WAN connections, cluster members
-and clients can have their own unique TLS/SSL certificates. You can also
-choose to have TLS/SSL configured on some of the members/clients and not on
+WAN replicated clusters using TLS. WAN connections, cluster members
+and clients can have their own unique TLS certificates. You can also
+choose to have TLS configured on some of the members/clients and not on
 the others.
 
-You can configure TLS/SSL for WAN replication using the advanced network configuration.
+You can configure TLS for WAN replication using the advanced network configuration.
 See the xref:wan:advanced-features.adoc#securing-wan-connections.adoc[Securing the Connections for WAN Replication section]
 for the details.
+
+== Customizing TLS
+
+Hazelcast allows TLS behavior to be further customized by implementing own `com.hazelcast.nio.ssl.SSLContextFactory` which allows building
+a custom `javax.net.ssl.SSLContext` object.
+
+The following is the implementation code snippet:
+
+[source,java]
+----
+public class MySSLContextFactory implements SSLContextFactory {
+    public void init( Properties properties ) throws Exception {
+    }
+
+    public SSLContext getSSLContext() {
+        // ...
+        SSLContext sslCtx = SSLContext.getInstance( "the protocol to be used" );
+        return sslCtx;
+    }
+}
+----
+
+The following is the base declarative configuration for the
+implemented `SSLContextFactory`:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+
+[source,xml]
+----
+<hazelcast>
+    ...
+    <network>
+        <ssl enabled="true">
+            <factory-class-name>
+                com.hazelcast.examples.MySSLContextFactory
+            </factory-class-name>
+            <properties>
+                <property name="foo">bar</property>
+            </properties>
+        </ssl>
+    </network>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  network:
+    ssl:
+      enabled: true
+      factory-class-name: com.hazelcast.examples.MySSLContextFactory
+      properties:
+        foo: bar
+----
+====
+
+Hazelcast provides a default `SSLContextFactory`,
+`com.hazelcast.nio.ssl.BasicSSLContextFactory`, which uses the configured
+keystore to initialize `SSLContext`.
+
+== Other considerations
+
+NOTE: Using TLS may have an impact on the cluster performance.
+See the xref:cluster-performance:performance-tuning.adoc#tls-ssl-perf[TLS Tuning section] for more information about the performance considerations. 
+
+NOTE: It is NOT recommended to reuse the key stores and trust stores
+for external applications.
+
+NOTE: You cannot use TLS when xref:encryption.adoc[Symmetric Encryption]
+is enabled. Also note that the symmetric encryption feature has been deprecated.

@@ -1,0 +1,296 @@
+= TLS Authentication
+:page-enterprise: true
+
+Hazelcast is able to protect network communication using TLS.
+The TLS mutual authentication is also supported. It means not only the
+server side identifies itself to a client side (member, client, REST client, etc.),
+but also the client side needs to prove its identity by using a TLS (X.509) certificate.
+
+The `tls` authentication type verifies within the Hazelcast authentication
+that the incoming connection already authenticated the client's TLS certificate.
+
+This authentication type is able to parse a role name (or names) from the client's certificate
+subject DN. The `roleAttribute` property specifies the attribute name (a part of the Subject's DN)
+to be used as a role name in Hazelcast.
+
+[tabs]
+====
+XML::
++
+--
+
+[source,xml]
+----
+include::ROOT:example$/hazelcast-authentication-types.xml[tag=tls]
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+realms:
+  name: tlsRealm
+    authentication:
+      tls:
+        roleAttribute: cn
+----
+====
+
+This `tls` authentication  uses `cn` attribute from the subject DN as the role name.
+If the subject DN in the certificate is `cn=admin,ou=Devs,o=Hazelcast` for instance,
+then the `"admin"` role name is assigned to the client.
+
+== Identity Configuration
+
+The Identity configuration allows defining own <<credentials, Credentials>>.
+These Credentials are used to authenticate to other systems.
+
+Available identity configuration types are as follows:
+
+* `username-password`: Defines a new `PasswordCredentials` object.
+* `token`: Defines a new `TokenCredentials` object.
+* `kerberos`: Defines the Kerberos identity which uses the
+service tickets stored in the `TokenCredentials` object.
+* `credentials-factory`: Configures the factory class which creates the `Credentials` objects.
+
+[[credentials]]
+=== Credentials
+
+One of the key elements in Hazelcast security is the `Credentials` object, which
+represents evidence of the identity (member or client).
+The content of `Credentials` object is verified during the authentication.
+Credentials is an interface which extends `Serializable`.
+
+[source,java]
+----
+public interface Credentials extends Serializable {
+    String getName();
+}
+----
+
+There are two subtype interfaces which simplify the `Credentials` usage.
+The subtypes reflect data provided in the client authentication messages:
+
+* Name and password (`com.hazelcast.security.PasswordCredentials`)
+* Byte array token (`com.hazelcast.security.TokenCredentials`)
+
+The interfaces have the following forms:
+
+[source,java]
+----
+public interface PasswordCredentials extends Credentials {
+    String getPassword();
+}
+----
+
+[source,java]
+----
+public interface TokenCredentials extends Credentials {
+  byte[] getToken();
+
+  default Data asData() {
+      return new HeapData(getToken());
+  }
+}
+----
+
+The `Credentials` instance can be retrieved in the login modules
+by handling a `CredentialsCallback`.
+
+Here is an example:
+
+[source,java]
+----
+include::ROOT:example$/security/CustomLoginModuleTest.java[tag=credentials-callback]
+----
+
+=== Password Credentials
+
+A `PasswordCredentials` implementation can be configured as a
+simple identity representation. It is configured by the `<username-password/>`
+XML configuration element as shown below:
+
+[tabs]
+====
+XML::
++
+--
+
+[source,xml]
+----
+include::ROOT:example$/hazelcast-password-realm.xml[tag=password]
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+realms:
+  name: passwordRealm
+    identity:
+      username-password:
+        username: member1
+        password: s3crEt
+member-authentication:
+  realm: passwordRealm
+----
+====
+
+The equivalent programmatic configuration is shown below:
+
+[source,java]
+----
+include::ROOT:example$/SecurityXmlTest.java[tag=password-realm]
+----
+
+=== Token Credentials
+
+`TokenCredentials` instances are also simply configurable for
+identity representation. The `<token/>` XML configuration element
+allows using either plain ASCII tokens or Base64 encoded values.
+Its optional argument `encoding` can have either `base64` or `none` (default)
+as its value.
+
+The following two realms define the same token value - bytes of the "Hazelcast" string:
+
+[tabs]
+====
+XML::
++
+--
+
+[source,xml]
+----
+include::ROOT:example$/hazelcast-authentication-types.xml[tag=token]
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+realms:
+  - name: tokenRealm1
+      identity:
+        token:
+          value: Hazelcast
+  - name: tokenRealm2
+      identity:
+        token:
+          encoding: base64
+          value: SGF6ZWxjYXN0
+----
+====
+
+The equivalent programmatic configuration is as follows:
+
+[source,java]
+----
+include::ROOT:example$/SecurityXmlTest.java[tag=token-realm]
+----
+
+=== Kerberos Identity
+
+The `kerberos` identity type is used to retrieve Kerberos service tickets to access
+a member with the `kerberos` authentication type configured. The resulting tickets
+are `TokenCredentials` instances. Read more about `kerberos` identity in
+the <<kerberos-authentication, Kerberos authentication section>>.
+
+=== Credentials Factory
+
+The most flexible way to define the `Credentials` objects
+is using a custom credential factory. It is an implementation
+of `com.hazelcast.security.ICredentialsFactory`
+interface. Its `newCredentials()` method is the one which provides credentials.
+
+The XML configuration uses `<credentials-factory>` element to define the factory class.
+
+The behavior of credential factories can be controlled by specifying factory properties.
+The properties are provided in the `init(Properties)` method.
+
+A sample configuration is shown below:
+
+[tabs]
+====
+XML::
++
+--
+
+[source,xml]
+----
+include::ROOT:example$/hazelcast-authentication-types.xml[tag=credentialsFactoryRealm]
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+realms:
+  name: credentialsFactoryRealm
+    identity:
+      credentials-factory:
+        class-name: com.examples.TOTPCredentialsFactory
+        properties:
+          seed: 3132333435363738393031323334353637383930
+----
+====
+
+== Security Realms on the Client Side
+
+Hazelcast offers limited support for security realms in native clients.
+The configuration allows specifying JAAS login modules which can be referenced from
+the Kerberos identity configuration.
+
+[tabs]
+====
+XML::
++
+--
+
+[source,xml]
+----
+<security>
+    <kerberos>
+        <realm>ACME.COM</realm>
+        <security-realm>krb5Initiator</security-realm>
+    </kerberos>
+    <realms>
+        <realm name="krb5Initiator">
+            <authentication>
+                <jaas>
+                    <login-module class-name="com.sun.security.auth.module.Krb5LoginModule" usage="REQUIRED">
+                        <properties>
+                            <property name="useTicketCache">true</property>
+                            <property name="doNotPrompt">true</property>
+                        </properties>
+                    </login-module>
+                </jaas>
+            </authentication>
+        </realm>
+    </realms>
+</security>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+security:
+  kerberos:
+    realm: ACME.COM
+    security-realm: krb5Initiator
+    realms:
+      name: krb5Initiator
+        authentication:
+          jaas:
+            class-name: com.sun.security.auth.module.Krb5LoginModule
+            usage: REQUIRED
+            properties:
+              useTicketCache: true
+              doNotPrompt: true
+----
+====

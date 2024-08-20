@@ -1,0 +1,205 @@
+= Identity Configuration
+:page-enterprise: true
+
+The Identity configuration allows defining own <<credentials, Credentials>>.
+These Credentials are used to authenticate to other systems.
+
+Available identity configuration types are as follows:
+
+* `username-password`: Defines a new `PasswordCredentials` object.
+* `token`: Defines a new `TokenCredentials` object.
+* `kerberos`: Defines the Kerberos identity which uses the
+service tickets stored in the `TokenCredentials` object.
+* `credentials-factory`: Configures the factory class which creates the `Credentials` objects.
+
+== Username-Password Identity
+
+The username with password is the most typical type of credentials.
+It is configured by the `<username-password/>`
+XML configuration element as shown below:
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+include::ROOT:example$/hazelcast-password-realm.xml[tag=password]
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+realms:
+  name: passwordRealm
+    identity:
+      username-password:
+        username: member1
+        password: s3crEt
+member-authentication:
+  realm: passwordRealm
+----
+--
+
+Java::
++
+--
+[source,java]
+----
+include::ROOT:example$/SecurityXmlTest.java[tag=password-realm]
+----
+--
+====
+
+== Token Identity
+
+Tokens are also simply configurable for
+identity representation. The `<token/>` XML configuration element
+allows using either plain ASCII tokens or Base64 encoded values.
+Its optional argument `encoding` can have either `base64` or `none` (default)
+as its value.
+
+The following two realms define the same token value - bytes of the "Hazelcast" string:
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+include::ROOT:example$/hazelcast-authentication-types.xml[tag=token]
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+realms:
+  - name: tokenRealm1
+      identity:
+        token:
+          value: Hazelcast
+  - name: tokenRealm2
+      identity:
+        token:
+          encoding: base64
+          value: SGF6ZWxjYXN0
+----
+--
+
+Java::
++
+--
+[source,java]
+----
+include::ROOT:example$/SecurityXmlTest.java[tag=token-realm]
+----
+--
+====
+
+Hazelcast doesn't provide an xref:authentication-overview.adoc[authentication type] with direct `token` identity support. Tokens are usually used together with custom JAAS login modules.
+
+== Kerberos Identity
+
+The `kerberos` identity type is used to retrieve Kerberos service tickets to access
+a member with the `kerberos` authentication type configured.
+Read more about `kerberos` identity in
+the xref:kerberos-authentication.adoc#identity-configuration[Kerberos authentication section].
+
+== Credentials Factory
+
+The most flexible way to define an identity is via <<credentials, `Credentials`>> objects
+created by a custom credential factory. It is an implementation
+of `com.hazelcast.security.ICredentialsFactory`
+interface. Its `newCredentials()` method is the one which provides credentials.
+
+The XML configuration uses `<credentials-factory>` element to define the factory class.
+
+The behavior of credential factories can be controlled by specifying factory properties.
+The properties are provided in the `init(Properties)` method.
+
+A sample configuration is shown below:
+
+[tabs]
+====
+XML::
++
+--
+
+[source,xml]
+----
+include::ROOT:example$/hazelcast-authentication-types.xml[tag=credentialsFactoryRealm]
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+realms:
+  name: credentialsFactoryRealm
+    identity:
+      credentials-factory:
+        class-name: com.examples.TOTPCredentialsFactory
+        properties:
+          seed: 3132333435363738393031323334353637383930
+----
+====
+
+[[credentials]]
+=== Credentials
+
+One of the key elements in Hazelcast security is the `Credentials` object, which
+represents evidence of the identity (member or client).
+The content of `Credentials` object is verified during the authentication.
+Credentials is an interface which extends `Serializable`.
+
+[source,java]
+----
+public interface Credentials extends Serializable {
+    String getName();
+}
+----
+
+There are two subtype interfaces which simplify the `Credentials` usage.
+The subtypes reflect data provided in the client authentication messages:
+
+* Name and password (`com.hazelcast.security.PasswordCredentials`)
+* Byte array token (`com.hazelcast.security.TokenCredentials`)
+
+The interfaces have the following forms:
+
+[source,java]
+----
+public interface PasswordCredentials extends Credentials {
+    String getPassword();
+}
+----
+
+[source,java]
+----
+public interface TokenCredentials extends Credentials {
+  byte[] getToken();
+
+  default Data asData() {
+      return new HeapData(getToken());
+  }
+}
+----
+
+The `Credentials` instance can be retrieved in the login modules
+by handling a `CredentialsCallback`.
+
+Here is an example:
+
+[source,java]
+----
+include::ROOT:example$/security/CustomLoginModuleTest.java[tag=credentials-callback]
+----

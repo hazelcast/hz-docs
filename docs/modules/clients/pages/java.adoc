@@ -1,4 +1,5 @@
 = Java Client
+:page-aliases: security:native-client-security.adoc[]
 :page-api-reference: https://docs.hazelcast.org/docs/{page-latest-supported-java-client}/javadoc
 :url-cloud-signup: https://cloud.hazelcast.com/sign-up
 :page-toclevels: 3 
@@ -874,7 +875,7 @@ You can configure the cluster routing mode to suit your requirements, as describ
 The following examples show the configuration for each cluster routing mode. 
 
 NOTE: If your clients want to use temporary permissions defined in a member, see 
-xref:security:native-client-security.adoc#handling-permissions-when-a-new-member-joins[Handling Permissions].
+xref:security:client-authorization.adoc#handling-permissions-when-a-new-member-joins[Handling Permissions].
 
 **ALL_MEMBERS**
 
@@ -1207,20 +1208,19 @@ socketOptions.setBufferSize(32)
              .setLingerSeconds(3);
 ----
 
-==== Enabling Client TLS/SSL
+==== Enabling Client TLS
 
 [blue]*Hazelcast {enterprise-product-name}*
 
-You can use TLS/SSL to secure the connection between the client and the members.
-If you want TLS/SSL enabled for the client-cluster connection, you should set `SSLConfig`.
-Once set, the connection (socket) is established out of an TLS/SSL factory defined either by
-a factory class name or factory implementation. See the xref:security:tls-ssl.adoc[TLS/SSL section].
+You can use TLS to secure the connection between the client and the members.
+If you want TLS enabled for the client-cluster connection, you should set `ssl` configuration.
+See the xref:security:tls-ssl.adoc[TLS/SSL section].
 
-As explained in the TLS/SSL section, Hazelcast members have keyStores used to
-identify themselves (to other members) and Hazelcast clients have trustStore used to
-define which members they can trust. The clients also have their keyStores and
-members have their trustStores so that the members can
-know which clients they can trust: see the xref:security:tls-ssl.adoc#mutual-authentication[Mutual Authentication section].
+As explained in the TLS/SSL section, keys and certificates in keyStores are used to
+prove identity to the other side of the connection and trustStores are used to
+specify trusted parties (from which the connection should be accepted).
+Clients only need to have their keyStores specified when the xref:security:tls-ssl.adoc#mutual-authentication[TLS Mutual Authentication] is
+required by members.
 
 ==== Configuring Hazelcast {hazelcast-cloud}
 
@@ -1467,10 +1467,111 @@ clientConfig.setClusterName("dev");
 [[client-security-configuration]]
 === Configuring Client Security
 
-In the cases where the security established with `Config` is not enough and
-you want your clients connecting securely to the cluster, you can use `ClientSecurityConfig`.
-This configuration has a `credentials` parameter to set the IP address and UID.
-See the https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/client/config/ClientSecurityConfig.html[ClientSecurityConfig Javadoc^].
+[blue]*Hazelcast {enterprise-product-name}*
+
+As described in xref:security:authentication-overview.adoc[authentication] and xref::client-authorization.adoc[authorization] sections you can define access control mechanisms for clients.
+
+Java  client which is part of Hazelcast codebase, can be provided with an identity used for authentication to a cluster.
+The identity of the connecting client is defined on the client side.
+Usually, there are no security realms on the clients, but just identity
+defined directly in the security configuration.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+
+[source,xml]
+----
+<hazelcast-client>
+    ...
+    <security>
+      <username-password username="uid=member1,dc=example,dc=com" password="s3crEt"/>
+    </security>
+    ...
+</hazelcast-client>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast-client:
+  security:
+    username-password:
+      username: uid=member1,dc=example,dc=com
+      password: s3crEt
+----
+====
+
+On the clients, you can use the same identity types as in security realms:
+
+* `username-password`
+* `token`
+* `kerberos` (may require an additional security realm definition)
+* `credentials-factory`
+
+==== Security Realms on the Client Side
+
+Hazelcast offers limited support for security realms in native clients.
+The configuration allows specifying JAAS login modules which can be referenced from
+the Kerberos identity configuration.
+
+[tabs]
+====
+XML::
++
+--
+
+[source,xml]
+----
+<security>
+    <kerberos>
+        <realm>ACME.COM</realm>
+        <security-realm>krb5Initiator</security-realm>
+    </kerberos>
+    <realms>
+        <realm name="krb5Initiator">
+            <authentication>
+                <jaas>
+                    <login-module class-name="com.sun.security.auth.module.Krb5LoginModule" usage="REQUIRED">
+                        <properties>
+                            <property name="useTicketCache">true</property>
+                            <property name="doNotPrompt">true</property>
+                        </properties>
+                    </login-module>
+                </jaas>
+            </authentication>
+        </realm>
+    </realms>
+</security>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+security:
+  kerberos:
+    realm: ACME.COM
+    security-realm: krb5Initiator
+    realms:
+      name: krb5Initiator
+        authentication:
+          jaas:
+            class-name: com.sun.security.auth.module.Krb5LoginModule
+            usage: REQUIRED
+            properties:
+              useTicketCache: true
+              doNotPrompt: true
+----
+====
+
+See https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/client/config/ClientSecurityConfig.html[ClientSecurityConfig Javadoc^]
+for detailed configuration options.
 
 [[client-serialization-configuration]]
 === Client Serialization Configuration

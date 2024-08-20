@@ -1,0 +1,295 @@
+= LDAP Authentication
+:page-enterprise: true
+
+LDAP servers are one of the most popular identity stores.
+They can track information about organization structure,
+users, groups, servers and configurations.
+
+Hazelcast supports authentication and authorization against LDAP servers.
+The authentication verifies the provided name and password.
+The authorization part allows to map roles to the authenticated user.
+
+The password verification during the authentication is possible by:
+
+* making a new LDAP bind operation with the given name and password
+* using a separate "admin connection" to verify the provided password
+against an LDAP object attribute.
+
+The LDAP authentication allows also a role mapping.
+As there are more ways how roles can be mapped in the LDAP,
+Hazelcast provides several approaches to retrieve them:
+
+* `attribute`: The role name is stored as an attribute in the object representing the identity.
+* `direct` mapping: The identity object contains an attribute with reference to the role object(s).
+* `reverse` mapping: The role objects having a reference to the identity object are searched.
+
+The `direct` and `reverse` mapping modes also allow a role search recursion.
+
+[cols="1,1,3"]
+.LDAP Configuration Options
+|===
+| Option Name
+| Default Value
+| Description
+
+| `url`
+|
+| URL of the LDAP server. The value is configured as the JNDI environment
+property, i.e., `java.naming.provider.url`.
+
+| `socket-factory-class-name`
+|
+| Socket factory class name. The factory can be used for fine-grained
+configuration of the TLS protocol on top of the LDAP protocol, i.e., `ldaps` scheme.
+
+| `parse-dn`
+| false
+| If set to `true`, it treats the value of `role-mapping-attribute` as a DN and
+extracts only the `role-name-attribute` values as role names. If set to `false`,
+the whole value of `role-mapping-attribute` is used as a role name.
+
+This option is only used when the `role-mapping-mode` option has the value `attribute`.
+
+| `role-context`
+|
+| LDAP Context in which assigned roles are searched, e.g., `ou=Roles,dc=hazelcast,dc=com`.
+
+This option is only used when the `role-mapping-mode` option has the value `reverse`.
+
+| `role-filter`
+| `([role-mapping-attribute]=\{MEMBERDN})`
+| LDAP search string which usually contains a placeholder `\{MEMBERDN}` to be
+replaced by the provided login name, e.g., `(member=\{MEMBERDN})`.
+
+If the role search recursion is enabled (see `role-recursion-max-depth`), the `\{MEMBERDN}`
+is replaced by role DNs in the recurrent searches.
+
+This option is only used when the `role-mapping-mode` option has the value `reverse`.
+
+| `role-mapping-attribute`
+|
+| Name of the LDAP attribute which contains either the role name or role DN.
+
+This option is  used when the `role-mapping-mode` option has the value `attribute` or `direct`.
+If the mapping mode is `reverse`, the value is used in `role-filter` default value.
+
+| `role-mapping-mode`
+| `attribute`
+a| Role mapping mode. It can have one of the following values:
+
+* `attribute`: The user object in the LDAP contains directly role name in the
+given attribute. Role name can be parsed from a DN string when `parse-dn=true`
+No additional LDAP query is done to find assigned roles.
+* `direct`: The user object contains an attribute with DN(s) of assigned
+role(s). Role object(s) is/are loaded from the LDAP and the role name is
+retrieved from its attributes. Role search recursion can be enabled for this mode.
+* `reverse`: The role objects are located by executing an LDAP search query
+with the given `role-filter`. In this case, the role object usually contains
+attributes with DNs of the assigned users. Role search recursion can be enabled for this mode.
+
+| `role-name-attribute`
+|
+| This option may refer to a name of LDAP attribute within the role object which
+contains the role name in case of `direct` and `reverse` role mapping mode. It may also refer
+to the attribute name within X.500 name stored in `role-mapping-attribute` when
+`role-mapping-mode=attribute` and `parse-dn=true`.
+
+| `role-recursion-max-depth`
+| 1
+| Sets the maximum depth of role search recursion. The default value 1 means
+the role search recursion is disabled.
+
+This option is only used when the `role-mapping-mode` option has value `direct` or `reverse`.
+
+| `role-search-scope`
+| `subtree`
+a| LDAP search scope used for `role-filter` search. It can have one of the following values:
+
+* `subtree`: Searches for objects in the given context and its subtree.
+* `one-level`: Searches just one-level under the given context.
+* `object`: Searches (or tests) just for the context object itself (if it matches the filter criteria).
+
+This option is only used when the `role-mapping-mode` option has the value `reverse`.
+
+| `user-name-attribute`
+| `uid`
+| LDAP attribute name whose value is used as a name in
+`ClusterIdentityPrincipal` added to the JAAS Subject.
+
+| `system-user-dn`
+|
+a| Admin account DN. If configured, then the following are true:
+
+* For the user and role object, search queries are used an admin connection instead
+of the "user" one created by LDAP bind with provided credentials.
+* LDAP authentication doesn't expect the full user DN to be provided as a login name.
+It rather expects names like `"jduke"` than `"uid=jduke,ou=Engineering,o=Hazelcast,dc=com"`;
+* The admin connection allows verifying the provided user credentials against a
+value defined in the `password-attribute` option.
+
+| `system-user-password`
+|
+| Admin's password (for `system-user-dn` account).
+
+
+| `system-authentication`
+| `simple`
+| Name of the authentication mechanism used for the admin LDAP connection.
+It's used as a value for JNDI environment property `Context#SECURITY_AUTHENTICATION`.
+You can specify `GSSAPI` to authenticate with the Kerberos protocol.
+
+| `password-attribute`
+|
+| Credentials verification is done by the new LDAP binds by default.
+Nevertheless, the password can be stored in a non-default LDAP attribute,
+and in this case use `password-attribute` to configure against which
+LDAP attribute (within the user object) is the provided password compared
+during the login. As a result, if the `password-attribute` option is provided,
+then the extra LDAP bind to verify credentials is not done and passwords
+are just compared within the Hazelcast code after retrieving the user object from LDAP server.
+
+This option is only used when the admin connection is configured, i.e., when `system-user-dn` or `system-authentication` is defined.
+
+| `user-context`
+|
+| LDAP context in which the user objects are searched, e.g., `ou=Users,dc=hazelcast,dc=com`.
+
+This option is only used when the admin connection is configured, i.e., when `system-user-dn` or `system-authentication` is defined.
+
+| `user-filter`
+| `(uid=\{login})`
+| LDAP search string for retrieving the user objects based on the provided login name.
+It usually contains a placeholder substring `\{login}` which is replaced by the provided login name.
+
+This option is only used when the admin connection is configured, i.e., when `system-user-dn` or `system-authentication` is defined.
+
+| `user-search-scope`
+| `subtree`
+a| LDAP search scope used for `user-filter` search. It can have one of the following values:
+
+* `subtree`: Searches for objects in the given context and its subtree.
+* `one-level`: Searches just one-level under the given context.
+* `object`: Searches (or tests) just for the context object itself (if it matches the filter criteria).
+
+This option is only used when the admin connection is configured, i.e., when `system-user-dn` or `system-authentication` is defined.
+
+| `skip-authentication`
+| `false`
+a| Flag which allows disabling password verification and
+only takes care about filling `HazelcastPrincipal` instances into the
+Subject.
+
+This option is only used when the admin connection is configured, i.e., when `system-user-dn` or `system-authentication` is defined.
+
+| `security-realm`
+|
+a| If specified, given realm name is used for authentication of
+a (temporary) Subject which is then used for doing LDAP queries.
+
+This option is only used when the admin connection is configured, i.e., when `system-user-dn` or `system-authentication` is defined.
+|===
+
+Detailed logging for LDAP authentication can be enabled by
+configuring a more verbose logger level for the `com.hazelcast.security`
+package as described in the xref:security-debugging.adoc[Security Debugging section].
+
+NOTE: The LDAP authentication implementation provided by Hazelcast doesn't handle LDAP referrals, i.e., references to other LDAP trees.
+
+== TLS Protected LDAP Server Connections
+
+The LDAP authentication type supports TLS protected connections
+to LDAP servers, using the `ldaps` protocol scheme. The TLS is
+handled on the Java runtime side (JNDI API and URL handlers).
+
+When using TLS, the LDAP provider will, by default, use the socket factory,
+`javax.net.ssl.SSLSocketFactory` for creating a TLS socket to communicate
+with the server, using the default JSSE configuration. By default, the server's
+certificate is validated against Java default CA certificate store and hostname
+in LDAPs URL is verified against the name(s) in the server certificate. The behavior
+can be controlled globally by using `javax.net.ssl.*` properties. Here is an example:
+
+[source,shell]
+----
+java -Djavax.net.ssl.trustStore=/opt/hazelcast.truststore \
+  -Djavax.net.ssl.trustStorePassword=123456 \
+  -Djavax.net.ssl.keyStore=/opt/hazelcast.keystore \
+  -Djavax.net.ssl.keyStorePassword=123456 \
+  ...
+----
+
+There can be also properties specific to vendor or Java version allowing more
+fine-grained control. Here is an example on disabling host name validation:
+
+[source,shell]
+----
+-Dcom.sun.jndi.ldap.object.disableEndpointIdentification=true
+----
+
+When even more control is necessary, you can implement your own
+`SSLSocketFactory` and use its class name as the value in the `ldap`
+authentication option `socket-factory-class-name`.
+
+Here is an example custom socket factory class:
+
+[source,java]
+----
+include::ROOT:example$/security/ldap/CustomSSLSocketFactory.java[]
+----
+
+The authentication configuration could look like as follows:
+
+[tabs]
+====
+XML::
++
+--
+
+[source,xml]
+----
+include::ROOT:example$/hazelcast-authentication-types.xml[tag=ldaps]
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+    realms:
+      - name: ldapsRealm
+        authentication:
+          ldap:
+             url: ldaps://ldapserver.acme.com
+             socket-factory-class-name: security.ldap.CustomSSLSocketFactory
+             role-mapping-attribute: cn
+----
+====
+
+The LDAP authentication is backed by the JNDI API in Java.
+It has also the failover support. You can configure multiple space-separated
+URLs in the `<url>` option:
+
+[tabs]
+====
+XML::
++
+--
+
+[source,xml]
+----
+include::ROOT:example$/hazelcast-authentication-types.xml[tag=ldap-fallback]
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+    realms:
+      - name: ldapFallbackRealm
+        authentication:
+          ldap:
+             url: ldap://ldap-master.example.com ldap://ldap-backup.example.com
+----
+====
+
+LDAP can also be used for role retrieval when the xref:kerberos-authentication.adoc[Kerberos authentication] is used. More details is in the xref:kerberos-authentication.adoc[Kerberos authentication] documentation.

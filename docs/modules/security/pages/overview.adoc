@@ -1,11 +1,11 @@
 = Security Overview
+:page-aliases: cluster-member-security.adoc
 :page-enterprise: true
 
 This section provides an introduction to the security features of Hazelcast.
-These features allow you to perform security activities, such as intercepting socket
-connections and remote operations executed by the clients, encrypting the communications 
-between the members at socket level and using SSL socket communication.
-All the security features explained in this chapter are the features of
+These features allow you to perform security activities, such as encrypting network communication using TLS,
+controlling access permissions of clients, or logging auditable events.
+The security features explained in this chapter are the features of
 [blue]#Hazelcast {enterprise-product-name}# edition.
 
 While Hazelcast supports non-secured cluster members and clients,
@@ -13,10 +13,54 @@ it is recommended to secure your deployments. A cluster without security may fac
 
 * unauthorized cluster members joining or accessing it
 * unwanted or malicious clients accessing it
-
 * unauthorized use (access or creation) of cluster resources and data tampering by the malicious cluster members and clients.
 
-And when using Hazelcast's Jet streaming engine, notice the following security considerations:
+Below, you can see the brief descriptions of Hazelcast's security features.
+You can evaluate them and decide which ones you want to use based on your
+security concerns and requirements. 
+
+For data privacy:
+
+* xref:security:tls-ssl.adoc[TLS] communication for members and clients for all socket-level communication;
+uses  key stores and trust stores to encrypt communications across a Hazelcast cluster,
+as well as between the clusters replicated over WAN.
+
+For authentication:
+
+* xref:security:authentication-overview.adoc[authentication] between the cluster members, and for clients accessing the cluster.
+Security Realms are used for authentication and identity configurations;
+* xref:security:tls-ssl.adoc#mutual-authentication[TLS Mutual Authentication] to ensure each TLS-communicating
+side proves its identity to the other.
+
+For authorization:
+
+* xref:security:client-authorization.adoc#authorization[authorization] using
+permission policies for role-based security.
+
+Hazelcast has a pluggable security component architecture allowing use your own code to control security:
+
+* pluggable xref:security:jaas-authentication.adoc[authentication] and xref:security:identity-configuration#credentials-factory[identity];
+* xref:security:socket-interceptor.adoc[Socket Interceptor] to interfere socket connections
+before a new member or client comes to the cluster; you can perform identity checking using custom
+authentication protocols.
+* xref:security:security-interceptor.adoc[Security Interceptor] that provides a callback
+point for client operations executed against the cluster.
+
+See also xref:secure-cluster:hardening-recommendations.adoc[Security Hardening Recommendations section]
+to learn more about the best security practices.
+
+Security-related areas that are covered in other sections of the documentation include:
+
+* Network and Advanced Network configuration allow specifying bind interfaces;
+* Advanced Network configuration allows separating socket addresses for different protocols;
+* Management operations can be limited to specific IP addresses where Management Center is allowed to run;
+* Untrusted deserialization protection allows control of which types are allowed in Java native deserialization;
+
+Hazelcast distributions contain security-hardened example configuration files that help users to review configuration sections related to deployment security.
+
+== Hazelcast Jet considerations
+
+When using Hazelcast's Jet streaming engine, notice the following security considerations:
 
 * Hazelcast jobs allow you to use your custom codes and these codes must be available on
 cluster classpath or deployed to the cluster; this means any client is able to deploy
@@ -25,43 +69,10 @@ custom codes to the cluster, so make sure each client is authorized to access th
 * The connectors of the Jet engine include 3rd party codes which may increase the attack surface.
 * SQL, which is used by the Jet engine, includes file connectors and it can read files on the cluster filesystem.
 
-Due to the above considerations, Hazelcast's streaming engine is disabled by default for our users who
+Due to the above considerations, access to Hazelcast's streaming engine is disabled by default for our users who
 mostly use Hazelcast's storage engine (formerly known as Hazelcast IMDG) with the JAR distribution
 (See the xref:secure-cluster:security-defaults.adoc[Security Defaults section] for information about
 the security considerations for different Hazelcast distributions).
 xref:configuration:jet-configuration.adoc[Enabling the Jet Engine section] shows how you can
 start using the Jet engine; relatedly, see the xref:secure-cluster:hardening-recommendations.adoc[Security Hardening Recommendations section]
 to learn the best practices to secure your cluster.
-
-Below, you can see the brief descriptions of Hazelcast's security features.
-You can evaluate them and decide which ones you want to use based on your
-security concerns and requirements. 
-
-For data privacy:
-
-* xref:security:tls-ssl.adoc[TLS/SSL] communication for members and clients for all socket-level communication;
-uses  key stores and trust stores to encrypt communications across a Hazelcast cluster,
-as well as between the clusters replicated over WAN. You can also configure
-xref:security:tls-configuration.adoc#configuring-cipher-suites[cipher suites] to secure the network communication.
-
-For authentication:
-
-* xref:security:jaas-authentication.adoc[JAAS-based authentication] between
-the cluster members and for pluggable identity verifications;
-works with identity, role and endpoint principal implementations.
-* xref:security:socket-interceptor.adoc[Socket Interceptor] to interfere socket connections
-before a new member or client comes to the cluster; you can perform identity checking using custom
-authentication protocols.
-* xref:security:tls-ssl.adoc#mutual-authentication[TLS Mutual Authentication] to ensure each TLS-communicating
-side proves its identity to the other.
-* xref:security:security-realms.adoc[Security Realms] for authentication and identity configurations.
-
-For authorization:
-
-* xref:security:native-client-security.adoc#authorization[JAAS-based authorization] using
-permission policies for role-based security.
-* xref:security:security-interceptor.adoc[Security Interceptor] that provides a callback
-point for every operation executed against the cluster.
-
-See also xref:secure-cluster:hardening-recommendations.adoc[Security Hardening Recommendations section]
-to learn more about the best security practices.

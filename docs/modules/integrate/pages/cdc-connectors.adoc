@@ -43,7 +43,7 @@ MySQL-specific connector:
     <version>{full-version}</version>
 </dependency>
 ----
-NOTE: MySQL connector does not include the MySQL driver as a dependency.
+NOTE: Due to licensing, MySQL connector does not include the MySQL driver as a dependency. You have to manually add dependency `com.mysql:mysql-connector-j` to the classpath.
 
 PostgreSQL-specific connector:
 
@@ -71,6 +71,11 @@ on Debezium, but with the additional benefits provided by Hazelcast
 
 To set up a streaming source of CDC data, define it using the following configuration:
 
+[tabs]
+====
+MySQL::
++
+--
 [source,java]
 ----
 Pipeline pipeline = Pipeline.create();
@@ -85,8 +90,45 @@ pipeline.readFrom(
     .withNativeTimestamps(0)
     .writeTo(Sinks.logger());
 ----
+--
+PostgreSQL::
++
+--
+[source,java]
+----
+Pipeline pipeline = Pipeline.create();
+pipeline.readFrom(
+    PostgresCdcSources.postgres("customers")
+            .setDatabaseAddress("127.0.0.1", 5432)
+            .setDatabaseCredentials("debezium", "dbz")
+            .setClusterName("dbserver1")
+            .setDatabaseIncludeList("inventory")
+            .setTableIncludeList("inventory.customers")
+            .build())
+    .withNativeTimestamps(0)
+    .writeTo(Sinks.logger());
+----
+--
+MongoDB::
++
+--
+[source,java]
+----
+Pipeline pipeline = Pipeline.create();
+pipeline.readFrom(
+    DebeziumCdcSources.debezium("customers", MongoDbConnector.class)
+            .setProperty("mongodb.connection.string", "mongodb://localhost:27017")
+            .setDatabaseIncludeList("inventory")
+            .setProperty("collection.include.list", "customers")
+            .build())
+    .withNativeTimestamps(0)
+    .writeTo(Sinks.logger());
+----
+--
 
-MySQL- and PostgreSQL-specific source builders contain methods for all major configuration settings with protection if, for example, mutually exclusive options are not used. If using a generic source builder, refer to the link:https://debezium.io/documentation/reference/stable/index.html[Debezium, window=_blank] documentation
+====
+
+MySQL- and PostgreSQL-specific source builders contain methods for all major configuration settings with protection if, for example, mutually exclusive options are not used. If using a generic source builder, refer to the link:https://debezium.io/documentation/reference/stable/index.html[Debezium, window=_blank] documentation for the information about possible required or mutually exclusive fields.
 
 Follow the provided xref:pipelines:cdc.adoc[] tutorial to see how CDC processes change events from a MySQL database.
 

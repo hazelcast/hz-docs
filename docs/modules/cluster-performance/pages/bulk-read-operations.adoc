@@ -1,43 +1,44 @@
-= Best Practices For IMap Bulk Read Operations
+= Bulk read operations
+:description: Learn about best practices for IMap bulk read operations.
 
-[[best-practices-for-imap-bulk-read-operations]]
+[[bulk-read-operations]]
 
-Avoiding an Out of Memory Error (OOME) is critical, as its impact
-can be severe. Even though Hazelcast strives to protect your data,
+To safeguard your cluster and application from becoming Out of Memory
+(OOM), follow these best practices and consider using the described 
+alternatives to bulk read operations.
+
+It's critical to avoid an Out of Memory Error (OOME) as its impact
+can be severe. Hazelcast strives to protect your data but
 an OOME can lead to a loss of cluster availability. This can result
 in increased operation latencies due to triggered migrations. From
 your application's perspective, an OOME could also cause a system
-crash. Certain IMap API calls are particularly risky in this regard.
+crash. 
 
-*Methods like `IMap#entrySet()` and `IMap#values()` can trigger an OOME*, depending
+Some specific IMap API calls are particularly risky in this regard. 
+Methods like `IMap#entrySet()` and `IMap#values()` can trigger an OOME, depending
 on the size of your map and the available memory on each member.
-To mitigate this risk, following best practices is essential.
+To mitigate this risk, you should follow these best practices.
 
-== Best Practices to Prevent OOM with IMap API Calls
-To safeguard your cluster and application from
-OOM, follow best practices and consider using the
-following alternatives to bulk read operations:
-
-=== Plan Capacity
+== Plan capacity
 Proper capacity planning is crucial for providing
 sufficient system resources to the Hazelcast cluster. This
 involves estimating and validating the cluster's capacity
 (memory, CPU, disk, etc.) to determine the best practices
-that will help the cluster achieve optimal performance.
+that help the cluster achieve optimal performance.
 
-See xref:ROOT:capacity-planning.adoc[Capacity Planning] for more information.
+For more information, see xref:ROOT:capacity-planning.adoc[].
 
-=== Limit Query Result Size
-Limiting query result sizes can help prevent the adverse effects of bulk data reads.
+== Limit query result size
+If you limit query result sizes, this can help prevent the adverse effects of bulk data reads.
 
 [source,java]
 ----
 Set<Map.Entry<K, V>> entrySet();
 Set<Map.Entry<K, V>> entrySet(Predicate<K, V> predicate);
 ----
-See xref:data-structures:preventing-out-of-memory.adoc#configuring-query-result-size[Configuring Query Result Size] for more details.
+For more information, see xref:data-structures:preventing-out-of-memory.adoc#configuring-query-result-size[Configuring query result size].
 
-=== Use Iterator
+== Use Iterator
 The Iterator fetches data in batches, ensuring consistent heap
 utilization. The relevant methods in the IMap API include:
 
@@ -46,7 +47,7 @@ utilization. The relevant methods in the IMap API include:
 Iterator<Entry<K, V>> iterator();
 Iterator<Entry<K, V>> iterator(int fetchSize);
 ----
-Here is an example usage of iterator api:
+This example shows how to use the Iterator API:
 [source,java]
 ----
 IMap<Integer, Integer> testMap = instance.getMap("test");
@@ -63,26 +64,25 @@ while (iterator.hasNext()) {
 ----
 
 
-=== Use PartitionPredicate
-Filtering with *PartitionPredicate* can reduce memory overhead during bulk operations.
+== Use PartitionPredicate
+You can reduce memory overhead during bulk operations by filtering with *PartitionPredicate*.
 
-See xref:query:predicate-overview.adoc#filtering-with-partition-predicate[PartitionPredicate] for more information.
+For more info, see xref:query:predicate-overview.adoc#filtering-with-partition-predicate[PartitionPredicate].
 
-
-=== Use EntryProcessor
+== Use Entry Processor
 In some scenarios, reversing the traditional approach can be
 more effective. Instead of fetching all data to the local
 application for processing, you can send operations directly to
-the data. This in-place processing method saves both time and
-resources. *EntryProcessor* is an excellent tool for this purpose.
+the data. This _in-place_ processing method saves both time and
+resources; *Entry Processor* is an excellent tool for this purpose.
 
-See xref:data-structures:entry-processor.adoc[Entry Processor] for more details.
+For more info, see xref:data-structures:entry-processor.adoc[].
 
-=== Use SqlService
-SQL was designed specifically for distributed computing use cases in mind :
-the DQL queries results are paged, what makes SQL a decent tool to fetch bulks of data.
-For example, a replacement for `IMap#values()`:
+== Use SQL service
+SQL was designed specifically for distributed computing use cases: SQL query results
+are paged, which makes SQL a good tool to fetch data in bulk.
 
+The following example shows a replacement for `IMap#values()`:
 
 [source,java]
 ----
@@ -98,8 +98,8 @@ for (SqlRow row: result) {
 }
 ----
 
-Caution: user must have Jet to be enabled to use SQL service.
+IMPORTANT: You must have Jet enabled to use the SQL service.
 
-See: xref:query:sql-overview.adoc[SQL Overview] for more details
+For more info, see xref:query:sql-overview.adoc[].
 
 

@@ -72,8 +72,8 @@ It will be supported in the future versions.
 
 The client API is your gateway to access your Hazelcast cluster, including distributed objects and data pipelines (jobs).
 
-First, you must configure your client. Currently, the {client-name} supports only programmatic configuration, as follows:
-
+The first step is the configuration. You can configure the {client-name} xref:configuration:understanding-configuration.adoc[declaratively or
+programmatically]. We use the programmatic approach for this section.
 
 [source,java]
 ----
@@ -82,15 +82,15 @@ clientConfig.setClusterName("dev");
 clientConfig.getNetworkConfig().addAddress("10.90.0.1", "10.90.0.2:5702");
 ----
 
-For further information, see <<configuring-the-java-client, Configuring the {client-name} >>.
+See the <<configuring-java-client, Configuring Java Client section>> for more information.
 
-After completing the client configuration, you must initialize the `HazelcastInstance` that you want to connect to the cluster as follows:
+The second step is initializing the `HazelcastInstance` to be connected to the cluster.
 
 ```java
 HazelcastInstance client = HazelcastClient.newHazelcastClient(clientConfig);
 ```
 
-You can create a map and populate it with some data as follows:
+To create a map and populate it with some data:
 
 [source,java]
 ----
@@ -101,15 +101,88 @@ mapCustomers.put("2", new Customer("Ali", "Selam"));
 mapCustomers.put("3", new Customer("Avi", "Noyan"));
 ----
 
-For further information about using maps, see xref:data-structures:map.adoc[].
+For details about using maps, see xref:data-structures:map.adoc[].
 
-Lastly, after setting up your client, you can shut it down as follows:
+As the final step, if and when you are done with your client, you can shut it down as shown below:
 
 ```java
 client.shutdown();
 ```
 
-The code line provided above releases all used resources and closes all connections to the cluster.
+The above code line releases all the used resources and closes connections to the cluster.
+
+=== Client Cluster Routing Modes
+
+The cluster routing mode specifies how the client connects to the cluster. It can currently be used only with Java and .NET clients.
+
+NOTE: In previous releases, this functionality was known as the client operation mode and could be configured as smart or unisocket. 
+If the cluster routing mode is not configured in your client, the configured client operation mode is used.
+
+The mode that you use depends on your network requirements due to the distributed nature of the data and cluster.
+
+In all modes, the following information is provided to the client on initial connection:
+
+* Cluster version
+* Member details, including instance name, IP or UUID, partition group information, CP membership status, and type ({enterprise-product-name} only)
+* Partition group information ({enterprise-product-name} only)
+* CP group leader information ({enterprise-product-name} with `Advanced CP` enabled only) 
+
+The client is updated whenever the cluster version, cluster topology, partition groups, or CP group leader changes.
+
+From {enterprise-product-name} 5.5, you can use any of the following cluster routing modes:
+
+* **ALL_MEMBERS** 
++
+The default mode, and is the equivalent of the legacy **Smart** client operation mode. 
++
+In `ALL_MEMBERS` cluster routing mode, clients connect to each cluster member. 
++
+Since clients are aware of xref:overview:data-partitioning.adoc[data partitions], they are able to send an operation directly
+to the cluster member that owns the partition holding their data, which increases the overall throughput and efficiency.
++
+If <<configuring-direct-to-leader-routing, CP direct-to-leader routing>> is enabled on your clients, and the `ADVANCED_CP`
+license is present on your Enterprise cluster, then clients in this routing mode can use this to send CP operations
+directly to group leaders wherever possible, even after leadership changes.
+
+* **SINGLE_MEMBER** 
++
+In `SINGLE_MEMBER` cluster routing mode, clients only connect to one of the configured addresses. This is the equivalent of the legacy **Unisocket** client operation mode.
++
+In some environments, clients must connect to only a single member instead of to each member in the cluster; 
+for example, this can be enforced due to firewalls, security, or a custom network consideration.
+In these environments, `SINGLE_MEMBER` mode allows to you connect to a single member, while retaining the ability to work with other members in the cluster.
++
+The single connected member behaves as a gateway to the other members of the cluster.
+When the client makes a request, the connected member redirects the request to the relevant member and
+returns the response from that member to the client.
+
+* **MULTI_MEMBER** 
++
+This mode provides most of the functionality of `ALL_MEMBERS` routing over a single partition group, falling back to the more
+restricted behavior of `SINGLE_MEMBER` mode for members outside that partition group as follows:
++
+** The client can connect to all members in the defined partition group
+** Outside the visible partition group, a member in the defined partition group acts as a gateway to the other members in the cluster
+
++
+--
+In `MULTI_MEMBER` cluster routing mode, the client connection flow is as follows:
+
+. Connect to the first member 
+The client then has visibility of the partition group associated with the first member. 
+
+. Read the partition group information
+. Connect to a limited subset of the cluster as defined by the partition grouping
+The client does not have a connection to any cluster members outside this partition group, but it will have knowledge of all cluster members
+--
+
+The following diagram shows how each mode connects to members in a cluster:
+
+image:ROOT:client-routing.png[Hazelcast Cluster Routing diagram]
+
+For information on configuring the cluster routing mode, see <<configure-cluster-routing-mode,Configure Cluster Routing Mode>>.
+
+If already using the legacy **Smart** and **Unisocket** client operation modes, these remain supported. However, we recommend that you update your configuration to use the appropriate cluster routing mode as these options will be removed in a future major version. For information on these modes and their configuration, select **5.4** from the version picker at the top of the navigation pane. Ensure that the cluster routing mode is not configured at the same time as the legacy client operation mode, only one should be defined.
 
 [[handling-failures]]
 === Handling Failures
@@ -193,6 +266,19 @@ Locality is ambiguous for the client, so the `addLocalEntryListener()` and
 `localKeySet()` methods are not supported. See xref:data-structures:map.adoc[]
 for more information.
 
+==== Using Queue with Java Client
+
+An example usage is shown below.
+
+[source,java]
+----
+IQueue<String> myQueue = client.getQueue("theQueue");
+myQueue.offer("John")
+----
+
+The `getLocalQueueStats()` method is not supported because locality is ambiguous for the client.
+See xref:data-structures:queue.adoc[] for more information.
+
 === Using Client Services
 
 The {client-name} provides the services discussed below for some common functionalities on the client side.
@@ -248,6 +334,26 @@ if(lifecycleService.isRunning()){
 lifecycleService.shutdown();
 ----
 
+==== Using Other Supported Distributed Structures
+
+The distributed data structures listed below are also supported by the client.
+Since their logic is the same in both the member side and client side, you can see
+their sections as listed below.
+
+* xref:data-structures:topic.adoc[Topic]
+* xref:data-structures:reliable-topic.adoc[Reliable Topic]
+* xref:data-structures:replicated-map.adoc[Replicated Map]
+* xref:data-structures:list.adoc[List]
+//* xref:data-structures:set.adoc[Set]
+* xref:data-structures:ringbuffer.adoc[Ringbuffer]
+* xref:data-structures:pn-counter.adoc[PN Counter]
+* xref:data-structures:iatomiclong.adoc[IAtomicLong]
+* xref:data-structures:iatomicreference.adoc[IAtomicReference]
+* xref:data-structures:icountdownlatch.adoc[ICountDownLatch]
+* xref:data-structures:isemaphore.adoc[ISemaphore]
+* xref:data-structures:flake-id-generator.adoc[FlakeIdGenerator]
+* xref:data-structures:fencedlock.adoc[Lock]
+* xref:data-structures:cpmap.adoc[CPMap]
 
 === Client Listeners
 
@@ -307,13 +413,30 @@ these.
 [[configuring-java-client]]
 == Configuring {client-name}
 
-=== Declarative vs. Programmatic Configuration
+You can configure {client-name} declaratively (XML), programmatically (API), or
+using client system properties.
 
-In the declarative configuration approach, settings are defined in configuration files, in XML or YAML format. This method allows for a clear separation of configuration from the application code, making it easier to manage and modify configurations without altering the codebase.
+For declarative configuration, the Hazelcast client looks at
+the following places for the client configuration file:
 
-NOTE: The {client-name} currently does not support declarative configuration. This support will be added in future releases.
+* **System property**: The client first checks if `hazelcast.client.config` system property is
+set to a file path, e.g., `-Dhazelcast.client.config=C:/myhazelcast.xml`.
+* **Classpath**: If config file is not set as a system property,
+the client checks the classpath for `hazelcast-client.xml` file.
 
-The programmatic configuration approach involves setting configurations directly within the application code using the provided API. Using this method, configurations can be dynamically adjusted at runtime based on the application's needs. For programmatic configuration of the {client-name}, instantiate a `ClientConfig` object and configure the desired aspects. An example is shown below:
+If the client does not find any configuration file, it starts with the default configuration
+(`hazelcast-client-default.xml`) located in the `hazelcast.jar` library.
+Before configuring the client, please try to work with the default configuration to see if
+it works for you. The default should be just fine for most users.
+If not, then consider custom configuration for your environment.
+
+If you want to specify your own configuration file to create a `Config` object,
+the Hazelcast client supports the following:
+
+* `Config cfg = new XmlClientConfigBuilder(xmlFileName).build();`
+* `Config cfg = new XmlClientConfigBuilder(inputStream).build();`
+
+For programmatic configuration of the Hazelcast Java Client, just instantiate a `ClientConfig` object and configure the desired aspects. An example is shown below:
 
 [source,java]
 ----
@@ -322,7 +445,6 @@ clientConfig.setClusterName("dev");
 clientConfig.setLoadBalancer(yourLoadBalancer);
 ----
 
-NOTE: In the subsequent sections, all examples will be provided using the programmatic approach.
 
 [[client-network]]
 === Client Network
@@ -382,37 +504,181 @@ networkConfig.addOutboundPortDefinition("34700,34701,34702,34703");
 networkConfig.addOutboundPort(34705);
 ----
 
-[[java-client-operation-modes]]
-==== Setting Smart Routing
+[[configure-cluster-routing-mode]]
+==== Configure Cluster Routing Mode
 
-Hazelcast clients have two operation modes because of the distributed nature of the data and cluster.
+You can configure the cluster routing mode to suit your requirements, as described in <<client-cluster-routing-modes,Client Cluster Routing Modes>>.
 
-**Smart Client**: In the Smart mode, the clients connect to each cluster member.
-Since each xref:overview:data-partitioning.adoc[data partition] uses the well known and consistent hashing algorithm,
-each client can send an operation to the cluster member that owns the partition that holds their data,
-which increases the overall throughput and efficiency.
+The following examples show the configuration for each cluster routing mode. 
 
-NOTE: The **Smart Client** mode is currently not implemented in the {client-name}. Support for Smart Client will be added in the future versions.
+NOTE: If your clients want to use temporary permissions defined in a member, see 
+xref:security:native-client-security.adoc#handling-permissions-when-a-new-member-joins[Handling Permissions].
 
-**Unisocket Client**:  In the Unisocket mode, the clients only connect to one of the configured addresses.
-This single member behaves as a gateway to the other members.
-For any operation requested from the client, it redirects the request to the relevant member and
-returns the response back to the client returned from that member.
+**ALL_MEMBERS**
 
-Using the Unisocket mode is necessary in scenarios where clients are required to connect to only a single member rather than to each member in the cluster. This requirement may arise due to firewalls, security considerations, or specific networking issues.
+To connect to all members, use the `ALL_MEMBERS` cluster routing mode, which can be defined as follows.
 
-Since the {client-name} currently only supports the Unisocket mode, you need to disable Smart routing in the client network configuration as follows:
+Declarative Configuration:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast-client>
+    ...
+    <network>
+        <cluster-routing mode="ALL_MEMBERS"/>
+    </network>
+    ...
+</hazelcast-client>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast-client:
+  network:
+    cluster-routing:
+      mode: ALL_MEMBERS
+----
+====
+
+Programmatic Configuration:
 
 [source,java]
 ----
 ClientConfig clientConfig = new ClientConfig();
 ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
-networkConfig.setSmartRouting(false);
+networkConfig.getClusterRoutingConfig().setRoutingMode(RoutingMode.ALL_MEMBERS);
 ----
 
-Note that you need also to disable Smart routing for the clients which
-want to use temporary permissions defined in a member.
-See the xref:security:native-client-security.adoc#handling-permissions-when-a-new-member-joins[Handling Permissions section].
+**SINGLE_MEMBER**
+
+To connect to a single member, which can be used as a gateway to the other members, use the `SINGLE_MEMBER` cluster routing mode, which can be defined as described below.
+
+When using the `SINGLE_MEMBER` cluster routing mode, consider the following:
+
+* The absence of <<configuring-backup-acknowledgement, backup acknowledgements>>, as the client does not have a view of the entire cluster
+* If you have multiple members on a single machine, we advise that <<configuring-address-list,explicit ports are set for each member>>
+* If CP group leader priority is assigned appropriately, and the client is explicitly set to connect to a CP group leader,
+connections to the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] are direct-to-leader, which can result in improved performance.
+If leadership is reassigned while using `SINGLE_MEMBER` cluster routing, then this benefit may be lost.
+* <<configuring-load-balancer,`LoadBalancer`>> configuration is ignored
+* xref:cluster-performance:thread-per-core-tpc.adoc[Thread-Per-Core] is not supported for `SINGLE_MEMBER` cluster routing and no benefit will be gained by enabling it with this routing mode.
+
+Declarative Configuration:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast-client>
+    ...
+    <network>
+        <cluster-routing mode="SINGLE_MEMBER"/>
+    </network>
+    ...
+</hazelcast-client>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast-client:
+  network:
+    cluster-routing:
+      mode: SINGLE_MEMBER
+----
+====
+
+Programmatic Configuration:
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
+networkConfig.getClusterRoutingConfig().setRoutingMode(RoutingMode.SINGLE_MEMBER);
+----
+
+**MULTI_MEMBER**
+
+To connect to a subset partition grouping of members, which allows direct connection to the specified group and gateway connections to other members, use the `MULTI_MEMBER` cluster routing mode, which can be defined as follows.
+
+To use the `MULTI_MEMBER` cluster routing mode, you must also define the grouping strategy to apply. For further information on configuring partition groups, see xref:clusters:partition-group-configuration.adoc[]. 
+
+When using the `MULTI_MEMBER` cluster routing mode, consider the following:
+
+* The <<handling-client-configuration-failure,handling of connection failures>>, which failover to another partition group where one is available. 
+No retry attempt is made to connect to the lost member(s) 
++
+In a split and heal scenario, where the client has no access to other group members, the client is re-assigned to the initial group. 
++
+In a scenario where all group members are killed almost simultaneously, the client loses connection but reconnects when a member starts again.
+
+* The absence of <<configuring-backup-acknowledgement, backup acknowledgements>>, as the client does not have a view of the entire cluster
+If <<configuring-direct-to-leader-routing, CP direct-to-leader routing>> is enabled on your clients, and the `ADVANCED_CP` license
+is present on your Enterprise cluster, then clients in this routing mode can use this to send CP operations directly
+to group leaders wherever possible, even after leadership changes.
+* Best efforts are made to route operations to the required member, but if this cannot be done operations are routed as defined in the <<configuring-load-balancer,`LoadBalancer`>>
+
+* xref:cluster-performance:thread-per-core-tpc.adoc[Thread-Per-Core] is not supported for `MULTI_MEMBER` cluster routing and may lead to event inconsistency if used.
+
+Declarative Configuration:
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast-client>
+    ...
+    <network>
+        <cluster-routing mode="MULTI_MEMBER">
+          <grouping-strategy>PARTITION_GROUPS</grouping-strategy>
+        </cluster-routing>
+    </network>
+    ...
+</hazelcast-client>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast-client:
+  network:
+    cluster-routing:
+      mode: MULTI_MEMBER
+      grouping-strategy: PARTITION_GROUPS
+----
+====
+
+Programmatic Configuration:
+
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+ClientNetworkConfig networkConfig = clientConfig.getNetworkConfig();
+networkConfig.getClusterRoutingConfig().setRoutingMode(RoutingMode.MULTI_MEMBER);
+// PARTITION_GROUPS is the default strategy, so it does not need to be explicitly defined
+networkConfig.getClusterRoutingConfig().setRoutingStrategy(RoutingStrategy.PARTITION_GROUPS);
+----
+
+TIP: If you are using the `smart` or `unisocket` client operation modes, select **5.4** from the version picker above the navigation pane to see the configuration information. The cluster routing mode described above must not be present in your configuration.
+
 
 [[enabling-redo-operation]]
 ==== Enabling Redo Operation
@@ -767,6 +1033,71 @@ When a failover starts, i.e., the client is disconnected and was configured
 to connect to alternative clusters, the current <<client-network, member list>> is not considered;
 the client cuts all the connections before attempting to connect to a new cluster and tries the clusters as configured.
 See the below configuration related sections.
+
+[[ordering-of-clusters-when-clients-try-to-connect]]
+=== Ordering of Clusters When Clients Try to Connect
+
+The order of the clusters, that the client will try to connect
+in a blue-green or disaster recovery scenario, is decided by
+the order of these cluster declarations as given in the client configuration.
+
+Each time the client is disconnected from a cluster and it cannot connect back to the same one,
+the configured list is iterated over. Count of these iterations before
+the client decides to shut down is provided using the `try-count` configuration element.
+See the following configuration related sections.
+
+We didn't go over the configuration yet (see the following configuration related sections),
+but for the sake of explaining the ordering, assume that you have
+`client-config1`, `client-config2` and `client-config3`
+in the given order as shown below (in your `hazelcast-client-failover` XML or YAML file).
+This means you have three alternative clusters.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast-client-failover>
+    <try-count>4</try-count>
+    <clients>
+        <client>client-config1.xml</client>
+        <client>client-config2.xml</client>
+        <client>client-config3.xml</client>
+    </clients>
+</hazelcast-client-failover>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast-client-failover:
+  try-count: 4
+  clients:
+    - client-config1.yaml
+    - client-config2.yaml
+    - client-config3.yaml
+----
+====
+
+And let's say the client is disconnected from the cluster
+whose configuration is given by `client-config2.xml`.
+Then, the client tries to connect to the next cluster in this list,
+whose configuration is given by `client-config3.xml`. When the end of the list is reached,
+which is so in this example, and the client could not connect to `client-config3`,
+then `try-count` is incremented and the client continues to try to connect starting with `client-config1`.
+
+This iteration continues until the client connects to a cluster or `try-count` is reached to the configured value.
+When the iteration reaches this value and the client still could not connect to a cluster,
+it shuts down. Note that, if `try-count` was set to `1` in the above example,
+and the client could not connect to `client-config3`, it would shut down since
+it already tried once to connect to an alternative cluster.
+
+The following sections describe how you can configure the Java client for
+blue-green and disaster recovery scenarios.
 
 === Configuring Without CNAME
 

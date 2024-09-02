@@ -116,23 +116,19 @@ The main areas are around client connections and retry-able operations. Some app
 
 **Handling Client Connection Failure:**
 
-While the client initially tries to connect to one of the members in the
-`ClientNetworkConfig.addressList`, it is possible that not all members are available.
-Instead of giving up, throwing an exception and stopping,
-the client continues to attempt to connect as configured.
-For information on the available configuration, see <<configuring-client-connection-retry, Configuring Client Connection Retry>>.
+While the client is trying to connect initially to one of the members in the
+`ClientNetworkConfig.addressList`, all the members might be not available.
+Instead of giving up, throwing an exception and stopping the client,
+the client retries to connect as configured which is described in the
+<<configuring-client-connection-retry, Configuring Client Connection Retry section>>.
 
-The client executes each operation through the already established connection to the cluster.
-If this connection disconnects or drops, the client tries to reconnect as configured.
+The client executes each operation through the already established connection(s) to the cluster.
+If these connection(s) disconnect or drop, the client tries to reconnect as configured.
 
-The initial connection is established using one of the addresses provided in the <<configuring-address-list, address list>>.
-The client gets the addresses of other members in the cluster from the first connected member.
-
-If you use a <<client-network,discovery mechanism>> to find the initial member for the connection instead of an address list,
-you can use the same property to configure whether the initial member connection uses the private or public address.
-
-For an example of this scenario, refer to
-link:https://docs.hazelcast.com/tutorials/hazelcast-platform-operator-expose-externally[Connect to Hazelcast from Outside Kubernetes, window=_blank] in the Operator documentation.
+If using the `MULTI_MEMBER` cluster routing mode, and the cluster has multiple partition groups defined 
+and the client connection to a partition group fails, connectivity is maintained by failing over to an alternative partition group.
+If the connection is lost, which occurs only if all members of the partition group become unavailable, there is no attempt to retry the connection before failing over to another partition group.
+For further information on client cluster routing modes, see <<client-cluster-routing-modes,Client Cluster Routing Modes>>.
 
 **Handling Retry-able Operation Failure:**
 
@@ -765,6 +761,71 @@ When a failover starts, i.e., the client is disconnected and was configured
 to connect to alternative clusters, the current <<client-network, member list>> is not considered;
 the client cuts all the connections before attempting to connect to a new cluster and tries the clusters as configured.
 See the below configuration related sections.
+
+[[ordering-of-clusters-when-clients-try-to-connect]]
+=== Ordering of Clusters When Clients Try to Connect
+
+The order of the clusters, that the client will try to connect
+in a blue-green or disaster recovery scenario, is decided by
+the order of these cluster declarations as given in the client configuration.
+
+Each time the client is disconnected from a cluster and it cannot connect back to the same one,
+the configured list is iterated over. Count of these iterations before
+the client decides to shut down is provided using the `try-count` configuration element.
+See the following configuration related sections.
+
+We didn't go over the configuration yet (see the following configuration related sections),
+but for the sake of explaining the ordering, assume that you have
+`client-config1`, `client-config2` and `client-config3`
+in the given order as shown below (in your `hazelcast-client-failover` XML or YAML file).
+This means you have three alternative clusters.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast-client-failover>
+    <try-count>4</try-count>
+    <clients>
+        <client>client-config1.xml</client>
+        <client>client-config2.xml</client>
+        <client>client-config3.xml</client>
+    </clients>
+</hazelcast-client-failover>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast-client-failover:
+  try-count: 4
+  clients:
+    - client-config1.yaml
+    - client-config2.yaml
+    - client-config3.yaml
+----
+====
+
+And let's say the client is disconnected from the cluster
+whose configuration is given by `client-config2.xml`.
+Then, the client tries to connect to the next cluster in this list,
+whose configuration is given by `client-config3.xml`. When the end of the list is reached,
+which is so in this example, and the client could not connect to `client-config3`,
+then `try-count` is incremented and the client continues to try to connect starting with `client-config1`.
+
+This iteration continues until the client connects to a cluster or `try-count` is reached to the configured value.
+When the iteration reaches this value and the client still could not connect to a cluster,
+it shuts down. Note that, if `try-count` was set to `1` in the above example,
+and the client could not connect to `client-config3`, it would shut down since
+it already tried once to connect to an alternative cluster.
+
+The following sections describe how you can configure the Java client for
+blue-green and disaster recovery scenarios.
 
 === Configuring Without CNAME
 

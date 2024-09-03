@@ -4,14 +4,14 @@
 
 {description}
 
-When clients are connected to a single cluster, that cluster becomes a single point of failure. If the cluster fails for any reason, the client cannot connect to it and the application may break. To make clients more robust, you can set up a blue-green cluster deployment, which provides a client failover mechanism that reroutes client connections to a different cluster without requiring a client network configuration update or client restart. 
+When clients are connected to a single cluster, that cluster becomes a single point of failure. If the cluster fails for any reason, the client cannot connect to it and the application may break. To make clients more robust, you can set up a blue-green cluster deployment, which provides a client failover mechanism that reroutes client connections to a different cluster without requiring a client network configuration update or client restart.
 
-You can use a blue-green deployment in the following scenarios: 
+You can use a blue-green deployment in the following scenarios:
 
 * To manually redirect client traffic to a secondary cluster while you perform maintenance or software updates.
 * To automatically redirect client traffic to a secondary cluster during a disaster recovery scenario.
 
-In both cases, you will need to manually deploy a xref:{page-latest-supported-mc}@management-center:clusters:client-filtering.adoc[client filter] to the secondary cluster to force clients to reconnect to the original, primary cluster when it is back online.  
+In both cases, you will need to manually deploy a xref:{page-latest-supported-mc}@management-center:clusters:client-filtering.adoc[client filter] to the secondary cluster to force clients to reconnect to the original, primary cluster when it is back online.
 
 This tutorial focuses on the disaster recovery scenario, where you will complete the following steps:
 
@@ -38,7 +38,7 @@ To complete this tutorial, you need the following:
 |xref:get-started-enterprise.adoc[Install Hazelcast Enterprise]
 
 |Docker network with the name `hazelcast-network`
-|Use the `docker network create hazelcast-network` command 
+|Use the `docker network create hazelcast-network` command
 
 |===
 
@@ -66,7 +66,7 @@ You should see your cluster name in the console along with the IP address of the
 
 [source,shell,subs="attributes+"]
 ----
-2021-12-01 18:26:42,369 [ INFO] [main] [c.h.i.c.ClusterService]: [172.18.0.2]:5701 [blue] [{full-version}] 
+2021-12-01 18:26:42,369 [ INFO] [main] [c.h.i.c.ClusterService]: [172.18.0.2]:5701 [blue] [{full-version}]
 
 Members {size:1, ver:1} [
 	Member [172.18.0.2]:5701 - c00213e1-da50-4b5f-a53b-ccfe4a1ebeea this
@@ -84,9 +84,9 @@ Start another local single-member cluster called `green`.
 docker run \
     --network hazelcast-network \
     --rm \
-    -e HZ_NETWORK_PUBLICADDRESS=<host_ip>:5702 \
+    -e HZ_NETWORK_PUBLICADDRESS=<host_ip>:5702 \ <1>
     -e HZ_CLUSTERNAME=green \
-    -e HZ_LICENSEKEY=<your license key> \ <1>
+    -e HZ_LICENSEKEY=<your license key> \ <2>
     -p 5702:5701 hazelcast/hazelcast-enterprise:{full-version}
 ----
 <1> Replace the `<host_ip>` placeholder with the IP address of your Docker host.
@@ -96,7 +96,7 @@ See the `green` cluster is formed:
 
 [source,shell,subs="attributes+"]
 ----
-2021-12-01 18:28:46,299 [ INFO] [main] [c.h.i.c.ClusterService]: [172.18.0.3]:5701 [green] [{full-version}] 
+2021-12-01 18:28:46,299 [ INFO] [main] [c.h.i.c.ClusterService]: [172.18.0.3]:5701 [green] [{full-version}]
 
 Members {size:1, ver:1} [
 	Member [172.18.0.3]:5701 - 72f5520c-8c27-4501-9199-a8da6b58c0b4 this
@@ -131,11 +131,11 @@ For this, you need to create two client configurations for the same client, and 
 . Create the client configuration file for the `blue` cluster, called `client-blue.yaml` (or `client-blue.xml`)
 and place it in the `resources` directory:
 +
-[tabs] 
-==== 
-YAML:: 
-+ 
--- 
+[tabs]
+====
+YAML::
++
+--
 .client-blue.yaml
 [source,yaml]
 ----
@@ -175,11 +175,11 @@ For testing/development purposes, set to 1000 milliseconds to see the client con
 . Create the client configuration for the `green` cluster, called `client-green.yaml` (or `client-green.xml`)
 and place it in the `resources` directory:
 +
-[tabs] 
-==== 
-YAML:: 
-+ 
--- 
+[tabs]
+====
+YAML::
++
+--
 .client-green.yaml
 [source,yaml]
 ----
@@ -220,11 +220,11 @@ For testing/development purposes, set to 1000 milliseconds to see the client con
 The name of the client failover configuration file must be `hazelcast-client-failover` (`hazelcast-client-failover.yaml` or `hazelcast-client-failover.xml`).
 Place this failover configuration file in the `resources` directory.
 +
-[tabs] 
-==== 
-YAML:: 
-+ 
--- 
+[tabs]
+====
+YAML::
++
+--
 .hazelcast-client-failover.yaml
 [source,yaml]
 ----
@@ -264,15 +264,15 @@ see xref:clients:java#ordering-of-clusters-when-clients-try-to-connect.adoc[Orde
 
 In this step, you'll start the client.
 
-[tabs] 
-==== 
-Java:: 
+[tabs]
+====
+Java::
 +
 
 . Install the xref:getting-started:install-hazelcast.adoc#use-java[Java client library].
 . Add the following to the `MyClient.java` file.
 +
--- 
+--
 [source,java,subs="attributes+"]
 ----
 import com.hazelcast.client.HazelcastClient;
@@ -337,7 +337,7 @@ const { Client } = require('hazelcast-client');
             }
         ]
       });
-        
+
     } catch (err) {
         console.error('Error occurred:', err);
     }
@@ -380,7 +380,7 @@ Dec 01, 2021 8:16:45 PM com.hazelcast.core.LifecycleService
 INFO: hz.client_1 [green] [{full-version}] HazelcastClient {full-version} (20210922 - dbaeffe) is CLIENT_CONNECTED
 ----
 
-NOTE: In this type of failover scenario, the client does not automatically reconnect to the `blue` cluster when it is back online. Instead, you need to deploy a deny list to block client connections to the `green` cluster. The client will then use the failover configuration (in <<step-3, Step 3>>) to reconnect to the original cluster. When the client is reconnected, you can remove the client filter. 
+NOTE: In this type of failover scenario, the client does not automatically reconnect to the `blue` cluster when it is back online. Instead, you need to deploy a deny list to block client connections to the `green` cluster. The client will then use the failover configuration (in <<step-3, Step 3>>) to reconnect to the original cluster. When the client is reconnected, you can remove the client filter.
 
 == Step 6. Shut Down the Cluster
 
@@ -389,7 +389,7 @@ move to the other tutorials. To shut down the cluster, close the terminals in wh
 
 == Next Steps
 
-If you're interested in learning more about the topics introduced in this tutorial, see: 
+If you're interested in learning more about the topics introduced in this tutorial, see:
 
 * xref:clients:java#blue-green-deployment-and-disaster-recovery.adoc[Blue-Green Deployment].
 * xref:{page-latest-supported-mc}@management-center:clusters:client-filtering.adoc[Filtering Client Connections].

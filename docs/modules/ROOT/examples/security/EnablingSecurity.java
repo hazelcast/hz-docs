@@ -53,5 +53,4 @@ cfg.getSecurityConfig()
     .addClientPermissionConfig(new PermissionConfig(PermissionType.MAP, "playground", "*").addAction("all"));
 //end::authz[]
     }
-
 }

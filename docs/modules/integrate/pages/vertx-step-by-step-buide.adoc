@@ -1,0 +1,477 @@
+= Vert.x Hazelcast Getting Started
+
+This is a step-by-step guide on how to integrate Vert.x with Hazelcast and use Hazelcast for distributed session management and other distributed data structures.
+
+In this guide we will
+- start with a simple Vert.x Hello World application
+- add vertx-hazelcast module and enable distributed session management
+- use `io.vertx.core.shareddata.Counter` data structure to implement a unique id generator
+
+== Prerequisites
+
+- Java 17 or newer
+- Maven 3.9+
+- link:https://httpie.io[httpie] client
+
+== Create a new project
+
+1. Go to link:https://start.vertx.io[start.vertx.io], change the artifact id to `messages`, the version to 5.0.0 and generate a new project.
+
+2. Extract the project and build it using
+
+[source,bash]
+----
+$ mvn clean package
+----
+
+and start the application using
+
+[source,bash]
+----
+java -jar target/messages-1.0.0-SNAPSHOT-fat.jar
+----
+
+you should see an output similar to the following:
+
+[source]
+----
+HTTP server started on port 8888
+Aug 29, 2024 2:22:38 PM io.vertx.launcher.application.VertxApplication
+INFO: Succeeded in deploying verticle
+----
+
+[NOTE]
+====
+TODO (should be removed when fixed before merging)
+
+There seems tobe a bug in 5.0.0-SNAPSHOT
+change
+
+`<launcher.class>io.vertx.core.Launcher</launcher.class>`
+
+to
+
+`<launcher.class>io.vertx.launcher.application.VertxApplication</launcher.class>`
+
+END TODO
+====
+
+== Storing Data in Session
+
+Go to the `MainVerticle.java` file and replace the contents of the start method with the following:
+
+NOTE: This guide uses 2 space indentation, which is customary for Vertx projects due to high number of nested callbacks.
+
+[source,java]
+----
+  public void start() {
+    // Create a Router
+    Router router = router(vertx);
+
+    // Create local SessionStore
+    SessionStore store = LocalSessionStore.create(vertx);
+
+    // Use the SessionStore to handle all requests
+    router.route()
+      .handler(SessionHandler.create(store));
+
+    router.route(HttpMethod.PUT, "/").handler(context -> {
+      context.request().bodyHandler(body -> {
+        List<String> messages = getMessagesFromSession(context);
+
+        JsonObject json = body.toJsonObject();
+        String message = json.getString("message");
+        messages.add(message);
+
+        putMessagesToSession(context, messages);
+
+        context.json(
+          new JsonObject()
+            .put("messages", messages)
+        );
+      });
+    });
+
+    // Create the HTTP server
+    vertx.createHttpServer()
+      // Handle every request using the router
+      .requestHandler(router)
+      // Start listening
+      .listen(8888)
+      // Print the port
+      .onSuccess(server ->
+        System.out.println(
+          "HTTP server started on port " + server.actualPort()
+        )
+      );
+  }
+
+  private static List<String> getMessagesFromSession(RoutingContext context) {
+    String messages = context.session().get("messages");
+    if (messages == null) {
+      return new ArrayList<>();
+    } else {
+      return new ArrayList<>(Arrays.asList(messages.split(",")));
+    }
+  }
+
+  private void putMessagesToSession(RoutingContext context, List<String> messages) {
+    context.session().put("messages", String.join(",", messages));
+  }
+----
+
+[source,bash]
+----
+$ http put localhost:8888 message=Hello\ World!
+HTTP/1.1 200 OK
+content-length: 29
+content-type: application/json
+set-cookie: vertx-web.session=ed22f77473a7f613c9305431a62832a6; Path=/
+
+{
+    "messages": [
+        "Hello World!"
+    ]
+}
+
+----
+
+Execute another request with the cookie.
+
+[source,bash]
+----
+$ http put localhost:8888 'Cookie:vertx-web.session=ed22f77473a7f613c9305431a62832a6' message=Hello\ World\ 2!
+HTTP/1.1 200 OK
+content-length: 46
+content-type: application/json
+
+{
+    "messages": [
+        "Hello World!",
+        "Hello World 2!"
+    ]
+}
+
+----
+
+== Distributed Sessions
+
+Let's modify the code, so we can start multiple instances easily - the application will start on defined port, and when the port is not available it will search for another port:
+
+Add the following method to the `MainVerticle.java` class
+
+[source,java]
+----
+  private int findFreePort(int from) {
+    for (int port = from; port < from + 100; port++) {
+      try {
+        new ServerSocket(port).close();
+        return port;
+      } catch (IOException e) {
+        // port not available, try next
+      }
+    }
+    throw new RuntimeException("Could not find an available port");
+  }
+----
+
+and use it in the `start` method:
+
+[source,java]
+----
+    ...
+    int port = findFreePort(8888);
+
+    // Create the HTTP server
+    vertx.createHttpServer()
+      // Handle every request using the router
+      .requestHandler(router)
+      // Start listening
+      .listen(port)
+    ...
+----
+
+Now, we can start two instances:
+
+[source,bash]
+----
+$ java -jar target/vertx-hz-1.0.0-SNAPSHOT-fat.jar
+HTTP server started on port 8888
+Aug 30, 2024 9:09:44 AM io.vertx.launcher.application.VertxApplication
+INFO: Succeeded in deploying verticle
+
+...
+
+$ java -jar target/vertx-hz-1.0.0-SNAPSHOT-fat.jar
+HTTP server started on port 8889
+Aug 30, 2024 9:09:47 AM io.vertx.launcher.application.VertxApplication
+INFO: Succeeded in deploying verticle
+----
+
+and we can see the session is not shared between the instances, here is the request to the first instance:
+
+[source, bash]
+----
+$ http PUT localhost:8888 message="Hello world"
+HTTP/1.1 200 OK
+content-length: 28
+content-type: application/json
+set-cookie: vertx-web.session=00f219c166ca50727d23eaaf9fe54229; Path=/
+
+{
+    "messages": [
+        "Hello world"
+    ]
+}
+----
+
+and here is the request to the 2nd instance, notice the different port and that we use the cookie we received, but the data does not contain the previous message.
+
+[source, bash]
+----
+$ http PUT localhost:8889 message="Hello world 2" 'Cookie: vertx-web.session=00f219c166ca50727d23eaaf9fe54229'
+HTTP/1.1 200 OK
+content-length: 30
+content-type: application/json
+set-cookie: vertx-web.session=a1486c5ed6416972fdc356e4d91d2397; Path=/
+
+{
+    "messages": [
+        "Hello world 2"
+    ]
+}
+----
+
+We will fix that by using a Hazelcast Cluster Manager. There are two modules that provide Hazelcast Cluster Manager:
+
+- `io.vertx:vertx-hazelcast` - this module is maintained by the Vert.x team, with contributions from Hazelcast, and is built on top of open-source Hazelcast
+- `com.hazelcast:vertx-hazelcast-enterprise` / this module is maintained by the Hazelcast team and is built on top of the `vertx-hazelcast` but uses Hazelcast Enterprise instead. You need an enterprise license to use Hazelcast Enterprise.
+
+You can use either module for most of this guilde, at the end of this guide you will need the `vertx-hazelcast-enterprise` module.
+
+NOTE: You can get your trial key at https://hazelcast.com/get-started/ or you can use `vertx-hazelcast` and a community edition of Hazelcast.
+
+Add the following dependency to the `pom.xml`
+
+[source,xml]
+----
+<dependency>
+  <groupId>com.hazelcast</groupId>
+  <artifactId>vertx-hazelcast-enterprise</artifactId>
+  <version>{vertx.version}</version>
+</dependency>
+----
+
+change the following part of the `start` method
+
+[source,java]
+----
+// Create local SessionStore
+SessionStore store = LocalSessionStore.create(vertx);
+----
+
+to the following
+
+[source,java]
+----
+// Create clustered SessionStore
+SessionStore store = ClusteredSessionStore.create(vertx);
+----
+
+and from now on we will start the application with `-server` parameter, which tells Vert.x to look for a cluster manager implementation.
+
+We also need to provide Hazelcast configuration file, create a file cluster.xml in `src/main/resources` directory:
+
+[source,xml]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<hazelcast xmlns="http://www.hazelcast.com/schema/config"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.hazelcast.com/schema/config
+           https://www.hazelcast.com/schema/config/hazelcast-config-5.5.xsd">
+
+  <license-key>replace/with/your/key</license-key> <!-- Only if using vertx-hazelcast-enterprise -->
+
+  <network>
+    <join>
+      <multicast enabled="true"/>
+    </join>
+  </network>
+
+  <multimap name="__vertx.subs">
+    <backup-count>1</backup-count>
+    <value-collection-type>SET</value-collection-type>
+  </multimap>
+
+  <map name="__vertx.haInfo">
+    <backup-count>1</backup-count>
+  </map>
+
+  <map name="__vertx.nodeInfo">
+    <backup-count>1</backup-count>
+  </map>
+
+  <cp-subsystem>
+    <cp-member-count>0</cp-member-count>
+    <semaphores>
+      <semaphore>
+        <name>__vertx.*</name>
+        <jdk-compatible>false</jdk-compatible>
+        <initial-permits>1</initial-permits>
+      </semaphore>
+    </semaphores>
+  </cp-subsystem>
+</hazelcast>
+----
+
+Now rebuild the project and start the application, you will see more verbose output as Hazelcast prints its own startup logs:
+
+[source,bash]
+----
+$ java -jar target/vertx-hz-1.0.0-SNAPSHOT-fat.jar -cluster
+...
+HTTP server started on port 8888
+...
+Members {size:2, ver:2} [
+	Member [192.168.0.10]:5701 - e29f0362-f9a9-4708-b6e5-1a6067b5aa39 this
+	Member [192.168.0.10]:5702 - 74014573-a18a-44f2-9ca7-fd90b70dcb43
+]
+...
+----
+
+and
+
+[source,bash]
+----
+$ java -jar target/vertx-hz-1.0.0-SNAPSHOT-fat.jar -cluster
+...
+HTTP server started on port 8889
+...
+Members {size:2, ver:2} [
+	Member [192.168.0.10]:5701 - e29f0362-f9a9-4708-b6e5-1a6067b5aa39
+	Member [192.168.0.10]:5702 - 74014573-a18a-44f2-9ca7-fd90b70dcb43 this
+]
+...
+----
+
+putting two messages into different instances while using the same cookie we see that the session is shared between the instances.
+
+[source,bash]
+----
+$ http PUT localhost:8888 message="Hello world"
+HTTP/1.1 200 OK
+content-length: 31
+content-type: application/json
+set-cookie: vertx-web.session=1ab47cb96731123135f25ec7b67efd64; Path=/
+
+{
+    "messages": [
+        "",
+        "Hello world"
+    ]
+}
+----
+
+[source,bash]
+----
+$ http PUT localhost:8889 message="Hello world 2" 'Cookie: vertx-web.session=674806546c690674962f279670abefcf'
+HTTP/1.1 200 OK
+content-length: 44
+content-type: application/json
+
+{
+    "messages": [
+        "Hello world",
+        "Hello world 2"
+    ]
+}
+----
+
+== Using Counter
+
+Replace this part of the code at the end of the `start()` method
+
+[source,java]
+----
+context.json(
+  new JsonObject()
+    .put("messages", messages)
+);
+----
+
+with the following
+
+[source,java]
+----
+context.vertx()
+  .sharedData()
+  .getCounter("requestId")
+  .onSuccess(counter -> {
+    counter.incrementAndGet()
+      .onSuccess(requestId -> {
+        context.json(
+          new JsonObject()
+            .put("requestId", requestId)
+            .put("messages", messages)
+        );
+      });
+  });
+----
+
+when you try the application now you can see the response contains additional field named `requestId` and its value increments every for every request
+
+[source,bash]
+----
+$ http PUT localhost:8888 message="Hello world"
+HTTP/1.1 200 OK
+content-length: 42
+content-type: application/json
+set-cookie: vertx-web.session=d9fb4cada5c0fc625089a38f3de13e3c; Path=/
+
+{
+    "messages": [
+        "Hello world"
+    ],
+    "requestId": 1
+}
+----
+
+== CP Subsystem backed Lock and Counter
+
+The module `vertx-hazelcast-enterprise` provides a different implementation of the `io.vertx.core.shareddata.Counter` and `io.vertx.core.shareddata.Lock` data structures. The implementation in `vertx-hazelcast` is based on the IMap data structure and provides guarantees defined in the xref:architecture:data-partitioning.adoc#best-effort-consistency[Best-effort consistency] section. This means that under certain network partition conditions the counter doesn't provide strong consistency guarantees and can generate duplicate values.
+
+The module `vertx-hazelcast-enterprise` uses the CP Subsystem from {enterprise-product-name} to implement the Lock and Counter.
+
+NOTE: For the rest of this guide you need to have an {enterprise-product-name} license.
+
+Make sure you have the following dependency
+
+[source,xml]
+----
+<dependency>
+  <groupId>com.hazelcast</groupId>
+  <artifactId>vertx-hazelcast-enterprise</artifactId>
+  <version>{vertx.version}</version>
+</dependency>
+----
+
+and your XML config contains a valid license key:
+
+[source,xml]
+----
+...
+  <license-key>replace/with/your/key</license-key>
+...
+----
+
+enable the CP subsystem, in cluster.xml change the value of the `` property to `3`:
+
+[source,xml]
+----
+    <cp-member-count>3</cp-member-count>
+----
+
+You need to start at least 3 instances for the cluster to form successfully. For complete documentation see the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] section.
+
+

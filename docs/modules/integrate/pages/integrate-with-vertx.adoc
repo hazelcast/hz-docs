@@ -1,0 +1,118 @@
+= Integrate with Vert.x
+
+Vert.x is a reactive application toolkit for creating resource-efficient, concurrent, asynchronous and flexible application on the JVM.
+
+Hazelcast integrates with Vert.x in a form of a cluster manager - the link:https://vertx.io/docs/vertx-hazelcast/java/[Hazelcast Cluster Manager].
+
+
+In Vert.x a cluster manager is used for various functions including:
+
+- Discovery and group membership of Vert.x nodes in a cluster
+- Maintaining cluster wide topic subscriber lists (so we know which nodes are interested in which event bus addresses)
+- Distributed Map support
+- Distributed Locks
+- Distributed Counters
+
+There are 2 modules to chose from:
+- `io.vertx:vertx-hazelcast` - this module is part of Vert.x and is maintained by the Vert.x team with contributions from Hazelcast developers. This module is licensed under the Apache 2 license.
+
+- `com.hazelcast:vertx-hazelcast-enterprise` - this module is built on top of `vertx-hazelcast` and leverages functionality of {enterprise-product-name} to implement some of the cluster manager functionality (e.g. it uses CP Subsystem to implement strongly consistent `io.vertx.core.shareddata.Lock` and `io.vertx.core.shareddata.Counter`).
+
+== Using Vert.x Hazelcast Enterprise Cluster Manager
+
+To use the Vert.x Hazelcast Enterprise Cluster Manager add the following dependency to your Vert.x application:
+
+[source,xml]
+----
+<dependency>
+  <groupId>com.hazelcast</groupId>
+  <artifactId>vertx-hazelcast-enterprise</artifactId>
+  <version>5.0.0-SNAPSHOT</version>
+</dependency>
+----
+
+The dependency is located in the Hazelcast private repository, you need to add that as well:
+
+[source,xml]
+----
+<repositories>
+  <repository>
+    <id>private-repository</id>
+    <name>Hazelcast Private Repository</name>
+    <url>https://repository.hazelcast.com/release/</url>
+  </repository>
+</repositories>
+----
+
+To enable clustering, start your Vert.x application with the `-cluster` parameter.
+
+=== Configuration
+
+Provide file named `cluster.xml` on your classpath to configure Hazelcast instance used by Vert.x.
+
+To take advantage of the Lock and Counter data structures backed by the CP subsystem, you need to enable the xref:cp-subsystem:cp-subsystem.adoc[CP Subsytem].
+
+For other configuration methods see the link:https://vertx.io/docs/vertx-hazelcast/java/#configcluster[Vert.x documentation].
+
+=== Versioning and Hazelcast compatibility
+
+Vert.x Hazelcast Enterprise module follows the versioning of Vertx. If you use `x.y.z` version of Vert.x you should use `x.y.z` version of `vertx-hazelcast-enteprise`.
+
+The `vertx-hazelcast-enteprise` module is compatible with all Hazelcast versions supported at the time of the release of the `vertx-hazelcast-enteprise` module unless stated otherwise.
+
+While older versions may work, such configurations are not supported.
+
+== Using Vert.x Hazelcast Cluster Manager
+
+See the Vert.x Hazelcast Cluster Manager site for reference documentation of the `vertx-hazelcast` module.
+
+You can also follow our xref:vertx-step-by-step-buide.adoc[step-by-step guide].
+
+== Using different Hazelcast version
+
+Due to Java compatibility reasons the Vert.x Hazelcast module doesn't depend on the latest version of Hazelcast.
+You can change the Hazelcast dependency to any version of Hazelcast you need, e.g. you can change it to Hazelcast 5.2.x for Java 8 compatibilty, or to the latest.
+
+NOTE: The old versions may not be supported by Hazelcast anymore and don't receive any patches.
+
+There are multiple ways how to replace the transitive dependency. The most reliable way is to exclude the `com.hazelcast:hazelcast` transitive dependency of the `vert-hazelcast` module and add a direct dependency on `com.hazelcast:hazelcast` to the pom.xml of your project.
+
+[source,xml]
+----
+<dependency>
+  <groupId>io.vertx</groupId>
+  <artifactId>vertx-hazelcast</artifactId>
+  <exclusions>
+    <exclusion>
+      <groupId>com.hazelcast</groupId>
+      <artifactId>hazelcast</artifactId>
+    </exclusion>
+  </exclusions>
+</dependency>
+<dependency>
+  <groupId>com.hazelcast</groupId>
+  <artifactId>hazelcast</artifactId>
+  <version>5.5.0</version>
+</dependency>
+----
+
+Similarly, for `vertx-hazelcast-enterprise`:
+
+[source,xml]
+----
+<dependency>
+  <groupId>com.hazelcast</groupId>
+  <artifactId>vertx-hazelcast-enterprise</artifactId>
+  <exclusions>
+    <exclusion>
+      <groupId>com.hazelcast</groupId>
+      <artifactId>hazelcast</artifactId>
+    </exclusion>
+  </exclusions>
+</dependency>
+<dependency>
+  <groupId>com.hazelcast</groupId>
+  <artifactId>hazelcast</artifactId>
+  <version>5.5.0</version>
+</dependency>
+----

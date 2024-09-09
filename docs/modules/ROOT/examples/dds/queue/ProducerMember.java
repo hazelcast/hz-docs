@@ -7,9 +7,9 @@ public class ProducerMember {
 
     public static void main( String[] args ) throws Exception {
         HazelcastInstance hz = Hazelcast.newHazelcastInstance();
-        IQueue<Integer> queue = hz.getQueue( "queue" ); <1>
+        IQueue<Integer> queue = hz.getQueue( "queue" ); // <1>
         
-        <2>
+        // <2>
         for ( int k = 1; k < 100; k++ ) {
             queue.put( k );
             System.out.println( "Producing: " + k );

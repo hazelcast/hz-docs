@@ -1,3 +1,5 @@
+package jcache;
+
 import java.util.Collection;
 
 //tag::userdao[]

@@ -1,6 +1,6 @@
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.core.HazelcastClient;
+import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.map.IMap;
 import com.hazelcast.map.MapEvent;
 import com.hazelcast.core.EntryEvent;
@@ -10,7 +10,7 @@ import com.hazelcast.map.listener.*;
 public class Listen {
 
     public static void main( String[] args ) {
-        HazelcastInstance hz = HazelcastClient.newHazelcastCllient();
+        HazelcastInstance hz = HazelcastClient.newHazelcastClient();
         IMap<String, String> map = hz.getMap( "somemap" );
         map.addEntryListener( new MyEntryListener(), true );
         System.out.println( "EntryListener registered" );

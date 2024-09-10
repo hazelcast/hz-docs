@@ -1,3 +1,5 @@
+package jcache;
+
 import com.hazelcast.cache.ICache;
 import com.hazelcast.cache.impl.event.CachePartitionLostEvent;
 import com.hazelcast.cache.impl.event.CachePartitionLostListener;

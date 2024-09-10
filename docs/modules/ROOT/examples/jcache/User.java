@@ -1,3 +1,5 @@
+package jcache;
+
 import java.io.Serializable;
 
 @SuppressWarnings("unused")

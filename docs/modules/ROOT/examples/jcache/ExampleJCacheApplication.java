@@ -1,3 +1,5 @@
+package jcache;
+
 import javax.cache.Cache;
 import javax.cache.CacheManager;
 import javax.cache.Caching;

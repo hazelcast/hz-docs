@@ -132,6 +132,11 @@ MySQL- and PostgreSQL-specific source builders contain methods for all major con
 
 Follow the provided xref:pipelines:cdc.adoc[] tutorial to see how CDC processes change events from a MySQL database.
 
+[NOTE]
+====
+Remember you have to have database up and running before CDC job is started, including e.g. additional CDC agents required (like DB2 does require).
+====
+
 === Common source builder functions
 [cols="m,a"]
 |===
@@ -203,6 +208,50 @@ The key and value functions have certain limitations. They can be used to map on
 
 If user code has to be used, then the problem can be solved with the help of the User Code Deployment feature. Example configs for that can be seen in our xref:pipelines:cdc-join.adoc#7-start-hazelcast-jet[CDC Join tutorial].
 ====
+
+== Data types
+
+Hazelcast relies on Debezium, which in turn uses Kafka Connect API such as `Struct` objects. Hazelcast makes conversion to `Map` and `POJO` s easier by providing abstractions such as `RecordPart`. Despite that, it's worth knowing how some database types can or will be mapped to Java types.
+
+[NOTE]
+====
+Each database type has it's own database type-to-struct type mappings. For specific mappings of this type, please
+check out Debezium documentation, for example: link:https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-data-types[MySQL], link:https://debezium.io/documentation/reference/stable/connectors/postgresql.html#postgresql-data-types[PostgreSQL], link:https://debezium.io/documentation/reference/stable/connectors/db2.html#db2-data-types[DB2], etc..
+====
+
+=== Common datatypes mapping.
+[cols="m,a,a"]
+|===
+|Struct type|Semantic type|Java type
+
+.3+|INT32
+|-|int/Integer
+|io.debezium.time.Date|java.time.LocalDate / java.util.Date
+|io.debezium.time.Time|java.time.Duration
+
+.5+|INT64
+|-|long/Long
+|io.debezium.time.Timestamp|java.time.Instant
+|io.debezium.time.MicroTimestamp|java.time.Instant
+|io.debezium.time.MicroTime|java.time.Duration
+|io.debezium.time.NanoTimestamp|java.time.Instant
+|io.debezium.time.NanoTime|java.time.Duration
+
+|FLOAT32|-|float/Float
+|FLOAT64|-|double/Double
+|BOOLEAN|-|boolean/Boolean
+|STRING|-|String
+
+The `RecordPart#value` field contains Debezium's message in a JSON format. This JSON format uses string as date representation,
+instead of ints, which are standard in Debezium, but harder to deal with.
+
+[NOTE]
+====
+We strongly recommend using `time.precision.mode=adaptive` (default).
+Using `time.precision.mode=connect` uses `java.util.Date` to represent dates, time, etc. and is less precise.
+====
+
+|===
 
 == Migration Tips
 

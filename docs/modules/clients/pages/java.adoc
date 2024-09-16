@@ -127,13 +127,15 @@ clientConfig.getNetworkConfig().addAddress("10.90.0.1", "10.90.0.2:5702");
 
 For further information, see <<configure-java-client, Configure the client} >>.
 
+After completing the client configuration, you must create an `HazelcastClient` instance that will initialize and connect to the client based on the provided configuration:
+
 After completing the client configuration, you must initialize the `HazelcastInstance` that you want to connect to the cluster as follows:
 
 ```java
 HazelcastInstance client = HazelcastClient.newHazelcastClient(clientConfig);
 ```
 
-You can create a map and populate it with some data as follows:
+You can create a distributed map and populate it with some data as follows:
 
 [source,java]
 ----
@@ -160,7 +162,7 @@ This command releases all used resources and closes all connections to the clust
 
 Hazelcast offers distributed implementations of many common data structures, most of which are supported by the {java-client}.
 
-IMPORTANT: Currently, the {java-client-new} only supports the Map distributed data structure.
+IMPORTANT: Currently, the {java-client-new} only supports the IMap distributed data structure.
 
 When you use clients in other languages, you should review the appropriate client documentation for exceptions and details. As a general rule, you should configure these data structures on the server side and
 access them through a proxy on the client side.
@@ -415,7 +417,7 @@ You can configure a custom `classLoader`.
 It is used by the serialization service and loads any class specified in the configuration, including event listeners or ProxyFactories.
 
 [[configuring-direct-to-leader-routing]]
-=== Configuring CP direct-to-leader operation routing for vlients
+=== Configuring CP direct-to-leader operation routing for clients
 
 NOTE: This section is only applicable to the {java-client}.
 // check
@@ -1478,8 +1480,8 @@ public interface SocketInterceptor {
 }
 ----
 
-The first step initializes the `SocketInterceptor` using the defined properties.
-The second step informs when the socket is connected using the `onConnect` method.
+The first method initializes the `SocketInterceptor` using the defined properties.
+The second method informs when the socket is connected using the `onConnect` method.
 
 The following example shows how to create a SocketInterceptor and add it to the client configuration:
 
@@ -1556,7 +1558,9 @@ define which members they can trust. The clients also have their own keyStores, 
 members have their own trustStores, so that members can
 know which clients they can trust. For more information, see xref:security:tls-ssl.adoc#mutual-authentication[Mutual authentication].
 
-// check standalone - is config different or is the content pulled from above linked page?
+For a programmatic code example, see xref:java#programmatic-configuration-5[SSL code example].
+
+// The following code is moved in original PR but still in Cloud section below
 
 //ClientConfig clientConfig = new ClientConfig();
 //clientConfig.getNetworkConfig().setSSLConfig(sslConfig);
@@ -1583,7 +1587,7 @@ You can connect the {java-client} to a {hazelcast-cloud} Standard cluster which 
 For this, you need to enable {hazelcast-cloud} and specify the cluster's discovery token provided while creating the cluster; this allows the cluster to discover your clients.
 See the following example configurations:
 
-==== Declarative configuration:
+==== Declarative configuration
 
 [tabs] 
 ==== 
@@ -1619,7 +1623,7 @@ hazelcast-client:
 ----
 ====
 
-==== Programmatic configuration:
+==== Programmatic configuration
 
 [source,java]
 ----
@@ -1651,17 +1655,17 @@ And you need to set the Java security property as follows:
 
 `Security.setProperty("ocsp.enable", "true")`
 
-You can find more details on the related security topics
-http://docs.oracle.com/javase/6/docs/technotes/guides/security/jsse/JSSERefGuide.html#CERTPATH[here^] and
-http://docs.oracle.com/javase/6/docs/technotes/guides/security/certpath/CertPathProgGuide.html#AppC[here^].
+You can find more details on the related security topics from the Oracle Docs on
+http://docs.oracle.com/javase/6/docs/technotes/guides/security/jsse/JSSERefGuide.html#CERTPATH[JSSE Ref Guide] and
+http://docs.oracle.com/javase/6/docs/technotes/guides/security/certpath/CertPathProgGuide.html#AppC[Cert Path Prog Guide].
 ====
 
 === Configure client for AWS
 
 The example declarative and programmatic configurations below show
-how to configure a Java client for connecting to a Hazelcast cluster in AWS.
+how to configure a Java client for connecting to a Hazelcast cluster in AWS (Amazon Web Services).
 
-Declarative Configuration:
+==== Declarative Configuration
 
 [tabs] 
 ==== 
@@ -1708,21 +1712,21 @@ hazelcast-client:
 ----
 ====
 
-Programmatic Configuration:
+==== Programmatic Configuration
 
 [source,java]
 ----
 include::ROOT:example$/clients/ExampleClientAwsConfig.java[tag=clientaws]
 ----
 
-See the xref:clusters:network-configuration.adoc#aws-element[aws element section] for the descriptions of
-the above AWS configuration elements except `use-public-ip`.
+For more information on AWS configuration elements (except `use-public-ip`), see xref:clusters:network-configuration.adoc#aws-element[AWS Element section on network configuration].
 
 If the `use-public-ip` element is set to `true`, the private addresses of cluster members
 are always converted to public addresses. Also, the client uses public addresses to
 connect to the members. In order to use private addresses, set the `use-public-ip` parameter to `false`.
-Also note that, when connecting outside from AWS, setting the `use-public-ip` parameter to `false` causes
-the client to not be able to reach the members.
+
+NOTE: When connecting outside from AWS, if you set the `use-public-ip` parameter to `false` then
+the client will not be able to reach the members.
 
 == Use client services
 
@@ -1813,18 +1817,15 @@ For details about data pipelines, see xref:pipelines:overview.adoc[].
 === Define client labels
 // decide placement
 
-You can define labels in your Java client, similar to the way it can
-be done for the xref:management:cluster-utilities.adoc[members].
-Through the client labels, you can assign special roles for your clients and
-use these roles to perform some actions specific to those client connections.
+You can define labels in your Java client, similar to the way labels are used for members. 
+With client labels you can assign special roles for your clients and
+use these roles to perform actions specific to those client connections. For more information on labels, see xref:management:cluster-utilities.adoc[Cluster Utilities].
 
-You can also group your clients using the client labels.
-These client groups can be blacklisted in the Hazelcast Management Center so that
-they can be prevented from connecting to a cluster. See the related section in the
-Hazelcast Management Center Reference Manual for more information about this topic.
+You can also group your clients using labels. You can use Hazelcast Management Center to blocklist these client groups to prevent them connecting to a cluster. For more information, see xref:{page-latest-supported-mc}@management-center:clusters:create-filter-lists-rest#creating-a-filter-list[Creating a filter list].
+// check link with James
 
-Declaratively, you can define the client labels using the `client-labels`
-configuration element. See the below example.
+The following declarative example shows how to define client using the `client-labels`
+configuration element:
 
 [tabs] 
 ==== 
@@ -1857,7 +1858,8 @@ hazelcast-client:
 ----
 ====
 
-The equivalent programmatic approach is shown below.
+The following programmatic example shows how to define client using the `client-labels`
+configuration element:
 
 [source,java]
 ----
@@ -1869,8 +1871,7 @@ clientConfig.addLabel("bar");
 HazelcastClient.newHazelcastClient(clientConfig);
 ----
 
-See the https://github.com/hazelcast/hazelcast-code-samples/tree/master/clients/client-labels[code sample^]
-for the client labels to see them in action.
+For an working code sample using client labels, ee the https://github.com/hazelcast/hazelcast-code-samples/tree/master/clients/client-labels[Client labels code sample].
 
 
 == Query with SQL
@@ -1893,15 +1894,14 @@ For details about querying with SQL, see xref:query:sql-overview.adoc[].
 
 == Client system properties
 
-There are some advanced client configuration properties to tune some aspects of Hazelcast Client.
-You can set them as property name and value pairs through declarative configuration,
-programmatic configuration, or JVM system property. See the xref:ROOT:system-properties.adoc[System Properties appendix]
-to learn how to set these properties.
+NOTE: This section is only applicable to the {java-client}.
 
-NOTE: When you want to reconfigure a system property, you need to restart the clients for
-which the property is modified.
+There are some advanced client configuration properties that help you tune the {java-client}. 
+You can set them as property name and value pairs through either declarative or programmatic configuration, or with a JVM system property. For more information on system properties in general, including how to set them, see xref:ROOT:system-properties.adoc[System Properties].
 
-The table below lists the client configuration properties with their descriptions.
+// big overlap with System properties - some from below missing from above; some the same, some different...
+
+NOTE: You need to restart clients after modifying system properties.
 
 [cols="4a,1,1,4a"]
 .Client System Properties

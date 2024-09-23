@@ -1,7 +1,9 @@
 import com.hazelcast.config.Config;
+import com.hazelcast.config.MergePolicyConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.scheduledexecutor.IScheduledExecutorService;
+import com.hazelcast.config.ScheduledExecutorConfig;
 
 public class ScheduledExecutorConfiguration {
     public static void main(String[] args) throws Exception{

@@ -1,6 +1,8 @@
 = CDC Connector
 [.enterprise]*Enterprise*
 
+NOTE: This page refers to Hazelcast's {enterprise-product-name} CDC connectors. For more information on {open-source-product-name} CDC connectors, see xref:integrate:legacy-cdc-connectors.adoc[].
+
 Change Data Capture (CDC) refers to the process of observing changes
 made to a database and extracting them in a form usable by other
 systems, for the purposes of replication, analysis and many more.
@@ -15,7 +17,7 @@ which can handle CDC events from link:https://debezium.io/documentation/referenc
 However, we're also striving to make CDC sources first class citizens in Hazelcast,
 as we have done already for MySQL and PostgreSQL.
 
-== Installing the Connector
+== Install the CDC connector
 
 This connector is included in the full distribution of Hazelcast {enterprise-product-name}.
 
@@ -134,7 +136,7 @@ Follow the provided xref:pipelines:cdc.adoc[] tutorial to see how CDC processes 
 
 [NOTE]
 ====
-Remember you have to have database up and running before CDC job is started, including e.g. additional CDC agents required (like DB2 does require).
+Remember to ensure your database is up and running before a CDC job is started, including any additional required CDC agents (as required by DB2), for example.
 ====
 
 === Common source builder functions
@@ -158,7 +160,7 @@ where the map entry's key is the key of `SourceRecord` in JSON format, and the v
 but also more widely used and tested. Use this engine for the most stable results (for example, no async offset restore). For MySQL and PostgreSQL especially this engine makes the most sense, as MySQL and PostgreSQL Debezium connectors are single-threaded only.
 
 |withAsyncEngine()
-|Sets the preferred engine to the async one. This engine is multithreaded (if supported by the connector), but you must be aware of the async nature; for example, offset restore may occur asynchronously after the restart is done, leading to sometimes confusing results.
+|Sets the preferred engine to the async one. This engine is multithreaded (if supported by the connector), but be aware of the async nature; for example, offset restore may occur asynchronously after the restart is done, leading to sometimes confusing results.
 
 |setProperty(String, String)
 |Sets connector property to given value. There are multiple overloads, allowing to
@@ -166,7 +168,7 @@ set the value to `long`, `String` or `boolean`.
 
 |===
 
-=== Fault Tolerance
+=== Fault tolerance
 
 CDC sources offer at least-once processing guarantees. The source
 periodically saves the database write ahead log offset for which it had
@@ -211,12 +213,11 @@ If user code has to be used, then the problem can be solved with the help of the
 
 == Data types
 
-Hazelcast relies on Debezium, which in turn uses Kafka Connect API such as `Struct` objects. Hazelcast makes conversion to `Map` and `POJO` s easier by providing abstractions such as `RecordPart`. Despite that, it's worth knowing how some database types can or will be mapped to Java types.
+Hazelcast relies on Debezium, which in turn uses the Kafka Connect API, including `Struct` objects for example. Hazelcast makes conversion to `Map` and `POJO`s easier by providing abstractions such as `RecordPart`. Despite this, it's worth knowing how some database types can or will be mapped to Java types.
 
 [NOTE]
 ====
-Each database type has it's own database type-to-struct type mappings. For specific mappings of this type, please
-check out Debezium documentation, for example: link:https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-data-types[MySQL], link:https://debezium.io/documentation/reference/stable/connectors/postgresql.html#postgresql-data-types[PostgreSQL], link:https://debezium.io/documentation/reference/stable/connectors/db2.html#db2-data-types[DB2], etc..
+Each database type has its own database type-to-struct type mappings. For specific mappings of this type, see the Debezium documentation, for example: link:https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-data-types[MySQL], link:https://debezium.io/documentation/reference/stable/connectors/postgresql.html#postgresql-data-types[PostgreSQL], link:https://debezium.io/documentation/reference/stable/connectors/db2.html#db2-data-types[DB2], etc..
 ====
 
 === Common datatypes mapping.
@@ -253,11 +254,11 @@ Using `time.precision.mode=connect` uses `java.util.Date` to represent dates, ti
 
 |===
 
-== Migration Tips
+== Migration tips
 
 Hazelcast {open-source-product-name} has a Debezium CDC connector, but it's based on an older version of Debezium.
 Migration to the new connector is straightforward but be aware of the following changes:
 
  * You should use the `com.hazelcast.enterprise.jet.cdc` package instead of `com.hazelcast.jet.cdc`.
  * Artifact names are now `hazelcast-enterprise-cdc-debezium`, `hazelcast-enterprise-cdc-mysql` and `hazelcast-enterprise-cdc-postgres` (instead of `hazelcast-jet-...`).
- * Debezium replaced all `whitelist`s with `include list`s and `blacklist`s with `exclude list`s, which we have replicated in our naming; so, for example, use `setTableIncludeList` instead of `setTableWhitelist`. If you are not sure what are the new names the Debezium is using, you can check out their link:https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-connector-properties[MySQL] and link:https://debezium.io/documentation/reference/stable/connectors/postgresql.html#postgresql-connector-properties[PostgreSQL] documentation.
+ * Debezium renamed certain terms, which we have also replicated in our code. For example, `include list` replaces `whitelist`, `exclude list` replaces `blacklist`. This means, for example, you need to use `setTableIncludeList` instead of `setTableWhitelist`. For more detail on new Debezium names, see their link:https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-connector-properties[MySQL] and link:https://debezium.io/documentation/reference/stable/connectors/postgresql.html#postgresql-connector-properties[PostgreSQL] documentation.

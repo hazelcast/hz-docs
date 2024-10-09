@@ -1,14 +1,10 @@
 = Integrating OpenSSL / BoringSSL
 :page-enterprise: true
 
-NOTE: You cannot integrate OpenSSL into Hazelcast when xref:encryption.adoc[Symmetric Encryption] is enabled.
-Also note that the symmetric encryption feature has been deprecated.
-
-TLS/SSL in Java is normally provided by the JRE. However, the performance overhead can be
-significant; even with AES intrinsics
-enabled. If you are using an x86_64 system (Linux, Mac, Windows), Hazelcast supports native
-integration for TLS/SSL which can provide significant performance
-improvements. There are two supported native TLS/SSL libraries available through
+TLS in Java is normally provided by the Java runtime (JRE). However, the performance overhead can be
+significant; even with AES intrinsics enabled. If you are using an x86_64 system (Linux, Mac, Windows), Hazelcast supports native
+integration for TLS which can provide significant performance
+improvements. There are two supported native TLS libraries available through
 https://netty.io/wiki/forked-tomcat-native.html[netty-tcnative^] libraries:
 
 * OpenSSL
@@ -26,13 +22,9 @@ configure the appropriate cipher suite(s).
 Check the https://netty.io/wiki/forked-tomcat-native.html[netty-tcnative^] page
 for installation details.
 
-NOTE: If OpenSSL capabilities are detected
-(also the appropriate Java libraries are included) and if no
-explicit `SSLEngineFactory` is set, Hazelcast defaults to use OpenSSL.
-
 == Netty Libraries
 
-For the native TLS/SSL integration in Java, the https://netty.io/[Netty^] library is used.
+For the native TLS integration in Java, the https://netty.io/[Netty^] library is used.
 
 Make sure the following libraries from the Netty framework and their dependencies are on the classpath:
 
@@ -41,11 +33,12 @@ Make sure the following libraries from the Netty framework and their dependencie
 ** either BoringSSL: `netty-tcnative-boringssl-static`
 ** or OpenSSL: `netty-tcnative` (for given OS architecture)
 
-NOTE: It is very important that the version of Netty JAR(s) corresponds to
-a very specific version of `netty-tcnative`. In case of doubt, the
-simplest thing to do is to download the `netty-<version>.tar.bz2` file
+NOTE: The `netty-handler` and `tcnative` artifacts have different versioning strategies.
+It is important that the these versions are compatible. The safe way
+is to download the `netty-<version>.tar.bz2` file
 from the https://netty.io/downloads.html[Netty^] website and check which
-`netty-tcnative` version is used for that Netty release.
+`netty-tcnative` version is used for that Netty release. Other possibility
+is to use import `netty-bom` in Maven for dependency management.
 
 == Using BoringSSL
 
@@ -56,16 +49,26 @@ Example Maven dependencies:
 
 [source,xml]
 ----
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-bom</artifactId>
+            <version>${netty.version}</version>
+            <scope>import</scope>
+            <type>pom</type>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+
 <dependencies>
     <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-tcnative-boringssl-static</artifactId>
-        <version>${netty-tcnative.version}</version>
     </dependency>
     <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-handler</artifactId>
-        <version>${netty.version}</version>
     </dependency>
 </dependencies>
 ----
@@ -87,17 +90,27 @@ Example Maven dependencies (for Linux):
 
 [source,xml]
 ----
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-bom</artifactId>
+            <version>${netty.version}</version>
+            <scope>import</scope>
+            <type>pom</type>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+
 <dependencies>
     <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-tcnative</artifactId>
-        <version>${netty-tcnative.version}</version>
         <classifier>linux-x86_64</classifier>
     </dependency>
     <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-handler</artifactId>
-        <version>${netty.version}</version>
     </dependency>
 </dependencies>
 ----
@@ -105,7 +118,7 @@ Example Maven dependencies (for Linux):
 == Configuring Hazelcast for OpenSSL
 
 Configuring OpenSSL in Hazelcast is straight forward. On the client and/or
-member side, the following snippet enables TLS/SSL
+member side, the following snippet enables TLS
 using OpenSSL:
 
 [tabs] 
@@ -155,7 +168,7 @@ hazelcast:
 ----
 ====
 
-The configuration is similar to a regular TLS/SSL integration. The main differences
+The configuration is similar to a regular TLS integration. The main differences
 are the `OpenSSLEngineFactory` factory class and the following properties:
 
 * `keyFile`: Path of your PKCS#8 key file in PEM format.

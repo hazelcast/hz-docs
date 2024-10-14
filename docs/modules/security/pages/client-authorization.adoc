@@ -1,132 +1,31 @@
-= Client Security
-:description: To protect your members from a malicious client, you can allow them to identify clients and restrict their permissions to access either data in data structures or features such as user code deployment.
+= Client Authorization
 :page-enterprise: true
 
-{description}
+To protect your members from a malicious client, you can allow them to identify clients and restrict their permissions to access data in data structures or use features such as user code deployment.
 
-To allow members to identify clients, set up <<authenticating-clients, client authentication>>.
-
-To allow members to restrict client permissions, set up <<authorizing-clients, client authorization>>.
-
-== Authenticating Clients
-
-To implement the client authentication, reference a xref:security-realms.adoc[Security Realm]
-with the `authentication` section defined in the `client-authentication` setting
-of a cluster member's configuration.
-
-The `authentication` configuration defines a method used to verify the client's identity
-and assign its roles.
-
-[tabs] 
-==== 
-XML:: 
-+ 
--- 
-
-[source,xml]
-----
-<hazelcast>
-    ...
-    <security enabled="true">
-      <realms>
-          <realm name="clientRealm">
-              <authentication>
-                <ldap>
-                    <url>ldap://corp-ldap.example.com/</url>
-                    <role-mapping-attribute>cn</role-mapping-attribute>
-                </ldap>
-              </authentication>
-          </realm>
-      </realms>
-      <client-authentication realm="clientRealm"/>
-    </security>
-    ...
-</hazelcast>
-----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  security:
-    enabled: true
-    realms:
-      name: clientRealm
-      authentication:
-        ldap:
-          url: ldap://corp-ldap.example.com/
-          role-mapping-attribute: cn
-    client-authentication:
-      realm: clientRealm
-----
-====
-
-The identity of the connecting client is defined on the client side.
-Usually, there are no security realms on the clients, but just identity
-defined directly in the security configuration.
-
-[tabs] 
-==== 
-XML:: 
-+ 
--- 
-
-[source,xml]
-----
-<hazelcast-client>
-    ...
-    <security>
-      <username-password username="uid=member1,dc=example,dc=com" password="s3crEt"/>
-    </security>
-    ...
-</hazelcast-client>
-----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast-client:
-  security:
-    username-password:
-      username: uid=member1,dc=example,dc=com
-      password: s3crEt
-----
-====
-
-On the clients, you can use the same identity types as in security realms:
-
-* `username-password`
-* `token`
-* `kerberos` (may require an additional security realm definition)
-* `credentials-factory`
-
-== Authorizing Clients
+The xref:security:authentication-overview.adoc[] describes how authentication is used for verifying credentials, and roles mapping. This section describes how the assigned role names are used to map permissions to clients.
 
 Hazelcast client authorization is configured by a client permission
 policy. Hazelcast has a default permission policy implementation that uses
 permission configurations defined in the Hazelcast security configuration.
-Default policy permission checks are done against instance types (map, queue, etc.),
+Default policy permission checks are made against instance types (map, queue, etc.),
 instance names, instance actions (put, read, remove, add, etc.),
 the client endpoint address (`ClusterEndpointPrincipal`), and client roles (`ClusterRolePrincipal`).
 
-The default permission policy allows to use comma separated names in the `principal`
+The default permission policy allows you to use comma separated names in the `principal`
 attribute configuration.
 
 [NOTE]
 ====
-Unless part of the role name, do not include spaces when adding names to the `principal` attribute.
+Unless part of the role name, don't include spaces when adding names to the `principal` attribute.
 
-Hazelcast does not automatically remove spaces in role names. If you include spaces that are not part of the name, permission is not granted to the intended role. 
+Hazelcast doesn't automatically remove spaces in role names. If you include spaces that aren't part of the name, permission isn't granted to the intended role. 
 
-For example, if you configure permissions for the *admin* and *devel* roles using ``principal=" admin ,devel"``, the *admin* role is not granted the permission.
+For example, if you configure permissions for the *admin* and *devel* roles using ``principal=" admin ,devel"``, the *admin* role isn't granted the permission.
 ====
 
 You can define the instance and principal names as wildcards using the `"*"` character.
-See the xref:configuration:using-wildcards.adoc[Using Wildcards] section for details.
+For more information, see xref:configuration:using-wildcards.adoc[Using Wildcards].
 
 The endpoint names can use range characters `"-"` and `"*"` as described
 in the xref:clusters:network-configuration.adoc#interfaces[Interfaces] section.
@@ -275,18 +174,18 @@ The `IPermissionPolicy.getPermissions(Subject subject, Class<? extends Permissio
 method is used to determine a client request that has been granted permission to
 perform a security-sensitive operation.
 
-Permission policy should return a `PermissionCollection` containing permissions
+The permission policy should return a `PermissionCollection` containing permissions
 of the given type for the given `Subject`. The Hazelcast access controller calls
 `PermissionCollection.implies(Permission)` on returning `PermissionCollection` and
-it decides whether the current `Subject` has permission to access the requested resources.
+decides whether the current `Subject` has permission to access the requested resources.
 
 == Permissions
 
 The following is the list of client permissions that can be configured on the member:
 
-=== All Permission
+=== All permissions
 
-This permission grants clients access to all data and features.
+The `<all-permissions>`` permission grants clients access to all data and features.
 
 [tabs] 
 ==== 
@@ -317,10 +216,10 @@ all:
 
 === Management Permission
 
-This permission defines which
+The `<management-permission>`` permission defines which
 client principals/endpoints are allowed to perform management tasks.
-Here, the client we mention is the one that is used by Hazelcast Management Center
-when it connects to the clusters. To learn more about this client, see xref:{page-latest-supported-mc}@management-center:ROOT:connecting-members.adoc[].
+The client specified in the following code example is used by Hazelcast Management Center
+when it connects to clusters. To learn more about this client, see xref:{page-latest-supported-mc}@management-center:ROOT:connecting-members.adoc[].
 
 [tabs]
 ====
@@ -349,9 +248,9 @@ management:
 ----
 ====
 
-=== Map Permission
+=== Map permission
 
-Actions: all, create, destroy, index, intercept, listen, lock, put, read, remove 
+Actions: all, create, destroy, index, intercept, listen, lock, put, read, remove .
 
 [tabs] 
 ==== 
@@ -386,9 +285,9 @@ map:
 ----
 ====
 
-=== Queue Permission
+=== Queue permission
 
-Actions: add, all, create, destroy, listen, read, remove
+Actions: add, all, create, destroy, listen, read, remove.
 
 [tabs] 
 ==== 
@@ -423,9 +322,9 @@ queue:
 ----
 ====
 
-=== MultiMap Permission
+=== MultiMap permission
 
-Actions: all, create, destroy, listen, lock, put, read, remove
+Actions: all, create, destroy, listen, lock, put, read, remove.
 
 [tabs] 
 ==== 
@@ -460,9 +359,9 @@ multimap:
 ----
 ====
 
-=== Replicated Map Permission
+=== Replicated map permission
 
-Actions: all, create, destroy, index, intercept, listen, lock, put, read, remove
+Actions: all, create, destroy, index, intercept, listen, lock, put, read, remove.
 
 [tabs] 
 ==== 
@@ -497,9 +396,9 @@ replicatedmap:
 ----
 ====
 
-=== Topic Permission
+=== Topic permission
 
-Actions: create, destroy, listen, publish 
+Actions: create, destroy, listen, publish.
 
 [tabs] 
 ==== 
@@ -534,9 +433,9 @@ topic:
 ----
 ====
 
-=== Reliable Topic Permission
+=== Reliable topic permission
 
-Actions: create, destroy, listen, publish 
+Actions: create, destroy, listen, publish.
 
 [tabs] 
 ==== 
@@ -571,9 +470,9 @@ reliable-topic:
 ----
 ====
 
-=== List Permission
+=== List permission
 
-Actions: add, all, create, destroy, listen, read, remove
+Actions: add, all, create, destroy, listen, read, remove.
 
 [tabs] 
 ==== 
@@ -608,9 +507,9 @@ list:
 ----
 ====
 
-=== Set Permission
+=== Set permission
 
-Actions: add, all, create, destroy, listen, read, remove
+Actions: add, all, create, destroy, listen, read, remove.
 
 [tabs] 
 ==== 
@@ -645,9 +544,9 @@ set:
 ----
 ====
 
-=== Ringbuffer Permission
+=== Ringbuffer permission
 
-Actions: add, put, read, create, destroy
+Actions: add, put, read, create, destroy.
 
 [tabs] 
 ==== 
@@ -682,9 +581,9 @@ ringbuffer:
 ----
 ====
 
-=== Lock Permission
+=== Lock permission
 
-Actions: all, create, destroy, lock, read
+Actions: all, create, destroy, lock, read.
 
 [tabs] 
 ==== 
@@ -719,9 +618,9 @@ lock:
 ----
 ====
 
-=== AtomicLong Permission
+=== AtomicLong permission
 
-Actions: all, create, destroy, modify, read
+Actions: all, create, destroy, modify, read.
 
 [tabs] 
 ==== 
@@ -756,9 +655,9 @@ atomic-long:
 ----
 ====
 
-=== AtomicReference Permission
+=== AtomicReference permission
 
-Actions: all, create, destroy, modify, read
+Actions: all, create, destroy, modify, read.
 
 [tabs] 
 ==== 
@@ -794,9 +693,9 @@ atomic-reference:
 ====
 
 
-=== CountDownLatch Permission
+=== CountDownLatch permission
 
-Actions: all, create, destroy, modify, read 
+Actions: all, create, destroy, modify, read.
 
 [tabs] 
 ==== 
@@ -831,9 +730,9 @@ countdown-latch:
 ----
 ====
 
-=== FlakeIdGenerator Permission
+=== FlakeIdGenerator permission
 
-Actions: all, create, destroy, modify, read 
+Actions: all, create, destroy, modify, read.
 
 [tabs] 
 ==== 
@@ -868,9 +767,9 @@ flake-id-generator:
 ----
 ====
 
-=== Semaphore Permission
+=== Semaphore permission
 
-Actions: all, acquire, create, destroy, read, release
+Actions: all, acquire, create, destroy, read, release.
 
 [tabs] 
 ==== 
@@ -942,9 +841,9 @@ executor-service:
 ----
 ====
 
-=== Durable Executor Service Permission
+=== Durable executor service permission
 
-Actions: all, create, destroy
+Actions: all, create, destroy.
 
 [tabs] 
 ==== 
@@ -979,9 +878,9 @@ durable-executor-service:
 ----
 ====
 
-=== Scheduled Executor Service Permission
+=== Scheduled executor service permission
 
-Actions: all, create, destroy, read, modify
+Actions: all, create, destroy, read, modify.
 
 [tabs] 
 ==== 
@@ -1016,9 +915,9 @@ scheduled-executor-service:
 ----
 ====
 
-=== Cardinality Estimator Permission
+=== Cardinality estimator permission
 
-Actions: all, create, destroy, read, modify
+Actions: all, create, destroy, read, modify.
 
 [tabs] 
 ==== 
@@ -1053,9 +952,9 @@ cardinality-estimator:
 ----
 ====
 
-=== PN Counter Permission
+=== PN counter permission
 
-Actions: all, create, destroy, read, modify
+Actions: all, create, destroy, read, modify.
 
 [tabs] 
 ==== 
@@ -1090,7 +989,7 @@ pn-counter:
 ----
 ====
 
-=== Transaction Permission
+=== Transaction permission
 
 [tabs] 
 ==== 
@@ -1119,9 +1018,9 @@ transaction:
 ----
 ====
 
-=== Cache Permission
+=== Cache permission
 
-Actions: all, create, destroy, listen, put, read, remove
+Actions: all, create, destroy, listen, put, read, remove.
 
 [tabs] 
 ==== 
@@ -1157,7 +1056,7 @@ cache:
 ====
 
 NOTE: The name provided in `cache-permission` must be the Hazelcast distributed
-object name corresponding to the `Cache` as described in
+object name that corresponds to the `Cache` as described in
 the xref:jcache:hazelcast-integration.adoc[JCache - Hazelcast Instance Integration section].
 
 === Vector Collection Permission (Beta)
@@ -1199,7 +1098,7 @@ vector-collection:
 
 === User Code Deployment Permission
 
-Actions: all, deploy
+Actions: all, deploy/
 
 include::clusters:partial$ucn-migrate-tip.adoc[]
 
@@ -1235,7 +1134,7 @@ user-code-deployment:
 ----
 ====
 
-If you have migrated to {ucn} use the following permissions:
+If you have migrated to {ucn}, use the following permissions:
 
 [tabs] 
 ==== 
@@ -1269,7 +1168,7 @@ user-code-namespace:
 ----
 ====
 
-=== Configuration Permission
+=== Configuration permission
 
 This permission defines which
 client principals/endpoints are allowed to
@@ -1302,7 +1201,7 @@ config:
 ----
 ====
 
-=== Job Permission
+=== Job permission
 
 Actions:
 
@@ -1316,10 +1215,10 @@ WARNING: When you query a streaming source with SQL, Hazelcast runs that query a
 - `export-snapshot`: Export or read snapshots.
 - `add-resources`: Upload resources and classes as well as jobs to members.
 +
-WARNING: Hazelcast cannot check permissions in code that's uploaded with a job, If you enable this permission, clients can xref:pipelines:job-security.adoc[upload custom code] that ignores any configured permissions.
+WARNING: Hazelcast can't check permissions in code that's uploaded with a job, If you enable this permission, clients can xref:pipelines:job-security.adoc[upload custom code] that ignores any configured permissions.
 - `all`: Enable all actions.
 
-All actions for job permissions also enable the `read` action. For example if you enable the `create` action, the `read` action is automatically enabled as well.
+All actions for job permissions also enable the `read` action. For example, if you enable the `create` action, the `read` action is automatically enabled as well.
 
 [tabs] 
 ==== 
@@ -1349,7 +1248,7 @@ job:
 ====
 
 
-=== Connector Permission
+=== Connector permission
 
 You can give permissions to the following xref:integrate:connectors.adoc[connectors]:
 
@@ -1419,7 +1318,7 @@ connector:
 WARNING: To protect external systems from being reached by external connectors (JDBC, Mongo, S3, ...), use other means than Hazelcast client permissions.
 Traditionally, this is done by enabling authentication on the external system and/or setting up firewall rules.
 
-=== SQL Permission
+=== SQL permission
 
 You can give clients permission to use the following xref:sql:sql-statements.adoc[SQL statements]:
 
@@ -1524,26 +1423,25 @@ sql:
 ====
 
 [[handling-permissions-when-a-new-member-joins]]
-=== Handling Permissions When a New Member Joins
+=== Handling permissions when a new member joins
 
 By default, the set of permissions defined in the leader member of a cluster is
-distributed to the newly joining members, overriding their own permission
-configurations, if any. However, you can configure a new member to be joined, so that
-it keeps its own set of permissions and even send these to the existing members in
+distributed to new members that join, overriding their own permission
+configurations, if any. However, you can configure a new member to join but keep its own set of permissions and even send these to the existing members in
 the cluster. This can be done dynamically, without needing to restart the
 cluster, using either one of the following configuration options:
 
 * the `on-join-operation` configuration attribute
 * the `setOnJoinPermissionOperation()` method
 
-Using the above, you can choose whether a new member joining to a cluster will
+You can use these options to choose whether a new member joining to a cluster will
 apply the client permissions stored in its own configuration, or use the ones
-defined in the cluster. The behaviors that you can specify with the configuration
+defined in the cluster. The behaviors that you specify with the configuration
 are `RECEIVE`, `SEND` and `NONE`, which are described after the examples below.
 
-The following are the examples for both approaches on how to use them:
+The following examples show how to use both approaches:
 
-**Declarative Configuration:**
+**Declarative configuration:**
 
 [tabs] 
 ==== 
@@ -1577,7 +1475,7 @@ hazelcast:
 ----
 ====
 
-**Programmatic Configuration:**
+**Programmatic configuration:**
 
 [source,java]
 ----
@@ -1590,24 +1488,24 @@ config.getSecurityConfig()
 The behaviors are explained below:
 
 * `RECEIVE`: Applies the permissions from the leader member in the
-cluster before join. This is the default value.
-* `SEND`: Doesn't apply the permissions from the leader member before join.
-If the security is enabled, then it refreshes or replaces the cluster wide
-permissions with the ones in the new member after the join is complete.
-This option is suitable for the scenarios where you need to replace the
-cluster wide permissions without restarting the cluster.
-* `NONE`: Neither applies pre-join permissions, nor sends the local permissions
-to the other members. It means that the new member does not send its own
+cluster before joining. This is the default value.
+* `SEND`: Doesn't apply the permissions from the leader member before joining.
+If security is enabled, then it refreshes or replaces the cluster wide
+permissions with the ones in the new member after it joins.
+This option is suitable for scenarios where you need to replace the
+cluster-wide permissions without restarting the cluster.
+* `NONE`: Neither applies pre-join permissions nor sends the local permissions
+to the other members. It means that the new member doesn't send its own
 permission definitions to the cluster, but keeps them when it joins. However,
 after the join, when you update the permissions in the other cluster members,
-those updates are also sent to the newly joining member. Therefore, this option
-is suitable for the scenarios where you need to elevate privileges temporarily
+those updates are also sent to the new member. Therefore, this option
+is suitable for scenarios where you need to elevate privileges temporarily
 on a single member (preferably a xref:management:cluster-utilities.adoc#enabling-lite-members[lite member]) for a
-limited time period. The clients which want to use these temporary permissions
+limited time period. The clients which need to use these temporary permissions
 have to access the cluster through this single new member, meaning that you need
 to configure the xref:clients:java.adoc#configure-cluster-routing-mode[SINGLE_MEMBER] cluster routing mode for such clients.
 +
-Note that, the `create` and `destroy` permissions will not work when using
+Note that the `create` and `destroy` permissions won't work when using
 the `NONE` option, since the distributed objects need to be created/destroyed on all the members.
 +
 The following is an example for a scenario where `NONE` is used:
@@ -1639,20 +1537,20 @@ hzLite.shutdown();
 ----
 
 [[deny-permissions]]
-=== Deny Permissions
+=== Deny permissions
 
-Hazelcast employs Additive Access Control as its default security mechanism.
+Hazelcast employs additive access control as its default security mechanism.
 When a client connects to a security-enabled cluster, it is initially granted
 no permissions. As a result, access to protected resources is inherently denied
 unless explicit permissions are configured and granted to specific roles.
 
-The Additive Access Control approach has limited expression capabilities and
+The additive access control approach has limited expression capabilities and
 is not well-suited for configurations involving simple exclusions.
 For example, it's challenging to allow access to all maps except
 the one named `"private"`.
 
-To address this limitation, Hazelcast introduces the concept of Deny Permissions
-(or Deny Rules).
+To address this limitation, Hazelcast introduces the concept of deny permissions
+(or deny rules).
 
 Within the permission configuration, there is a `boolean` flag called `deny`
 that enables permission subtraction.
@@ -1708,7 +1606,7 @@ hazelcast:
 ====
 
 [[priority-of-grant-and-deny-permissions]]
-=== Priority of Grant and Deny Permissions
+=== Priority of grant and deny permissions
 
 By default, when a permission is both granted and denied, the denial takes precedence.
 In other words, if conflicting permissions exist, denial prevails.
@@ -1751,15 +1649,16 @@ hazelcast:
 ====
 
 [[permission-evaluation-table]]
-==== Permission Evaluation Table
+==== Permission evaluation table
 
-The table below illustrates how permission evaluation changes when `priority-grant` is configured.
+The table below illustrates how permission evaluation changes when `priority-grant` is configured:
 
 [options="header"]
 |============================================================================
 | Permission Implication       | `priority-grant=false` (default) | `priority-grant=true`
-| No Grant or Deny Implication | Denied                           | Granted
-| Implication from Grant only  | Granted                          | Granted
-| Implication from Deny only   | Denied                           | Denied
-| Both Grant and Deny Imply    | Denied                           | Granted
+| No Grant or Deny Implication | ❌                           | ✅
+| Implication from Grant only  | ✅                          | ✅
+| Implication from Deny only   | ❌                           | ❌
+| Both Grant and Deny Imply    | ❌                           | ✅
 |============================================================================
+

@@ -1,0 +1,105 @@
+= IMap bulk read operations
+:description: Learn about best practices for IMap bulk read operations.
+
+[[bulk-read-operations]]
+
+To safeguard your cluster and application from becoming Out of Memory
+(OOM), follow these best practices and consider using the described 
+alternatives to IMap bulk read operations.
+
+It's critical to avoid an Out of Memory Error (OOME) as its impact
+can be severe. Hazelcast strives to protect your data but
+an OOME can lead to a loss of cluster availability. This can result
+in increased operation latencies due to triggered migrations. From
+your application's perspective, an OOME could also cause a system
+crash. 
+
+Some specific IMap API calls are particularly risky in this regard. 
+Methods like `IMap#entrySet()` and `IMap#values()` can trigger an OOME, depending
+on the size of your map and the available memory on each member.
+To mitigate this risk, you should follow these best practices.
+
+== Plan capacity
+Proper capacity planning is crucial for providing
+sufficient system resources to the Hazelcast cluster. This
+involves estimating and validating the cluster's capacity
+(memory, CPU, disk, etc.) to determine the best practices
+that help the cluster achieve optimal performance.
+
+For more information, see xref:ROOT:capacity-planning.adoc[].
+
+== Limit query result size
+If you limit query result sizes, this can help prevent the adverse effects of bulk data reads.
+
+[source,java]
+----
+Set<Map.Entry<K, V>> entrySet();
+Set<Map.Entry<K, V>> entrySet(Predicate<K, V> predicate);
+----
+For more information, see xref:data-structures:preventing-out-of-memory.adoc#configuring-query-result-size[Configuring query result size].
+
+== Use Iterator
+The Iterator fetches data in batches, ensuring consistent heap
+utilization. The relevant methods in the IMap API include:
+
+[source,java]
+----
+Iterator<Entry<K, V>> iterator();
+Iterator<Entry<K, V>> iterator(int fetchSize);
+----
+This example shows how to use the Iterator API:
+[source,java]
+----
+IMap<Integer, Integer> testMap = instance.getMap("test");
+for (int i = 0; i < 1_000; i++) {
+    testMap.set(i, i);
+}
+
+// default fetch size is 100 element
+Iterator<Map.Entry<Integer, Integer>> iterator = testMap.iterator();
+while (iterator.hasNext()) {
+    Map.Entry<Integer, Integer> next = iterator.next();
+    System.err.println(next);
+}
+----
+
+
+== Use PartitionPredicate
+You can reduce memory overhead during bulk operations by filtering with *PartitionPredicate*.
+
+For more info, see xref:query:predicate-overview.adoc#filtering-with-partition-predicate[PartitionPredicate].
+
+== Use Entry Processor
+In some scenarios, reversing the traditional approach can be
+more effective. Instead of fetching all data to the local
+application for processing, you can send operations directly to
+the data. This _in-place_ processing method saves both time and
+resources; *Entry Processor* is an excellent tool for this purpose.
+
+For more info, see xref:data-structures:entry-processor.adoc[].
+
+== Use SQL service
+SQL was designed specifically for distributed computing use cases: SQL query results
+are paged, which makes SQL a good tool to fetch data in bulk.
+
+The following example shows a replacement for `IMap#values()`:
+
+[source,java]
+----
+String MAP_NAME = "...";
+HazelcastInstance client = HazelcastClient.newHazelcastClient();
+// Create a SQL mapping for IMap
+client.getSql().execute("CREATE MAPPING " + MAP_NAME + " (__key INT, this VARCHAR)");
+// Run query to replace IMap#values()
+SqlResult result = client.getSql().execute("SELECT this FROM " + MAP_NAME);
+// Process the data in paged fashion
+for (SqlRow row: result) {
+    /* do your processing */
+}
+----
+
+IMPORTANT: You must have Jet enabled to use the SQL service.
+
+For more info, see xref:query:sql-overview.adoc[].
+
+

@@ -1,0 +1,192 @@
+= Get Started with REST API using Java
+:description: This tutorial provides a step-by-step guide to help you enable, run and use the REST API with minimal configuration using Java.
+
+:page-enterprise: true
+
+{description}
+
+== Before You Begin
+
+To complete this tutorial, you need the following:
+
+[cols="1a,1a"]
+|===
+|Prerequisites|Useful resources
+
+|Any supported JDK
+|
+xref:deploy:versioning-compatibility.adoc#supported-java-virtual-machines[Supported Java Virtual Machines]
+
+|Maven
+|link:https://maven.apache.org/download.cgi[Download Maven]
+
+|===
+
+== Set up the Java Maven project
+
+You need to set up a Java project that you can use later to start a Hazelcast member with REST API. Add the following dependencies to your `pom.xml` file:
+
+[source,xml,subs="attributes+"]
+----
+<dependencies>
+    <dependency>
+        <groupId>com.hazelcast</groupId>
+        <artifactId>hazelcast-enterprise-rest</artifactId>
+        <version>{full-version}</version>
+    </dependency>
+    <dependency>
+        <groupId>com.hazelcast</groupId>
+        <artifactId>hazelcast-enterprise</artifactId>
+        <version>{full-version}</version>
+    </dependency>
+</dependencies>
+----
+
+== Step 1. Prepare your Java code
+
+Add the following code to your `RestApi.java` file:
+
+[source,java]
+----
+package org.example;
+
+import com.hazelcast.config.Config;
+import com.hazelcast.config.SecurityConfig;
+import com.hazelcast.config.rest.RestConfig;
+import com.hazelcast.config.security.AccessControlServiceConfig;
+import com.hazelcast.config.security.RealmConfig;
+import com.hazelcast.config.security.SimpleAuthenticationConfig;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.internal.rest.access.DefaultAccessControlServiceFactory;
+
+public class RestApi {
+    public static void main(String[] args) {
+        // Configure your member to enable REST.
+        Config config = new Config()
+                .setLicenseKey("<your license key>")
+                .setRestConfig(new RestConfig()
+                        .setEnabled(true)
+                        .setSecurityRealm("restRealm")
+                )
+                .setSecurityConfig(new SecurityConfig()
+                        .setEnabled(true)
+                        .addRealmConfig("restRealm", new RealmConfig()
+                                .setSimpleAuthenticationConfig(
+                                        new SimpleAuthenticationConfig()
+                                                .addUser("restuser", "restpassword", "admin")
+                                )
+                                .setAccessControlServiceConfig(
+                                        new AccessControlServiceConfig()
+                                                .setFactoryClassName(DefaultAccessControlServiceFactory.class.getName())
+                                )
+                        )
+                );
+
+        // Start a member in your JVM by creating a instance of Hazelcast.
+        Hazelcast.newHazelcastInstance(config);
+    }
+}
+----
+
+Replace the `<your license key>` with your Hazelcast {enterprise-product-name} license key.
+
+== Step 2. Execute the program
+
+Use Maven to compile and execute your Java project:
+
+[source,bash]
+----
+mvn compile exec:java -Dexec.mainClass="org.example.RestApi"
+----
+
+You should see a message in the console indicating that the REST service is enabled, similar to the following:
+
+[source,shell,subs="attributes+"]
+----
+com.hazelcast.internal.rest.init.RestServiceImpl
+INFO: [192.168.0.24]:5701 [dev] [5.5.0-SNAPSHOT] Hazelcast REST Service is enabled on port: 8443 with security realm: restRealm and access control service: com.hazelcast.internal.rest.access.DefaultAccessControlService
+----
+
+== Step 3. Access the REST API and Swagger UI
+
+The REST API is running on port 8443.
+You can access the https://swagger.io/tools/swagger-ui/[Swagger UI] at: http://localhost:8443/swagger-ui/index.html. This user interface displays detailed documentation for the Hazelcast REST API, and enables you to interact with the API within the cluster.
+
+TIP: You can also xref:maintain-cluster:rest-api-swagger.adoc[view this Swagger UI] within this documentation.
+
+== Step 4. Obtain a token to access all endpoints
+To obtain a token, send a POST request to the endpoint at `/hazelcast/rest/api/v1/token`.
+
+[tabs]
+=====
+Using Swagger UI::
++
+- Open the Swagger UI at http://localhost:8443/swagger-ui/index.html
+- Navigate to the token endpoint under the *JWT Token Controller* section
+- Click **Try it out**
+- Set the request body as follows:
++
+[source,json]
+----
+{
+  "username": "restuser",
+  "password": "restpassword"
+}
+----
++
+- Click **Execute**
+
+Using cURL::
+- Run the following command in your terminal:
++
+[source,shell]
+----
+curl -X 'POST' \
+  'http://localhost:8443/hazelcast/rest/api/v1/token' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "username": "restuser",
+  "password": "restpassword"
+}'
+----
+=====
+
+== Step 5. Execute a Hazelcast REST call
+
+You need to add the token as the Authorization header in all requests, or you will get an `access denied` response.
+
+[tabs]
+====
+Using Swagger UI::
++
+Click **Authorize** and enter the token in the provided field. After a successful authorization, any subsequent requests made using the Swagger UI will add the token into the proper request header automatically.
++
+*Example request with Swagger UI:*
++
+- Navigate to the `/hazelcast/rest/api/v1/cluster` endpoint under the *Cluster Controller* section.
+- Click **Try it out**
+- Click **Execute**
+
+Using cURL::
++
+When you want to access a Hazelcast REST endpoint, you need to add the token to your requests as follows, replacing <add token here> with your actual token:
++
+[source,shell]
+----
+-H 'Authorization: Bearer <add token here>'
+----
++
+*Example request with cURL:*
++
+[source,shell]
+----
+curl -X 'GET' \
+'http://localhost:8443/hazelcast/rest/api/v1/cluster' \
+-H 'Authorization: Bearer <add token here>'
+----
+====
+
+== Next steps
+
+If you're interested in learning more about the topics introduced in this tutorial, see xref:maintain-cluster:enterprise-rest-api.adoc[Enterprise REST API].
+

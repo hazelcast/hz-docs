@@ -5,253 +5,271 @@
 
 == Introduction
 
-LangChain is a Python framework that makes it easier to create large language model (LLM) based solutions, such as chat bots by linking various components.
+LangChain4J is a Java framework that makes it easier to create large language model (LLM) based solutions, such as chat bots by linking various components.
 
-LangChain `VectorStore` interface makes it easier to incorporate RAGs (Retrieval Augmented Generation) in LLM solutions.
+LangChain4J `EmbeddingStore` interface makes it easier to incorporate RAGs (Retrieval Augmented Generation) in LLM solutions.
 
-`langchain-hazelcast` package provides the Hazelcast `VectorStore` implementation for LangChain.
+`hazelcast.com:langchain-hazelcast` package provides the Hazelcast `EmbeddingStore` implementation for LangChain.
 
-== Installing LangChain/Hazelcast Vector Store
+== Installing LangChain/Hazelcast Embedding Store
 
-[source,bash]
+Add the following to your `pom.xml`:
+
+[source,xml]
 ----
-pip install langchain-hazelcast
-----
-
-== Creating a Vector Store
-
-`Hazelcast` class is the Hazelcast vector store implementation that lives in the `langchain_hazelcast.vectorstore` package.
-
-The constructor for the `Hazelcast` vector store class takes the following arguments:
-
-* `embedding: Embeddings`: The embedding producer. This is a required argument.
-* `collection_name: str`: Hazelcast `VectorCollection` to use. By default `"langchain"`.
-* `client: Optional[HazelcastClient]`: A Hazelcast client object.
-* `client_config: Optional[Config]`: A Hazelcast client configuration object.
-
-`client` and `client_config` arguments are mutually exclusive, they must not be set together.
-
-If you already have a Hazelcast client object, it is recommended to reuse it using the `client` argument.
-Otherwise, you may prefer to create a Hazelcast configuration object first and pass it to the `Hazelcast` vector store constructor.
-
-The embedding producer must be an instance of LangChain `langchain_core.embeddings.Embeddings` class, such as `HuggingFaceEmbeddings`.
-Here is an example:
-
-[source,python]
-----
-from langchain_huggingface import HuggingFaceEmbeddings
-
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-mpnet-base-v2",
-    model_kwargs={
-        "device": "cpu",
-        "tokenizer_kwargs": {
-            "clean_up_tokenization_spaces": True,
-        },
-    },
-    encode_kwargs={"normalize_embeddings": False},
-)
+<dependency>
+    <groupId>com.hazelcast</groupId>
+    <artifactId>langchain-hazelcast</artifactId>
+    <version>6.0.0</version>
+</dependency>
 ----
 
-Once you have the embedding producer, you can create the `Hazelcast` vector store instance.
-Here's how to create a vector store which uses the default Hazelcast client that connects to the Hazelcast cluster `dev` at `localhost:5701`:
+== Creating an Embedding Store
 
-[source,python]
+`HazelcastEmbeddingStore` class is the Hazelcast embedding store implementation that lives in the `hazelcast.com:langchain-hazelcast` package.
+But before creating the embedding store, you must create an instance of the embedding model itself.
+The model instance will be used to generate the embeddings for adding text documents and searching them.
+In the sample below, we used `AllMiniLmL6V2QuantizedEmbeddingModel`, but you can use anything.
+
+[source,java]
 ----
-vector_store = Hazelcast(embeddings)
-----
-
-The same but with an explicitly created Hazelcast client:
-
-[source,python]
-----
-from hazelcast import HazelcastClient
-from hazelcast.config import Config
-
-config = Config()
-config.cluster_members = ["localhost:5701"]
-config.cluster_name = "dev"
-client = HazelcastClient(config)
-vector_store = Hazelcast(embeddings, client=client)
+var embeddingModel = new AllMiniLmL6V2QuantizedEmbeddingModel();
 ----
 
-In case you would like to pass the client configuration without creating the client itself:
-[source,python]
-----
-from hazelcast import HazelcastClient
-from hazelcast.config import Config
+To create an instance of `HazelcastEmbeddingStore`, use its `builder` method, using the dimension of the embedding model:
 
-config = Config()
-config.cluster_members = ["localhost:5701"]
-config.cluster_name = "dev"
-vector_store = Hazelcast(embeddings, client_config=config)
+[source,java]
+----
+var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
+    // ...
+    .build();
 ----
 
-You can find more about the various Hazelcast client configuration options in link:https://hazelcast.readthedocs.io/en/stable/client.html#hazelcast.client.HazelcastClient[Hazelcast Client documentation].
+The `builder` method creates an instance of `HazelcastEmbeddingStore.Builder`.
+`HazelcastEmbeddingStore` needs to communicate with an Hazelcast Enterprise cluster in order to send embeddings and retrieve search results.
+Cluster configuration parameters can be supplied one of the alternative methods below:
 
-Although there is a default name for the underlying Hazelcast VectorCollection, you may want to use a different name.
-You can do that by passing the name in the `collection_name` argument to the vector store constructor:
-[source,python]
+* Using Hazelcast Client XML configuration by calling `builder.clientConfigFromXml(path or stream)`
+* Using Hazelcast Client YAML configuration by calling `builder.clientConfigFromXml(path or stream)`
+* Setting cluster configuration directly using `builder.clusterName` and one of `builder.address` or `builder.addressess`.
+
+The latter method of setting the cluster configuration is useful during development and when the cluster requires very little configuration.
+The following code snippet uses simple cluster configuration:
+
+[source,java]
 ----
-name = "customer-docs"
-vector_store = Hazelcast(embeddings, collection_name=name, client=client)
+var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
+    .clusterName("dev")
+    .address("localhost:5701")
+    .build();
 ----
 
-== Updating the Vector Store
+Code above is equivalent to the one below, since it uses the defaults:
+
+[source,java]
+----
+var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
+    .build();
+----
+
+Use the XML/YAML configuration method when you already have Hazelcast Client configuration in XML/YAML, or the cluster requires more advanced features, such as authentication, TLS etc.
+
+The example below shows how to use a Hazelcast Client XML configuration:
+
+[source,java]
+----
+var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
+    .clientConfigFromXml("client.xml")
+    .build();
+----
+
+`client.xml` looks like this:
+
+[source,xml]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<hazelcast-client xmlns="http://www.hazelcast.com/schema/client-config"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xsi:schemaLocation="http://www.hazelcast.com/schema/client-config
+                  http://www.hazelcast.com/schema/client-config/hazelcast-client-config-6.0.xsd">
+
+    <cluster-name>dev</cluster-name>
+
+    <network>
+        <cluster-members>
+            <address>localhost:5701</address>
+        </cluster-members>
+    </network>
+
+</hazelcast-client>
+----
+
+You can find more information about client XML configuration at xref:clients:java.adoc[] documentation.
+
+Using client YAML configuration with `clientConfigFromYaml` is similar to how XML configuration is used:
+
+[source,java]
+----
+var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
+    .clientConfigFromYaml("client.yaml")
+    .build();
+----
+
+`client.yaml` used above looks like this:
+
+[source,yaml]
+----
+hazelcast-client:
+  cluster-name: dev
+  network:
+    cluster-members:
+      - localhost:5701
+----
+
+== Updating the Embedding Store
 
 Once the vector store is created, you can start adding LangChain documents or string data into it.
 While adding the data, you have the option to associate identifiers and metadata with it.
+Hazelcast embedding store supports a few ways of adding embeddings and text documents.
 
-Hazelcast vector store has two methods to add data, `add_documents` and `add_texts`.
-Using the former, you can add `langchain_core.documents.Document` objects, and using the latter, you can add strings.
+The simplest case is adding a single embedding.
+An identifier is randomly created in this case:
 
-In the simplest case, you would add one or more strings to the vector store:
-
-[source,python]
+[source,java]
 ----
-texts = [
-    "Hazelcast Platform uniquely combines a distributed compute engine and a fast data store in one runtime.",
-    "It offers unmatched performance, resilience and scale for real-time and AI-driven applications.",
-    "It allows you to quickly build resource-efficient, real-time applications.",
-    "You can deploy it at any scale from small edge devices to a large cluster of cloud instances.",
-]
-ids = vector_store.add_texts(texts)
-for id in ids:
-    print(id)
+var text = "Hazelcast provides a simple scheme for controlling which partitions data resides in."
+var embedding = embeddingModel.embed(text);
+var id = store.add(embedding);
 ----
 
-Outputs:
-[source,output]
-----
-8c28f820-d4ed-4cfa-bac4-89b2d110b380
-b235643b-62c0-4039-9856-1493f921e1a4
-083cc0a4-9221-48bd-b734-0de2b4754bb3
-94b524bd-cdcb-4327-92e9-488ea5d915fd
-----
+You can also add an embedding and associate an identifier with it:
 
-`Hazelcast.add_texts` method returns the IDs of the added texts.
-If the IDs were not provided to the `add_texts` method, then they are automatically generated, like in the example above.
-
-You can provide the IDs manually by passing them in the `ids` parameter.
-This is useful when you want to update data instead of extending the vector store.
-
-[source,python]
+[source,java]
 ----
-ids = vector_store.add_texts(
-    texts,
-    ids=["item1", "item2", "item3", "item4"]
-)
-for id in ids:
-    print(id)
+var id = UUID.randomUUID().toString();
+store.add(id, embedding);
 ----
 
-If provided, the number of IDs must be equal to the number of texts.
+To store an embedding and the corresponding text document, pass them to the `add` method.
+The corresponding identifier is randomly created:
 
-You can also pass metadata with the text or documents using the `metadatas` parameter.
-Each item of the `metadatas` list must be a Python dictionary.
-Like IDs, the number of metadata must be equal to the number of texts.
-
-[source,python]
+[source,java]
 ----
-ids = vector_store.add_texts(
-    texts,
-    metadata=[
-        {"page": 1},
-        {"page": 1},
-        {"page": 1},
-        {"page": 2},
-    ]
-)
+var document = TextSegment.from(text)
+var id = store.add(embedding, document);
 ----
 
-If you have `langchain_core.documents.Document` objects, you can use the `add_documents` methods to add them to the vector store:
+You have the option to attach metadata to the document too:
 
-[source,python]
+[source,java]
 ----
-from langchain_core.documents import Document
-
-docs = [
-    Document(
-        id="item1",
-        metadata={"page": 1},
-        page_content="Hazelcast Platform uniquely combines a distributed compute engine and a fast data store in one runtime."),
-    Document(
-        id="item2",
-        metadata={"page": 1},
-        page_content="It offers unmatched performance, resilience and scale for real-time and AI-driven applications."),
-    Document(
-        id="item3",
-        metadata={"page": 1},
-        page_content="It allows you to quickly build resource-efficient, real-time applications."),
-    Document(
-        id="item4",
-        metadata={"page": 2},
-        page_content="You can deploy it at any scale from small edge devices to a large cluster of cloud instances."),
-]
-ids = vector_store.add_documents(docs)
+var metadata = new Metadata();
+metadata.put("page", 7);
+var document = TextSegment.from(text, metadata)
+var id = store.add(embedding, document);
 ----
 
-`Hazelcast` vector store has two class methods that combine creating the vector store and adding texts or documents to it.
-These are the `Hazelcast.from_texts` and `Hazelcast.from_documents` methods respectively.
-Calling these methods returns the `Hazelcast` vector store instance.
+Metadata keys must be of type `String` but values can be in one of the following types:
+ `String`, `Integer`, `Long`, `Float`, `Double`.
 
-Here is an example that uses the `Hazelcast.from_texts` method:
-[source,python]
+
+You can add an embedding and document with a predefined identifier:
+
+[source,java]
 ----
-vector_store = Hazelcast.from_texts(texts, embedding=embeddings, client_config=config)
+store.add(id, embedding, document);
+----
+
+In case you have more than one embedding or document to add, it is more efficient to use one of the `addAll` methods.
+
+Calling `addAll` with only the list of embeddings stores those embeddings with autogenerated identifiers:
+
+[source,java]
+----
+var embeddings = new ArrayList<Embedding>();
+for (String text : texts) {
+    var embedding = embeddingModel.embed(text).content();
+    embeddings.add(embedding);
+}
+var ids = store.addAll(embeddings);
+----
+
+Similarly, calling `addAll` with the list of embeddings and documents stores them with autogenerated identifiers.
+The number of items in those lists must be the same:
+
+[source,java]
+----
+var documents = new ArrayList<TextSegment>();
+for (String text : texts) {
+    documents.add(TextSegment.from(text));
+}
+var ids = store.addAll(embeddings, documents);
+----
+
+You also have the option to specify the identifiers manually.
+The number of items must match to the number of items in the embeddings and documents lists:
+
+[source,java]
+----
+var ids = new ArrayList<String>();
+for (int i = 0; i < texts.size(); i++) {
+    ids.add(String.valueOf(i);
+}
+store.addAll(ids, embeddings, documents);
 ----
 
 == Searching the Vector Store
 
-Once the vector store is populated, you can run vector similarity searches on it.
-The `similarity_search` method of `Hazelcast` vector store takes a string to be used for the search and returns a list of Documents.
+Once the embedding store is populated, you can run vector similarity searches on it.
+The `search` method of `Hazelcast` embedding store takes an `EmbeddingSearchRequest` instance  to be used for the search and returns an `EmbeddingSearchResult<TextSegment>` object:
 
-[source,python]
+[source,java]
 ----
-query = "Does Hazelcast enable real-time applications?"
-docs = vector_store.similarity_search(query)
-for doc in docs:
-    print(f"{doc.id}: {doc.page_content}")
-----
-
-You can optionally specify the maximum number of Documents to be returned using the `k` parameter:
-
-[source,python]
-----
-docs = vector_store.similarity_search(query, k=10)
-----
-
-== Other Vector Store Operations
-
-You can retrieve Documents in the vector store using the `get_by_ids` method.
-This method takes a sequence of IDs and returns the corresponding Documents if they exist.
-Note that, the order of the IDs and the returned Documents may not be the same:
-
-[source,python]
-----
-docs = vector_store.get_by_ids([
-    "b235643b-62c0-4039-9856-1493f921e1a4",
-    "24d72bd3-e981-4701-a983-0a7800383fd1",
-])
+var query = "What was Hazelcast designed for?";
+var embedding = embeddingModel.embed(query).content();
+EmbeddingSearchRequest req =
+        EmbeddingSearchRequest.builder()
+                .queryEmbedding(embedding)
+                .build();
+var results = store.search(req).matches();
+for (var result : results) {
+    var document = result.embedded();
+    System.out.println(document.text());
+}
 ----
 
-To delete some or all Documents, you can use the `delete` method.
-It deletes the Documents with the given IDs if one or more IDs are provided, or deletes all Documents if no IDs are provided.
-This method always returns `True`.
-The example below deletes only two Documents:
+You can optionally specify the maximum number of Documents to be returned using the `maxResults` method of the search request builder:
 
-[source,python]
+[source,java]
 ----
-vector_store.delete([
-    "b235643b-62c0-4039-9856-1493f921e1a4",
-    "24d72bd3-e981-4701-a983-0a7800383fd1",
-])
+EmbeddingSearchRequest req =
+        EmbeddingSearchRequest.builder()
+                .queryEmbedding(embedding)
+                .maxResults(3)
+                .build();
 ----
 
-And the following example deletes all Documents:
+Currently, other methods of the search request builder are not supported.
 
-[source,python]
+== Deleting Data From Embedding Store
+
+To delete a single embedding and the corresponding document, you can call the `remove` method of the embedding store with the identifier of the embedding:
+
+[source,java]
 ----
-vector_store.delete()
+store.remove(id);
 ----
 
+If you have a number of embeddings to delete, using the `removeAll` method is more efficient:
+
+[source,java]
+----
+store.removeAll(ids);
+----
+
+To delete all embeddings from the embedding store, call `removeAll` with no arguments:
+
+[source,java]
+----
+store.removeAll();
+----

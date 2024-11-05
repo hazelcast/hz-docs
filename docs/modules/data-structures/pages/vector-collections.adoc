@@ -695,3 +695,14 @@ As this is a beta version, Vector Collection has some limitations; the most sign
 3. The lack of fault tolerance, as backups cannot yet be configured. However, data in collections is migrated to other cluster members on graceful shutdown and a new member joining the cluster, which means that normal cluster maintenance (such as a rolling restart) is possible without data loss.
 4. Only on-heap storage of vector collections is available
 
+
+== Known issue
+
+There is currently a known issue that has potential for causing a memory leak in Vector collections in some scenarios:
+
+1. Using `destroy` or `clear` on a non-empty vector collection.
+2. Making a vector collection partition empty by removing the last entry using `deleteAsync` or `removeAsync`.
+3. Updating the only entry in a vector collection partition using one of the `put`/`set` methods.
+4. Repeating migrations back and forth when a member is not restarted. This should not significantly affect rolling restart, provided sufficient heap margin. The leak may manifest itself when a subset of members is not restarted and the rest of them are repeatedly shut down or restarted gracefully.
+
+The workaround for scenarios 1 - 3 is to avoid those situations or restart the affected cluster. For scenario 4 the workaround is to restart the affected member or cluster. The restart can be graceful, which should not cause loss of data. 

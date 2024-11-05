@@ -58,6 +58,47 @@ PostgreSQL-specific connector:
 </dependency>
 ----
 
+Because all these artifacts are in Hazelcast's private repository, you also have to add:
+
+[tabs]
+====
+Maven::
++
+--
+[source,xml]
+----
+ <repositories>
+    <repository>
+        <id>private-repository</id>
+        <name>Hazelcast Private Repository</name>
+        <url>https://repository.hazelcast.com/release/</url>
+        <releases>
+            <enabled>true</enabled>
+        </releases>
+        <snapshots>
+            <enabled>false</enabled>
+        </snapshots>
+    </repository>
+</repositories>
+----
+--
+Gradle::
++
+--
+[source,groovy]
+----
+repositories {
+    mavenCentral()
+    maven {
+        url = uri("https://repository.hazelcast.com/release/")
+    }
+    mavenLocal()
+}
+----
+--
+====
+to your `pom.xml`.
+
 == CDC as a source
 
 The Java API supports the following types of CDC source:
@@ -208,7 +249,7 @@ p.readFrom(source)
 ====
 The key and value functions have certain limitations. They can be used to map only to objects which the Hazelcast member can deserialize, which unfortunately doesn't include user code submitted as a part of the job. So in the above example it's OK to have `String` email values, but we wouldn't be able to use `Customer` directly.
 
-If user code has to be used, then the problem can be solved with the help of the User Code Deployment feature. Example configs for that can be seen in our xref:pipelines:cdc-join.adoc#7-start-hazelcast-jet[CDC Join tutorial].
+If user code has to be used, then the problem can be solved with the help of the User Code Deployment feature. Example configs for that can be seen in our xref:pipelines:cdc-join.adoc#step-7-start-hazelcast[CDC Join tutorial].
 ====
 
 == Data types
@@ -230,7 +271,7 @@ Each database type has its own database type-to-struct type mappings. For specif
 |io.debezium.time.Date|java.time.LocalDate / java.util.Date / String `yyyy-MM-dd`
 |io.debezium.time.Time|java.time.Duration / String ISO-8601 `PnDTnHnMn.nS`
 
-.5+|INT64
+.6+|INT64
 |-|long/Long
 |io.debezium.time.Timestamp|java.time.Instant / String `yyyy-MM-dd HH:mm:ss.SSS`
 |io.debezium.time.MicroTimestamp|java.time.Instant / String `yyyy-MM-dd HH:mm:ss.SSS`
@@ -243,6 +284,8 @@ Each database type has its own database type-to-struct type mappings. For specif
 |BOOLEAN|-|boolean/Boolean / String
 |STRING|-|String
 
+|===
+
 The `RecordPart#value` field contains Debezium's message in a JSON format. This JSON format uses string as date representation,
 instead of ints, which are standard in Debezium but harder to work with.
 
@@ -251,8 +294,6 @@ instead of ints, which are standard in Debezium but harder to work with.
 We strongly recommend using `time.precision.mode=adaptive` (default).
 Using `time.precision.mode=connect` uses `java.util.Date` to represent dates, time, etc. and is less precise.
 ====
-
-|===
 
 == Migration tips
 

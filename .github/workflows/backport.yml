@@ -4,37 +4,33 @@ on:
   branches:
    - main
 jobs:
-  backport:
-    strategy:
-      matrix:
-        branch: ['v/5.0', 'v/5.1', 'v/5.2', 'v/5.3', 'v/5.4', 'v/5.5']
+  get-maintenance-branches:
     runs-on: ubuntu-latest
+    outputs:
+      branches: "['5.0', '5.1', '5.2', '5.3', '5.4', '5.5']"
     steps:
-    
-      - name: checkout
-        uses: actions/checkout@v4
-        with:
-         fetch-depth: 0
+      - run: exit 0
 
-      - name: Set up git config
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "<>"
-          
-      - name: Check PR for backport label
-        id: check_pr_labels
-        uses: shioyang/check-pr-labels-on-push-action@v1.0.12
-        with:
-         github-token: ${{ secrets.GITHUB_TOKEN }}
-         labels: '["backport to all versions"]'
-        
-      - name: See result
-        run: echo "${{ steps.check_pr_labels.outputs.result }}"
+  backport-to-all-branch:
+    needs: get-maintenance-branches
+    strategy:
+      fail-fast: true
+      matrix:
+        branch: ${{ fromJSON(needs.get-maintenance-branches.outputs.branches) }}
+    uses: ./.github/workflows/backport-workflow.yml
+    with:
+      label: '["backport to all versions"]'
+      target-branch: v/${{ matrix.branch }}
+    secrets: inherit
 
-      - name: Checkout maintenance branch and cherry-pick
-        if: ${{ steps.check_pr_labels.outputs.result == 'true' }}
-        run: |
-          git fetch
-          git checkout ${{ matrix.branch }}
-          git cherry-pick -x --strategy=recursive -X theirs $GITHUB_SHA
-          git push
+  backport-to-specified-branch:
+    needs: get-maintenance-branches
+    strategy:
+      fail-fast: true
+      matrix:
+        branch: ${{ fromJSON(needs.get-maintenance-branches.outputs.branches) }}
+    uses: ./.github/workflows/backport-workflow.yml
+    with:
+      label: '["backport to ${{ matrix.branch }}"]'
+      target-branch: v/${{ matrix.branch }}
+    secrets: inherit

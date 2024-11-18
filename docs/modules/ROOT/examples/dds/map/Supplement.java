@@ -1,3 +1,5 @@
+package dds.map;
+
 import java.io.Serializable;
 
 

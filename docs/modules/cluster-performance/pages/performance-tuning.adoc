@@ -6,7 +6,125 @@ Of course, we also recommend to run performance and stress tests to evaluate the
 
 == Operating System Tuning
 
-=== Disabling Transparent Huge Pages (THP)
+* Eight cores per Hazelcast server instance
+* Minimum of 8 GB RAM per Hazelcast member (if not using the High-Density Memory Store)
+* Dedicated NIC for each Hazelcast member
+* Linux—any distribution
+* Run all members within the same subnet
+* Attach all members to the same network switch
+
+=== Using Operation Threads Efficiently
+
+By default, Hazelcast uses the machine's core count to determine the number of operation threads. Creating more
+operation threads than this core count is highly unlikely to lead to an improved performance since there will be more context
+switching, more thread notification, and so on.
+
+Especially if you have a system that does simple operations like put and get,
+it is better to use a lower thread count than the number of cores.
+The reason behind the increased performance
+by reducing the core count is that the operations executed on the operation threads normally execute very fast and there can
+be a very significant amount of overhead caused by thread parking and unparking. If there are fewer threads, a thread needs
+to do more work, will block less and therefore needs to be notified less.
+
+=== Avoiding Random Changes
+
+Tweaking can be very rewarding because significant performance improvements are possible. By default, Hazelcast tries 
+to behave at its best for all situations, but this doesn't always lead to the best performance. So if you know what
+you are doing and what to look for, it can be very rewarding to tweak. However, it is also important that tweaking should
+be done with proper testing to see if there is actually an improvement. Tweaking without proper benchmarking
+is likely going to lead to confusion and could cause all kinds of problems. In case of doubt, we recommend not to tweak.
+
+=== Creating the Right Benchmark Environment
+
+When benchmarking, it is important that the benchmark reflects your production environment. Sometimes with a calculated
+guess, a representative smaller environment can be set up; but if you want to use the benchmark statistics to infer
+how your production system is going to behave, you need to make sure that you get as close as your production setup as
+possible. Otherwise, you are at risk of spotting the issues too late or focusing on the things which are not relevant.
+
+== Hardware
+
+**Uniform Hardware:**
+
+To maximize the efficiency and performance of Hazelcast, it's crucial to ensure that all cluster members are equipped with equal CPU, memory, and network resources. This uniformity prevents any single slow member from impeding the overall cluster performance. One effective strategy in achieving this is to allocate dedicated machine resources exclusively for Hazelcast services.
+
+By providing properly sized hardware or virtual hardware to each member, Hazelcast ensures that all members have ample resources without competing with other processes or services. This approach allows Hazelcast to distribute load evenly across all members and maintain predictable performance. In heterogeneous clusters where some machines are more powerful than others, weaker members can create bottlenecks, leading to underutilization of stronger members. Therefore, for optimal performance, it's advisable to use equivalent hardware for all Hazelcast members.
+
+**Minimal Recommendation:**
+
+Hazelcast is a lightweight framework and is reported to run well on devices
+such as the Raspberry Pi Zero (1GHz single-core CPU, 512MB RAM).
+
+**Recommended Configuration:**
+
+We suggest at least 8 CPU cores or equivalent per member, as well as running a single Hazelcast member for each host.
+
+As a starting point for data-intensive operations, consider machines such as AWS https://aws.amazon.com/ec2/instance-types/c5/[c5.2xlarge]
+with:
+
+* 8 CPU cores
+* 16 GB RAM
+* 10 Gbps network
+
+**Single Member per Machine:**
+
+A Hazelcast member assumes it is alone on a machine, so we recommend not running multiple
+Hazelcast members on a machine. Having multiple
+members on a single machine is likely to result in worse performance than
+running a single member, since there will be more
+context switching, less batching, and so on. So unless it is proven that running multiple members on each machine does give a better
+performance/behavior in your particular setup, it is best to run a single member per machine.
+
+**CPU:**
+
+Hazelcast can use hundreds of CPU cores efficiently by exploiting data and
+task parallelism. Adding more CPU can therefore help with scaling the
+CPU-bound computations. If you're using jobs and pipelines, read about the
+xref:architecture:distributed-computing.adoc#cooperative-execution-engine[Execution model]
+to understand how Hazelcast makes the computation parallel and design your pipelines according to it.
+
+By default, Hazelcast uses all available CPU. Starting two Hazelcast
+instances on one machine therefore doesn't bring any performance benefit
+as the instances would compete for the same CPU resources.
+
+Don't rely just on CPU usage when benchmarking your cluster. Simulate
+production workload and measure the throughput and latency instead. The
+task manager of Hazelcast can be configured to use the CPU aggressively.
+As an example, see https://hazelcast.com/blog/idle-green-threads-in-jet/?utm_source=docs-website[this benchmark]: the CPU usage was close to 20% with just 1000 events/s. At 1m items/s
+the CPU usage was 100% even though Jet still could push around 5 million
+items/s on that machine.
+
+**Disk:**
+
+Hazelcast is an in-memory framework. Cluster disks aren't involved in regular
+operations except for logging and thus are not critical for the cluster
+performance. There are optional features of Hazelcast (such as Persistence and 
+CP Persistence) which can use disk space, but even when they are in use a 
+Hazelcast system is primarily in-memory.
+
+Consider using more performant disks if you use the following Hazelcast features:
+
+* xref:pipelines:sources-sinks.adoc[The file connector] for reading or writing to files on the cluster's file system.
+* xref:storage:persistence.adoc[Persistence] for saving map data to disk.
+* xref:cp-subsystem:persistence.adoc[CP Persistence] for strong resiliency guarantees when using the CP Subsystem.
+
+== Operating System
+
+Hazelcast works in many operating environments and some environments
+have unique considerations. These are highlighted below.
+
+As a general suggestion, we recommend turning off the swapping at operating system level; see <<disabling-swap-usage, Disable Swap Usage>>.
+
+[[solaris]]**Solaris:**
+
+Hazelcast is certified for Solaris SPARC.
+
+However, the following modules are not supported for the Solaris operating system:
+
+- `hazelcast-jet-grpc`
+- `hazelcast-jet-protobuf`
+- `hazelcast-jet-python`
+
+**Disable Transparent Huge Pages (THP):**
 
 Transparent Huge Pages (THP) is the Linux Memory Management
 feature which aims to improve the application performance by

@@ -1,0 +1,67 @@
+name: Test external links
+
+env:
+    # Not possible to set this as a default
+    # https://github.com/orgs/community/discussions/46670
+    shell: bash
+
+runs:
+    using: composite
+
+    steps:
+        - uses: actions/setup-node@v4
+          with:
+            node-version: 20
+            cache: 'npm'
+  
+        - name: Install Lynx
+          shell: ${{ env.shell }}
+          run: |
+            sudo apt-get update
+            sudo apt-get install -y lynx
+  
+        - name: Build documentation
+          shell: ${{ env.shell }}
+          run: |
+            npm i
+            npm run-script build-local
+  
+        - shell: ${{ env.shell }}
+          run: |
+            echo "temp_file=$(mktemp)" >> $GITHUB_ENV
+  
+        - name: Extract links
+          shell: ${{ env.shell }}
+          run: |
+            # Extract all unique URLs
+            # Faster than potentially checking the same link on multiple pages
+            find . -name "*.html" | while read -r file; do
+                lynx -dump -listonly -nonumbers "${file}" | { grep -E "^http" || test $? = 1; } >> "${temp_file}"
+            done
+  
+        - name: Check links
+          shell: ${{ env.shell }}
+          run: |
+            distinct_urls=$(sort -u "${temp_file}")
+  
+            while read -r url; do
+                if [[ -n "${url}" ]]; then
+                    echo "::debug::Checking URL '${url}'..."
+  
+                    status=$(curl --globoff --no-progress-meter --output /dev/null --location --head --write-out "%{http_code}" "${url}" || true)
+  
+                    if [[ "${status}" -eq 404 ]]; then
+                        locations=$(grep -rl "${url}")
+                        echo "::error::❌ URL '${url}' had status ${status} (found in ${locations})" 1>&2
+                        found_error=1
+                    else
+                        echo "::debug::✅ URL '${url}' had status ${status}"
+                    fi
+                fi
+            done <<< "${distinct_urls}"
+            
+            if [[ "${found_error}" -eq 1 ]]; then
+                exit 1
+            else
+                exit 0
+            fi

@@ -1,0 +1,43 @@
+name: Backport changes
+
+on:
+  workflow_call:
+    inputs:
+      label-to-check-for:
+        required: true
+        type: string
+      target-branch:
+        required: true
+        type: string
+
+jobs:
+  backport:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check PR for backport label
+        id: check_pr_labels
+        uses: shioyang/check-pr-labels-on-push-action@v1.0.12
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          labels: ${{ inputs.label-to-check-for }}
+
+      - name: See result
+        run: echo "${{ steps.check_pr_labels.outputs.result }}"
+
+      - name: Checkout repository
+        if: ${{ steps.check_pr_labels.outputs.result == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout maintenance branch and cherry-pick
+        if: ${{ steps.check_pr_labels.outputs.result == 'true' }}
+        run: |
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+
+          git fetch
+          git checkout ${{ inputs.target-branch }}
+          git cherry-pick -x --strategy=recursive -X theirs $GITHUB_SHA
+          git push

@@ -15,6 +15,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Print accessible environment variables
+        if: runner.debug == '1'
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: |
+          echo "${GITHUB_CONTEXT}"
+          printenv
+
       - name: Check PR for backport label
         id: check_pr_labels
         uses: shioyang/check-pr-labels-on-push-action@v1.0.12
@@ -29,15 +37,36 @@ jobs:
         if: ${{ steps.check_pr_labels.outputs.result == 'true' }}
         uses: actions/checkout@v4
         with:
+          # ensure the backport target branch is checked out, too
           fetch-depth: 0
+          path: repo
+
+      - name: Checkout Backport tool
+        if: ${{ steps.check_pr_labels.outputs.result == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          repository: hazelcast/backport
+          path: backport
 
       - name: Checkout maintenance branch and cherry-pick
         if: ${{ steps.check_pr_labels.outputs.result == 'true' }}
+        working-directory: repo
         run: |
+          # Git metadata is required but not available out-of-the-box, inherit from the action
           git config user.name "${GITHUB_ACTOR}"
           git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
 
-          git fetch
-          git checkout ${{ inputs.target-branch }}
-          git cherry-pick -x --strategy=recursive -X theirs $GITHUB_SHA
-          git push
+          # Add "upstream" remote as checkout action doesn't include by default
+          git remote add upstream "${{ github.event.repository.clone_url }}"
+          git fetch --all
+
+          backport_target_branch=upstream/"${{ inputs.target-branch }}"
+          echo "::debug::Running backport script to backport "${GITHUB_SHA}" into \"${backport_target_branch}\""
+
+          ${GITHUB_WORKSPACE}/backport/backport \
+            "${GITHUB_SHA}" \
+            "${backport_target_branch}" \
+            --non-interactive \
+            --omit-labels
+        env:
+          GH_TOKEN: ${{ github.token }}

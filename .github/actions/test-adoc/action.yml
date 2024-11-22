@@ -1,0 +1,56 @@
+name: Test asciidoctor files
+
+env:
+    # Not possible to set this as a default
+    # https://github.com/orgs/community/discussions/46670
+    shell: bash
+
+runs:
+    using: composite
+
+    steps:
+        - name: Install asciidoctor
+          shell: ${{ env.shell }}
+          run: |
+            sudo apt-get update
+            sudo apt-get install -y asciidoctor
+  
+        - name: Check for errors
+          shell: ${{ env.shell }}
+          run: |
+            # Builds the adoc file using asciidoctor, discarding the output
+            # This logs any warnings etc
+
+            # asciidoc doesn't handle "include::partial" (this is supported by Antora on top), so we ignore any of those errors
+            # We can't use Antora directly because if built in isolation, none of the links between documentation repos resolve
+            # To address this would require comingling PR and upstream repos
+
+            output=$( \
+              asciidoctor \
+                --out-file /dev/null  \
+                "**/*.adoc" \
+                 2>&1 | \
+              grep \
+                -v \
+                "include file not found" \
+              )
+
+            result=$?
+
+            # Fail the action if there was an unexpected error code, or any output from the build
+            if [[ ${result} != 0 ]]; then
+              exit ${result}
+            elif [[ ${output} ]]; then
+              while IFS= read -r line; do
+                  if [[ "${line}" == *"ERROR"* ]]; then
+                    severity=error
+                  elif [[ "${line}" == *"WARNING"* ]]; then
+                    severity=warning
+                  else
+                    severity=notice
+                  fi
+
+                  echo "::${severity}::${line}"
+              done <<< "${output}"
+              exit 1
+            fi

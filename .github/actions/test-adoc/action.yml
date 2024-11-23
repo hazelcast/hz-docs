@@ -18,6 +18,8 @@ runs:
         - name: Check for errors
           shell: ${{ env.shell }}
           run: |
+            set -o errexit ${RUNNER_DEBUG:+-x}
+          
             # Builds the adoc file using asciidoctor, discarding the output
             # This logs any warnings etc
 
@@ -35,19 +37,15 @@ runs:
                 "include file not found" \
               )
 
-            result=$?
-
-            # Fail the action if there was an unexpected error code, or any output from the build
-            if [[ ${result} != 0 ]]; then
-              exit ${result}
-            elif [[ ${output} ]]; then
+            # Fail the action if there was any output from the build
+            if [[ ${output} ]]; then
               while IFS= read -r line; do
-                  if [[ "${line}" == *"ERROR"* ]]; then
-                    severity=error
+                  if [[ "${line}" == *"INFO"* ]]; then
+                    severity=info
                   elif [[ "${line}" == *"WARNING"* ]]; then
                     severity=warning
                   else
-                    severity=notice
+                    severity=error
                   fi
 
                   echo "::${severity}::${line}"

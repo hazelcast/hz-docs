@@ -10,6 +10,9 @@ on:
         required: true
         type: string
 
+env:
+  REPO_LOCATION: repo
+
 jobs:
   backport:
     runs-on: ubuntu-latest
@@ -23,6 +26,7 @@ jobs:
           labels: ${{ inputs.label-to-check-for }}
 
       - name: See result
+        if: runner.debug == '1'
         run: echo "${{ steps.check_pr_labels.outputs.result }}"
 
       - name: Checkout repository
@@ -31,34 +35,13 @@ jobs:
         with:
           # ensure the backport target branch is checked out, too
           fetch-depth: 0
-          path: repo
+          path: ${{ env.REPO_LOCATION }}
 
-      - name: Checkout Backport tool
-        if: ${{ steps.check_pr_labels.outputs.result == 'true' }}
-        uses: actions/checkout@v4
+      - if: ${{ steps.check_pr_labels.outputs.result == 'true' }}
+        uses: hazelcast/backport/.github/actions/backport@main
         with:
-          repository: hazelcast/backport
-          path: backport
-
-      - name: Checkout maintenance branch and cherry-pick
-        if: ${{ steps.check_pr_labels.outputs.result == 'true' }}
-        working-directory: repo
-        run: |
-          # Git metadata is required but not available out-of-the-box, inherit from the action
-          git config user.name "${GITHUB_ACTOR}"
-          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
-
-          # Add "upstream" remote as checkout action doesn't include by default
-          git remote add upstream "${{ github.event.repository.clone_url }}"
-          git fetch --all
-
-          backport_target_branch=upstream/"${{ inputs.target-branch }}"
-          echo "::debug::Running backport script to backport "${GITHUB_SHA}" into \"${backport_target_branch}\""
-
-          ${GITHUB_WORKSPACE}/backport/backport \
-            "${GITHUB_SHA}" \
-            "${backport_target_branch}" \
-            --non-interactive \
-            --omit-labels
-        env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          REPO_LOCATION: ${{ env.REPO_LOCATION }}
+          TARGET_BRANCH: ${{ inputs.target-branch }}
+          COMMIT_SHA: ${{ github.sha }}
+          BACKPORT_OPTIONS: --omit-labels

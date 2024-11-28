@@ -8,7 +8,7 @@
 The typical steps to use a data connection are as follows:
 
 1. Obtain the data connection from the data connection service.
-2. Retrieve the underlying resource from the `DataConnection` instance. This step varies based on the specific implementation of `DataConnection` (e.g., JdbcDataConnection provides `getConnection()` which returns a `java.sql.Connection`; `HazelcastDataConnection` provides `getClient()` which returns a HazelcastInstance).
+2. Retrieve the underlying resource from the `DataConnection` instance. This step varies based on the specific implementation of `DataConnection` (e.g., `JdbcDataConnection` provides `getConnection()` which returns a `java.sql.Connection`; `HazelcastDataConnection` provides `getClient()` which returns a `HazelcastInstance`).
 3. Use the resource to perform the required operations.
 4. Dispose of the resource (e.g., by calling `Connection#close` or `HazelcastInstance#destroy`).
 5. Release the `DataConnection` instance (by calling `DataConnection#release()`).
@@ -18,15 +18,17 @@ Steps 2, 3, and 4 should be completed as quickly as possible to maximize the eff
 [source,java]
 ----
 JdbcDataConnetion jdbcDataConnection = instance.getDataConnectionService()
-                .getAndRetainDataConnection("my_data_connection", JdbcDataConnection.class);
+                .getAndRetainDataConnection("my_data_connection", JdbcDataConnection.class); <1>
 
-try (Connection connection = jdbcDataConnection.getConnection()) {
-    // ... work with connection
+try (Connection connection = jdbcDataConnection.getConnection()) { <2>
+    // ... work with connection <3>
+
+    // try-with-resources statement closes the connection <4>
 } catch (SQLException e) {
     throw new RuntimeException("Failed to load value for key=" + key, e);
 }
 
-jdbcDataConnection.release();
+jdbcDataConnection.release(); <4>
 ----
 
 == Retrieve Data Connection Service

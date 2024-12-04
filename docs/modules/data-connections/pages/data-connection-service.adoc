@@ -1,0 +1,74 @@
+= Using Data Connections in custom components
+:description: Using the Data Connection Service gives access to the configured xref:data-connections-configuration.adoc[data connections] in custom components.
+
+{description}
+
+== Typical Usage
+
+The typical steps to use a data connection are as follows:
+
+1. Obtain the data connection from the data connection service.
+2. Retrieve the underlying resource from the `DataConnection` instance. This step varies based on the specific implementation of `DataConnection` (e.g., `JdbcDataConnection` provides `getConnection()` which returns a `java.sql.Connection`; `HazelcastDataConnection` provides `getClient()` which returns a `HazelcastInstance`).
+3. Use the resource to perform the required operations.
+4. Dispose of the resource (e.g., by calling `Connection#close` or `HazelcastInstance#destroy`).
+5. Release the `DataConnection` instance (by calling `DataConnection#release()`).
+
+Steps 2, 3, and 4 should be completed as quickly as possible to maximize the efficiency of connection pooling.
+
+[source,java]
+----
+JdbcDataConnetion jdbcDataConnection = instance.getDataConnectionService()
+                .getAndRetainDataConnection("my_data_connection", JdbcDataConnection.class); <1>
+
+try (Connection connection = jdbcDataConnection.getConnection()) { <2>
+    // ... work with connection <3>
+
+    // try-with-resources statement closes the connection <4>
+} catch (SQLException e) {
+    throw new RuntimeException("Failed to load value for key=" + key, e);
+}
+
+jdbcDataConnection.release(); <4>
+----
+
+== Retrieve Data Connection Service
+
+Before working with data connections you need to retrieve an instance of the `DataConnectionService`. Use
+https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/core/HazelcastInstance.html#getDataConnectionService()[`HazelcastInstance#getDataConnectionService()`]
+to obtain an instance of `DataConnectionService`.
+
+You can implement HazelcastInstanceAware in listeners, entry processors, tasks etc. to get access
+to the `HazelcastInstance`.
+
+In the pipeline API you can use
+https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/core/ProcessorMetaSupplier.Context.html#dataConnectionService()[ProcessorMetaSupplier.Context#dataConnectionService()].
+
+NOTE: The Data Connection Service is only available on the member side. Calling `getDataConnectionService()` on client will result in `UnsupportedOperationException`.
+
+== Retrieve Configured DataConnection
+
+Use the `DataConnectionService` to get an instance of previously configured data connection https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/dataconnection/DataConnectionService.html#getAndRetainDataConnection(java.lang.String,java.lang.Class)[DataConnectionService#getAndRetainDataConnection(String, Class)]. For details how to configure a data connection, please refer
+to the xref:data-connections-configuration.adoc[Configuring Data Connections] page.
+
+== Data Connection Scope
+
+The data connection configuration is per-member. For example, when a data connection is created
+with maximum pool size of 10 and the cluster has 3 members, there will be up to 30 connections
+created.
+
+== Data Connection Sharing
+
+Data connection is shared by default. It means that when the data connection is requested in multiple places, the same
+underlying resource (e.g. Jdbc pool, remote client) is used.
+If you want to share the data connection configuration, but use a different instance of the underlying resource,
+set the `DataConnectionConfig#setShared` to false.
+
+== Configuration Considerations
+
+If the data connection is defined in the Hazelcast configuration, it remains immutable for the entire lifespan of the Hazelcast member. In this case, whether you retrieve the DataConnection instance once or each time before accessing the underlying resource, the result will be the same.
+
+However, if the data connection is created dynamically via SQL, it can be replaced using `CREATE OR REPLACE DATA CONNECTION`
+(see xref:sql.adoc).
+In such cases, the DataConnection instance will stay valid until you release it, allowing you to retrieve the underlying resource as needed. This approach can be useful for adapting to changes in data connection configuration.
+
+For example, if you are running a batch job and want to use the same data connection throughout, request the connection at the start of the job. For a streaming job that may need updated configurations, retrieve both the data connection and the underlying resource just before use (e.g., when processing each item in the pipeline).

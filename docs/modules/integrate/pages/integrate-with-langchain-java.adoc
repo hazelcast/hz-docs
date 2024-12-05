@@ -1,0 +1,275 @@
+= Integrate with LangChain for Jva
+:description: The Hazelcast integration for LangChain provides a Vector Store implementation that enables using Hazecast Vector Search with LangChain.
+
+{description}
+
+== Introduction
+
+LangChain4J is a Java framework that makes it easier to create large language model (LLM) based solutions, such as chat bots by linking various components.
+
+LangChain4J `EmbeddingStore` interface makes it easier to incorporate RAGs (Retrieval Augmented Generation) in LLM solutions.
+
+`hazelcast.com:langchain-hazelcast` package provides the Hazelcast `EmbeddingStore` implementation for LangChain.
+
+== Installing LangChain/Hazelcast Embedding Store
+
+Add the following to your `pom.xml`:
+
+[source,xml]
+----
+<dependency>
+    <groupId>com.hazelcast</groupId>
+    <artifactId>langchain-hazelcast</artifactId>
+    <version>6.0.0</version>
+</dependency>
+----
+
+== Creating an Embedding Store
+
+`HazelcastEmbeddingStore` class is the Hazelcast embedding store implementation that lives in the `hazelcast.com:langchain-hazelcast` package.
+But before creating the embedding store, you must create an instance of the embedding model itself.
+The model instance will be used to generate the embeddings for adding text documents and searching them.
+In the sample below, we used `AllMiniLmL6V2QuantizedEmbeddingModel`, but you can use anything.
+
+[source,java]
+----
+var embeddingModel = new AllMiniLmL6V2QuantizedEmbeddingModel();
+----
+
+To create an instance of `HazelcastEmbeddingStore`, use its `builder` method, using the dimension of the embedding model:
+
+[source,java]
+----
+var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
+    // ...
+    .build();
+----
+
+The `builder` method creates an instance of `HazelcastEmbeddingStore.Builder`.
+`HazelcastEmbeddingStore` needs to communicate with an Hazelcast Enterprise cluster in order to send embeddings and retrieve search results.
+Cluster configuration parameters can be supplied one of the alternative methods below:
+
+* Using Hazelcast Client XML configuration by calling `builder.clientConfigFromXml(path or stream)`
+* Using Hazelcast Client YAML configuration by calling `builder.clientConfigFromXml(path or stream)`
+* Setting cluster configuration directly using `builder.clusterName` and one of `builder.address` or `builder.addressess`.
+
+The latter method of setting the cluster configuration is useful during development and when the cluster requires very little configuration.
+The following code snippet uses simple cluster configuration:
+
+[source,java]
+----
+var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
+    .clusterName("dev")
+    .address("localhost:5701")
+    .build();
+----
+
+Code above is equivalent to the one below, since it uses the defaults:
+
+[source,java]
+----
+var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
+    .build();
+----
+
+Use the XML/YAML configuration method when you already have Hazelcast Client configuration in XML/YAML, or the cluster requires more advanced features, such as authentication, TLS etc.
+
+The example below shows how to use a Hazelcast Client XML configuration:
+
+[source,java]
+----
+var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
+    .clientConfigFromXml("client.xml")
+    .build();
+----
+
+`client.xml` looks like this:
+
+[source,xml]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<hazelcast-client xmlns="http://www.hazelcast.com/schema/client-config"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xsi:schemaLocation="http://www.hazelcast.com/schema/client-config
+                  http://www.hazelcast.com/schema/client-config/hazelcast-client-config-6.0.xsd">
+
+    <cluster-name>dev</cluster-name>
+
+    <network>
+        <cluster-members>
+            <address>localhost:5701</address>
+        </cluster-members>
+    </network>
+
+</hazelcast-client>
+----
+
+You can find more information about client XML configuration at xref:clients:java.adoc[] documentation.
+
+Using client YAML configuration with `clientConfigFromYaml` is similar to how XML configuration is used:
+
+[source,java]
+----
+var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
+    .clientConfigFromYaml("client.yaml")
+    .build();
+----
+
+`client.yaml` used above looks like this:
+
+[source,yaml]
+----
+hazelcast-client:
+  cluster-name: dev
+  network:
+    cluster-members:
+      - localhost:5701
+----
+
+== Updating the Embedding Store
+
+Once the vector store is created, you can start adding LangChain documents or string data into it.
+While adding the data, you have the option to associate identifiers and metadata with it.
+Hazelcast embedding store supports a few ways of adding embeddings and text documents.
+
+The simplest case is adding a single embedding.
+An identifier is randomly created in this case:
+
+[source,java]
+----
+var text = "Hazelcast provides a simple scheme for controlling which partitions data resides in."
+var embedding = embeddingModel.embed(text);
+var id = store.add(embedding);
+----
+
+You can also add an embedding and associate an identifier with it:
+
+[source,java]
+----
+var id = UUID.randomUUID().toString();
+store.add(id, embedding);
+----
+
+To store an embedding and the corresponding text document, pass them to the `add` method.
+The corresponding identifier is randomly created:
+
+[source,java]
+----
+var document = TextSegment.from(text)
+var id = store.add(embedding, document);
+----
+
+You have the option to attach metadata to the document too:
+
+[source,java]
+----
+var metadata = new Metadata();
+metadata.put("page", 7);
+var document = TextSegment.from(text, metadata)
+var id = store.add(embedding, document);
+----
+
+Metadata keys must be of type `String` but values can be in one of the following types:
+ `String`, `Integer`, `Long`, `Float`, `Double`.
+
+
+You can add an embedding and document with a predefined identifier:
+
+[source,java]
+----
+store.add(id, embedding, document);
+----
+
+In case you have more than one embedding or document to add, it is more efficient to use one of the `addAll` methods.
+
+Calling `addAll` with only the list of embeddings stores those embeddings with autogenerated identifiers:
+
+[source,java]
+----
+var embeddings = new ArrayList<Embedding>();
+for (String text : texts) {
+    var embedding = embeddingModel.embed(text).content();
+    embeddings.add(embedding);
+}
+var ids = store.addAll(embeddings);
+----
+
+Similarly, calling `addAll` with the list of embeddings and documents stores them with autogenerated identifiers.
+The number of items in those lists must be the same:
+
+[source,java]
+----
+var documents = new ArrayList<TextSegment>();
+for (String text : texts) {
+    documents.add(TextSegment.from(text));
+}
+var ids = store.addAll(embeddings, documents);
+----
+
+You also have the option to specify the identifiers manually.
+The number of items must match to the number of items in the embeddings and documents lists:
+
+[source,java]
+----
+var ids = new ArrayList<String>();
+for (int i = 0; i < texts.size(); i++) {
+    ids.add(String.valueOf(i);
+}
+store.addAll(ids, embeddings, documents);
+----
+
+== Searching the Vector Store
+
+Once the embedding store is populated, you can run vector similarity searches on it.
+The `search` method of `Hazelcast` embedding store takes an `EmbeddingSearchRequest` instance  to be used for the search and returns an `EmbeddingSearchResult<TextSegment>` object:
+
+[source,java]
+----
+var query = "What was Hazelcast designed for?";
+var embedding = embeddingModel.embed(query).content();
+EmbeddingSearchRequest req =
+        EmbeddingSearchRequest.builder()
+                .queryEmbedding(embedding)
+                .build();
+var results = store.search(req).matches();
+for (var result : results) {
+    var document = result.embedded();
+    System.out.println(document.text());
+}
+----
+
+You can optionally specify the maximum number of Documents to be returned using the `maxResults` method of the search request builder:
+
+[source,java]
+----
+EmbeddingSearchRequest req =
+        EmbeddingSearchRequest.builder()
+                .queryEmbedding(embedding)
+                .maxResults(3)
+                .build();
+----
+
+Currently, other methods of the search request builder are not supported.
+
+== Deleting Data From Embedding Store
+
+To delete a single embedding and the corresponding document, you can call the `remove` method of the embedding store with the identifier of the embedding:
+
+[source,java]
+----
+store.remove(id);
+----
+
+If you have a number of embeddings to delete, using the `removeAll` method is more efficient:
+
+[source,java]
+----
+store.removeAll(ids);
+----
+
+To delete all embeddings from the embedding store, call `removeAll` with no arguments:
+
+[source,java]
+----
+store.removeAll();
+----

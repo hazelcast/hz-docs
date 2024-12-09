@@ -23,21 +23,20 @@ jobs:
           labels: ${{ inputs.label-to-check-for }}
 
       - name: See result
+        if: runner.debug == '1'
         run: echo "${{ steps.check_pr_labels.outputs.result }}"
 
       - name: Checkout repository
         if: ${{ steps.check_pr_labels.outputs.result == 'true' }}
         uses: actions/checkout@v4
         with:
+          # ensure the backport target branch is checked out, too
           fetch-depth: 0
 
-      - name: Checkout maintenance branch and cherry-pick
-        if: ${{ steps.check_pr_labels.outputs.result == 'true' }}
-        run: |
-          git config user.name "${GITHUB_ACTOR}"
-          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
-
-          git fetch
-          git checkout ${{ inputs.target-branch }}
-          git cherry-pick -x --strategy=recursive -X theirs $GITHUB_SHA
-          git push
+      - if: ${{ steps.check_pr_labels.outputs.result == 'true' }}
+        uses: hazelcast/backport/.github/actions/backport@master
+        with:
+          GITHUB_TOKEN: ${{ github.token }}
+          TARGET_BRANCH: ${{ inputs.target-branch }}
+          REF_TO_BACKPORT: ${{ github.sha }}
+          BACKPORT_OPTIONS: --omit-labels

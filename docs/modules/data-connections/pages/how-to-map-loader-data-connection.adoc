@@ -1,0 +1,278 @@
+= Map Loader using Data Connection
+
+:description: In this tutorial you build a custom map loader that uses a configured data connection to load data not present in an IMap.
+
+{description}
+
+NOTE: This tutorial builds a custom implementation of MapLoader. For the most common use cases we also provide an out-of-the-box implementation xref:mapstore:configuring-a-generic-maploader.adoc[GenericMapLoader].
+
+== Before you begin
+
+To complete this tutorial, you need the following:
+
+[cols="1a,1a"]
+|===
+|Prerequisites|Useful resources
+
+|Java {minimum-java-version} or newer
+|
+|Maven or Gradle
+| https://maven.apache.org/install.html or https://gradle.org/install/
+|Docker
+|https://docs.docker.com/get-started/[Get Started on docker.com]
+
+|===
+
+=== Step 1. Create and Populate the Database
+
+This tutorial uses Docker to run the Postgres database.
+
+Run the following command to start Postgres:
+
+[source, bash]
+----
+docker run --name postgres --rm -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres
+----
+
+Start `psql` client:
+
+[source, bash]
+----
+docker exec -it postgres psql -U postgres
+----
+
+Create a table `my_table` and populate it with data:
+
+[source,sql]
+----
+CREATE TABLE my_table(id INTEGER PRIMARY KEY, value VARCHAR(128));
+
+INSERT INTO my_table VALUES (0, 'zero');
+INSERT INTO my_table VALUES (1, 'one');
+INSERT INTO my_table VALUES (2, 'two');
+INSERT INTO my_table VALUES (3, 'three');
+INSERT INTO my_table VALUES (4, 'four');
+INSERT INTO my_table VALUES (5, 'five');
+INSERT INTO my_table VALUES (6, 'six');
+INSERT INTO my_table VALUES (7, 'seven');
+INSERT INTO my_table VALUES (8, 'eight');
+INSERT INTO my_table VALUES (9, 'nine');
+----
+
+== Step 2. Create a New Java Project
+
+Create a blank Java project named pipeline-service-data-connection-example and copy the Gradle or Maven file into it:
+
+[source,xml]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.example</groupId>
+    <artifactId>maploader-data-connection-example</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <name>maploader-data-connection-example</name>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.release>17</maven.compiler.release>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.hazelcast</groupId>
+            <artifactId>hazelcast</artifactId>
+            <version>6.0.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>2.24.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
+            <version>2.24.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.7.4</version>
+        </dependency>
+    </dependencies>
+</project>
+----
+
+== Step 3. MapLoader
+
+The following map loader implements the `com.hazelcast.map.MapLoader` and `com.hazelcast.map.MapLoaderLifecycleSupport`
+interfaces.
+
+[source,java]
+----
+public class SimpleMapLoader implements MapLoader<Integer, String>, MapLoaderLifecycleSupport {
+
+    private JdbcDataConnection jdbcDataConnection;
+
+    // ...
+}
+----
+
+To implement the `MapLoaderLifecycleSupport` interface we need the following methods:
+
+[source,java]
+----
+    // ...
+
+    @Override
+    public void init(HazelcastInstance instance, Properties properties, String mapName) {
+        jdbcDataConnection = instance.getDataConnectionService()
+                .getAndRetainDataConnection("my_data_connection", JdbcDataConnection.class);
+    }
+
+    @Override
+    public void destroy() {
+        jdbcDataConnection.release();
+    }
+
+    // ...
+----
+
+To implement the `MapLoader` interface we need the following methods:
+
+[source,java]
+----
+    @Override
+    public String load(Integer key) {
+        try (Connection connection = jdbcDataConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement("SELECT value FROM my_table WHERE id = ?")) {
+
+            statement.setInt(1, key);
+            ResultSet resultSet = statement.executeQuery();
+            String value = null;
+            if (resultSet.next()) {
+                value = resultSet.getString("value");
+            }
+            return value;
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to load value for key=" + key, e);
+        }
+    }
+
+    @Override
+    public Map<Integer, String> loadAll(Collection<Integer> keys) {
+        Map<Integer, String> resultMap = new HashMap<>();
+        StringBuilder queryBuilder = new StringBuilder("SELECT id, value FROM my_table WHERE id IN (");
+
+        // Construct query for batch retrieval
+        keys.forEach(key -> queryBuilder.append("?,"));
+        queryBuilder.setLength(queryBuilder.length() - 1); // Remove last comma
+        queryBuilder.append(")");
+
+        try (Connection connection = jdbcDataConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement(queryBuilder.toString())) {
+
+            int index = 1;
+            for (Integer key : keys) {
+                statement.setInt(index++, key);
+            }
+
+            ResultSet resultSet = statement.executeQuery();
+            while (resultSet.next()) {
+                resultMap.put(resultSet.getInt("id"), resultSet.getString("value"));
+            }
+            return resultMap;
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to load values", e);
+        }
+    }
+
+    @Override
+    public Iterable<Integer> loadAllKeys() {
+        List<Integer> keys = new ArrayList<>();
+        try (Connection connection = jdbcDataConnection.getConnection();
+             PreparedStatement statement = connection.prepareStatement("SELECT id FROM my_table");
+             ResultSet resultSet = statement.executeQuery()) {
+
+            while (resultSet.next()) {
+                keys.add(resultSet.getInt("id"));
+            }
+            return keys;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to load all keys", e);
+        }
+    }
+----
+
+== Step 4. MapLoader Example App
+
+Configure the data connection:
+
+[source,java]
+----
+public class MapLoaderExampleApp {
+    public static void main(String[] args) {
+        Config config = new Config();
+
+        DataConnectionConfig dcc = new DataConnectionConfig("my_data_connection");
+        dcc.setType("JDBC");
+        dcc.setProperty("jdbcUrl", "jdbc:postgresql://172.17.0.2/postgres");
+        dcc.setProperty("user", "postgres");
+        dcc.setProperty("password", "postgres");
+        config.addDataConnectionConfig(dcc);
+
+    }
+}
+----
+
+Configure an IMap named `my_map` with the map loader:
+
+[source,java]
+----
+public class MapLoaderExampleApp {
+    public static void main(String[] args) {
+        // ...
+
+        MapStoreConfig mapStoreConfig = new MapStoreConfig();
+        mapStoreConfig.setClassName(SimpleMapLoader.class.getName());
+
+        MapConfig mapConfig = new MapConfig("my_map");
+        mapConfig.setMapStoreConfig(mapStoreConfig);
+        config.addMapConfig(mapConfig);
+
+
+    }
+}
+----
+
+Create a `HazelcastInstance` with the `Config`, get the IMap and read some data:
+[source,java]
+----
+public class MapLoaderExampleApp {
+    public static void main(String[] args) {
+        // ...
+
+        HazelcastInstance hz = Hazelcast.newHazelcastInstance(config);
+        IMap<Integer, String> map = hz.getMap("my_map");
+
+        System.out.println("1 maps to " + map.get(1));
+        System.out.println("42 maps to " + map.get(10));
+    }
+}
+----
+
+When you run this class you should see the following output:
+
+[source,text]
+----
+1 maps to one
+42 maps to null
+----
+
+== Next steps
+
+Read through the xref:configuration:dynamic-config.adoc[Dynamic Configuration] section to find out how to add the
+`DataConnection` config and new `IMap` config with `MapStore` dynamically.

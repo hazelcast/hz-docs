@@ -1,0 +1,257 @@
+= Integrate with LangChain
+:description: The Hazelcast integration for LangChain provides a Vector Store implementation that enables using Hazecast Vector Search with LangChain.
+
+{description}
+
+== Introduction
+
+LangChain is a Python framework that makes it easier to create large language model (LLM) based solutions, such as chat bots by linking various components.
+
+LangChain `VectorStore` interface makes it easier to incorporate RAGs (Retrieval Augmented Generation) in LLM solutions.
+
+`langchain-hazelcast` package provides the Hazelcast `VectorStore` implementation for LangChain.
+
+== Installing LangChain/Hazelcast Vector Store
+
+[source,bash]
+----
+pip install langchain-hazelcast
+----
+
+== Creating a Vector Store
+
+`Hazelcast` class is the Hazelcast vector store implementation that lives in the `langchain_hazelcast.vectorstore` package.
+
+The constructor for the `Hazelcast` vector store class takes the following arguments:
+
+* `embedding: Embeddings`: The embedding producer. This is a required argument.
+* `collection_name: str`: Hazelcast `VectorCollection` to use. By default `"langchain"`.
+* `client: Optional[HazelcastClient]`: A Hazelcast client object.
+* `client_config: Optional[Config]`: A Hazelcast client configuration object.
+
+`client` and `client_config` arguments are mutually exclusive, they must not be set together.
+
+If you already have a Hazelcast client object, it is recommended to reuse it using the `client` argument.
+Otherwise, you may prefer to create a Hazelcast configuration object first and pass it to the `Hazelcast` vector store constructor.
+
+The embedding producer must be an instance of LangChain `langchain_core.embeddings.Embeddings` class, such as `HuggingFaceEmbeddings`.
+Here is an example:
+
+[source,python]
+----
+from langchain_huggingface import HuggingFaceEmbeddings
+
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-mpnet-base-v2",
+    model_kwargs={
+        "device": "cpu",
+        "tokenizer_kwargs": {
+            "clean_up_tokenization_spaces": True,
+        },
+    },
+    encode_kwargs={"normalize_embeddings": False},
+)
+----
+
+Once you have the embedding producer, you can create the `Hazelcast` vector store instance.
+Here's how to create a vector store which uses the default Hazelcast client that connects to the Hazelcast cluster `dev` at `localhost:5701`:
+
+[source,python]
+----
+vector_store = Hazelcast(embeddings)
+----
+
+The same but with an explicitly created Hazelcast client:
+
+[source,python]
+----
+from hazelcast import HazelcastClient
+from hazelcast.config import Config
+
+config = Config()
+config.cluster_members = ["localhost:5701"]
+config.cluster_name = "dev"
+client = HazelcastClient(config)
+vector_store = Hazelcast(embeddings, client=client)
+----
+
+In case you would like to pass the client configuration without creating the client itself:
+[source,python]
+----
+from hazelcast import HazelcastClient
+from hazelcast.config import Config
+
+config = Config()
+config.cluster_members = ["localhost:5701"]
+config.cluster_name = "dev"
+vector_store = Hazelcast(embeddings, client_config=config)
+----
+
+You can find more about the various Hazelcast client configuration options in link:https://hazelcast.readthedocs.io/en/stable/client.html#hazelcast.client.HazelcastClient[Hazelcast Client documentation].
+
+Although there is a default name for the underlying Hazelcast VectorCollection, you may want to use a different name.
+You can do that by passing the name in the `collection_name` argument to the vector store constructor:
+[source,python]
+----
+name = "customer-docs"
+vector_store = Hazelcast(embeddings, collection_name=name, client=client)
+----
+
+== Updating the Vector Store
+
+Once the vector store is created, you can start adding LangChain documents or string data into it.
+While adding the data, you have the option to associate identifiers and metadata with it.
+
+Hazelcast vector store has two methods to add data, `add_documents` and `add_texts`.
+Using the former, you can add `langchain_core.documents.Document` objects, and using the latter, you can add strings.
+
+In the simplest case, you would add one or more strings to the vector store:
+
+[source,python]
+----
+texts = [
+    "Hazelcast Platform uniquely combines a distributed compute engine and a fast data store in one runtime.",
+    "It offers unmatched performance, resilience and scale for real-time and AI-driven applications.",
+    "It allows you to quickly build resource-efficient, real-time applications.",
+    "You can deploy it at any scale from small edge devices to a large cluster of cloud instances.",
+]
+ids = vector_store.add_texts(texts)
+for id in ids:
+    print(id)
+----
+
+Outputs:
+[source,output]
+----
+8c28f820-d4ed-4cfa-bac4-89b2d110b380
+b235643b-62c0-4039-9856-1493f921e1a4
+083cc0a4-9221-48bd-b734-0de2b4754bb3
+94b524bd-cdcb-4327-92e9-488ea5d915fd
+----
+
+`Hazelcast.add_texts` method returns the IDs of the added texts.
+If the IDs were not provided to the `add_texts` method, then they are automatically generated, like in the example above.
+
+You can provide the IDs manually by passing them in the `ids` parameter.
+This is useful when you want to update data instead of extending the vector store.
+
+[source,python]
+----
+ids = vector_store.add_texts(
+    texts,
+    ids=["item1", "item2", "item3", "item4"]
+)
+for id in ids:
+    print(id)
+----
+
+If provided, the number of IDs must be equal to the number of texts.
+
+You can also pass metadata with the text or documents using the `metadatas` parameter.
+Each item of the `metadatas` list must be a Python dictionary.
+Like IDs, the number of metadata must be equal to the number of texts.
+
+[source,python]
+----
+ids = vector_store.add_texts(
+    texts,
+    metadata=[
+        {"page": 1},
+        {"page": 1},
+        {"page": 1},
+        {"page": 2},
+    ]
+)
+----
+
+If you have `langchain_core.documents.Document` objects, you can use the `add_documents` methods to add them to the vector store:
+
+[source,python]
+----
+from langchain_core.documents import Document
+
+docs = [
+    Document(
+        id="item1",
+        metadata={"page": 1},
+        page_content="Hazelcast Platform uniquely combines a distributed compute engine and a fast data store in one runtime."),
+    Document(
+        id="item2",
+        metadata={"page": 1},
+        page_content="It offers unmatched performance, resilience and scale for real-time and AI-driven applications."),
+    Document(
+        id="item3",
+        metadata={"page": 1},
+        page_content="It allows you to quickly build resource-efficient, real-time applications."),
+    Document(
+        id="item4",
+        metadata={"page": 2},
+        page_content="You can deploy it at any scale from small edge devices to a large cluster of cloud instances."),
+]
+ids = vector_store.add_documents(docs)
+----
+
+`Hazelcast` vector store has two class methods that combine creating the vector store and adding texts or documents to it.
+These are the `Hazelcast.from_texts` and `Hazelcast.from_documents` methods respectively.
+Calling these methods returns the `Hazelcast` vector store instance.
+
+Here is an example that uses the `Hazelcast.from_texts` method:
+[source,python]
+----
+vector_store = Hazelcast.from_texts(texts, embedding=embeddings, client_config=config)
+----
+
+== Searching the Vector Store
+
+Once the vector store is populated, you can run vector similarity searches on it.
+The `similarity_search` method of `Hazelcast` vector store takes a string to be used for the search and returns a list of Documents.
+
+[source,python]
+----
+query = "Does Hazelcast enable real-time applications?"
+docs = vector_store.similarity_search(query)
+for doc in docs:
+    print(f"{doc.id}: {doc.page_content}")
+----
+
+You can optionally specify the maximum number of Documents to be returned using the `k` parameter:
+
+[source,python]
+----
+docs = vector_store.similarity_search(query, k=10)
+----
+
+== Other Vector Store Operations
+
+You can retrieve Documents in the vector store using the `get_by_ids` method.
+This method takes a sequence of IDs and returns the corresponding Documents if they exist.
+Note that, the order of the IDs and the returned Documents may not be the same:
+
+[source,python]
+----
+docs = vector_store.get_by_ids([
+    "b235643b-62c0-4039-9856-1493f921e1a4",
+    "24d72bd3-e981-4701-a983-0a7800383fd1",
+])
+----
+
+To delete some or all Documents, you can use the `delete` method.
+It deletes the Documents with the given IDs if one or more IDs are provided, or deletes all Documents if no IDs are provided.
+This method always returns `True`.
+The example below deletes only two Documents:
+
+[source,python]
+----
+vector_store.delete([
+    "b235643b-62c0-4039-9856-1493f921e1a4",
+    "24d72bd3-e981-4701-a983-0a7800383fd1",
+])
+----
+
+And the following example deletes all Documents:
+
+[source,python]
+----
+vector_store.delete()
+----
+

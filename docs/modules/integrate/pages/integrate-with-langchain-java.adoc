@@ -1,5 +1,5 @@
 = Integrate with LangChain for Java
-:description: The Hazelcast integration for LangChain provides a Vector Store implementation that enables using Hazecast Vector Search with LangChain.
+:description: The Hazelcast integration for LangChain provides a vector store implementation that enables using Hazecast Vector Search with the LangChain4J Java framework.
 
 {description}
 
@@ -7,13 +7,13 @@
 
 link:https://docs.langchain4j.dev[LangChain4J] is a Java framework that makes it easier to create large language model (LLM) based solutions, such as chat bots, by linking various components.
 
-LangChain4J `EmbeddingStore` interface makes it easier to incorporate RAGs (Retrieval Augmented Generation) in LLM solutions.
+LangChain4J's `EmbeddingStore` interface makes it easier to incorporate RAGs (Retrieval Augmented Generation) in LLM solutions.
 
-`hazelcast.com:langchain-hazelcast` package provides the Hazelcast `EmbeddingStore` implementation for LangChain.
+The `hazelcast.com:langchain-hazelcast` package provides the Hazelcast `EmbeddingStore` implementation for LangChain.
 
-== Installing LangChain/Hazelcast Embedding Store
+== Installing the LangChain/Hazelcast embedding store
 
-Add the following to your `pom.xml`:
+To install the `hazelcast.com:langchain-hazelcast` package, add the following lines to your `pom.xml` file:
 
 [source,xml]
 ----
@@ -24,19 +24,20 @@ Add the following to your `pom.xml`:
 </dependency>
 ----
 
-== Creating an Embedding Store
+== Creating an embedding store
 
-`HazelcastEmbeddingStore` class is the Hazelcast embedding store implementation that lives in the `hazelcast.com:langchain-hazelcast` package.
-But before creating the embedding store, you must create an instance of the embedding model itself.
-The model instance will be used to generate the embeddings for adding text documents and searching them.
-In the sample below, we used `AllMiniLmL6V2QuantizedEmbeddingModel`, but you can use anything.
+The Hazelcast embedding store is implemented using the `HazelcastEmbeddingStore`class  in the `hazelcast.com:langchain-hazelcast` package.
+
+Before creating the embedding store, you must create an instance of the embedding model. The model instance will be used to generate the embeddings for adding text documents and searching them.
+
+The following example uses `AllMiniLmL6V2QuantizedEmbeddingModel`, but you can use any model:
 
 [source,java]
 ----
 var embeddingModel = new AllMiniLmL6V2QuantizedEmbeddingModel();
 ----
 
-To create an instance of `HazelcastEmbeddingStore`, use its `builder` method, using the dimension of the embedding model:
+To create an instance of `HazelcastEmbeddingStore`, use its `builder` method with the dimension of the embedding model:
 
 [source,java]
 ----
@@ -46,15 +47,14 @@ var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
 ----
 
 The `builder` method creates an instance of `HazelcastEmbeddingStore.Builder`.
-`HazelcastEmbeddingStore` needs to communicate with an Hazelcast Enterprise cluster in order to send embeddings and retrieve search results.
-Cluster configuration parameters can be supplied one of the alternative methods below:
 
-* Using Hazelcast Client XML configuration by calling `builder.clientConfigFromXml(path or stream)`
-* Using Hazelcast Client YAML configuration by calling `builder.clientConfigFromXml(path or stream)`
-* Setting cluster configuration directly using `builder.clusterName` and one of `builder.address` or `builder.addressess`.
+`HazelcastEmbeddingStore` needs to communicate with a Hazelcast Enterprise cluster to send embeddings and retrieve search results. You can supply cluster configuration parameters using one of the following methods:
 
-The latter method of setting the cluster configuration is useful during development and when the cluster requires very little configuration.
-The following code snippet uses simple cluster configuration:
+* Using Hazelcast Client XML configuration by calling `builder.clientConfigFromXml(path or stream)`.
+* Using Hazelcast Client YAML configuration by calling `builder.clientConfigFromXml(path or stream)`.
+* Setting cluster configuration directly using `builder.clusterName` and one of `builder.address` or `builder.addressess`. This can be useful during development and when the cluster requires little configuration.
+
+The following example uses simple cluster configuration:
 
 [source,java]
 ----
@@ -64,7 +64,7 @@ var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
     .build();
 ----
 
-Code above is equivalent to the one below, since it uses the defaults:
+The previous example uses the default configuration, which you can omit as follows:
 
 [source,java]
 ----
@@ -72,9 +72,9 @@ var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
     .build();
 ----
 
-Use the XML/YAML configuration method when you already have Hazelcast Client configuration in XML/YAML, or the cluster requires more advanced features, such as authentication, TLS etc.
+You should use the XML/YAML configuration method when you already have Hazelcast Client configuration in XML/YAML, or when the cluster requires more advanced features, such as authentication and TLS.
 
-The example below shows how to use a Hazelcast Client XML configuration:
+The following example shows how to use Hazelcast Client XML configuration:
 
 [source,java]
 ----
@@ -83,7 +83,7 @@ var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
     .build();
 ----
 
-`client.xml` looks like this:
+`client.xml` contains the following configuration:
 
 [source,xml]
 ----
@@ -104,9 +104,9 @@ var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
 </hazelcast-client>
 ----
 
-You can find more information about client XML configuration at xref:clients:java.adoc[] documentation.
+You can find more information about client XML configuration in Hazelcast's xref:clients:java.adoc[] documentation.
 
-Using client YAML configuration with `clientConfigFromYaml` is similar to how XML configuration is used:
+Using client YAML configuration with `clientConfigFromYaml` is similar to using XML:
 
 [source,java]
 ----
@@ -115,7 +115,7 @@ var store = HazelcastEmbeddingStore.builder(embeddingModel.dimension())
     .build();
 ----
 
-`client.yaml` used above looks like this:
+`client.yaml` contains the following configuration:
 
 [source,yaml]
 ----
@@ -126,14 +126,11 @@ hazelcast-client:
       - localhost:5701
 ----
 
-== Updating the Embedding Store
+== Updating the embedding store
 
-Once the vector store is created, you can start adding LangChain documents or string data into it.
-While adding the data, you have the option to associate identifiers and metadata with it.
-Hazelcast embedding store supports a few ways of adding embeddings and text documents.
+Once the embedding store is created, you can start adding LangChain documents or string data into it. When adding the data, you have the option to associate identifiers and metadata with it.
 
-The simplest case is adding a single embedding.
-An identifier is randomly created in this case:
+The Hazelcast embedding store supports several ways of adding embeddings and text documents. The simplest case is adding a single embedding. An identifier is automatically created:
 
 [source,java]
 ----
@@ -150,8 +147,7 @@ var id = UUID.randomUUID().toString();
 store.add(id, embedding);
 ----
 
-To store an embedding and the corresponding text document, pass them to the `add` method.
-The corresponding identifier is randomly created:
+To store an embedding and the corresponding text document, pass them to the `add` method. An identifier is automatically created:
 
 [source,java]
 ----
@@ -159,7 +155,7 @@ var document = TextSegment.from(text)
 var id = store.add(embedding, document);
 ----
 
-You have the option to attach metadata to the document too:
+You can also attach metadata to the document:
 
 [source,java]
 ----
@@ -169,9 +165,9 @@ var document = TextSegment.from(text, metadata)
 var id = store.add(embedding, document);
 ----
 
-Metadata keys must be of type `String` but values can be in one of the following types:
- `String`, `Integer`, `Long`, `Float`, `Double`.
+Metadata keys must be of type `String`, but values can be in one of the following types:
 
+`String`, `Integer`, `Long`, `Float`, `Double`
 
 You can add an embedding and document with a predefined identifier:
 
@@ -180,9 +176,7 @@ You can add an embedding and document with a predefined identifier:
 store.add(id, embedding, document);
 ----
 
-In case you have more than one embedding or document to add, it is more efficient to use one of the `addAll` methods.
-
-Calling `addAll` with only the list of embeddings stores those embeddings with autogenerated identifiers:
+If you have more than one embedding or document to add, it is more efficient to use one of the `addAll` methods. Calling `addAll` with only the list of embeddings stores those embeddings with autogenerated identifiers:
 
 [source,java]
 ----
@@ -194,8 +188,7 @@ for (String text : texts) {
 var ids = store.addAll(embeddings);
 ----
 
-Similarly, calling `addAll` with the list of embeddings and documents stores them with autogenerated identifiers.
-The number of items in those lists must be the same:
+Similarly, calling `addAll` with the list of embeddings and documents stores them with autogenerated identifiers. The number of items in those lists must be the same:
 
 [source,java]
 ----
@@ -206,8 +199,7 @@ for (String text : texts) {
 var ids = store.addAll(embeddings, documents);
 ----
 
-You also have the option to specify the identifiers manually.
-The number of items must match to the number of items in the embeddings and documents lists:
+You can also specify the identifiers manually. The number of items must match the number of items in the embeddings and documents lists:
 
 [source,java]
 ----
@@ -218,10 +210,9 @@ for (int i = 0; i < texts.size(); i++) {
 store.addAll(ids, embeddings, documents);
 ----
 
-== Searching the Vector Store
+== Searching the embedding store
 
-Once the embedding store is populated, you can run vector similarity searches on it.
-The `search` method of `Hazelcast` embedding store takes an `EmbeddingSearchRequest` instance  to be used for the search and returns an `EmbeddingSearchResult<TextSegment>` object:
+Once the embedding store is populated, you can run vector similarity searches on it. The `search` method of `Hazelcast` embedding store takes an `EmbeddingSearchRequest` instance  to be used for the search and returns an `EmbeddingSearchResult<TextSegment>` object:
 
 [source,java]
 ----
@@ -249,11 +240,11 @@ EmbeddingSearchRequest req =
                 .build();
 ----
 
-Currently, other methods of the search request builder are not supported.
+Other methods of the search request builder are not supported.
 
-== Deleting Data From Embedding Store
+== Deleting data from the embedding store
 
-To delete a single embedding and the corresponding document, you can call the `remove` method of the embedding store with the identifier of the embedding:
+To delete a single embedding and the corresponding document, you can call the `remove` method with the identifier of the embedding:
 
 [source,java]
 ----

@@ -61,6 +61,17 @@ Can include letters, numbers, and the symbols `-`, `_`, `*`.
 |Optional
 |`0`
 
+|merge-policy
+|Configuration of the merge policy for this vector collection. See the <<merge-policy>> section.
+|Optional
+|`PutIfAbsentMergePolicy` with `batchSize`=`100`
+
+|split-brain-protection-ref
+|Name of the split-brain protection configuration that you want this vector collection to use.
+See the <<split-brain-protection>> section.
+|Optional
+|`NULL`
+
 |===
 
 .Index configuration options
@@ -151,6 +162,8 @@ XML::
                 <use-deduplication>false</use-deduplication>
             </index>
         </indexes>
+        <merge-policy batch-size="200">PutIfAbsentMergePolicy</merge-policy>
+        <split-brain-protection-ref>splitbrainprotection-name</split-brain-protection-ref>
     </vector-collection>
 </hazelcast>
 ----
@@ -175,6 +188,10 @@ hazelcast:
           max-degree: 32
           ef-construction: 256
           use-deduplication: false
+      merge-policy:
+        batch-size: 200
+        class-name: PutIfAbsentMergePolicy
+      split-brain-protection-ref: splitbrainprotection-name
 ----
 --
 Java::
@@ -199,7 +216,11 @@ VectorCollectionConfig collectionConfig = new VectorCollectionConfig("books")
                 .setMaxDegree(32)
                 .setEfConstruction(256)
                 .setUseDeduplication(false)
-    );
+    ).setMergePolicyConfig(
+            new MergePolicyConfig()
+                .setBatchSize(200)
+                .setPolicy(PutIfAbsentMergePolicy.class.getName())
+    ).setSplitBrainProtectionName("splitbrainprotection-name");
 config.addVectorCollectionConfig(collectionConfig);
 ----
 --
@@ -212,10 +233,87 @@ client.create_vector_collection_config("books", backup_count=1, async_backup_cou
     IndexConfig(name="word2vec-index", metric=Metric.DOT, dimension=6),
     IndexConfig(name="glove-index", metric=Metric.DOT, dimension=10,
                 max_degree=32, ef_construction=256, use_deduplication=False),
-])
+], merge_policy="PutIfAbsentMergePolicy", merge_batch_size=200, split_brain_protection_name="splitbrainprotection-name")
 ----
 --
 ====
+
+
+[[split-brain-protection]]
+=== Split-Brain Protection
+Vector collection can be configured to check for a minimum number of
+available members before applying vector collection operations (see the xref:network-partitioning:split-brain-protection.adoc[Split-Brain Protection section]).
+This is a check to avoid performing successful vector collection operations on all parts of a cluster during a network partition.
+
+The following methods support split-brain protection checks:
+
+* `WRITE`, `READ_WRITE`:
+** `putAsync`
+** `setAsync`
+** `putIfAbsentAsync`
+** `putAllAsync`
+** `removeAsync`
+** `deleteAsync`
+** `clearAsync`
+** `optimizeAsync`
+* `READ`, `READ_WRITE`:
+** `getAsync`
+** `size`
+** `searchAsync`
+
+The value of `split-brain-protection-ref` should be the split-brain protection configuration name which you
+configured under the `split-brain-protection` element as explained in the xref:network-partitioning:split-brain-protection.adoc[Split-Brain Protection documentation].
+
+[[merge-policy]]
+=== Configuring Merge Policy
+
+While recovering from a split-brain scenario, Vector Collection
+in the small cluster merges into the bigger cluster based on a configured
+merge policy. The merge policy resolves conflicts with different out-of-the-box strategies.
+It can be configured programmatically using the method
+https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/config/vector/VectorCollectionConfig.html#setMergePolicyConfig(com.hazelcast.config.MergePolicyConfig)[setMergePolicyConfig()^],
+or declaratively using the element `merge-policy`.
+The following example shows declarative configuration:
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+    ...
+    <vector-collection name="books">
+        <merge-policy batch-size="200">PutIfAbsentMergePolicy</merge-policy>
+    </vector-collection>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  vector-collection:
+    books:
+      merge-policy:
+        batch-size: 200
+        class-name: PutIfAbsentMergePolicy
+----
+====
+
+Vector collection supports the following policies:
+
+* `DiscardMergePolicy`: The entry from the smaller cluster is discarded.
+* `PassThroughMergePolicy`: The entry from the smaller cluster wins.
+* `PutIfAbsentMergePolicy`: The entry from the smaller cluster wins if it doesn't exist in the cluster.
+
+Additionally, you can develop a custom merge policy by implementing
+the `SplitBrainMergePolicy` interface, as explained in
+xref:network-partitioning:split-brain-recovery.adoc#custom-merge-policies[Custom merge policies].
 
 == Create collection
 

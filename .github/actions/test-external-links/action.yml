@@ -68,7 +68,8 @@ runs:
                     fi
 
                     if [[ "${status}" -eq 404 ]]; then
-                        locations=$(grep -rl "${url}")
+                        # In the event of unicode control characters, grep's behaviour may be unpredictable - but lets not fail the workflow for that
+                        locations=$(grep -rl "${url}" || true)
                         echo "::error::❌ URL '${url}' had status ${status} (found in ${locations})" 1>&2
                         found_error=1
                     else
@@ -85,7 +86,7 @@ runs:
 
         - name: Slack notification
           uses: 8398a7/action-slack@v3
-          if: failure()
+          if: failure() && github.event_name == 'schedule'
           with:
             status: failure
             fields: repo,job,workflow

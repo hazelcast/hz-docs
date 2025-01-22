@@ -16,7 +16,7 @@ If you use Maven, add the following lines to your `pom.xml`:
 <dependency>
     <groupId>com.hazelcast</groupId>
     <artifactId>hazelcast-spring</artifactId>
-    <version>{full-version}</version>
+    <version>{os-version}</version>
 </dependency>
 ----
 
@@ -32,7 +32,7 @@ If you want to use `hazelcast-spring` with `hazelcast-enterprise`, you need to e
 <dependency>
     <groupId>com.hazelcast</groupId>
     <artifactId>hazelcast-spring</artifactId>
-    <version>{full-version}</version>
+    <version>{os-version}</version>
     <exclusions>
         <exclusion>
           <groupId>com.hazelcast</groupId>
@@ -67,6 +67,70 @@ org.xml.sax.SAXParseException; lineNumber: 25; columnNumber: 33; schema_referenc
 
 In this case, ensure that the required classes are in the classpath as explained in <<enabling-spring-integration, Enabling Spring Integration>>.
 
+== Declaring Beans using Spring Java configuration
+
+The easiest and recommended way of configuring Spring is with Java-based configuration. Is it also very easy way to use
+Spring with Hazelcast.
+
+Example Java configuration is listed below.
+
+[source,java]
+----
+@Configuration(proxyBeanMethods = false)
+@ExposeHazelcastObjects // (1)
+public class SpringHazelcastConfiguration {
+
+    @Bean
+    public HazelcastInstance hazelcastInstance() { // (2)
+        Config config = new Config();
+        config.setClusterName("spring-hazelcast-cluster-from-java");
+
+        config.getJetConfig().setEnabled(true);
+
+        NetworkConfig networkConfig = config.getNetworkConfig();
+        networkConfig.getInterfaces().addInterface("127.0.0.1");
+
+        config.addMapConfig(new MapConfig("testMap").setBackupCount(2));
+        config.addMapConfig(new MapConfig("otherTestMap"));
+        return Hazelcast.newHazelcastInstance(config);
+    }
+
+}
+----
+
+(1) Using `@ExposeHazelcastObjects` annotation will expose all Hazelcast distributed objects (such as IMaps) as Spring beans.
+(2) The HazelcastInstance bean declaration. This a standard way of declaring beans in Spring nowadays, method itself
+is just a plain old Java with no "magic tricks".
+
+Using this configuration will enable user to autowire `HazelcastInstance` and e.g. `IMap`s like in this snippet:
+
+[source,java]
+----
+/// (...)
+@SpringBootApplication
+@Import(SpringHazelcastConfiguration.class)
+public class SpringApplication {
+
+    @Autowired
+    private HazelcastInstance instance;
+
+    // Jet and SQL are also exposed when using ExposeHazelcastObjects meta annotation
+    @Autowired
+    private JetService jet;
+
+    @Autowired
+    private SqlService sqlService;
+
+    @Autowired
+    @Qualifier(value = "testMap") // qualifier is needed as we configured 2 IMaps, so there are two beans with the same type
+    private IMap<String, String> testMap;
+----
+
+NOTE: We could've use `ExposeHazelcastObjects` directly on `SpringApplication` class and move the `hazelcastInstance`
+bean declaration to this class, removing `SpringHazelcastConfiguration` completely, as `@SpringBootApplication`
+is also a `@Configuration` class. We've decided to split configuration and usage just because user may also want to use
+e.g. application context creation directly from Java, using `AnnotationConfigApplicationContext`.
+
 == Declaring Beans by Spring *beans* Namespace
 
 _Bean Declaration:_
@@ -99,18 +163,16 @@ used as a bean declaration.
 
 Here is an example schema definition:
 
-[source,xml]
+[source,xml,opts=novalidate]
 ----
 <beans xmlns="http://www.springframework.org/schema/beans"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
        xmlns:hz="http://www.hazelcast.com/schema/spring"
        xsi:schemaLocation="http://www.springframework.org/schema/beans
-                http://www.springframework.org/schema/beans/spring-beans-4.3.xsd
+                http://www.springframework.org/schema/beans/spring-beans-5.5.xsd
                 http://www.hazelcast.com/schema/spring
                 http://www.hazelcast.com/schema/spring/hazelcast-spring.xsd">
 ----
-
-== Example Configuration
 
 Following is an example Hazelcast configuration when integrated with Spring.
 

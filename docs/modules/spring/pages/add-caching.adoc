@@ -7,6 +7,29 @@ backed by Hazelcast if your Spring version supports JCache.
 
 == Declarative Spring Cache Configuration
 
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+@EnableCaching
+@SpringBootApplication
+public class MyApplication {
+    @Bean
+    public HazelcastInstance hazelcastInstance() { ... }
+
+    @Bean
+    public HazelcastCacheManager cacheManager(HazelcastInstance hazelcastInstance) {
+        return new HazelcastCacheManager(hazelcastInstance);
+    }
+}
+----
+--
+XML::
++
+--
 [source,xml]
 ----
 <cache:annotation-driven cache-manager="cacheManager" />
@@ -19,11 +42,37 @@ backed by Hazelcast if your Spring version supports JCache.
     <constructor-arg ref="instance"/>
 </bean>
 ----
+--
+====
 
 Hazelcast uses its Map implementation for underlying cache.
 You can configure a map with your cache's name if you want to set
 additional configuration such as `ttl`.
 
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+@Bean
+HazelcastInstance hazelcastInstance(Config config) {
+    return Hazelcast.newHazelcastInstance(config);
+}
+
+@Bean
+Config config() {
+    Config config = new Config();
+    //...
+    config.addMapConfig(new MapConfig("city").setTimeToLiveSeconds(0).setInMemoryFormat(InMemoryFormat.BINARY));
+    return config;
+}
+----
+--
+XML::
++
+--
 [source,xml]
 ----
 <cache:annotation-driven cache-manager="cacheManager" />
@@ -40,7 +89,11 @@ additional configuration such as `ttl`.
     <constructor-arg ref="instance"/>
 </bean>
 ----
+--
+====
 
+After configuration is done, you will be able to use `@Cacheable` annotation on your services to mark the results
+of function as cacheable.
 [source,java]
 ----
 public interface IDummyBean {
@@ -59,9 +112,10 @@ property to your Spring properties file (usually named as `application.propertie
 
 An example usage is given below:
 
-```
+[source]
+----
 hazelcast.spring.cache.prop=defaultReadTimeout=2,cache1=10,cache2=20
-```
+----
 
 The argument `defaultReadTimeout` applies to all your Spring caches.
 If you want to define different timeout values for some specific Spring

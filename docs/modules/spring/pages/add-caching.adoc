@@ -123,8 +123,31 @@ caches, you can provide them as a comma separated list as shown in the
 above example usage. The values are in milliseconds. If you want to have
 no timeout for a cache, simply set it to `0` or a negative value.
 
-== Declarative Hazelcast JCache Based Caching Configuration
+== Hazelcast JCache Based Caching Configuration
 
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+import javax.management.MXBean;@EnableCaching
+@SpringBootApplication
+public class MyApplication {
+    @Bean
+    public HazelcastInstance hazelcastInstance() { ... }
+
+    @Bean
+    public JCacheCacheManager cacheManager(HazelcastInstance hazelcastInstance) {
+        return new JCacheCacheManager(new HazelcastCacheManager(hazelcastInstance));
+    }
+}
+----
+--
+XML::
++
+--
 [source,xml]
 ----
 <cache:annotation-driven cache-manager="cacheManager" />
@@ -139,17 +162,13 @@ no timeout for a cache, simply set it to `0` or a negative value.
     <constructor-arg ref="hazelcastJCacheCacheManager" />
 </bean>
 ----
-
-You can use JCache implementation in both member and client mode.
-A cache manager should be bound to an instance. Instance can be referenced
-by `instance-ref` attribute or provided by `hazelcast.instance.name`
+Instance can be referenced by `instance-ref` attribute or provided by `hazelcast.instance.name`
 property which is passed to CacheManager. Instance should be specified
 using one of these methods.
 
 NOTE: Instance name provided in properties overrides `instance-ref` attribute.
 
 You can specify a URI for each cache manager with `uri` attribute.
-
 
 [source,xml]
 ----
@@ -160,40 +179,11 @@ You can specify a URI for each cache manager with `uri` attribute.
     </hz:properties>
 </hz:cache-manager>
 ----
+--
+====
 
-== Annotation-Based Spring Cache Configuration
-
-Annotation-Based Configuration does not require any XML definition.
-To perform Annotation-Based Configuration:
-
-* Implement a `CachingConfiguration` class with related Annotations.
-+
-[source,java]
-----
-@Configuration
-@EnableCaching
-public class CachingConfiguration extends CachingConfigurerSupport {
-    @Bean
-    public CacheManager cacheManager() {
-        ClientConfig config = new ClientConfig();
-        HazelcastInstance client = HazelcastClient.newHazelcastClient(config);
-        return new com.hazelcast.spring.cache.HazelcastCacheManager(client);
-    }
-    @Bean
-    public KeyGenerator keyGenerator() {
-        return null;
-    }
-}
-----
-+
-* Launch Application Context and register `CachingConfiguration`.
-+
-[source,java]
-----
-AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
-context.register(CachingConfiguration.class);
-context.refresh();
-----
+You can use JCache implementation in both member and client mode.
+A cache manager should be bound to an instance.
 
 For more information about Spring Cache, see
 https://spring.io/guides/gs/caching/[Spring Cache Abstraction^].

@@ -98,16 +98,14 @@ To allow the system to return enough results, the following conditions must be s
 By default, `memberLimit` is equal to `topK` and `partitionLimit` is calculated based on `topK` and cluster configuration (number of partitions)
 in a way that is unlikely to cause quality degradation.
 
-[NOTE]
+[TIP]
 ====
 Consider tuning `efSearch` based on quality and throughput/latency requirements.
 ====
 
 [NOTE]
 ====
-Heuristics for `partitionLimit` assumes that data (vectors) is distributed uniformly in partitions. If this is not the case,
-for example if the closest neighbours reside only in a single or a few partitions, default value of `partitionLimit` may negatively impact search quality.
-In such case consider using larger value of `partitionLimit`.
+Heuristics for `partitionLimit` assume that data (vectors) is distributed uniformly in partitions. If this is not the case, for example if the closest neighbours reside only in a single or a few partitions, the default value of `partitionLimit` may negatively impact search quality. In such a case consider increasing the `partitionLimit`.
 
 `memberLimit` is less critical for overall behavior if there are only a few members.
 ====
@@ -233,7 +231,7 @@ The number of partitions has a big impact on the performance of the vector colle
   After this point, more partitions will not significantly improve ingestion speed. 
   If there are fewer partitions than number of cores, not all available resources will be utilized during ingestion because updates on a given partition are executed by single thread. 
 - *similarity search*: in general, having fewer partitions results in better search performance and reduced latency.
-  However, the impact on quality/recall is complicated and depends also on `efSearch` and `partitionLimit`.
+  However, the impact on quality/recall is complicated and depends also on `efSearch` and `partitionLimit` values.
 - *migration*: avoid partitions with a large memory size, including metadata, vectors and vector index internal representation.
   In general, the recommendation is for a partition size of around 50-100MB per partition, which results in fast migrations and small pressure on heap during migration.
   However, for vector search, the partition size can be increased above that general recommendation provided that there is enough heap memory for migrations (see below).
@@ -242,7 +240,7 @@ The number of partitions has a big impact on the performance of the vector colle
 NOTE: It is not possible to change the number of partitions for an existing cluster.
 
 [CAUTION]
-.For this Beta version, the following apply:
+.For this Beta version, the following recommendations apply:
 ====
 The entire collection partition is migrated as a single chunk.
 If using partitions that are larger than the recommended size, ensure that you have sufficient heap memory to run migrations. The amount of heap memory required is approximately the size of the vector collection partition multiplied by the number of parallel migrations.
@@ -251,15 +249,15 @@ To decrease pressure on heap memory, you can decrease the number of parallel mig
 
 == Tuning tips
 
-1. Enable xref:vector-collections.adoc#jvm-configuration[Vector API]
+1. Enable xref:vector-collections.adoc#jvm-configuration[Vector API].
 2. Prefer DOT metric with normalized vectors over COSINE metric if your use case does not require the COSINE metric.
-3. Adjust `efSearch` to achieve desired balance between throughput/latency and precision.
+3. Adjust `efSearch` to achieve the desired balance between throughput/latency and precision.
 By default `efSearch = topK`.
-For searches with small `topK` (for example, 1 - 10) it may be beneficial to use larger value to get better precision.
-For large `topK` (for example 100) a smaller `efSearch` value will give better performance with potentially small and acceptable decrease in precision.
-4. Test if adjusting `efSearch` gives satisfactory results before increasing index build parameters (`max-degree`, `ef-construction`) which would result in slower index builds and searches and a larger index.
+For searches with small `topK` (for example, 1 - 10), it may be beneficial to use a larger value to get better precision.
+For large `topK` (for example 100), a smaller `efSearch` value will give better performance with only a potentially small and acceptable decrease in precision.
+4. Test if adjusting `efSearch` gives satisfactory results before increasing index build parameters (`max-degree`, `ef-construction`) which would result in slower index builds and searches, and a larger index.
 5. Vector deduplication does not incur significant overhead for uploads (usually less than 1%) and searches. You may consider disabling it to get slightly better performance and smaller memory usage if your dataset does not contain duplicated vectors. However, be aware that in the presence of many duplicated vectors with deduplication disabled, a similarity search may return poor quality results.
-6. For a given query, each vector index partition is searched by one thread. The number of concurrent partition searches is configured by specifying a pool size for `hz:query` executor, which by default has 16 threads per member. If optimizing for search, we recommend setting the `hz:query` pool size to be that of the physical core count of your host machines: this will result in a good balance between search throughput and CPU utilization. Setting `hz:query` to have a pool size greater than that of the physical core count will not deliver a significant increase in throughput but it will increase total CPU utilization. The `hz:query` pool size can be changed as follows:
+6. For a given query, each vector index partition is searched by one thread. The number of concurrent partition searches is configured by specifying a pool size for `hz:query` executor, which by default has 16 threads per member. If optimizing for search, we recommend setting the `hz:query` pool size to be that of the physical core count of your host machines; this will result in a good balance between search throughput and CPU utilization. Setting `hz:query` to have a pool size greater than that of the physical core count will not deliver a significant increase in throughput but it will increase total CPU utilization. The `hz:query` pool size can be changed as follows:
 +
 [tabs] 
 ==== 
@@ -300,6 +298,6 @@ hazelcast:
 ----
 ====
 +
-7. Decreasing number of partitions can improve query performance but has xref:partition-count-impact[significant impact on entire cluster].
+7. Decreasing the number of partitions can improve query performance but has xref:partition-count-impact[significant impact on the entire cluster].
 8. If there are fewer partitions than available cores, not all cores will be used for single search execution. This is ok if you are focused on throughput, as in general fewer partitions means you need less resources. However, if you want to achieve the best latency for a single client, it is better to distribute the search to as many cores as possible, which requires having at least as many partitions as cores in the cluster.
-9. `vectorCollection.searchIndexVisitedNodes` metric can be helpful to understand vector search performance. If the fraction of number of  nodes visited per search to collection size is high, this may indicate that vector index is not beneficial in given case.
+9. The `vectorCollection.searchIndexVisitedNodes` metric can be helpful to understand vector search performance. If the fraction of number of nodes visited per search to collection size is high, this may indicate that vector index is not beneficial in the given case.

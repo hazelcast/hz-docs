@@ -284,96 +284,107 @@ For `map-store``, you should set either the `class-name` or the `implementation`
 
 == Supported data structures
 
-// Tomasz: please check list is comprehensive, add Java examples
-
 The following table lists all of the Hazelcast data structures you can use in your Spring application.
 
 |===
 |Data structure |Example Java configuration |Example XML configuration 
 
 |`map`
-|``
+|`config.addMapConfig(new MapConfig("aggr")
+    .setInMemoryFormat(InMemoryFormat.OBJECT));`
 |`<hz:map id="map" instance-ref="client" name="map" lazy-init="true" />`
 
 |`multiMap`
-|``
+|`config.addMultiMapConfig(new MultiMapConfig("aggr")
+    .setBinary(false));`
 |`<hz:multiMap id="multiMap" instance-ref="instance" name="multiMap" lazy-init="false" />`
 
 |`replicatedmap`
-|``
+|`config.addReplicatedMapConfig(new ReplicatedMapConfig("aggr")
+.setInMemoryFormat(InMemoryFormat.OBJECT));`
 |`<hz:replicatedMap id="replicatedmap" instance-ref="instance" name="replicatedmap" lazy-init="false" />`
 
 |`queue`
-|``
+|`config.addQueueConfig(new QueueConfig("aggr")
+.setMaxSize(1024));`
 |`<hz:queue id="queue" instance-ref="client" name="queue" lazy-init="true" depends-on="instance"/>`
 
 |`topic`
-|``
+|`config.addTopicConfig(new TopicConfig("aggr")
+.setMultiThreadingEnabled(true));`
 |`<hz:topic id="topic" instance-ref="instance" name="topic" depends-on="instance, client"/>`
 
 |`reliableTopic`
-|``
+|`config.addReliableTopicConfig(new ReliableTopicConfig("aggr")
+.setTopicOverloadPolicy(TopicOverloadPolicy.BLOCK));`
 |`<hz:reliableTopic id="reliableTopic" instance-ref="instance" name="reliableTopic"/>`
 
 |`set`
-|``
+|`config.addSetConfig(new SetConfig("aggr")
+.setBackupCount(2));`
 |`<hz:set id="set" instance-ref="instance" name="set" />`
 
 |`list`
-|``
+|`config.addListConfig(new ListConfig("aggr")
+.setBackupCount(2));`
 |`<hz:list id="list" instance-ref="instance" name="list"/>`
 
-|`executorService`
-|``
-|`<hz:executorService id="executorService" instance-ref="client" name="executorService"/>`
-
-|`durableExecutorService`
-|``
-|`<hz:durableExecutorService id="durableExec" instance-ref="instance" name="durableExec"/>`
-
-|`scheduledExecutorService`
-|``
-|`<hz:scheduledExecutorService id="scheduledExec" instance-ref="instance" name="scheduledExec"/>`
-
 |`ringbuffer`
-|``
+|`config.addRingBufferConfig(new RingbufferConfig("ringbuf")
+.setBackupCount(1);`
 |`<hz:ringbuffer id="ringbuffer" instance-ref="instance" name="ringbuffer"/>`
 
 |`cardinalityEstimator`
-|``
+|`config.addCardinalityEstimatorConfig(new CardinalityEstimatorConfig("est")
+.setBackupCount(1);`
 |`<hz:cardinalityEstimator id="cardinalityEstimator" instance-ref="instance" name="cardinalityEstimator"/>`
 
+|`flakeIdGenerator`
+|`config.addFlakeIdGeneratorConfig(new FlakeIdGeneratorConfig("est")
+.setBackupCount(1);`
+|`<hz:flakeIdGenerator id="flakeIdGenerator" instance-ref="instance" name="flakeIdGenerator"/>`
+
 |`idGenerator`
-|``
+|`config.addCardinalityEstimatorConfig(new CardinalityEstimatorConfig("gen")
+.setNodeIdOffset(1);`
 |`<hz:idGenerator id="idGenerator" instance-ref="instance"
     name="idGenerator"/>`
 
-|`flakeIdGenerator`
-|``
-|`<hz:flakeIdGenerator id="flakeIdGenerator" instance-ref="instance" name="flakeIdGenerator"/>`
-
 |`atomicLong`
-|``
+|- (needs manual bean addition)
 |`<hz:atomicLong id="atomicLong" instance-ref="instance" name="atomicLong"/>`
 
 |`atomicReference`
-|``
+|- (needs manual bean addition)
 |`<hz:atomicReference id="atomicReference" instance-ref="instance" name="atomicReference"/>`
 
-|`semaphore`
-|``
+|`semaphore` ^{enterprise-product-name}^
+|`config.getCPSubsystemConfig().addSemaphoreConfig(new SemaphoreConfig("s1").setInitialPermits(5));`
 |`<hz:semaphore id="semaphore" instance-ref="instance" name="semaphore"/>`
 
 |`countDownLatch`
-|``
+|- (needs manual bean addition)
 |`<hz:countDownLatch id="countDownLatch" instance-ref="instance" name="countDownLatch"/>`
 
-|`lock`
-|``
+|`lock` ^{enterprise-product-name}^
+|`config.getCPSubsystemConfig().addLockConfig(new FencedLockConfig("lock1").setLockAcquireLimit(5));`
 |`<hz:lock id="lock" instance-ref="instance" name="lock"/>`
 
+|`cpmap` ^{enterprise-product-name}^
+|`config.getCPSubsystemConfig().addCPMapConfig(new CPMapConfig("cpMap1").setMaxSizeMb(150));`
+|`<hz:cpmap instance-ref="instance" name="cpmap" id="cpMap" />`
+
 |`dataConnection`
-|``
+|
++
+[source,java,opts=novalidate]
+-----
+config.addDataConnectionConfig(new DataConnectionConfig()
+              .setName("my-jdbc-data-connection")
+              .setType("Jdbc")
+              .setProperties(getProperties()));
+-----
++
 |`<hz:external-data-store name="externalStore">
     <hz:class-name>com.hazelcast.datastore.JdbcDataStoreFactory</hz:class-name>
     <hz:properties>
@@ -381,9 +392,18 @@ The following table lists all of the Hazelcast data structures you can use in yo
     </hz:properties>
 </hz:external-data-store>`
 
-|`cpmap`
-|``
-|`<hz:cpmap instance-ref="instance" name="cpmap" id="cpMap" />`
+|`executorService`
+|`config.addExecutorConfig(new ExecutorConfig("executor1").setPoolSize(100));`
+|`<hz:executorService id="executorService" instance-ref="client" name="executorService"/>`
+
+|`durableExecutorService`
+|`config.addDurableExecutorConfig(new DurableExecutorConfig("executor1").setPoolSize(100));`
+|`<hz:durableExecutorService id="durableExec" instance-ref="instance" name="durableExec"/>`
+
+|`scheduledExecutorService`
+|`config.addScheduledExecutorConfig(new ScheduledExecutorConfig("executor1").setPoolSize(100));`
+|`<hz:scheduledExecutorService id="scheduledExec" instance-ref="instance" name="scheduledExec"/>`
+
 
 |===
 

@@ -1,12 +1,17 @@
-= Add Caching to Spring
+= Add caching to Spring
 
-As of version 3.1, Spring Framework provides support for adding caching into an existing Spring application. Spring 3.2 and later versions support JCache-compliant caching providers. You can also use JCache caching backed by Hazelcast if your Spring version supports JCache.
+As of version 3.1, Spring Framework provides support for adding caching into an existing Spring application. From version 3.2, Spring also supports JCache-compliant caching providers. 
 
-In order to configure caching in Spring, you have to define CacheManager bean. For Hazelcast, this bean will have type HazelcastCacheManager. It's configuration is easy and requires passing an HazelcastInstance object (preferably also a bean).
+To use Hazelcast as the cache manager in your Spring application:
 
-You can use Hazelcast-backed Spring caching on both member side and client side.
+. Define a `CacheManager` bean with type `HazelcastCacheManager`.
+. Pass a `HazelcastInstance` object, typically as a bean.
 
-== Declarative Spring Cache Configuration
+You can use Hazelcast as a standard Spring cache manager or a JCache-compliant cache manager and deploy it on both member and client sides.
+
+== Enable Hazelcast as a Spring cache manager
+
+The following declarative configuration creates a Hazelcast instance to use as a cache manager. Note that the Hazelcast instance bean is not strictly needed because Spring Boot would detect Hazelcast on the classpath and configure an instance automatically.
 
 [tabs]
 ====
@@ -15,12 +20,15 @@ Java::
 --
 [source,java]
 ----
-@EnableCaching
-@SpringBootApplication
+@EnableCaching // Instructs Spring Boot to enable caching configuration
+@SpringBootApplication // Mark as Spring Boot application
 public class MyApplication {
+
+    // Hazelcast instance bean
     @Bean
     public HazelcastInstance hazelcastInstance() { ... }
 
+    // Cache manager bean
     @Bean
     public HazelcastCacheManager cacheManager(HazelcastInstance hazelcastInstance) {
         return new HazelcastCacheManager(hazelcastInstance);
@@ -46,9 +54,9 @@ XML::
 --
 ====
 
-Hazelcast uses its Map implementation for underlying cache.
-You can configure a map with your cache's name if you want to set
-additional configuration such as `ttl`.
+== Enable Hazelcast as a JCache-compliant cache manager
+
+The following declarative configuration creates a Hazelcast instance to use as a JCache-compliant cache manager. Again, the Hazelcast instance bean is not strictly needed because Spring Boot would detect Hazelcast on the classpath and configure an instance automatically.
 
 [tabs]
 ====
@@ -57,13 +65,95 @@ Java::
 --
 [source,java]
 ----
-// declaration of HazelcastInstance bean. The configuration will be autowired.
+import javax.management.MXBean;
+
+@EnableCaching // Instructs Spring Boot to enable caching configuration
+@SpringBootApplication // Mark as Spring Boot application
+public class MyApplication {
+
+    // Hazelcast instance bean
+    @Bean
+    public HazelcastInstance hazelcastInstance() { ... }
+
+    // Cache manager bean
+    @Bean
+    public JCacheCacheManager cacheManager(HazelcastInstance hazelcastInstance) {
+        return new JCacheCacheManager(new HazelcastCacheManager(hazelcastInstance));
+    }
+}
+----
+--
+XML::
++
+--
+[source,xml]
+----
+<cache:annotation-driven cache-manager="cacheManager" />
+
+<hz:hazelcast id="instance">
+    ...
+</hz:hazelcast>
+
+<hz:cache-manager id="hazelcastJCacheCacheManager" instance-ref="instance" name="hazelcastJCacheCacheManager"/>
+
+<bean id="cacheManager" class="org.springframework.cache.jcache.JCacheCacheManager">
+    <constructor-arg ref="hazelcastJCacheCacheManager" />
+</bean>
+----
+
+== Reference the cache manager
+
+The Hazelcast instance can be referenced by the `instance-ref` attribute or provided by the `hazelcast.instance.name` property, which is passed to `CacheManager`.
+
+NOTE: Providing an instance name as a property overrides the `instance-ref` attribute.
+
+You can specify a URI for each cache manager with the `uri` attribute. For example:
+
+[source,xml]
+----
+<hz:cache-manager id="cacheManager2" name="cacheManager2" uri="testURI">
+    <hz:properties>
+        <hz:property name="hazelcast.instance.name">named-spring-hz-instance</hz:property>
+        <hz:property name="testProperty">testValue</hz:property>
+    </hz:properties>
+</hz:cache-manager>
+----
+--
+====
+// Should we have a Java equivalent here?
+
+== Populate the cache
+
+Once you've configured a Hazelcast instance as a cache manager, you can use the `@Cacheable` annotation on your services to mark the results of a function as cacheable. For example:
+
+[source,java]
+----
+public interface DummyService {
+    @Cacheable("city")
+    String getCity();
+}
+----
+
+For more information about Spring cache annotations, see link:https://docs.spring.io/spring-framework/reference/integration/cache/annotations.html[Declarative Annotation-based Caching] in the Spring documentation.
+
+== Configure cache behavior
+
+Hazelcast uses its `Map` implementation for the underlying cache. To set additional configuration such as time-to-live, configure a map with your cache's name:
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+// Declaration of HazelcastInstance bean. The configuration will be autowired.
 @Bean
 HazelcastInstance hazelcastInstance(Config config) {
     return Hazelcast.newHazelcastInstance(config);
 }
 
-// declaration of Hazelcast configuration bean.
+// Declaration of Hazelcast configuration bean
 @Bean
 Config config() {
     Config config = new Config();
@@ -95,102 +185,17 @@ XML::
 --
 ====
 
-After configuration is done, you will be able to use `@Cacheable` annotation on your services to mark the results
-of function as cacheable.
-[source,java]
-----
-public interface DummyService {
-    @Cacheable("city")
-    String getCity();
-}
-----
+== Define a timeout for cache read operations
 
-== Defining Timeouts for Cache Read Operation
+You can define timeout values for the get operations from your Spring cache using the `hazelcast.spring.cache.prop` property. This can be useful for meeting SLA requirements, or for maximizing cache stability in busy or unreliable networks. You can configure timeouts as a Java property (using the `-D` flag) or by adding the property to your Spring properties file (usually named `application.properties`). The default global timeout is zero.
 
-You can define a timeout value for the get operations from your Spring cache.
-This may be useful for some cases, such as SLA requirements. Hazelcast
-provides a property to specify this timeout: `hazelcast.spring.cache.prop`.
-This can be specified as a Java property (using `-D`) or you can add this
-property to your Spring properties file (usually named as `application.properties`).
-
-An example usage is given below:
+The following example sets a global timeout of 2ms and overrides this value for two named Spring caches, `cache1` and `cache2`, using a comma-separated list.
 
 [source]
 ----
 hazelcast.spring.cache.prop=defaultReadTimeout=2,cache1=10,cache2=20
 ----
 
-The argument `defaultReadTimeout` applies to all your Spring caches.
-If you want to define different timeout values for some specific Spring
-caches, you can provide them as a comma separated list as shown in the
-above example usage. The values are in milliseconds. If you want to have
-no timeout for a cache, simply set it to `0` or a negative value.
+If you want to have no timeout for a cache, set it to `0`.
 
-== Hazelcast JCache Based Caching Configuration
-
-You can use JCache implementation in both member and client mode. A cache manager should be bound to an instance.
-
-[tabs]
-====
-Java::
-+
---
-[source,java]
-----
-import javax.management.MXBean;
-
-@EnableCaching // instructs Spring Boot to enable caching configuration
-@SpringBootApplication // main annotation to mark Spring Boot application
-public class MyApplication {
-
-    // hazelcast instance bean. Note that it's not strictly needed as Spring Boot would detect
-    // Hazelcast on the classpath and configure instance automatically
-    @Bean
-    public HazelcastInstance hazelcastInstance() { ... }
-
-    @Bean
-    public JCacheCacheManager cacheManager(HazelcastInstance hazelcastInstance) {
-        return new JCacheCacheManager(new HazelcastCacheManager(hazelcastInstance));
-    }
-}
-----
---
-XML::
-+
---
-[source,xml]
-----
-<cache:annotation-driven cache-manager="cacheManager" />
-
-<hz:hazelcast id="instance">
-    ...
-</hz:hazelcast>
-
-<hz:cache-manager id="hazelcastJCacheCacheManager" instance-ref="instance" name="hazelcastJCacheCacheManager"/>
-
-<bean id="cacheManager" class="org.springframework.cache.jcache.JCacheCacheManager">
-    <constructor-arg ref="hazelcastJCacheCacheManager" />
-</bean>
-----
-Instance can be referenced by `instance-ref` attribute or provided by `hazelcast.instance.name`
-property which is passed to CacheManager. Instance should be specified
-using one of these methods.
-
-NOTE: Instance name provided in properties overrides `instance-ref` attribute.
-
-You can specify a URI for each cache manager with `uri` attribute.
-
-[source,xml]
-----
-<hz:cache-manager id="cacheManager2" name="cacheManager2" uri="testURI">
-    <hz:properties>
-        <hz:property name="hazelcast.instance.name">named-spring-hz-instance</hz:property>
-        <hz:property name="testProperty">testValue</hz:property>
-    </hz:properties>
-</hz:cache-manager>
-----
---
-====
-
-For more information about Spring Cache, see
-https://spring.io/guides/gs/caching/[Spring Cache Abstraction^].
+// TODO: next steps section could link to relevant tutorials

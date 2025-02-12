@@ -45,17 +45,14 @@ kubectl apply -f https://raw.githubusercontent.com/hazelcast/hazelcast/master/ku
 
 Hazelcast Kubernetes Discovery requires creating a link:https://kubernetes.io/docs/concepts/services-networking/service/[service] of any type in any Pods where Hazelcast is running.
 
+If the service exposes multiple ports, name the port that exposes the Hazelcast member `hazelcast`. This configuration ensures that auto-discovery functions correctly.
+
 ```yaml
 apiVersion: v1
 kind: Service
 metadata:
   name: MY-SERVICE-NAME
 spec:
-  # In some rare special cases (embedded mode with min cluster size matching replica count) your initial deployment might run into a hen-egg problem.
-  # It is caused by Kubernetes DNS only resolving headless service´s when the underlying pods are healthy (or ready).
-  # If your pods need the service to be resolved before, the property `publishNotReadyAddresses` comes in handy.
-  # Please also refer to [Kubernetes Service](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#service-v1-core) spec.
-  # 
   # publishNotReadyAddresses: true
   type: LoadBalancer
   selector:
@@ -65,7 +62,7 @@ spec:
     port: 5701
 ```
 
-NOTE: If the service exposes multiple ports, name the port that exposes the Hazelcast member `hazelcast`. This configuration ensures that auto-discovery functions correctly.
+NOTE: If you are running Hazelcast in embedded mode with a minimum cluster size matching the replica count, your initial deployment might fail due to dependencies on services that are still starting. The problem is caused by Kubernetes DNS only resolving headless services when the underlying Pods are ready. To avoid this problem, you can use the property `publishNotReadyAddresses` (commented out in this example). For more information, see the link:https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#service-v1-core[Kubernetes Service API specification].
 
 ==== Hazelcast Configuration
 

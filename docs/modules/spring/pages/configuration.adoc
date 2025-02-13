@@ -72,12 +72,11 @@ The following example provides basic configuration for using Hazelcast in a Spri
 
 [source,java]
 ----
-@Configuration(proxyBeanMethods = false)
-@ExposeHazelcastObjects // (1)
+import javax.management.MXBean;@Configuration(proxyBeanMethods = false)
 public class SpringHazelcastConfiguration {
 
     @Bean
-    public HazelcastInstance hazelcastInstance() { // (2)
+    public HazelcastInstance hazelcastInstance() { // (1)
         Config config = new Config();
         config.setClusterName("spring-hazelcast-cluster-from-java");
 
@@ -89,11 +88,20 @@ public class SpringHazelcastConfiguration {
         return Hazelcast.newHazelcastInstance(config);
     }
 
+    @Bean
+    public IMap<String, String> testMap(HazelcastInstance instance) { // (2)
+        return instance.getMap("testMap");
+    }
+
+    @Bean
+    public IMap<String, String> otherTestMap(HazelcastInstance instance) {
+        return instance.getMap("otherTestMap");
+    }
 }
 ----
 
-(1) The `@ExposeHazelcastObjects` annotation will expose all Hazelcast distributed objects (such as IMaps) as Spring beans.
-(2) The `HazelcastInstance` bean declaration is a standard way of declaring beans in Spring. It uses a plain old Java method.
+(1) The `HazelcastInstance` bean declaration is a standard way of declaring beans in Spring. It uses a plain old Java method.
+(2) Declaration of bean for `testMap` IMap, so that you will be able to inject IMap directly into a field.
 
 You can then use Spring's `@Autowired` dependency injection annotation to automatically configure objects such as `HazelcastInstance` and `IMap`. For example:
 
@@ -101,25 +109,17 @@ You can then use Spring's `@Autowired` dependency injection annotation to automa
 ----
 /// (...)
 @SpringBootApplication
-@ExposeHazelcastObjects
 public class SpringApplication {
 
     @Autowired
     private HazelcastInstance instance;
-
-    // Jet and SQL are also exposed when using ExposeHazelcastObjects meta annotation
-    @Autowired
-    private JetService jet;
-
-    @Autowired
-    private SqlService sqlService;
 
     @Autowired
     @Qualifier(value = "testMap") // Qualifier is needed because we configured two IMaps, so there are two beans with the same type
     private IMap<String, String> testMap;
 ----
 
-As `@SpringBootApplication` is also a `@Configuration` class, you could instead use `ExposeHazelcastObjects` directly on the `SpringApplication` class and move the `hazelcastInstance` bean declaration to `SpringApplication`, removing `SpringHazelcastConfiguration` completely. However, splitting configuration and usage provides more flexibility. For example, you can use application context creation directly from Java with `AnnotationConfigApplicationContext`.
+As `@SpringBootApplication` is also a `@Configuration` class, you could instead move the `hazelcastInstance` bean declaration to `SpringApplication`, removing `SpringHazelcastConfiguration` completely. However, splitting configuration and usage provides more flexibility. For example, you can use application context creation directly from Java with `AnnotationConfigApplicationContext`.
 
 == Declare beans using XML configuration
 

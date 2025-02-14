@@ -1,12 +1,65 @@
-= Configuring Hibernate Second-Level Cache
+= Configure Hibernate second-level cache
 
-**Code Sample**: See the https://github.com/hazelcast/hazelcast-code-samples/tree/master/spring/spring-hibernate-2ndlevel-cache[sample application^]
-for Hibernate 2nd Level Cache configuration.
+Hibernate is a popular object-relational mapping (ORM) library for the Java language that lets you store your Java object data in a relational database management system (RDBMS). Hibernate's default cache operates at the scope of a single session. This is often supplemented with a second-level cache that is shared across all sessions and persists when sessions end. You can use Hazelcast to provide a Hibernate second-level cache in your Spring application.
 
-If you are using Hibernate with Hazelcast as a second level cache provider, you can easily configure your
-`LocalSessionFactoryBean` to use a Hazelcast instance by passing Hazelcast instance name. That way, you can use the
-same `HazelcastInstance` as Hibernate L2 cache instance.
+== Enable Hazelcast as a Hibernate second-level cache provider
 
+If you haven't already, configure a `HazelcastInstance` using the `hazelcast` namespace as described in xref:configuration.adoc#hazelcast-namespace[Configure Hazelcast in Spring].
+
+If you are using Spring Boot, the easiest way to enable Hazelcast as a Hibernate second-level cache provider is to modify your Spring `application.properties` file to reference a Hazelcast instance:
+
+[source,yaml]
+----
+spring:
+  jpa:
+    properties:
+      hibernate:
+        cache:
+          use_query_cache: true
+          use_second_level_cache: true
+          region:
+            factory_class: com.hazelcast.hibernate.HazelcastLocalCacheRegionFactory
+          # Hazelcast client configuration
+          hazelcast:
+            instance_name: my-instance
+      javax:
+        persistence:
+          sharedCache:
+            # Only entities marked with Cacheable will use 2nd level cache
+            mode: ENABLE_SELECTIVE
+----
+
+If you are not using Spring Boot, configure your `LocalSessionFactoryBean` to use a Hazelcast instance by passing the Hazelcast instance name. That way, you can use the same `HazelcastInstance` as the Hibernate second-level cache instance:
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+@Value("${hz.instance.name}")
+private String hazelcastInstanceName;
+@Bean
+public LocalSessionFactoryBean sessionFactory() throws Exception {
+    LocalSessionFactoryBean bean = new LocalSessionFactoryBean();
+
+    Properties hibernateProperties = new Properties();
+    hibernateProperties.put("hibernate.cache.region.factory_class", "com.hazelcast.hibernate.HazelcastLocalCacheRegionFactory");
+    // need to specify Hazelcast connection parameter, such as instance name
+    hibernateProperties.put("hibernate.cache.hazelcast.instance_name", hazelcastInstanceName);
+
+    hibernateProperties.put("hibernate.dialect", "org.hibernate.dialect.MySQLDialect");
+    bean.setHibernateProperties(hibernateProperties);
+    bean.setDataSource(dataSource());
+    bean.setPackagesToScan("com.example");
+    return bean;
+}
+----
+--
+XML::
++
+--
 [source,xml]
 ----
 ...
@@ -18,17 +71,25 @@ same `HazelcastInstance` as Hibernate L2 cache instance.
         <props>
             ...
             <prop key="hibernate.cache.region.factory_class">com.hazelcast.hibernate.HazelcastLocalCacheRegionFactory</prop>
+            <!-- need to specify Hazelcast connection parameter, such as instance name -->
             <prop key="hibernate.cache.hazelcast.instance_name">${hz.instance.name}</prop>
         </props>
     </property>
     ...
 </bean>
 ----
+--
+====
 
-**Hibernate RegionFactory Classes**
+== Hibernate RegionFactory classes
+
+Hazelcast provides the following classes for configuring Hibernate second-level cache:
 
 * `com.hazelcast.hibernate.HazelcastLocalCacheRegionFactory`
 * `com.hazelcast.hibernate.HazelcastCacheRegionFactory`
 
-See the https://github.com/hazelcast/hazelcast-hibernate#configuring-regionfactory[Configuring RegionFactory section^]
-in the Hazelcast Hibernate GitHub repository for more information.
+See https://github.com/hazelcast/hazelcast-hibernate#configuring-regionfactory[Configuring RegionFactory] in the Hazelcast Hibernate GitHub repository for more information.
+
+== Next steps
+
+See the https://github.com/hazelcast/hazelcast-code-samples/tree/master/spring/spring-hibernate-2ndlevel-cache[sample application^] for an example Hibernate second-level cache configuration.

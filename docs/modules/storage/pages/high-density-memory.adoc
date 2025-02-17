@@ -162,19 +162,36 @@ system properties.
 [[metadata]]
 == Metadata
 
-In this context metadata refers to the off-heap memory used by Hazelcast internal data structures holding the user data and for tracking allocated memory blocks/pages when using the `POOLED` allocator detailed above. Metadata is included when calculating the total committed off-heap memory.
+In this context metadata refers to the off-heap memory used by Hazelcast
+internal data structures holding the user data and for tracking allocated memory
+blocks/pages when using the `POOLED` allocator detailed above. Metadata is
+included when calculating the total committed off-heap memory.
 
-There is no configurable limit for metadata usage, it will expand as needed to accommodate user data. This means it is possible for total committed off-heap memory to exceed the configured limit. This is an important consideration in deployment environments such as Kubernetes where containers in pods can be terminated if allocated memory exceeds configured limits.
+There is no configurable limit for metadata usage, it will expand as needed to
+accommodate user data. This means it is possible for total committed off-heap
+memory to exceed the configured limit. This is an important consideration in
+deployment environments such as Kubernetes where containers in pods can be
+terminated if allocated memory exceeds configured limits.
 
-While metadata usage expands as needed this is not the case for user data. If you have 256MB native memory configured and 10MB of that is metadata, then you have 246MB available for storing your data. Exceeding that will result in an `NativeOutOfMemoryError`.
+While metadata usage expands as needed this is not the case for user data. If
+you have 256MB native memory configured and 10MB of that is metadata, then you
+have 246MB available for storing your data. Exceeding that will result in an
+`NativeOutOfMemoryError`.
 
 === Estimating Usage
 
-In general member sizing should primarily come from benchmarking in a simulated production environment and monitoring the `memory.usedMetadata` metric. A rough metadata usage can be estimated for initial test sizing using the following approach:
+In general member sizing should primarily come from benchmarking in a simulated
+production environment and monitoring the `memory.usedMetadata` metric. A rough
+metadata usage can be estimated for initial test sizing using the following
+approach:
 
-The majority of metadata usage comes from the space allocated for underlying data structures holding the entries for `IMap` and `ICache`. This data structure is similar to a hashmap with
-a buffer expanding by a factor of 2 each time the number of entries exceeds a load factor of 0.6 on the existing buffer size. Each slot in the buffer costs 16 bytes and the minimum buffer size is 
-128. We can define the rough cost of this structure in bytes for `n` entries with the following python snippet:
+The majority of metadata usage comes from the space allocated for underlying
+data structures holding the entries for `IMap` and `ICache`. This data structure
+is similar to a hashmap with a buffer expanding by a factor of 2 each time the
+number of entries exceeds a load factor of 0.6 on the existing buffer size. Each
+slot in the buffer costs 16 bytes and the minimum buffer size is 128. We can
+define the rough cost of this structure in bytes for `n` entries with the
+following python snippet:
 
 ```python
 import math as m
@@ -184,15 +201,19 @@ def mapCost(n):
     return 16 * max(128, nextPow2 if n < 0.6 * nextPow2 else 2 * nextPow2)
 ```
 
-then for a cluster with `p` partitions and `m` members we can estimate per member metadata usage for an `IMap` or `ICache` with `b` backups and `n` entries to be:
+then for a cluster with `p` partitions and `m` members we can estimate per
+member metadata usage for an `IMap` or `ICache` with `b` backups and `n` entries
+to be:
 
 ```python
 (p * (b + 1) * mapCost(int(n / p))) / m
 ```
 
-Using the `HazelcastJsonValue` type in an `IMap` will roughly double the metadata storage costs as structural information will be stored for each entry.
+Using the `HazelcastJsonValue` type in an `IMap` will roughly double the
+metadata storage costs as structural information will be stored for each entry.
 
-Finally the cost of tracking allocated memory blocks is comparatively small. As a rule of thumb increase the above estimate by about 10% to cover this.
+Finally the cost of tracking allocated memory blocks is comparatively small. As
+a rule of thumb increase the above estimate by about 10% to cover this.
 
 [[using-persistent-memory]]
 == Using the High-Density Memory Store with Persistent Memory Devices

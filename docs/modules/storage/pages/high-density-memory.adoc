@@ -92,8 +92,7 @@ by the **POOLED** memory allocator. Its default value is **16 bytes**.
 It is used only by the **POOLED** memory allocator. Its default value is `1 << 22` = **4194304 Bytes**, about **4 MB**.
 * **metadata space percentage:** Defines the percentage of the allocated native memory that is estimated to be used 
 for internal High-Density Memory data structures. It is used only by the **POOLED** memory allocator. 
-Its default value is **12.5**. Hazelcast will allow the actual metadata usage to exceed this defined threshold, 
-if it does warning logs will be issued. For more detail see the dedicated metadata section in this doc.
+Its default value is **12.5**. Hazelcast will allow the actual metadata usage to exceed this defined threshold but will send warning logs. See <<metadata>>.
 * **persistent-memory:** See <<using-persistent-memory, Using the High-Density Memory Store with Persistent Memory Devices>>.
 
 The following is the programmatic configuration example.
@@ -162,36 +161,35 @@ system properties.
 [[metadata]]
 == Metadata
 
-In this context metadata refers to the off-heap memory used by Hazelcast
-internal data structures holding the user data and for tracking allocated memory
-blocks/pages when using the `POOLED` allocator detailed above. Metadata is
+Metadata refers to the off-heap memory used by Hazelcast
+internal data structures holding user data and for tracking allocated memory
+blocks or pages when using the `POOLED` allocator. Metadata is
 included when calculating the total committed off-heap memory.
 
-There is no configurable limit for metadata usage, it will expand as needed to
+There is no configurable limit for metadata usage -- it will expand as needed to
 accommodate user data. This means it is possible for total committed off-heap
 memory to exceed the configured limit. This is an important consideration in
-deployment environments such as Kubernetes where containers in pods can be
+deployment environments such as Kubernetes, where containers in Pods can be
 terminated if allocated memory exceeds configured limits.
 
-While metadata usage expands as needed this is not the case for user data. If
+While metadata usage expands as needed, this is not the case for user data. If
 you have 256MB native memory configured and 10MB of that is metadata, then you
-have 246MB available for storing your data. Exceeding that will result in an
+have 246MB available for storing your data. Exceeding that will result in a
 `NativeOutOfMemoryError`.
 
 === Estimating Usage
 
-In general member sizing should primarily come from benchmarking in a simulated
-production environment and monitoring the `memory.usedMetadata` metric. A rough
-metadata usage can be estimated for initial test sizing using the following
-approach:
+You can estimate member sizing by benchmarking in a simulated
+production environment and monitoring the `memory.usedMetadata` metric.
 
-The majority of metadata usage comes from the space allocated for underlying
-data structures holding the entries for `IMap` and `ICache`. This data structure
-is similar to a hashmap with a buffer expanding by a factor of 2 each time the
+The majority of metadata usage comes from the space allocated for the underlying
+data structures holding the entries for `IMap` and `ICache`. These data structures
+are similar to a hashmap, with a buffer expanding by a factor of two each time the
 number of entries exceeds a load factor of 0.6 on the existing buffer size. Each
-slot in the buffer costs 16 bytes and the minimum buffer size is 128. We can
-define the rough cost of this structure in bytes for `n` entries with the
-following python snippet:
+slot in the buffer costs 16 bytes and the minimum buffer size is 128.
+
+You can define the rough cost of this structure in bytes for `n` entries with the
+following Python snippet:
 
 ```python
 import math as m
@@ -201,7 +199,7 @@ def mapCost(n):
     return 16 * max(128, nextPow2 if n < 0.6 * nextPow2 else 2 * nextPow2)
 ```
 
-then for a cluster with `p` partitions and `m` members we can estimate per
+Then for a cluster with `p` partitions and `m` members, you can estimate per
 member metadata usage for an `IMap` or `ICache` with `b` backups and `n` entries
 to be:
 
@@ -210,10 +208,10 @@ to be:
 ```
 
 Using the `HazelcastJsonValue` type in an `IMap` will roughly double the
-metadata storage costs as structural information will be stored for each entry.
+metadata storage costs because structural information will be stored for each entry.
 
-Finally the cost of tracking allocated memory blocks requires further metadata. As
-a rule of thumb increase the above estimate by about 25% to cover this.
+Finally, the cost of tracking allocated memory blocks requires further metadata. 
+Increase the above estimate by about 25% to cover this.
 
 [[using-persistent-memory]]
 == Using the High-Density Memory Store with Persistent Memory Devices

@@ -51,61 +51,10 @@ NOTE: This tutorial uses 2-space indentation, which is customary for Vert.x proj
 
 [source,java]
 ----
-  public void start() {
-    // Create a Router
-    Router router = router(vertx);
-
-    // Create local SessionStore
-    SessionStore store = LocalSessionStore.create(vertx);
-
-    // Use the SessionStore to handle all requests
-    router.route()
-      .handler(SessionHandler.create(store));
-
-    router.route(HttpMethod.PUT, "/").handler(context -> {
-      context.request().bodyHandler(body -> {
-        List<String> messages = getMessagesFromSession(context);
-
-        JsonObject json = body.toJsonObject();
-        String message = json.getString("message");
-        messages.add(message);
-
-        putMessagesToSession(context, messages);
-
-        context.json(
-          new JsonObject()
-            .put("messages", messages)
-        );
-      });
-    });
-
-    // Create the HTTP server
-    vertx.createHttpServer()
-      // Handle every request using the router
-      .requestHandler(router)
-      // Start listening
-      .listen(8888)
-      // Print the port
-      .onSuccess(server ->
-        System.out.println(
-          "HTTP server started on port " + server.actualPort()
-        )
-      );
-  }
-
-  private static List<String> getMessagesFromSession(RoutingContext context) {
-    String messages = context.session().get("messages");
-    if (messages == null) {
-      return new ArrayList<>();
-    } else {
-      return new ArrayList<>(Arrays.asList(messages.split(",")));
-    }
-  }
-
-  private void putMessagesToSession(RoutingContext context, List<String> messages) {
-    context.session().put("messages", String.join(",", messages));
-  }
+include::ROOT:example$/vertx/vertxMainVerticleStart.java[]
 ----
+
+Now, test the server response:
 
 [source,bash]
 ----
@@ -143,39 +92,20 @@ content-type: application/json
 
 == Distributed sessions
 
-Let's modify the code, so we can start multiple instances easily - the application will start on the defined port and, when the port is not available, it will search for another port:
+Let's modify the code, so we can start multiple instances easily — the application will start on the defined port and, if the port is unavailable, it will search for another port:
 
 Add the following method to the `MainVerticle.java` class:
 
 [source,java]
 ----
-  private int findFreePort(int from) {
-    for (int port = from; port < from + 100; port++) {
-      try {
-        new ServerSocket(port).close();
-        return port;
-      } catch (IOException e) {
-        // port not available, try next
-      }
-    }
-    throw new RuntimeException("Could not find an available port");
-  }
+include::ROOT:example$/vertx/vertxDistributedExample1.java[]
 ----
 
 And use it in the `start` method:
 
 [source,java]
 ----
-    ...
-    int port = findFreePort(8888);
-
-    // Create the HTTP server
-    vertx.createHttpServer()
-      // Handle every request using the router
-      .requestHandler(router)
-      // Start listening
-      .listen(port)
-    ...
+include::ROOT:example$/vertx/vertxDistributedExample2.java[]
 ----
 
 Now, we can start two instances:
@@ -391,19 +321,7 @@ with the following:
 
 [source,java]
 ----
-context.vertx()
-  .sharedData()
-  .getCounter("requestId")
-  .onSuccess(counter -> {
-    counter.incrementAndGet()
-      .onSuccess(requestId -> {
-        context.json(
-          new JsonObject()
-            .put("requestId", requestId)
-            .put("messages", messages)
-        );
-      });
-  });
+include::ROOT:example$/vertx/vertxCounterExample.java[]
 ----
 
 When you now try the application, you can see the response contains an additional field named `requestId` and its value increments for every request.

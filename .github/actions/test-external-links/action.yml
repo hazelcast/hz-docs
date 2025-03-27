@@ -57,28 +57,27 @@ runs:
 
             while read -r url; do
                 if [[ -n "${url}" ]]; then
-                  echo "::debug::Checking URL '${url}'..."
+                    echo "::debug::Checking URL '${url}'..."
 
-                  # Some links will probably still fail to resolve, e.g. `localhost`, "some.dummy.url" etc, so don't treat CURL exit codes as fact
-                  # We want to identify when a real server responds to the request
+                    # Some links will probably still fail to resolve, e.g. `localhost`, "some.dummy.url" etc, so don't treat CURL exit codes as fact
+                    # We want to identify when a real server responds to the request
+                    # First try a HEAD request to avoid downloading the whole response
+                    status=$(curl --globoff --silent --output /dev/null --location --head --write-out "%{http_code}" "${url}" || true)
 
-                  # First try a HEAD request to avoid downloading the whole response
-                  status=$(curl --globoff --silent --output /dev/null --location --head --write-out "%{http_code}" "${url}" || true)
+                    if [[ "${status}" -eq 404 ]]; then
+                      # But not all servers support "HEAD" (e.g. azure.microsoft.com), so try again
+                      status=$(curl --globoff --silent --output /dev/null --location --write-out "%{http_code}" "${url}" || true)
+                    fi
 
-                  if [[ "${status}" -eq 404 ]]; then
-                    # But not all servers support "HEAD" (e.g. azure.microsoft.com), so try again
-                    status=$(curl --globoff --silent --output /dev/null --location --write-out "%{http_code}" "${url}" || true)
-                  fi
-
-                  if [[ "${status}" -eq 404 ]]; then
-                      # In the event of unicode control characters, grep's behaviour may be unpredictable - but lets not fail the workflow for that
-                      locations=$(grep -rl "${url}" || true)
-                      echo "::debug::❌ URL '${url}' had status ${status} (found in ${locations})" 1>&2
-                      echo "| ${url} | ${status} | ${locations} |" >> "$GITHUB_STEP_SUMMARY"
-                      found_error=1
-                  else
-                      echo "::debug::✅ URL '${url}' had status ${status}"
-                  fi
+                    if [[ "${status}" -eq 404 ]]; then
+                        # In the event of unicode control characters, grep's behaviour may be unpredictable - but lets not fail the workflow for that
+                        locations=$(grep -rl "${url}" || true)
+                        echo "::debug::❌ URL '${url}' had status ${status} (found in ${locations})" 1>&2
+                        echo "| ${url} | ${status} | ${locations} |" >> "$GITHUB_STEP_SUMMARY"
+                        found_error=1
+                    else
+                        echo "::debug::✅ URL '${url}' had status ${status}"
+                    fi
                 fi
             done <<< "${distinct_urls}"
 

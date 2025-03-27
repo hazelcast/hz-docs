@@ -51,36 +51,48 @@ runs:
             ${RUNNER_DEBUG:+set -o xtrace}
 
             distinct_urls=$(sort -u "${temp_file}")
-  
+
+            echo "## ❌ Dead links found" >> "${summary_file}"
+            echo "" >> "${summary_file}"
+            echo "| URL | Status | Locations |" >> "${summary_file}"
+            echo "| --- | -----: | --------- |" >> "${summary_file}"
+
             while read -r url; do
                 if [[ -n "${url}" ]]; then
-                    echo "::debug::Checking URL '${url}'..."
-  
-                    # Some links will probably still fail to resolve, e.g. `localhost`, "some.dummy.url" etc, so don't treat CURL exit codes as fact
-                    # We want to identify when a real server responds to the request
+                  echo "::debug::Checking URL '${url}'..."
 
-                    # First try a HEAD request to avoid downloading the whole response
-                    status=$(curl --globoff --silent --output /dev/null --location --head --write-out "%{http_code}" "${url}" || true)
-  
-                    if [[ "${status}" -eq 404 ]]; then
-                      # But not all servers support "HEAD" (e.g. azure.microsoft.com), so try again
-                      status=$(curl --globoff --silent --output /dev/null --location --write-out "%{http_code}" "${url}" || true)
-                    fi
+                  # Some links will probably still fail to resolve, e.g. `localhost`, "some.dummy.url" etc, so don't treat CURL exit codes as fact
+                  # We want to identify when a real server responds to the request
 
-                    if [[ "${status}" -eq 404 ]]; then
-                        # In the event of unicode control characters, grep's behaviour may be unpredictable - but lets not fail the workflow for that
-                        locations=$(grep -rl "${url}" || true)
-                        echo "::error::❌ URL '${url}' had status ${status} (found in ${locations})" 1>&2
-                        found_error=1
-                    else
-                        echo "::debug::✅ URL '${url}' had status ${status}"
-                    fi
+                  # First try a HEAD request to avoid downloading the whole response
+                  status=$(curl --globoff --silent --output /dev/null --location --head --write-out "%{http_code}" "${url}" || true)
+
+                  if [[ "${status}" -eq 404 ]]; then
+                    # But not all servers support "HEAD" (e.g. azure.microsoft.com), so try again
+                    status=$(curl --globoff --silent --output /dev/null --location --write-out "%{http_code}" "${url}" || true)
+                  fi
+
+                  if [[ "${status}" -eq 404 ]]; then
+                      # In the event of unicode control characters, grep's behaviour may be unpredictable - but lets not fail the workflow for that
+                      locations=$(grep -rl "${url}" || true)
+                      echo "::debug::❌ URL '${url}' had status ${status} (found in ${locations})" 1>&2
+                      echo "| ${url} | ${status} | ${locations} |" >> "${summary_file}"
+                      found_error=1
+
+                      # TODO REMOVE
+                      cat "${summary_file}" >> "$GITHUB_STEP_SUMMARY"
+                      exit 1
+                  else
+                      echo "::debug::✅ URL '${url}' had status ${status}"
+                  fi
                 fi
             done <<< "${distinct_urls}"
-            
+
             if [[ "${found_error}" -eq 1 ]]; then
+                cat "${summary_file}" >> "$GITHUB_STEP_SUMMARY"
                 exit 1
             else
+                echo "✅ No dead links found" >> "$GITHUB_STEP_SUMMARY"
                 exit 0
             fi
 

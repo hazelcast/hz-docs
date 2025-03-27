@@ -98,14 +98,33 @@ Add the following method to the `MainVerticle.java` class:
 
 [source,java]
 ----
-include::ROOT:example$/vertx/vertxDistributedExample1.java[]
+private int findFreePort(int from) {
+    for (int port = from; port < from + 100; port++) {
+      try {
+        new ServerSocket(port).close();
+        return port;
+      } catch (IOException e) {
+        // port not available, try next
+      }
+    }
+    throw new RuntimeException("Could not find an available port");
+  }
 ----
 
 And then use it in the `start` method:
 
 [source,java]
 ----
-include::ROOT:example$/vertx/vertxDistributedExample2.java[]
+...
+int port = findFreePort(8888);
+
+// Create the HTTP server
+vertx.createHttpServer()
+  // Handle every request using the router
+  .requestHandler(router)
+  // Start listening
+  .listen(port)
+...
 ----
 
 Now, we can start two instances:
@@ -323,7 +342,19 @@ with the following:
 
 [source,java]
 ----
-include::ROOT:example$/vertx/vertxCounterExample.java[]
+context.vertx()
+  .sharedData()
+  .getCounter("requestId")
+  .onSuccess(counter -> {
+    counter.incrementAndGet()
+      .onSuccess(requestId -> {
+        context.json(
+          new JsonObject()
+            .put("requestId", requestId)
+            .put("messages", messages)
+        );
+      });
+  });
 ----
 
 Now, when you try the application, you can see the response contains an additional field named `requestId` and its value increments for every request.

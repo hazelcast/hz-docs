@@ -33,6 +33,7 @@ runs:
         - shell: ${{ env.shell }}
           run: |
             echo "temp_file=$(mktemp)" >> $GITHUB_ENV
+            echo "docs_output=test" >> $GITHUB_ENV
   
         - name: Extract links
           shell: ${{ env.shell }}
@@ -41,7 +42,7 @@ runs:
 
             # Extract all unique URLs
             # Faster than potentially checking the same link on multiple pages
-            find test -name "*.html" | while read -r file; do
+            find "${docs_output}" -name "*.html" | while read -r file; do
                 lynx -dump -listonly -nonumbers "${file}" | { grep --extended-regexp "^http" || test $? = 1; } >> "${temp_file}"
             done
   
@@ -72,7 +73,7 @@ runs:
 
                     if [[ "${status}" -eq 404 ]]; then
                         # In the event of unicode control characters, grep's behaviour may be unpredictable - but lets not fail the workflow for that
-                        locations=$(grep -rl "${url}" || true)
+                        locations=$(grep -rl "${url}" "${docs_output}" || true)
                         echo "::debug::❌ URL '${url}' had status ${status} (found in ${locations})" 1>&2
                         echo "| ${url} | ${status} | $(awk '{printf "- %s<br>", $0}' <<< "${locations}") |" >> ${GITHUB_STEP_SUMMARY}
                         found_error=1

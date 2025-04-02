@@ -181,7 +181,18 @@ For clusters with high data mutation rates or with long expected periods of disr
 you might need to increase the replication queue size. The default queue size for replication queues is `10000`.
 This means, if you have heavy put/update/remove rates or if the target/passive cluster is unavailable for too long,
 you might exceed the queue size so that the oldest, not yet replicated, updates might get lost.
-Note that a separate queue is used for each WAN Replication configured for IMap and ICache.
+Separate queues are used for each WAN Replication configured for IMap and ICache.
+
+Two queues are used for each WAN Replication: Primary and Backup. The primary queue is offered events from owned
+partitions, while the backup queue is offered events from partitions owned by other members.
+The configured queue capacity applies separately to each of the primary and backup event queues.
+Metrics for WAN outbound queue sizes report the primary event queue size.
+
+NOTE: During partition migrations, particularly when a cluster size shrinks, some elements in the backup events queue
+can be promoted to the primary events queue, resulting in an increased outbound queue size which can exceed the configured
+queue capacity. The total memory footprint of both queues combined will not increase in this case as the backup events
+queue was already in memory, so this temporary increase in the primary queue size is expected and necessary to prevent
+WAN event data loss.
 
 Queue capacity can be set for each target cluster by modifying the related `WanBatchPublisherConfig`.
 

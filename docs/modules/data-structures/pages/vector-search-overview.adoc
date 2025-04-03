@@ -257,7 +257,11 @@ For searches with small `topK` (for example, 1 - 10), it may be beneficial to us
 For large `topK` (for example 100), a smaller `efSearch` value will give better performance with only a potentially small and acceptable decrease in precision.
 4. Test if adjusting `efSearch` gives satisfactory results before increasing index build parameters (`max-degree`, `ef-construction`) which would result in slower index builds and searches, and a larger index.
 5. Vector deduplication does not incur significant overhead for uploads (usually less than 1%) and searches. You may consider disabling it to get slightly better performance and smaller memory usage if your dataset does not contain duplicated vectors. However, be aware that in the presence of many duplicated vectors with deduplication disabled, a similarity search may return poor quality results.
-6. For a given query, each vector index partition is searched by one thread. The number of concurrent partition searches is configured by specifying a pool size for `hz:query` executor, which by default has 16 threads per member. If optimizing for search, we recommend setting the `hz:query` pool size to be that of the physical core count of your host machines; this will result in a good balance between search throughput and CPU utilization. Setting `hz:query` to have a pool size greater than that of the physical core count will not deliver a significant increase in throughput but it will increase total CPU utilization. The `hz:query` pool size can be changed as follows:
+6. For a given query, each vector index partition is searched by one thread. The number of concurrent partition searches is determined by `hz:vector-query` executor configuration, which by default has a pool size equal to the half of virtual core count of your host machines (effectively for CPUs with HyperThreading the pool size is equal to number of physical cores).
+This results in a good balance between search throughput and CPU utilization.
+When HyperThreading is not enabled or available (in particular on ARM CPUs) increasing default `hz:vector-query` pool size can result in a significant boost in performance.
+Setting `hz:vector-query` to have a pool size greater than physical core count will not deliver a significant increase in throughput but will increase total CPU utilization.
+The `hz:vector-query` pool size can be changed as follows:
 +
 [tabs] 
 ==== 
@@ -267,7 +271,7 @@ Java::
 [source,java]
 ----
 Config cfg = new Config();
-cfg.getExecutorConfig("hz:query").setPoolSize(100);
+cfg.getExecutorConfig("hz:vector-query").setPoolSize(100);
 ----
 --
 
@@ -278,7 +282,7 @@ XML::
 ----
 <hazelcast>
     ...
-    <executor-service name="hz:query">
+    <executor-service name="hz:vector-query">
         <pool-size>100</pool-size>
     </executor-service>
     ...
@@ -293,7 +297,7 @@ YAML::
 hazelcast:
   ...
   executor-service:
-    "hz:query":
+    "hz:vector-query":
       pool-size: 100
 ----
 ====

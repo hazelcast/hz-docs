@@ -5,33 +5,34 @@ on:
    - main
    - v/*
 jobs:
-  get-maintenance-branches:
+  get-maintenance-versions:
     runs-on: ubuntu-latest
     outputs:
-      branches: "['5.3', '5.4', '5.5']"
+      versions: ${{ steps.get-maintenance-versions.outputs.versions }}
     steps:
-      - run: exit 0
+      - id: get-maintenance-versions
+        uses: hazelcast/hazelcast/.github/actions/get-supported-maintenance-versions
 
   backport-to-all-branch:
-    needs: get-maintenance-branches
+    needs: get-maintenance-versions
     strategy:
       fail-fast: false
       matrix:
-        branch: ${{ fromJSON(needs.get-maintenance-branches.outputs.branches) }}
+        version: ${{ fromJSON(needs.get-maintenance-versions.outputs.versions) }}
     uses: ./.github/workflows/backport-workflow.yml
     with:
       label-to-check-for: '["backport to all versions"]'
-      target-branch: v/${{ matrix.branch }}
+      target-branch: v/${{ matrix.version }}
     secrets: inherit
 
   backport-to-specified-branch:
-    needs: get-maintenance-branches
+    needs: get-maintenance-versions
     strategy:
       fail-fast: false
       matrix:
-        branch: ${{ fromJSON(needs.get-maintenance-branches.outputs.branches) }}
+        version: ${{ fromJSON(needs.get-maintenance-versions.outputs.versions) }}
     uses: ./.github/workflows/backport-workflow.yml
     with:
-      label-to-check-for: '["backport to ${{ matrix.branch }}"]'
-      target-branch: v/${{ matrix.branch }}
+      label-to-check-for: '["backport to ${{ matrix.version }}"]'
+      target-branch: v/${{ matrix.version }}
     secrets: inherit

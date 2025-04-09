@@ -7,13 +7,14 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       versions: ${{ steps.get-maintenance-versions.outputs.versions }}
-      version_branches: ${{ steps.create-version-branch-matrix.outputs.matrix }}
+      versions-and-branches: ${{ steps.get-maintenance-versions-and-branches.outputs.versions-and-branches }}
     steps:
       - id: get-maintenance-versions
         uses: JackPGreen/hazelcast-tpm/.github/actions/get-supported-maintenance-versions@DI-349
-      - id: create-version-branch-matrix
+      - id: get-maintenance-versions-and-branches
         run: |
-          echo "matrix=$(jq --compact-output 'map({version: ., branch: "v/\(.)"})' <<< '${{ steps.get-maintenance-versions.outputs.versions }}')" >> ${GITHUB_OUTPUT}
+          # Convert from versions -> branches (i.e. prepend "v\")
+          echo "versions-and-branches=$(jq --compact-output 'map({version: ., branch: "v/\(.)"})' <<< '${{ steps.get-maintenance-versions.outputs.versions }}')" >> ${GITHUB_OUTPUT}
 
   backport-to-specified-branch:
     runs-on: ubuntu-latest
@@ -21,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ${{ fromJSON(needs.get-maintenance-versions.outputs.version_branches) }}
+        version-and-branch: ${{ fromJSON(needs.get-maintenance-versions.outputs.versions-and-branches) }}
     steps:
       - name: Get latest patch versions
         run: |

@@ -9,15 +9,16 @@ public class ExampleEntryListener implements EntryListener<String, String> {
         System.out.println("Entry Added: " + event);
     }
     @Override
-    public void entryUpdated(EntryEvent<String, String> event) {
-        System.out.println( "Entry Updated: " + event );
+    public void entryRemoved(EntryEvent<String, String> event) {
+        System.out.println( "Entry Removed: " + event );
     }
     @Override
     public void mapCleared(MapEvent event) {
         System.out.println( "Map Cleared: " + event );
     }
     @Override
-    public void entryRemoved(EntryEvent<String, String> event) {
+    public void entryUpdated(EntryEvent<String, String> event) {
+        // not supported for MultiMap
     }
     @Override
     public void entryEvicted(EntryEvent<String, String> event) {

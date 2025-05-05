@@ -901,9 +901,7 @@ The following are the metrics that you can access via the `LocalTopicStats ` obj
 * total number of published messages of the topic on the member (`getPublishOperationCount()`)
 * total number of received messages of the topic on the member (`getReceiveOperationCount()`)
 
-See the https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/topic/LocalTopicStats.html[`LocalTopicStats` Javadoc^] to see all the metrics.
-
-NOTE: There is a known issue with the `ReliableTopic` structure whereby if a `MessageListener` is removed, it can still be called by the internal `MessageRunner`, resulting in duplicated topic statistics. As a result, these statistics are unreliable and should be used for general insights only.
+See the https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/topic/LocalTopicStats.html[`LocalTopicStats` Javadoc^] to see all the metrics.
 
 === Executor Statistics
 
@@ -1249,13 +1247,15 @@ want to specify the port in the monitor
 
 == Diagnostics
 
-Hazelcast offers an extended set of diagnostics plugins for both Hazelcast members and clients.
+Hazelcast offers an extended set of diagnostics plugins for both Hazelcast members and  Java clients.
 A dedicated log file is used to write the diagnostics content, and a rolling file approach is used to
 prevent taking up too much disk space.
 
 === Enabling Diagnostics Logging
 
 To enable diagnostics logging, you should specify the following properties on the member side:
+
+NOTE: Properties over Diagnostics will be deprecated in Hazelcast 6.0. Please, refer to the new config API. If you are using properties and new configuration APIs to configure Diagnostics, the system properties will override the configuration API. We encourage you to use the new configuration API.
 
 [tabs] 
 ==== 
@@ -1266,14 +1266,23 @@ XML::
 ----
 <hazelcast>
     ...
-    <properties>
-        <property name="hazelcast.diagnostics.enabled">true</property>
-        <property name="hazelcast.diagnostics.metric.level">info</property>
-        <property name="hazelcast.diagnostics.invocation.sample.period.seconds">30</property>
-        <property name="hazelcast.diagnostics.pending.invocations.period.seconds">30</property>
-        <property name="hazelcast.diagnostics.slowoperations.period.seconds">30</property>
-        <property name="hazelcast.diagnostics.storeLatency.period.seconds">60</property>
-    </properties>
+    <diagnostics enabled="true">
+        <!-- Diagnostics service configurations.-->
+        <log-directory>/user/dir/</log-directory>
+        <output-type>FILE</output-type>
+        <max-rolled-file-size-in-mb>50</max-rolled-file-size-in-mb>
+        <max-rolled-file-count>10</max-rolled-file-count>
+        <include-epoch-time>true</include-epoch-time>
+        <file-name-prefix>my-logs</file-name-prefix>
+
+        <!-- Optional properties for Diagnostics Plugins, see below for more details.-->
+        <plugin-properties>
+            <property name="hazelcast.diagnostics.metric.level">info</property>
+            <property name="hazelcast.diagnostics.invocation.sample.period.seconds">30</property>
+            <property name="hazelcast.diagnostics.pending.invocations.period.seconds">30</property>
+            <property name="hazelcast.diagnostics.slowoperations.period.seconds">30</property>
+        </plugin-properties>        
+    </diagnostics>
     ...
 </hazelcast>
 ----
@@ -1286,13 +1295,17 @@ YAML::
 ----
 hazelcast:
     ...
-    properties:
-      hazelcast.diagnostics.enabled=true
-      hazelcast.diagnostics.metric.level=info
-      hazelcast.diagnostics.invocation.sample.period.seconds=30
-      hazelcast.diagnostics.pending.invocations.period.seconds=30
-      hazelcast.diagnostics.slowoperations.period.seconds=30
-      hazelcast.diagnostics.storeLatency.period.seconds=60
+  diagnostics:
+    enabled: true
+    max-rolled-file-size-in-mb: 50
+    max-rolled-file-count: 10
+    include-epoch-time: true
+    log-directory: /user/dir
+    file-name-prefix: "my-logs"
+    output-type: "FILE"
+    # Optional properties for Diagnostics Plugins, see below for more details.
+    plugin-properties:
+      "hazelcast.diagnostics.storeLatency.period.seconds": '5'
     ...
 ----
 --
@@ -1303,12 +1316,17 @@ Java::
 [source,java]
 ----
 Config config = new Config();
-config.setProperty( "hazelcast.diagnostics.enabled", "true" );
-      .setProperty( "hazelcast.diagnostics.metric.level", "info" );
-      .setProperty( "hazelcast.diagnostics.invocation.sample.period.seconds", "30" );
-      .setProperty( "hazelcast.diagnostics.pending.invocations.period.seconds", "30" );
-      .setProperty( "hazelcast.diagnostics.slowoperations.period.seconds", "30" );
-      .setProperty( "hazelcast.diagnostics.storeLatency.period.seconds", "60" );
+config.getDiagnosticsConfig()
+                .setEnabled(true)
+                .setLogDirectory("/your/log/directory")
+                .setFileNamePrefix("my-logs")
+                .setOutputType(DiagnosticsOutputType.FILE)
+                .setMaxRolledFileSizeInMB(50)
+                .setMaxRolledFileCount(10)
+                .setIncludeEpochTime(true)
+                // Optional properties for Diagnostics Plugins, see below for more details.
+                .setProperty("hazelcast.diagnostics.metric.level", "info")
+                .setProperty("hazelcast.diagnostics.invocation.sample.period.seconds", "30");
 ----
 --
 JVM::
@@ -1317,7 +1335,9 @@ JVM::
 .Java command
 [source,shell]
 ----
-java -Dhazelcast.diagnostics.enabled=true
+java -Dhz.diagnostics.enabled=true
+     -Dhz.diagnostics.output-type=STDOUT     
+    # Plugins are configured over properties which can be set over DiagnosticsConfig object.
      -Dhazelcast.diagnostics.metric.level=info
      -Dhazelcast.diagnostics.invocation.sample.period.seconds=30
      -Dhazelcast.diagnostics.pending.invocations.period.seconds=30
@@ -1328,19 +1348,100 @@ java -Dhazelcast.diagnostics.enabled=true
 .JAVA_OPTS
 [source,shell]
 ----
-JAVA_OPTS="-Dhazelcast.diagnostics.enabled=true -Dhazelcast.diagnostics.metric.level=info -Dhazelcast.diagnostics.invocation.sample.period.seconds=30 -Dhazelcast.diagnostics.pending.invocations.period.seconds=30 -Dhazelcast.diagnostics.slowoperations.period.seconds=30 -Dhazelcast.diagnostics.storeLatency.period.seconds=60"
+JAVA_OPTS="-Dhz.diagnostics.enabled=true -Dhz.diagnostics.output-type=STDOUT -Dhazelcast.diagnostics.metric.level=info -Dhazelcast.diagnostics.invocation.sample.period.seconds=30 -Dhazelcast.diagnostics.pending.invocations.period.seconds=30 -Dhazelcast.diagnostics.slowoperations.period.seconds=30 -Dhazelcast.diagnostics.storeLatency.period.seconds=60"
 ----
 --
 ====
 
-On the Java client side, it is enough to set the following properties:
+On the Java client side, diagnostics can be configured over the `Config` object or config files similar to the member side.
 
-* `hazelcast.diagnostics.enabled=true`
-* `hazelcast.diagnostics.metric.level=info`
+Java::
++
+--
+[source,java]
+----
+ClientConfig clientConfig = new ClientConfig();
+clientConfig.getDiagnosticsConfig()
+                .setEnabled(true)
+                .setLogDirectory("/your/log/directory")
+                .setFileNamePrefix("my-logs")
+                .setOutputType(DiagnosticsOutputType.FILE)
+                .setMaxRolledFileSizeInMB(50)
+                .setMaxRolledFileCount(10)
+                .setIncludeEpochTime(true)
+                // Optional properties for Diagnostics Plugins, see below for more details.
+                .setProperty("hazelcast.diagnostics.metric.level", "info");                
+----
+--
+
+
+=== Cluster Wide Dynamic Configuration
+
+Diagnostics service can be configured dynamically at runtime. You can use the following ways to configure the service dynamically:
+
+
+[tabs] 
+==== 
+K8s Operator::
++
+--
+For more details please refer to hazelcast k8s operator documentation.
+
+[source,yaml]
+----
+apiVersion: hazelcast.com/v1alpha1
+kind: Hazelcast
+metadata:
+  name: hazelcast
+spec:
+  clusterSize: 3
+  repository: 'docker.io/hazelcast/hazelcast-enterprise'
+  version: 6.0.0
+  licenseKeySecretName: hazelcast-license-key
+  diagnostics:
+    outputType: FILE
+    includeEpochTime: false
+    maxRolledFileCount: 10
+    maxRolledFileSizeInMB: 50
+    fileNamePrefix: 'pod'
+    pluginProperties:
+      "hazelcast.diagnostics.storeLatency.period.seconds": '5'
+    pvc:
+      accessModes: [ "ReadWriteOnce" ]
+      requestStorage: 1Gi
+----
+--
+
+Over an Embedded Member::
++
+--
+It can be configure over the `DiagnosticsConfig` object over a member. Clients cannot set diagnostics configuration over the cluster due to security restriction.
+
+[source,java]
+----
+Config config = new Config();
+config.getDiagnosticsConfig()
+                .setEnabled(false);
+
+HazelcastInstance hz = Hazelcast.newHazelcastInstance(config);
+
+DiagnosticsConfig diagnosticsConfig = new DiagnosticsConfig();
+diagnosticsConfig.setEnabled(true);        
+hz.getConfig().setDiagnosticsConfig(diagnosticsConfig);
+----
+--
+Management Center::
++
+--
+
+--
+
+====
+
 
 === Diagnostics Log File
 
-You can use the following property to specify the location of the diagnostics log file:
+You can use the following configuration to specify the location of the diagnostics log file:
 
 [tabs] 
 ==== 
@@ -1351,9 +1452,14 @@ XML::
 ----
 <hazelcast>
     ...
-    <properties>
-        <property name="hazelcast.diagnostics.directory">/your/log/directory</property>
-    </properties>
+<hazelcast>
+    ...
+    <diagnostics>
+        <!-- Diagnostics service configurations.-->
+        <log-directory>/your/log/directory</log-directory>            
+    </diagnostics>
+    ...
+</hazelcast>
     ...
 </hazelcast>
 ----
@@ -1366,8 +1472,8 @@ YAML::
 ----
 hazelcast:
     ...
-    properties:
-      hazelcast.diagnostics.directory=/your/log/directory
+    diagnostics:
+        log-directory: /your/log/directory
     ...
 ----
 --
@@ -1378,7 +1484,8 @@ Java::
 [source,java]
 ----
 Config config = new Config();
-config.setProperty( "hazelcast.diagnostics.directory", "/your/log/directory" );
+config.getDiagnosticsConfig()
+    .setLogDirectory("/your/log/directory");
 ----
 --
 JVM::
@@ -1387,13 +1494,13 @@ JVM::
 .Java command
 [source,shell]
 ----
-java -Dhazelcast.diagnostics.directory=/your/log/directory
+java -Dhz.diagnostics.log-directory=/your/log/directory
 ----
 
 .JAVA_OPTS
 [source,shell]
 ----
-JAVA_OPTS="-Dhazelcast.diagnostics.directory=/your/log/directory"
+JAVA_OPTS="-Dhz.diagnostics.log-directory=/your/log/directory"
 ----
 --
 ====
@@ -1401,7 +1508,7 @@ JAVA_OPTS="-Dhazelcast.diagnostics.directory=/your/log/directory"
 The name of the log file has the following format:
 
 ```
-diagnostics-<host IP>#<port>-<unique ID>.log
+diagnostics-<host IP>_<port>-<start time as milliseconds>-<file count in rolling>-.log
 ```
 
 You can set a custom string prefix for the name of log file using the following property.
@@ -1415,9 +1522,11 @@ XML::
 ----
 <hazelcast>
     ...
-    <properties>
-        <property name="hazelcast.diagnostics.filename.prefix">foobar</property>
-    </properties>
+    <diagnostics>
+    ...
+        <file-name-prefix>my-log-prefix</file-name-prefix>      
+    ...
+    </diagnostics>
     ...
 </hazelcast>
 ----
@@ -1430,8 +1539,8 @@ YAML::
 ----
 hazelcast:
     ...
-    properties:
-      hazelcast.diagnostics.filename.prefix=foobar
+    diagnostics:        
+        file-name-prefix: "foobar"
     ...
 ----
 --
@@ -1442,7 +1551,8 @@ Java::
 [source,java]
 ----
 Config config = new Config();
-config.setProperty( "hazelcast.diagnostics.filename.prefix", "foobar" );
+config.getDiagnosticsConfig()                
+            .setFileNamePrefix("foobar");
 ----
 --
 JVM::
@@ -1451,13 +1561,13 @@ JVM::
 .Java command
 [source,shell]
 ----
-java -Dhazelcast.diagnostics.filename.prefix=foobar
+java -Dhz.diagnostics.file-name-prefix=foobar
 ----
 
 .JAVA_OPTS
 [source,shell]
 ----
-JAVA_OPTS="-Dhazelcast.diagnostics.filename.prefix=foobar"
+JAVA_OPTS="--Dhz.diagnostics.file-name-prefix=foobar"
 ----
 --
 ====
@@ -1482,8 +1592,8 @@ The content format of the diagnostics log file is depicted below:
 ...
 ```
 
-A rolling file approach is used to prevent creating too much data. By default 10 files of 50MB each are allowed
-to exist. You can set the size of each file and number of files using the following properties.
+A rolling file approach is used to prevent creating too much data for each run of Diagnostics. Diagnostics also can be configured dynamically. When the service enabled at runtime or new config applied while the service is enabled, diagnostics service creates a new session with a timestamp belongs to that start. The timestamp is also placed in the log file names which can be used to track log files produced by the service in a specific run. By default 10 files of 50MB each are allowed
+to exist. You can set the size of each file and number of files using the following configurations. If you change the config while the service is running, the previous files will not be part of the rolling file approach anymore. The new config will be applied to the new session created by the service.
 
 [tabs] 
 ==== 
@@ -1494,10 +1604,12 @@ XML::
 ----
 <hazelcast>
     ...
-    <properties>
-        <property name="hazelcast.diagnostics.max.rolled.file.size.mb">100</property>
-        <property name="hazelcast.diagnostics.max.rolled.file.count">5</property>
-    </properties>
+    <diagnostics>
+    ...
+        <max-rolled-file-size-in-mb>50</max-rolled-file-size-in-mb>
+        <max-rolled-file-count>10</max-rolled-file-count>
+    ...  
+    </diagnostics>
     ...
 </hazelcast>
 ----
@@ -1510,9 +1622,9 @@ YAML::
 ----
 hazelcast:
     ...
-    properties:
-      hazelcast.diagnostics.max.rolled.file.size.mb=100
-      hazelcast.diagnostics.max.rolled.file.count=5
+    diagnostics:
+      max-rolled-file-size-in-mb: 50
+      max-rolled-file-count: 10
     ...
 ----
 --
@@ -1523,8 +1635,9 @@ Java::
 [source,java]
 ----
 Config config = new Config();
-config.setProperty( "hazelcast.diagnostics.max.rolled.file.size.mb", "100" );
-      .setProperty( "hazelcast.diagnostics.max.rolled.file.count", "5" );
+config.getDiagnosticsConfig()
+        .setMaxRolledFileSizeInMB(50)
+        .setMaxRolledFileCount(10);
 ----
 --
 JVM::
@@ -1533,14 +1646,14 @@ JVM::
 .Java command
 [source,shell]
 ----
-java -Dhazelcast.diagnostics.max.rolled.file.size.mb=100
-     -Dhazelcast.diagnostics.max.rolled.file.count=5
+java -Dhz.diagnostics.max-rolled-file-size-in-mb=100
+     -Dhz.diagnostics.max-rolled-file-count=5
 ----
 
 .JAVA_OPTS
 [source,shell]
 ----
-JAVA_OPTS="-Dhazelcast.diagnostics.max.rolled.file.size.mb=100 -Dhazelcast.diagnostics.max.rolled.file.count=5"
+JAVA_OPTS="-Dhz.diagnostics.max-rolled-file-size-in-mb=100 -Dhz.diagnostics.max-rolled-file-count=5"
 ----
 --
 ====
@@ -1558,9 +1671,11 @@ XML::
 ----
 <hazelcast>
     ...
-    <properties>
-        <property name="hazelcast.diagnostics.stdout">FILE|STDOUT|LOGGER</property>
-    </properties>
+        <diagnostics>
+    ...
+        <output-type>FILE|STDOUT|LOGGER</output-type>
+    ...  
+    </diagnostics>
     ...
 </hazelcast>
 ----
@@ -1573,8 +1688,8 @@ YAML::
 ----
 hazelcast:
     ...
-    properties:
-      hazelcast.diagnostics.stdout=FILE|STDOUT|LOGGER
+    diagnostics:
+        output-type: "FILE"|"STDOUT"|"LOGGER"
     ...
 ----
 --
@@ -1585,7 +1700,12 @@ Java::
 [source,java]
 ----
 Config config = new Config();
-config.setProperty( "hazelcast.diagnostics.stdout", "FILE|STDOUT|LOGGER" );
+config.getDiagnosticsConfig()
+        .setOutputType(DiagnosticsOutputType.FILE);
+        // OR
+        .setOutputType(DiagnosticsOutputType.STDOUT);
+        // OR
+        .setOutputType(DiagnosticsOutputType.LOGGER);
 ----
 --
 JVM::
@@ -1594,13 +1714,13 @@ JVM::
 .Java command
 [source,shell]
 ----
-java -Dhazelcast.diagnostics.stdout=FILE|STDOUT|LOGGER
+java -Dhz.diagnostics.output-type=FILE|STDOUT|LOGGER
 ----
 
 .JAVA_OPTS
 [source,shell]
 ----
-JAVA_OPTS="-Dhazelcast.diagnostics.stdout=FILE|STDOUT|LOGGER"
+JAVA_OPTS="-Dhz.diagnostics.output-type=FILE|STDOUT|LOGGER"
 ----
 --
 ====
@@ -1628,9 +1748,11 @@ XML::
 ----
 <hazelcast>
     ...
-    <properties>
-        <property name="hazelcast.diagnostics.stdout">LOGGER</property>
-    </properties>
+    <diagnostics>        
+    ...
+        <output-type>LOGGER</output-type>    
+    ...
+    </diagnostics>
     ...
 </hazelcast>
 ----
@@ -1643,8 +1765,8 @@ YAML::
 ----
 hazelcast:
     ...
-    properties:
-      hazelcast.diagnostics.stdout=LOGGER
+    diagnostics:
+        output-type: "LOGGER"
     ...
 ----
 --
@@ -1655,7 +1777,8 @@ Java::
 [source,java]
 ----
 Config config = new Config();
-config.setProperty( "hazelcast.diagnostics.stdout", "LOGGER" );
+    config.getDiagnosticsConfig()
+        .setOutputType(DiagnosticsOutputType.LOGGER);
 ----
 --
 JVM::
@@ -1664,13 +1787,13 @@ JVM::
 .Java command
 [source,shell]
 ----
-java -Dhazelcast.diagnostics.stdout=LOGGER
+java -Dhz.diagnostics.output-type=LOGGER
 ----
 
 .JAVA_OPTS
 [source,shell]
 ----
-JAVA_OPTS="-Dhazelcast.diagnostics.stdout=LOGGER"
+JAVA_OPTS="-Dhz.diagnostics.output-type=LOGGER"
 ----
 --
 ====
@@ -1694,6 +1817,77 @@ NOTE: The diagnostic logs have the `DEBUG` level by default; if you don't want t
 
 As it is stated in the introduction of this section and shown in the log file content above,
 diagnostics utility consists of plugins such as BuildInfo, SystemProperties and HazelcastInstance.
+
+
+You can configure the plugins using the following ways:
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+[source,xml]
+----
+<hazelcast>
+    ...
+    <diagnostics>        
+    ...
+        <plugin-properties>
+            <property name="hazelcast.diagnostics.metric.level">info</property>
+            <property name="hazelcast.diagnostics.invocation.sample.period.seconds">30</property>
+            <property name="hazelcast.diagnostics.pending.invocations.period.seconds">30</property>
+            <property name="hazelcast.diagnostics.slowoperations.period.seconds">30</property>
+        </plugin-properties>        
+    ...
+    </diagnostics>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+    ...
+    diagnostics:
+        plugin-properties:
+            "hazelcast.diagnostics.metric.level": "info"
+            "hazelcast.diagnostics.invocation.sample.period.seconds": '30'
+            "hazelcast.diagnostics.pending.invocations.period.seconds": '30'
+    ...
+----
+--
+
+Java::
++
+--
+[source,java]
+----
+Config config = new Config();
+config.getDiagnosticsConfig()
+            .setProperty("hazelcast.diagnostics.metric.level", "info")
+            .setProperty("hazelcast.diagnostics.invocation.sample.period.seconds", "30")
+            .setProperty("hazelcast.diagnostics.pending.invocations.period.seconds", "30");
+----
+--
+JVM::
++
+--
+.Java command
+[source,shell]
+----
+java -Dhazelcast.diagnostics.pending.invocations.period.seconds=30
+----
+
+.JAVA_OPTS
+[source,shell]
+----
+JAVA_OPTS="-Dhazelcast.diagnostics.pending.invocations.period.seconds=30"
+----
+--
+====
 
 ==== BuildInfo
 
@@ -1863,6 +2057,8 @@ Please note that if you enable this, you may get a lot of log entries if you hav
 
 
 ==== StoreLatency
+
+!NOTE: This plugin is disabled by default and it cannot be enabled or disable dynamically at runtime. If you configure to enable it before starting the member, it will be enabled but Diagnostics service cannot be disable at runtime. If you configure it after starting the member, it will not be enabled.
 
 It shows statistics including the count of methods for each store (`load`, `loadAll`,
 `loadAllKeys`, etc.), average and maximum latencies for each store method calls and

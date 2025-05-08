@@ -13,22 +13,11 @@ for the following:
 - Synchronization
 - Metadata management
 
-== Glossary
-
-[cols="1e,1a"]
-|===
-|Term|Definition
-
-|caller
-|A Hazelcast member or client that interacts with the CP Subsystem through APIs.
-
-|===
-
 == CP Data Structures
 
 Data structures in the CP subsystem always maintain linearizability
 and prefer consistency over availability during network partitions. These data structures are _CP_ with
-respect to the link:https://en.wikipedia.org/wiki/CAP_theorem[CAP theorem].
+respect to the link:https://hazelcast.com/foundations/distributed-computing/cap-theorem/[CAP theorem].
 
 CP Subsystem supports the following Hazelcast data structures:
 
@@ -104,23 +93,21 @@ To configure the number of CP members that participate in a group, use the xref:
 === Leaders and Followers
 
 Each CP group elects its
-own Raft leader, which runs the link:http://thesecretlivesofdata.com/raft/[Raft consensus algorithm]. All other CP members in the group then become followers.
+own leader, which runs the link:http://thesecretlivesofdata.com/raft/[Raft consensus algorithm]. All other CP members in the group then become followers.
 
-A Raft leader is
-responsible for handling incoming requests from <<glossary, callers>> and replicating those requests to
+A CP group leader is
+responsible for handling incoming requests from callers -- Hazelcast members or clients -- and replicating those requests to
 follower members. To
-maintain the authority of the Raft leader and to help lagging CP group members to make
+maintain the authority of the leader and to help lagging CP group members to make
 progress, each CP group uses internal heartbeats.
 
 Each CP member can participate in more than one CP
 group. However, if a CP member is the leader of too many CP
 groups compared to other CP members, it can turn into a bottleneck. Therefore, the CP Subsystem runs a periodic background task to try to make sure that each CP
 member is a leader for an equal number of CP groups.
-For example, a cluster has three CP members and three CP groups, each CP member becomes the
-Raft leader for only one CP group. If one more CP group is created, then one of
-the CP members becomes the Raft leader for two CP groups.
+For example, a cluster has three CP members and three CP groups, each CP member becomes the leader for only one CP group. If one more CP group is created, then one of the CP members becomes the leader for two CP groups.
 
-You can also give CP members a priority rating to affect their chances of becoming a leader. See xref:configuration.adoc#configuring-leadership-priority[Configuring Leadership Priority].
+You can give CP members a priority rating to affect their chances of becoming a leader, or configure them to transfer leadership to another member if elected. See xref:configuration.adoc#configuring-leadership-priority[Configuring Leadership Priority] and xref:configuration.adoc#autostepdown[Configuring Members to Transfer Leadership].
 
 [[sessions]]
 == CP Sessions
@@ -198,6 +185,8 @@ committed operations are lost after recovery. When you restart a majority of
 CP members, they restore their local state and resume working as if they had
 never crashed.
 
+Enabling Persistence reduces the throughput of your CP Subsystem deployment, so you should consider whether it is necessary for your use case.
+
 === Example Scenarios
 
 The following is an example scenario of **a permanent crash** where
@@ -209,11 +198,11 @@ from the CP Subsystem because the CP Subsystem cannot determine if that
 member has actually crashed or just disconnected from the cluster. Therefore, absent CP members are still considered in majority calculations and cause a danger for the availability of the CP Subsystem. If you know for sure that an absent CP member is crashed, you can remove that CP member from CP Subsystem.
 * There might be a small window of unavailability after a CP member crash even
 if the majority of CP members are still online. For instance, if a crashed CP
-member is the Raft leader for some CP groups, those CP groups run a new leader
+member is the leader for some CP groups, those CP groups run a new leader
 election round to elect a new leader among remaining CP group members. CP
 Subsystem API calls that internally hit those CP groups are retried until they
-have new Raft leaders. If a failed CP member has the Raft follower role, it
-causes a very minimal disruption since Raft leaders are still able to replicate
+have new leaders. If a failed CP member has the follower role, it
+causes a very minimal disruption since leaders are still able to replicate
 and commit operations with the majority of their CP group members.
 * If a crashed CP member is restarted after it is removed from CP Subsystem,
 its behavior depends on whether CP Subsystem Persistence is enabled or disabled. If
@@ -233,8 +222,8 @@ CP Subsystem.
 * If a network partition occurs, behavior of CP Subsystem depends on how CP
 members are divided in different sides of the network partition and to which
 sides Hazelcast clients are connected. Each CP group remains available on
-the side that contains the majority of its CP members. If a Raft leader falls
-into the minority side, its CP group elects a new Raft leader on the other side
+the side that contains the majority of its CP members. If a leader falls
+into the minority side, its CP group elects a new leader on the other side
 and callers that are talking to the majority side continue to make successful
 API calls on CP Subsystem. However, callers that are talking to the minority
 side fail with operation timeouts. When the network problem is resolved, CP

@@ -5,33 +5,38 @@ on:
    - main
    - v/*
 jobs:
-  get-maintenance-branches:
+  get-maintenance-versions:
     runs-on: ubuntu-latest
     outputs:
-      branches: "['5.3', '5.4', '5.5']"
+      versions-and-branches: ${{ steps.get-maintenance-versions-and-branches.outputs.versions-and-branches }}
     steps:
-      - run: exit 0
+      - id: get-maintenance-versions
+        uses: hazelcast/hazelcast/.github/actions/get-supported-maintenance-versions@master
+      - id: get-maintenance-versions-and-branches
+        run: |
+          # Convert from versions -> branches (i.e. prepend "v/")
+          echo "versions-and-branches=$(jq --compact-output 'map({version: ., branch: "v/\(.)"})' <<< '${{ steps.get-maintenance-versions.outputs.versions }}')" >> ${GITHUB_OUTPUT}
 
   backport-to-all-branch:
-    needs: get-maintenance-branches
+    needs: get-maintenance-versions
     strategy:
       fail-fast: false
       matrix:
-        branch: ${{ fromJSON(needs.get-maintenance-branches.outputs.branches) }}
+        version-and-branch: ${{ fromJSON(needs.get-maintenance-versions.outputs.versions-and-branches) }}
     uses: ./.github/workflows/backport-workflow.yml
     with:
       label-to-check-for: '["backport to all versions"]'
-      target-branch: v/${{ matrix.branch }}
+      target-branch: ${{ matrix.version-and-branch.branch }}
     secrets: inherit
 
   backport-to-specified-branch:
-    needs: get-maintenance-branches
+    needs: get-maintenance-versions
     strategy:
       fail-fast: false
       matrix:
-        branch: ${{ fromJSON(needs.get-maintenance-branches.outputs.branches) }}
+        version-and-branch: ${{ fromJSON(needs.get-maintenance-versions.outputs.versions-and-branches) }}
     uses: ./.github/workflows/backport-workflow.yml
     with:
-      label-to-check-for: '["backport to ${{ matrix.branch }}"]'
-      target-branch: v/${{ matrix.branch }}
+      label-to-check-for: '["backport to ${{ matrix.version-and-branch.version }}"]'
+      target-branch: ${{ matrix.version-and-branch.branch }}
     secrets: inherit

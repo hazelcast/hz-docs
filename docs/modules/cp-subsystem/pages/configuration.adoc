@@ -1,5 +1,5 @@
 = Configure CP Subsystem
-:description: You can configure clusters to enable the CP Subsystem as well as fine-tune many other options such as CP groups sizes and persistence of CP state.
+:description: You can configure clusters to enable the CP Subsystem and adjust other options such as CP groups sizes and persistence of CP state.
 :page-aliases: persistence.adoc
 :page-enterprise: true
 
@@ -10,6 +10,8 @@
 Use this quickstart to test CP Subsystem in development.
 
 NOTE: Running clusters must be restarted before any configuration changes take effect.
+
+//RJS: then let's include a step to restart the cluster
 
 CP Subsystem is disabled by default, with any CP data structures operating in xref:cp-subsystem:cp-subsystem.adoc#unsafe-mode[unsafe mode]. To enable CP Subsystem, configure a non-zero value for the <<cp-member-count, `cp-member-count`>> option:
 
@@ -64,18 +66,20 @@ To enable xref:cp-subsystem:cp-subsystem.adoc#persistence[CP Subsystem persisten
 
 When CP Subsystem persistence is enabled, all Hazelcast cluster members, including AP members, create a sub-directory under the base `cp-data` directory. CP members persist CP state in these sub-directories. AP members persist only their status as non-CP members.
 
-NOTE: If you have both CP and AP members in your cluster when CP Subsystem persistence is enabled, and if you want to perform a cluster-wide restart, you need to ensure that AP members are also restarted with their CP persistence stores.
+If you have both CP and AP members in your cluster and you want to perform a cluster-wide restart, you need to ensure that AP members are also restarted with their CP persistence stores.
+//RJS: how do you ensure that?
 
 To change the base directory, set a value in the <<base-dir, `base-dir`>> option.
 
 [[ap-cp]]
 === CP Subsystem persistence and AP persistence
 
-As well as CP Subsystem persistence, Hazelcast offers xref:storage:persistence.adoc[persistence] for some AP data structures. If you persist AP and CP data structures in a single Hazelcast cluster, be aware that member or cluster restarts can fail because of either the persisted AP data structures or the CP data structures.
+Hazelcast also offers xref:storage:persistence.adoc[persistence] for some AP data structures. If you persist AP and CP data structures in a single Hazelcast cluster, be aware that member or cluster restarts can fail because of either the persisted AP data structures or the CP data structures.
+//RJS: because of them doing what?
 
 == Choose a group size
 
-For all xref:cp-subsystem.adoc#cp-groups[CP groups], you can set the number of CP members that should participate in each one, using the <<group-size, `group-size`>> option.
+For all xref:cp-subsystem.adoc#cp-groups[CP groups], you can set the number of CP members that should participate in each one using the <<group-size, `group-size`>> option.
 
 To scale out throughput and memory capacity, you can choose a CP group size that is smaller than the <<cp-member-count, CP member count>> to distribute your CP data structures to multiple CP groups.
 
@@ -84,7 +88,7 @@ CP groups must consist of three, five, or seven members. An odd number of CP mem
 For a CP group of `N` members:
 
 * the majority of members is calculated as `(N + 1) / 2`.
-* the number of failing members you wish to tolerate is calculated as `(N - 1) / 2`.
+* the number of failing members the group can tolerate is calculated as `(N - 1) / 2`.
 
 For example, in a CP group of five CP members, operations are committed when they are replicated to at least three CP members. This CP group can tolerate the failure of two CP members and remain available.
 
@@ -99,7 +103,7 @@ Some CP members are better leadership candidates than others. For example, membe
 
 On startup, any CP member with any priority can become a leader and `cp-member-priority` has no effect. The background leadership rebalancing task periodically transfers the leadership from CP members with the lowest priorities to those with higher priorities within each CP group. Eventually, all CP group leaders are CP members with high priorities.
 
-Only CP members that are part of a CP group can become leaders. CP members that are not in a CP group do not participate in the leadership rebalancing task. For example, you start a cluster with the CP group size set to three and all members with priority 0. Later, you promote a new CP member with priority 100. Even though it has a higher priority, the new CP member never becomes a leader because the CP group is full. The new CP member is eligible for leadership only when a CP member leaves the CP group and the new CP member takes the previous member's place.
+Only CP members that are part of a CP group can become leaders. CP members that are not in a CP group do not participate in the leadership rebalancing task. For example, you start a cluster with the CP group size set to three and all members with priority 0. Later, you configure a new CP member with priority 100. Even though it has a higher priority, the new CP member never becomes a leader because the CP group is full. The new CP member is eligible for leadership only when a CP member leaves the CP group and the new CP member takes the previous member's place.
 
 IMPORTANT: <<cp-member-priority, `cp-member-priority`>> does not override the Raft leadership election process: it is a hint rather than a rule. Consequently, it is possible that a member with a low priority becomes leader for a period until the background leadership rebalancing task transfers the leadership to a member with a higher priority. The leadership rebalancing task runs approximately every 60 seconds; however, a custom frequency can be defined by the system property `hazelcast.raft.leadership.rebalance.period`. If necessary, you can also <<autostepdown, configure members to transfer leadership>> to another member if elected.
 
@@ -119,35 +123,43 @@ Reducing the number of leadership candidates reduces the fault tolerance of the 
 [[sessions]]
 == Configure CP sessions
 
-xref:cp-subsystem:cp-subsystem.adoc#sessions[Sessions] offer a trade-off between liveliness and safety. If you set a small value for the <<session-time-to-live-seconds,`session-time-to-live-seconds`>> option, a session owner could be considered crashed very quickly and its resources can be released prematurely. On the other hand, if you set a large value, a session could be kept alive for an unnecessarily long duration even if its owner actually crashes. However, it is a safer approach to not use a small session `session-time-to-live-seconds` duration. If a session owner is known to be crashed, its session could be closed manually.
+xref:cp-subsystem:cp-subsystem.adoc#sessions[Sessions] offer a trade-off between liveness and safety. If you set a small value for the <<session-time-to-live-seconds,`session-time-to-live-seconds`>> option, a session owner could be considered crashed very quickly and its resources could be released prematurely. On the other hand, if you set a large value, a session could be kept alive for an unnecessarily long duration after its owner crashes. We recommend using the default `session-time-to-live-seconds` duration. If a session owner is known to have crashed, you can close its session manually.
+//RJS: how do you close a session manually?
 
 [[fencedlock-configuration]]
 == Configure fenced locks
 
 By default, fenced locks are reentrant. When a caller acquires the lock, it can acquire the lock reentrantly as many times as it wants in a linearizable manner.
 
-You can configure the reentrancy behavior in the <<lock-acquire-limit,`lock-acquire-limit`>> option. For example, reentrancy can be disabled by setting this option to `1`, making the lock a non-reentrant mutex. You can also set a custom reentrancy limit. When the reentrancy limit is already reached, the fenced lock does not block a lock call. Instead, it fails with `LockAcquireLimitReachedException` or a specified return value.
+You can configure the reentrancy behavior with the <<lock-acquire-limit,`lock-acquire-limit`>> option. For example, reentrancy can be disabled by setting this option to `1`, making the lock a non-reentrant mutex. You can also set a custom reentrancy limit. When the reentrancy limit is reached, the fenced lock fails with `LockAcquireLimitReachedException` or a specified return value.
+//RJS: specified where?
 
 == Configure semaphores
 
 By default, a caller must acquire permits before releasing them and it cannot release a permit that it has not acquired. This means that you can acquire a permit from one thread and release it from another thread, using the same caller, but not different callers. In this mode, acquired permits are automatically released upon failure of the caller.
 
-To enable a permit to be released without acquiring it first, enable JDK compatibility by setting the <<jdk-compatibility,`jdk-compatibility`>> option to `true`. Because acquired permits are not bound to threads.
+To enable a permit to be released without acquiring it first, enable JDK compatibility by setting the <<jdk-compatibility,`jdk-compatibility`>> option to `true`.
 
 WARNING: When `jdk-compatibility` is set to `true`, Hazelcast does not auto-cleanup acquired permits upon caller failures. If a permit holder fails, its permits must be released manually.
+
+//RJS: how do you release permits manually?
 
 [[remove]]
 == Remove missing CP members
 
 If CP Subsystem persistence is disabled, CP members lose their state after shutting down and so cannot rejoin the CP Subsystem. You can configure CP members to be automatically removed from the CP Subsystem after they shut down as well as how long to wait after they shut down before removing them.
 
-By default, missing CP members are automatically removed from the CP Subsystem after 4 hours and replaced with other available CP members in all its CP groups. You can configure this time, using the <<missing-cp-member-auto-removal-seconds,`missing-cp-member-auto-removal-seconds`>> option.
+By default, missing CP members are automatically removed from the CP Subsystem after 4 hours and replaced with other available CP members. You can configure this time using the <<missing-cp-member-auto-removal-seconds,`missing-cp-member-auto-removal-seconds`>> option.
 
 If a missing CP member rejoins the cluster after it is automatically removed from the CP Subsystem, that CP member must be terminated manually.
 
+//RJS: how do you terminate a member manually?
+
 If no CP members are available to replace a missing CP member, the group size of any groups that it was in is reduced and the majority values are recalculated.
 
-NOTE: When CP Subsystem persistence is enabled, CP members are not automatically removed from the CP Subsystem. These CP members can restore their CP state from disk and rejoin their CP groups. It is your responsibility to xref:management.adoc#removing-a-cp-member[remove CP members] if they do not restart.
+//RJS: we only allow 3, 5 or 7. if a group of 7 loses one member, does it drop to 6 or 5?
+
+When CP Subsystem persistence is enabled, CP members are not automatically removed from the CP Subsystem. These CP members can restore their CP state from disk and rejoin their CP groups. It is your responsibility to xref:management.adoc#removing-a-cp-member[remove CP members] if they do not restart.
 
 [[IndeterminateOperationStateException]]
 == Handle indeterminate operation state
@@ -351,7 +363,7 @@ Must be greater than or equal to <<session-time-to-live-seconds,`session-time-to
 
 A value of `0` means the time is unlimited, so CP members are never automatically removed.
 
-NOTE: This option does not apply when CP Subsystem persistence is enabled. See <<remove, Removing Missing CP Members Automatically>>.
+NOTE: This option does not apply when CP Subsystem persistence is enabled. See <<remove, Remove missing CP members>>.
 
 |`14400` seconds (4 hours)
 |
@@ -397,7 +409,7 @@ config.getCPSubsystemConfig()
 |Whether CP Subsystem operations use
 at-least-once and at-most-once execution guarantees. By default, operations use an at-least-once
 execution guarantee. If set to `true`, operations use an at-most-once execution
-guarantee. See <<IndeterminateOperationStateException, Handling Indeterminate Operation State>>
+guarantee. See <<IndeterminateOperationStateException, Handle indeterminate operation state>>
 
 |false
 |
@@ -1407,7 +1419,7 @@ config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
 |Maximum number of
 uncommitted log entries in the leader's Raft log before temporarily rejecting
 new requests of callers. Because leaders send log entries to followers in
-batches, they accumulate incoming requests in order to improve the throughput.
+batches, they accumulate incoming requests to improve the throughput.
 You can configure this field by considering your degree of concurrency in your
 callers. For instance, if you have at most `1000` threads sending requests to
 a CP group leader, you can set this field to `1000` so that callers do not get

@@ -28,8 +28,6 @@ CP member shutdown behavior varies depending on whether CP Subsystem Persistence
 
 When CP Subsystem Persistence is disabled (the default mode in which CP Subsystem works only in memory), a shutting down CP member is replaced with other available CP members in all of its CP groups to avoid decreasing group size or losing majorities. Because CP members keep their local state only in memory, a shut-down CP member cannot join back with its CP identity and state, so it is better to remove it from CP Subsystem and avoid harming the availability of CP groups. If there is no other available CP member to replace a shutting down CP member in a CP group, that CP group's size is reduced by one and its majority value is recalculated.
 
-//RJS: again, group size only reduced by one, even though we only allow configuring group size 3, 5, 7?
-
 When CP Subsystem Persistence is disabled, if there are `N` CP members in CP Subsystem, you can shut down `N-2` CP members concurrently. Once these `N-2` CP members complete their shutdown, the remaining CP members must be shut down one at a time. Even though the shutdown API can be called concurrently on multiple members, _the METADATA CP_ group handles shutdown requests serially. Therefore, it is simpler to shut down CP members one by one by calling `HazelcastInstance.shutdown()` on the next CP member once the current CP member completes its shutdown.
 
 === Persistence enabled
@@ -369,7 +367,7 @@ To create a custom CP group, add an `@` symbol to the end of the data structure'
 
 If you use fenced locks or semaphores, we recommend using a minimal number of CP groups. For these data structures, a Hazelcast member or client starts a new xref:cp-subsystem:cp-subsystem.adoc#sessions[session] on the corresponding CP group when it makes its first acquisition request, and then periodically commits session heartbeats to this CP group to indicate its liveness. If fenced locks and semaphores are distributed to multiple CP groups, there will be a session management overhead on each CP group. Therefore, for most use cases, the `DEFAULT` CP group should be sufficient to maintain all CP data structure instances. Custom CP groups are recommended only when you benchmark your deployment and decide that performance of the `DEFAULT` CP group is not sufficient for your workload.
 
-//RJS: This conflicts with the "use multiple groups" recommendation we added to best-practices. Either one of the two is wrong or we need to explain the difference.
+//RJS: This conflicts with the "use multiple groups" recommendation in best-practices. Either one of the two is wrong or we need to explain the difference.
 
 == Get CP groups
 
@@ -580,9 +578,7 @@ hz-cluster-cp-admin -o force-destroy-group --group ${CPGROUP_NAME} --address 127
 
 You can remove a specified CP member from the active CP members list and all CP groups it belongs to. If any other active CP member is available, it replaces the removed CP member in its CP groups. Otherwise, the affected CP groups shrink and their majority values are recalculated.
 
-WARNING: Before removing a CP member from the CP Subsystem, make sure that it is declared as unreachable by the failure detector and removed from the member list. The behavior is undefined when a running CP member is removed from the CP Subsystem.
-
-//RJS: how do you update the failure detector?
+WARNING: Before removing a CP member from the CP Subsystem, make sure that it is declared as unreachable by the xref:clusters:failure-detector-configuration.adoc[failure detector] and removed from the member list. The behavior is undefined when a running CP member is removed from the CP Subsystem.
 
 [tabs] 
 ====

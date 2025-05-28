@@ -25,6 +25,8 @@ CP Subsystem supports the following Hazelcast data structures:
 * xref:data-structures:iatomicreference.adoc[Atomic reference]
 * xref:data-structures:icountdownlatch.adoc[Countdown latch]
 
+IMPORTANT: By default, CP data structures operate in <<Unsafe mode, unsafe mode>>. You must configure your cluster with  <<CP members>> to benefit from the strong consistency guarantees of the CP Subsystem.
+
 == CP members
 
 Because CP data structures do not maintain large states, not all members of a Hazelcast cluster need to take part in the CP Subsystem. The members that do take part in the CP Subsystem are called _CP members_.
@@ -44,7 +46,7 @@ When a member becomes a CP member, it generates an additional UUID that other CP
 
 === Unsafe mode
 
-When a cluster is not configured with <<cp-members, CP members>>, the CP Subsystem is disabled and any CP data structures operate in _unsafe mode_. This is the default behavior.
+When a cluster is not configured with <<CP members>>, the CP Subsystem is disabled and any CP data structures operate in _unsafe mode_.
 
 In this mode, the following restrictions apply:
 
@@ -52,9 +54,7 @@ In this mode, the following restrictions apply:
 - CP Subsystem management APIs are not available.
 - Split-brain protection is not supported.
 
-Unsafe mode provides weaker consistency guarantees than the CP Subsystem. For example, when you increment an atomic long in unsafe mode, even though you may receive a success response, operations such as increments can be lost if a member fails.
-
-As a result, unsafe mode is not recommended for use cases that require strong consistency. Instead, this mode is suitable only for development or testing.
+Unsafe mode does not provide strong consistency guarantees. For example, when you increment an atomic long in unsafe mode, even though you may receive a success response, operations such as increments can be lost if a member fails. As a result, unsafe mode is only suitable for development or testing.
 
 == CP groups
 
@@ -171,9 +171,9 @@ The method by which deployment, pause, resume and rolling update are performed w
 
 We recommend setting xref:cp-subsystem:configuration.adoc#data-load-timeout-seconds[data-load-timeout-seconds,window=_blank] to a value that spans the duration from when the first pod is running to when the last pod is running and has completed its CP intialisation procedure. This is particularly important if you intend to perform _resume_ scenarios. The only way to determine when a CP member has completed its initialisation is to consult the logs. Therefore, we recommend the following to determine a reasonable value for `data-load-timeout-seconds`:
 
-1. Load CP with an amount of data that is representative of your production use case
-2. Pause the cluster
-3. Resume the cluster and determine the duration in seconds between when the first pod in the `StatefulSet` is running and when the last pod in the `StatefulSet` is running and output an `INFO` level log message that matches the pattern `CP restore completed...in`.
+1. Load CP with an amount of data that is representative of your production use case.
+2. Pause the cluster.
+3. Resume the cluster and determine the duration in seconds between when the first pod in the `StatefulSet` is running and the last pod is running. Output an `INFO`-level log message matching the pattern `CP restore completed...in`.
 
 If you are using a log aggregation service and want to filter key startup events within CP, you can use the `INFO` level patterns emitted by `CPPersistenceServiceImpl` as detailed below.
 

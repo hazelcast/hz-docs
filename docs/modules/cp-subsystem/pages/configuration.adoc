@@ -11,10 +11,8 @@ Use this quickstart to test CP Subsystem in development. CP Subsystem is disable
 
 NOTE: Running clusters must be restarted before any configuration changes take effect.
 
-//RJS: Would be nice to make this a complete procedure with numbered steps for config and restart. How do you restart a cluster?
-
-To enable CP Subsystem, configure a non-zero value for the <<cp-member-count, `cp-member-count`>> option:
-
+. To enable CP Subsystem, configure a non-zero value for the <<cp-member-count, `cp-member-count`>> option:
++
 [[cp-member-count]]
 [tabs] 
 ==== 
@@ -58,29 +56,29 @@ config.getCPSubsystemConfig()
 --
 ====
 
+. Restart the cluster.
+
 [[persistence]]
 == Persist CP data structures
 
 To enable xref:cp-subsystem:cp-subsystem.adoc#persistence[CP Subsystem persistence], set the <<persistence-enabled, `persistence-enabled`>> option to `true`.
 
-When CP Subsystem persistence is enabled, all Hazelcast cluster members, including AP members, create a sub-directory under the base `cp-data` directory. CP members persist CP state in these sub-directories. AP members persist only their status as non-CP members.
-
-If you have both CP and AP members in your cluster and you want to perform a cluster-wide restart, you need to ensure that AP members are also restarted with their CP persistence stores.
-//RJS: how do you ensure that?
+When CP Subsystem persistence is enabled, all Hazelcast cluster members -- including AP members -- create a directory under the base `cp-data` directory. CP members persist CP state in these sub-directories. AP members persist only their status as non-CP members. Ensure that you do not delete these directories.
 
 To change the base directory, set a value in the <<base-dir, `base-dir`>> option.
 
 [[ap-cp]]
 === CP Subsystem persistence and AP persistence
 
-Hazelcast also offers xref:storage:persistence.adoc[persistence] for some AP data structures. If you persist AP and CP data structures in a single Hazelcast cluster, be aware that member or cluster restarts can fail because of either the persisted AP data structures or the CP data structures.
-//RJS: what about the persisted structures might make restarts fail? How do you avoid this?
+Hazelcast also offers xref:storage:persistence.adoc[persistence] for some AP data structures. If you persist AP and CP data structures in a single Hazelcast cluster, be aware that member or cluster restarts can fail if the persisted state (CP or AP) becomes stale. You can configure AP and CP members to automatically remove stale data with the `auto-remove-stale-data` option -- see xref:storage:configuring-persistence.adoc[Configuring persistence]. Otherwise, you will need to remove stale data manually.
 
 == Choose a group size
 
 For all xref:cp-subsystem.adoc#cp-groups[CP groups], you can set the number of CP members that should participate in each one using the <<group-size, `group-size`>> option.
 
 To scale out throughput and memory capacity, you can choose a CP group size that is smaller than the <<cp-member-count, CP member count>> to distribute your CP data structures to multiple CP groups.
+
+NOTE: If you want to distribute CP data to a group other than `DEFAULT, you must specify the group name when creating or fetching the CP data structure proxy.
 
 CP groups must consist of three, five, or seven members. An odd number of CP members avoids stalemate scenarios in leadership elections and quorum calculations.
 
@@ -122,33 +120,29 @@ Reducing the number of leadership candidates reduces the fault tolerance of the 
 [[sessions]]
 == Configure CP sessions
 
-xref:cp-subsystem:cp-subsystem.adoc#sessions[Sessions] offer a trade-off between liveness and safety. If you set a small value for the <<session-time-to-live-seconds,`session-time-to-live-seconds`>> option, a session owner could be considered crashed very quickly and its resources could be released prematurely. On the other hand, if you set a large value, a session could be kept alive for an unnecessarily long duration after its owner crashes. We recommend using the default `session-time-to-live-seconds` duration. If a session owner is known to have crashed, you can close its session manually.
-//RJS: how do you close a session manually?
+xref:cp-subsystem:cp-subsystem.adoc#sessions[Sessions] offer a trade-off between liveness and safety. If you set a small value for the <<session-time-to-live-seconds,`session-time-to-live-seconds`>> option, a session owner could be considered crashed very quickly and its resources could be released prematurely. On the other hand, if you set a large value, a session could be kept alive for an unnecessarily long duration after its owner crashes. We recommend using the default `session-time-to-live-seconds` duration. If a session owner is known to have crashed, you can close its session manually by calling this method on the handler side: `CPSessionManagementService#forceCloseSession(String, Long)`.
 
 [[fencedlock-configuration]]
 == Configure fenced locks
 
 By default, fenced locks are reentrant. This means that once a caller has acquired the lock, the same caller can acquire it again multiple times in a linearizable manner without releasing it first.
 
-You can configure the reentrancy behavior with the <<lock-acquire-limit,`lock-acquire-limit`>> option. For example, reentrancy can be disabled by setting this option to `1`, making the lock a non-reentrant mutex. You can also set a custom reentrancy limit. When the reentrancy limit is reached, the fenced lock fails with `LockAcquireLimitReachedException` or a specified return value.
-//RJS: specified where?
+You can configure the reentrancy behavior with the <<lock-acquire-limit,`lock-acquire-limit`>> option. For example, reentrancy can be disabled by setting this option to `1`, making the lock a non-reentrant mutex. You can also set a custom reentrancy limit. When the reentrancy limit is reached, the fenced lock fails with link:https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/cp/lock/exception/LockAcquireLimitReachedException.html[LockAcquireLimitReachedException] or a specified return value.
 
 == Configure semaphores
 
 By default, a caller must acquire permits before releasing them and it cannot release a permit that it has not acquired. This means that you can acquire a permit from one thread and release it from another thread, using the same caller, but not different callers. In this mode, acquired permits are automatically released upon failure of the caller.
 
-To enable a permit to be released without acquiring it first, enable JDK compatibility by setting the <<jdk-compatibility,`jdk-compatibility`>> option to `true`.
+To enable a permit to be released without acquiring it first, enable JDK compatibility by setting the `jdk-compatibility` option to `true`.
 
-WARNING: When `jdk-compatibility` is set to `true`, Hazelcast does not auto-cleanup acquired permits upon caller failures. If a permit holder fails, its permits must be released manually.
-
-//RJS: how do you release permits manually?
+WARNING: When `jdk-compatibility` is set to `true`, Hazelcast does not auto-cleanup acquired permits upon caller failures. If a permit holder fails, its permits must be link:https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/cp/ISemaphore.html#release(int)[released manually].
 
 [[remove]]
 == Remove missing CP members
 
 If CP Subsystem persistence is disabled, CP members lose their state after shutting down and so cannot rejoin the CP Subsystem. You can configure CP members to be automatically removed from the CP Subsystem after they shut down as well as how long to wait after they shut down before removing them.
 
-By default, missing CP members are automatically removed from the CP Subsystem after 4 hours and replaced with other available CP members. You can configure this time using the <<missing-cp-member-auto-removal-seconds,`missing-cp-member-auto-removal-seconds`>> option.
+By default, missing CP members are automatically removed from the CP Subsystem after four hours and are replaced by other CP members if any are available. You can configure this time using the <<missing-cp-member-auto-removal-seconds,`missing-cp-member-auto-removal-seconds`>> option.
 
 If a missing CP member rejoins the cluster after it is automatically removed from the CP Subsystem, that CP member must be terminated manually. See xref:maintain-cluster:shutdown.adoc#shutting-down-a-hazelcast-member[Shutting Down a Hazelcast Member].
 
@@ -1206,7 +1200,7 @@ config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
 ====
 
 |[[leader-heartbeat-period-in-millis]]`leader-heartbeat-period-in-millis`
-|Duration in milliseconds for a CP group leader to send periodic heartbeat messages to its followers to indicate its liveness. Periodic heartbeat messages are actually append entries requests and can contain log entries for the lagging followers. If too small a value is set, heartbeat messages are sent from leaders to followers too frequently and it can cause an unnecessary usage of CPU and network bandwidth.
+|Interval in milliseconds at which a CP group leader sends periodic heartbeat messages to its followers to indicate its liveness. Periodic heartbeat messages are actually append entries requests and can contain log entries for the lagging followers. If too small a value is set, heartbeat messages are sent from leaders to followers too frequently and it can cause an unnecessary usage of CPU and network bandwidth.
 |5000
 |
 [tabs] 

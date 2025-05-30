@@ -2,16 +2,18 @@
 
 This tutorial helps you integrate Vert.x with Hazelcast and use Hazelcast for distributed session management and other distributed data structures.
 
-In this tutorial, you will
+== Overview
 
-- start with a simple Vert.x Hello World application
-- add vertx-hazelcast module and enable distributed session management
-- use `io.vertx.core.shareddata.Counter` data structure to implement a unique id generator
+In this tutorial, you will learn how to:
+
+- Start with a simple Vert.x Hello World application.
+- Add the vertx-hazelcast module and enable distributed session management.
+- Use the `io.vertx.core.shareddata.Counter` data structure to implement a unique ID generator.
 
 == Prerequisites
 
 - Java 17 or newer
-- Maven 3.9+
+- Maven {minimum-maven-version}
 - link:https://httpie.io[httpie] client
 
 == Create a new project
@@ -25,7 +27,7 @@ In this tutorial, you will
 $ mvn clean package
 ----
 
-and start the application using:
+Then start the application using:
 
 [source,bash]
 ----
@@ -41,14 +43,15 @@ Aug 29, 2024 2:22:38 PM io.vertx.launcher.application.VertxApplication
 INFO: Succeeded in deploying verticle
 ----
 
-== Storing Data in Session
+== Store data in session
 
 Go to the `MainVerticle.java` file and replace the contents of the start method with the following:
 
-NOTE: This tutorial uses 2-space indentation, which is customary for Vertx projects due to the high number of nested callbacks.
+NOTE: This tutorial uses 2-space indentation, which is customary for Vert.x projects due to the high number of nested callbacks.
 
 [source,java]
 ----
+// include::ROOT:example$/vertx/vertxMainVerticleStart.java[] Save for later; keep code sample inline for now
   public void start() {
     // Create a Router
     Router router = router(vertx);
@@ -105,6 +108,8 @@ NOTE: This tutorial uses 2-space indentation, which is customary for Vertx proje
   }
 ----
 
+Next, test the server response:
+
 [source,bash]
 ----
 $ http put localhost:8888 message=Hello\ World!
@@ -139,15 +144,15 @@ content-type: application/json
 
 ----
 
-== Distributed Sessions
+== Distributed sessions
 
-Let's modify the code, so we can start multiple instances easily - the application will start on the defined port, and when the port is not available it will search for another port:
+Let's modify the code, so we can start multiple instances easily — the application will start on the defined port and, if the port is unavailable, it will search for another port:
 
 Add the following method to the `MainVerticle.java` class:
 
 [source,java]
 ----
-  private int findFreePort(int from) {
+private int findFreePort(int from) {
     for (int port = from; port < from + 100; port++) {
       try {
         new ServerSocket(port).close();
@@ -160,20 +165,20 @@ Add the following method to the `MainVerticle.java` class:
   }
 ----
 
-and use it in the `start` method:
+And then use it in the `start` method:
 
 [source,java]
 ----
-    ...
-    int port = findFreePort(8888);
+...
+int port = findFreePort(8888);
 
-    // Create the HTTP server
-    vertx.createHttpServer()
-      // Handle every request using the router
-      .requestHandler(router)
-      // Start listening
-      .listen(port)
-    ...
+// Create the HTTP server
+vertx.createHttpServer()
+  // Handle every request using the router
+  .requestHandler(router)
+  // Start listening
+  .listen(port)
+...
 ----
 
 Now, we can start two instances:
@@ -193,7 +198,7 @@ Aug 30, 2024 9:09:47 AM io.vertx.launcher.application.VertxApplication
 INFO: Succeeded in deploying verticle
 ----
 
-and we can see the session is not shared between the instances. Here is the request to the first instance:
+We can see the session is not shared between the instances. Here is the request to the first instance:
 
 [source, bash]
 ----
@@ -210,7 +215,7 @@ set-cookie: vertx-web.session=00f219c166ca50727d23eaaf9fe54229; Path=/
 }
 ----
 
-and here is the request to the 2nd instance. Notice the different port and that we use the cookie we received, but the data does not contain the previous message.
+And here is the request to the 2nd instance. Notice the different port and that we use the cookie we received, but the data does not contain the previous message.
 
 [source, bash]
 ----
@@ -245,7 +250,7 @@ to the following:
 SessionStore store = ClusteredSessionStore.create(vertx);
 ----
 
-and from now on we will start the application with `-server` parameter, which tells Vert.x to look for a cluster manager implementation.
+From now on, we will start the application with the `-server` parameter, which tells Vert.x to look for a cluster manager implementation.
 
 We also need to provide a Hazelcast configuration file, and create a file cluster.xml in the `src/main/resources` directory:
 
@@ -294,7 +299,7 @@ Members {size:2, ver:2} [
 ...
 ----
 
-and
+And:
 
 [source,bash]
 ----
@@ -344,6 +349,8 @@ content-type: application/json
 
 == Using Counter
 
+Next, we'll use Hazelcast's distributed counter functionality to generate unique, incrementing IDs across a distributed system. The counter is maintained across all nodes in the Hazelcast cluster, ensuring each request gets a unique ID even when multiple servers are handling requests.
+
 Replace this part of the code at the end of the `start()` method:
 
 [source,java]
@@ -373,7 +380,7 @@ context.vertx()
   });
 ----
 
-When you now try the application, you can see the response contains an additional field named `requestId` and its value increments for every request.
+Now, when you try the application, you can see the response contains an additional field named `requestId` and its value increments for every request.
 
 [source,bash]
 ----
@@ -390,3 +397,4 @@ set-cookie: vertx-web.session=d9fb4cada5c0fc625089a38f3de13e3c; Path=/
     "requestId": 1
 }
 ----
+

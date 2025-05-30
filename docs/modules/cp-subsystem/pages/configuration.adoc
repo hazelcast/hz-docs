@@ -9,9 +9,9 @@
 
 Use this quickstart to test CP Subsystem in development.
 
-NOTE: Before going into production, make sure to read the <<production-checklist, Production Checklist>> section.
+NOTE: Running clusters must be restarted before any configuration changes take effect.
 
-By default, CP Subsystem runs in unsafe mode, which means it is disabled. To enable the CP Subsystem, you must first configure a non-zero value for the <<cp-member-count, `cp-member-count`>> option:
+CP Subsystem is disabled by default, with any CP data structures operating in xref:cp-subsystem:cp-subsystem.adoc#unsafe-mode[unsafe mode]. To enable CP Subsystem, configure a non-zero value for the <<cp-member-count, `cp-member-count`>> option:
 
 [[cp-member-count]]
 [tabs] 
@@ -56,14 +56,6 @@ config.getCPSubsystemConfig()
 --
 ====
 
-== Production Checklist
-
-Before you start configuring members, consider the following checklist:
-
-- [ ] Are you already <<persistence, persisting AP data structures in the same cluster>>?
-
-NOTE: Running clusters must be restarted before any configuration changes take effect.
-
 [[persistence]]
 == Persisting CP Data Structures
 [.enterprise]*{enterprise-product-name}*
@@ -95,8 +87,7 @@ that should participate in each one, using the <<group-size, `group-size`>> opti
 To scale out throughput and memory capacity, you can choose a CP group size that is
 smaller than the <<cp-member-count, CP member count>> to distribute your CP data structures to multiple CP groups.
 
-CP groups usually consist of an odd number of CP members between three and seven, i.e., it should be either three, five, or seven.
-An odd number of CP members in a group is more advantageous to an even number because of the quorum or majority calculations.
+CP groups must consist of three, five, or seven members. An odd number of CP members avoids stalemate scenarios in leadership elections and quorum calculations.
 
 For a CP group of `N` members:
 
@@ -107,23 +98,33 @@ For example, in a CP group of five CP members, operations are committed when the
 replicated to at least three CP members. This CP group can tolerate the failure of two CP
 members and remain available.
 
-[NOTE]
-====
-We recommend that you create the minimum number of CP groups that you think are sufficient for your CP subsystem use case.
-Creating separate CP groups allows clients to distribute the load among the leaders of several CP groups.
-However, a large number of CP groups running on the same members may slow down the system.
-If you have accidentally or intentionally created a large number of CP groups, and don't have plans to use them anymore,
-you should xref:cp-subsystem:management.adoc#destroying-a-cp-group-by-force[destroy them].
-====
+Creating separate CP groups allows clients to distribute the load among the leaders of several CP groups. However, a large number of CP groups running on the same members may slow down the system. A good compromise is to create the same number of CP groups as CP members for high throughput use cases. That way, each member will usually be the leader of one group.
+
+You should xref:cp-subsystem:management.adoc#destroying-a-cp-group-by-force[destroy] any unused CP groups.
 
 [[configuring-leadership-priority]]
 == Configuring Leadership Priority
 
-Some CP members are better leadership candidates than others. For example, members in your primary data center make better leaders because of the reduced latency between clients and the leader. Whereas, members under high load are not good candidates because they are more likely to suffer from downtime. To ensure the availability of the CP subsystem, you can configure CP members with a priority rating, using the <<cp-member-priority, `cp-member-priority`>> option.
+Some CP members are better leadership candidates than others. For example, members in your local data center are better candidates because of the reduced latency to clients, and members under high load are poor candidates because they are more likely to suffer from downtime. To maximise the availability and throughput of the CP subsystem, you can configure CP members with a priority rating, using the <<cp-member-priority, `cp-member-priority`>> option.
 
-Initially, any CP member with any priority can become a leader (`cp-member-priority` is not therefore taken into account during the leader election processes). But, the backgound leadership rebalancing task periodically transfers the leadership from CP members with the lowest priorities to those with higher priorities within each CP group. Eventually, all CP group leaders are CP members with high priorities.
+On startup, any CP member with any priority can become a leader and `cp-member-priority` has no effect. The background leadership rebalancing task periodically transfers the leadership from CP members with the lowest priorities to those with higher priorities within each CP group. Eventually, all CP group leaders are CP members with high priorities.
 
-NOTE: Only CP members that are part of a CP group can become leaders. CP members that are not in a CP group do not participate in the leadership rebalancing task. For example, you start a cluster with the CP group size set to three and three CP members with priority 0. Later, you promote a new CP member with priority 100. Even though it has a higher priority, the new CP member never becomes a leader because the CP group is full. The new CP member is eligible for leadership only when a CP member leaves the CP group and the new CP member takes the previous member's place.
+Only CP members that are part of a CP group can become leaders. CP members that are not in a CP group do not participate in the leadership rebalancing task. For example, you start a cluster with the CP group size set to three and all members with priority 0. Later, you promote a new CP member with priority 100. Even though it has a higher priority, the new CP member never becomes a leader because the CP group is full. The new CP member is eligible for leadership only when a CP member leaves the CP group and the new CP member takes the previous member's place.
+
+IMPORTANT: <<cp-member-priority, `cp-member-priority`>> does not override the Raft leadership election process: it is a hint rather than a rule. Consequently, it is possible that a member with a low priority becomes leader for a period until the background leadership rebalancing task transfers the leadership to a member with a higher priority. The leadership rebalancing task runs approximately every 60 seconds; however, a custom frequency can be defined by the system property `hazelcast.raft.leadership.rebalance.period`. If necessary, you can also <<autostepdown, configure members to transfer leadership>> to another member if elected.
+
+[[autostepdown]]
+== Configuring Members to Transfer Leadership
+
+In some deployment scenarios, you may want to prevent a CP group member from becoming the leader. For example, if your CP group is distributed across two local data centers and one remote data center for geographic redundancy, there may be a significantly higher latency to the remote data center.
+
+image:autostepdown-deployment.svg[Distributed CP Group deployment]
+
+If the CP group leader is in one of the local data centers -- and there are enough local followers to achieve quorum -- the leader will not need to wait for acknowledgements from followers in the remote data center and so the increased latency will have no impact. If the leader is in the remote data center, there will be a higher latency for client operations and this will reduce the maximum throughput achievable. To maximize throughput, you can force CP members in the remote data center to automatically transfer leadership to another member by enabling <<auto-step-down-when-leader, `auto-step-down-when-leader`>>. The increased latency will then only have an impact if a remote data center member is needed to achieve quorum.
+
+In the Raft algorithm, a member must become leader if it has the most recent log in the group. In this case, a member with <<auto-step-down-when-leader, `auto-step-down-when-leader`>> enabled will become leader but immediately trigger the leadership rebalancing task, and will reject client operations. If the leadership rebalancing task fails, it will retry automatically. Client operations continue to be rejected until a new leader is elected.
+
+Reducing the number of leadership candidates reduces the fault tolerance of the CP Subsystem. You should therefore only enable this feature if it is necessary to achieve your throughput requirements, and you should enable it on as few members as possible. This feature does not apply to the `METADATA` group, which is not sensitive to latency.
 
 [[sessions]]
 == Configuring CP Sessions
@@ -193,7 +194,7 @@ You can handle loss of the response in two ways:
 
 == Global Configuration Options
 
-Use these configuration options to configure the CP Subsystem.
+Use these options to configure the CP Subsystem.
 
 .CP Subsystem configuration options
 [cols="1a,1a,1m,2a",options="header"]
@@ -203,7 +204,7 @@ Use these configuration options to configure the CP Subsystem.
 |[[cp-member-count]]`cp-member-count`
 |Number of CP members to initialize the CP Subsystem. If set, must be greater than or equal to <<group-size, `group-size`>>.
 
-a|`0` (disabled, running in xref:cp-subsystem:cp-subsystem.adoc#unsafe-mode[unsafe mode])
+|`0` (disabled, running in xref:cp-subsystem:cp-subsystem.adoc#unsafe-mode[unsafe mode])
 |
 
 [tabs] 
@@ -245,10 +246,9 @@ config.getCPSubsystemConfig()
 
 |[[group-size]]`group-size`
 |Number of CP members to participate in each CP group. If set, this value must conform to the following rules:
-- Must be
-an odd number between `3` and `7`.
+- Must be `3`, '5' or `7`.
 - Must be smaller than or equal to <<cp-member-count, `cp-member-count`>>.
-a|Same as <<cp-member-count, `cp-member-count`>>
+|Same as <<cp-member-count, `cp-member-count`>>
 |
 [tabs] 
 ==== 
@@ -389,7 +389,7 @@ A value of `0` means the time is unlimited, so CP members are never automaticall
 
 NOTE: This option does not apply when CP Subsystem Persistence is enabled. See <<remove, Removing Missing CP Members Automatically>>.
 
-a|`14400` seconds (4 hours)
+|`14400` seconds (4 hours)
 |
 [tabs] 
 ==== 
@@ -612,49 +612,6 @@ config.getCPSubsystemConfig()
 --
 ====
 
-|[[cp-member-priority]]`cp-member-priority`
-|The priority rating as a positive or negative integer. The leader's role is eventually transferred to members with higher priorities within a CP group.
-
-|0
-|
-[tabs]
-====
-XML::
-+
---
-[source,xml]
-----
-<hazelcast>
-  <cp-subsystem>
-    <cp-member-priority>0
-    </cp-member-priority>
-  </cp-subsystem>
-</hazelcast>
-----
---
-YAML::
-+
---
-[source,yaml]
-----
-hazelcast:
-  cp-subsystem:
-    cp-member-priority: 0
-----
---
-Java::
-+
---
-[source,java]
-----
-Config config = new Config();
-
-config.getCPSubsystemConfig()
-.setCPMemberPriority(0)
-----
---
-====
-
 |===
 
 [[fenced-lock-config]]
@@ -714,7 +671,7 @@ config.getCPSubsystemConfig().addLockConfig(lockConfig);
 |[[name]]`name`
 |The name of the fenced lock to configure.
 
-a|' ' (empty)
+|' ' (empty)
 |
 
 [tabs] 
@@ -762,7 +719,7 @@ config.getCPSubsystemConfig().addLockConfig(lockConfig);
 
 |[[lock-acquire-limit]]`lock-acquire-limit`
 |Maximum number of reentrant lock acquisitions. Once a caller acquires the lock this many times, it will not be able to acquire the lock again, until it makes at least one `unlock()` call. If lock-acquire-limit is set to `1`, then the lock becomes non-reentrant.
-a|`0` (no limit)
+|`0` (no limit)
 |
 [tabs] 
 ==== 
@@ -868,7 +825,7 @@ config.getCPSubsystemConfig().addSemaphoreConfig(semaphoreConfig);
 
 |[[semaphore-name]]`name`
 |Name of the semaphore.
-a|' ' (empty)
+|' ' (empty)
 
 |
 [tabs] 
@@ -1072,7 +1029,7 @@ config.getCPSubsystemConfig().addCPMapConfig(cpMapConfig);
 
 |[[cpmap-name]]`name`
 |Name of the CPMap.
-a|' ' (empty)
+|' ' (empty)
 
 |
 [tabs] 
@@ -1278,7 +1235,7 @@ config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
 ====
 
 |[[leader-heartbeat-period-in-millis]]`leader-heartbeat-period-in-millis`
-|Duration in milliseconds for a Raft leader to send periodic heartbeat messages to its followers to indicate its liveliness. Periodic heartbeat messages are actually append entries requests and can contain log entries for the lagging followers. If a too small value is set, heartbeat messages are sent from Raft leaders to followers too frequently and it can cause an unnecessary usage of CPU and network bandwidth.
+|Duration in milliseconds for a CP group leader to send periodic heartbeat messages to its followers to indicate its liveliness. Periodic heartbeat messages are actually append entries requests and can contain log entries for the lagging followers. If too small a value is set, heartbeat messages are sent from leaders to followers too frequently and it can cause an unnecessary usage of CPU and network bandwidth.
 |5000
 |
 [tabs] 
@@ -1325,10 +1282,10 @@ config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
 ====
 
 |[[max-missed-leader-heartbeat-count]]`max-missed-leader-heartbeat-count`
-|Maximum number of missed Raft leader heartbeats for a follower to trigger a new leader election round. For example, if `leader-heartbeat-period-in-millis` is `1000` and this value is set to
-`5`, then a follower triggers a new leader election round if five seconds pass after the last heartbeat message of the current Raft leader. If this
+|Maximum number of missed CP group leader heartbeats for a follower to trigger a new leader election round. For example, if `leader-heartbeat-period-in-millis` is `1000` and this value is set to
+`5`, then a follower triggers a new leader election round if five seconds pass after the last heartbeat message of the current leader. If this
 duration is too small, new leader election rounds can be triggered
-unnecessarily if the current Raft leader temporarily slows down or a network congestion occurs. If it is too large, it takes longer to detect failures of Raft leaders.
+unnecessarily if the current leader temporarily slows down or a network congestion occurs. If it is too large, it takes longer to detect failures of leaders.
 |5
 |
 [tabs] 
@@ -1378,7 +1335,7 @@ config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
 |[[append-request-max-entry-count]]`append-request-max-entry-count`
 |Maximum number of Raft log entries that can
 be sent as a batch in a single append entries request. In Hazelcast's Raft
-consensus algorithm implementation, a Raft leader maintains a separate
+consensus algorithm implementation, a leader maintains a separate
 replication pipeline for each follower. It sends a new batch of Raft log
 entries to a follower after the follower acknowledges the last append entries
 request sent by the leader.
@@ -1429,13 +1386,12 @@ config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
 
 |[[commit-index-advance-count-to-snapshot]]`commit-index-advance-count-to-snapshot`
 |Number of new commits to initiate
-a new snapshot after the last snapshot taken by the local Raft member. This value
-must be configured wisely as it effects performance of the system in multiple
-ways. If a small value is set, it means that snapshots are taken too frequently
-and Raft members keep a very short Raft log. If snapshots are large and CP
-Subsystem Persistence is enabled, this can create an unnecessary overhead on I/O
-performance. Moreover, a Raft leader can send too many snapshots to followers
-and this can create an unnecessary overhead on network. On the other hand, if
+a new snapshot after the last snapshot taken by the local CP group member. This value
+affects performance of the system in multiple ways. If a small value is set, it means 
+that snapshots are taken too frequently and CP group members keep a very short Raft log. 
+If snapshots are large and CP Subsystem Persistence is enabled, this can create a high overhead on I/O
+performance. Moreover, a leader can send too many snapshots to followers
+and this can create a high overhead on network use. On the other hand, if
 a very large value is set, it can create a memory overhead since Raft log
 entries are going to be kept in memory until the next snapshot.
 |10000
@@ -1486,11 +1442,11 @@ config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
 |[[uncommitted-entry-count-to-reject-new-appends]]`uncommitted-entry-count-to-reject-new-appends`
 |Maximum number of
 uncommitted log entries in the leader's Raft log before temporarily rejecting
-new requests of callers. Since Raft leaders send log entries to followers in
+new requests of callers. Because leaders send log entries to followers in
 batches, they accumulate incoming requests in order to improve the throughput.
 You can configure this field by considering your degree of concurrency in your
 callers. For instance, if you have at most `1000` threads sending requests to
-a Raft leader, you can set this field to `1000` so that callers do not get
+a CP group leader, you can set this field to `1000` so that callers do not get
 retry responses unnecessarily.
 |100
 |
@@ -1539,7 +1495,7 @@ config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
 
 |[[append-request-backoff-timeout-in-millis]]`append-request-backoff-timeout-in-millis`
 |Timeout duration in milliseconds
-to apply backoff on append entries requests. After a Raft leader sends
+to apply backoff on append entries requests. After a CP group leader sends
 an append entries request to a follower, it will not send a subsequent append
 entries request either until the follower responds or this timeout occurs.
 Backoff durations are increased exponentially if followers remain unresponsive.
@@ -1585,6 +1541,104 @@ Config config = new Config();
 RaftAlgorithmConfig raftConfig = new RaftAlgorithmConfig().setAppendRequestBackoffTimeoutInMillis(250);
 
 config.getCPSubsystemConfig().setRaftAlgorithmConfig(raftConfig);
+----
+--
+====
+
+|===
+
+== Per-Member Configuration Options
+
+Use these options to configure individual CP members.
+
+.CP member configuration options
+[cols="1a,1a,1m,2a",options="header"]
+|===
+|Option|Description|Default|Example
+
+
+|[[cp-member-priority]]`cp-member-priority`
+|The priority rating as a positive or negative integer. The leader role is eventually transferred to members with higher priorities within a CP group.
+
+|0
+|
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <cp-member-priority>5
+    </cp-member-priority>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    cp-member-priority: 5
+----
+--
+Java::
++
+--
+[source,java]
+----
+Config config = new Config();
+
+config.getCPSubsystemConfig()
+.setCPMemberPriority(5)
+----
+--
+====
+
+|[[auto-step-down-when-leader]]`auto-step-down-when-leader`
+|Whether this member should automatically step down if elected leader. If enabled, `cp-member-priority` must be set to zero or below. If set on all members in a group, the CP Subsystem will fail with an `IllegalStateException`.
+
+|false
+|
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+  <cp-subsystem>
+    <auto-step-down-when-leader>true
+    </auto-step-down-when-leader>
+  </cp-subsystem>
+</hazelcast>
+----
+--
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  cp-subsystem:
+    auto-step-down-when-leader: true
+----
+--
+Java::
++
+--
+[source,java]
+----
+Config config = new Config();
+
+config.getCPSubsystemConfig()
+.setautoStepDownWhenLeader(true)
 ----
 --
 ====

@@ -253,7 +253,7 @@ The following is an example configuration when you are adding an `IdentifiedData
 ```
 To add a `Portable` class, use `<portable-factories>` instead of `<data-serializable-factories>` in the above configuration.
 
-See the https://docs.hazelcast.com/hazelcast/latest[Hazelcast Reference Manual] for more information on setting up the clusters.
+See the https://docs.hazelcast.com/hazelcast/latest[Hazelcast documentation] for more information on setting up the clusters.
 
 === Compile your project
 
@@ -314,6 +314,143 @@ cl.exe path\to\example.cpp ^
     /I C:\path\to\hazelcast\include /I C:\path\to\boost\include
 ```
 
+== Basic configuration
+
+If you are using Hazelcast and the Hazelcast {cpp} Client on the same computer, generally the default configuration should be fine. This is great for trying out the client. However, if you run the client on a different computer than any of the cluster members, you may need to do some simple configurations such as specifying the member addresses.
+
+Hazelcast members and clients have their own configuration options. You may need to reflect some of the member-side configurations on the client side to properly connect to the cluster.
+
+This section describes the most common configuration elements to get you started quickly. It discusses some member-side configuration options to ease the understanding of Hazelcast's ecosystem. Then, the client-side configuration options regarding the cluster connection are discussed. The configurations for the Hazelcast data structures that can be used in the {cpp} client are discussed in the following sections.
+
+For more information, see the https://github.com/hazelcast/hazelcast-cpp-client/blob/master/Reference_Manual.md#3-configuration-overview[Configuration Overview]. 
+
+=== Configuring Hazelcast server
+
+Hazelcast aims to run out-of-the-box for most common scenarios. However, if you have limitations on your network such as multicast being disabled, you may have to configure your Hazelcast members so that they can find each other on the network. Also, since most of the distributed data structures are configurable, you may want to configure them according to your needs. This section shows you the basics of network configuration.
+
+You can use the following options to configure Hazelcast:
+
+- Use the `hazelcast.xml` configuration file.
+- Programmatically configure the member before starting it from the Java code.
+
+Since we use standalone servers, we will use the `hazelcast.xml` file to configure our cluster members.
+
+When you download and unzip `hazelcast-<version>.zip` (or `tar`), you see the `hazelcast.xml` in the `bin` directory. When a Hazelcast member starts, it looks for the `hazelcast.xml` file to load the configuration from. A sample `hazelcast.xml` is shown below.
+
+```xml
+<hazelcast>
+    <cluster-name>dev</cluster-name>
+
+    <network>
+        <port auto-increment="true" port-count="100">5701</port>
+        <join>
+            <multicast enabled="true">
+                <multicast-group>224.2.2.3</multicast-group>
+                <multicast-port>54327</multicast-port>
+            </multicast>
+            <tcp-ip enabled="false">
+                <interface>127.0.0.1</interface>
+                <member-list>
+                    <member>127.0.0.1</member>
+                </member-list>
+            </tcp-ip>
+        </join>
+        <ssl enabled="false"/>
+    </network>
+    <partition-group enabled="false"/>
+    <map name="default">
+        <backup-count>1</backup-count>
+    </map>
+</hazelcast>
+```
+
+We will go over some important configuration elements in the rest of this section.
+
+- `<cluster-name>`: Specifies which cluster this member belongs to. 
+
+- `<network>`
+    - `<port>`: Specifies the port number to be used by the member when it starts. Its default value is 5701. You can specify another port number, and if you set `auto-increment` to `true`, then Hazelcast will try the subsequent ports until it finds an available port or the `port-count` is reached.
+    - `<join>`: Specifies the strategies to be used by the member to find other cluster members. Choose which strategy you want to
+    use by setting its `enabled` attribute to `true` and the others to `false`.
+        - `<multicast>`: Members find each other by sending multicast requests to the specified address and port. It is very useful if IP addresses of the members are not static.
+        - `<tcp>`: This strategy uses a pre-configured list of known members to find an already existing cluster. It is enough for a member to find only one cluster member to connect to the cluster. The rest of the member list is automatically retrieved from that member. We recommend putting multiple known member addresses there to avoid disconnectivity should one of the members in the list is unavailable at the time of connection.
+
+These configuration elements are enough for most connection scenarios. Now we will move onto the configuration of the {cpp} client.
+
+=== Configuring Hazelcast C++ client
+
+You must configure the Hazelcast {cpp} client programmatically as config files of any type are not yet supported.
+
+You can start the client with no custom configuration like this:
+
+```c++
+    auto hz = hazelcast::new_client().get(); // Connects to the cluster
+```
+
+This section describes some network configuration settings to cover common use cases in connecting the client to a cluster. See the https://github.com/hazelcast/hazelcast-cpp-client/blob/master/Reference_Manual.md#3-configuration-overview[Configuration Overview] and the following sections for information about detailed network configurations and/or additional features of Hazelcast {cpp} client configuration.
+
+An easy way to configure your Hazelcast {cpp} client is to create a `client_config` object and set the appropriate options. Then you need to pass this object to the client when starting it, as shown below:
+
+```c++
+    hazelcast::client::client_config config;
+    config.set_cluster_name("my-cluster"); // the server is configured to use the `my_cluster` as the cluster name hence we need to match it to be able to connect to the server.
+    config.get_network_config().add_address(address("192.168.1.10", 5701));
+    auto hz = hazelcast::new_client(std::move(config)).get(); // Connects to the cluster member at ip address `192.168.1.10` and port 5701
+```
+
+If you run Hazelcast members in a different server than the client, you most probably have configured the ports and the cluster names of the members as explained in the previous section. If you did, you need to make certain changes to the network settings of your client.
+
+=== Cluster name
+
+You only need to provide the name of the cluster if it is explicitly configured on the server side (otherwise the default value of `dev` is used).
+
+```c++
+hazelcast::client::client_config config;
+config.set_cluster_name("my-cluster"); // the server is configured to use the `my_cluster` as the cluster name hence we need to match it to be able to connect to the server.
+```
+
+=== Network settings
+
+You need to provide the IP address and port of at least one member in your cluster so the client can find it.
+
+```c++
+hazelcast::client::client_config config;
+config.get_network_config().add_address(hazelcast::client::address("your server ip", 5701 /* your server port*/));
+```
+=== Client system properties
+
+While configuring your {cpp} client, you can use various system properties provided by Hazelcast to tune its clients. These properties can be set programmatically through `config.set_property` or by using an environment variable. The value of this property will be:
+
+- the programmatically configured value, if programmatically set,
+- the environment variable value, if the environment variable is set,
+- the default value, if none of the above is set.
+
+See the following for an example client system property configuration:
+
+**Programmatically:**
+
+```c++
+config.set_property(hazelcast::client::client_properties::INVOCATION_TIMEOUT_SECONDS, "2") // Sets invocation timeout as 2 seconds
+```
+
+or 
+
+```c++
+config.set_property("hazelcast.client.invocation.timeout.seconds", "2") // Sets invocation timeout as 2 seconds
+```
+
+**By using an environment variable on Linux:** 
+
+```sh
+export hazelcast.client.invocation.timeout.seconds=2
+```
+
+If you set a property both programmatically and via an environment variable, the programmatically set value will be used.
+
+#AUTHORS NOTE—fix XREF here#
+See the hazelcast/include/hazelcast/client/client_properties.h[complete list of system properties], along with their descriptions, which can be used to configure your Hazelcast {cpp} client.
+
+#AUTHORS NOTE—TO DO: fix XREFs#
 
 == Next steps
 

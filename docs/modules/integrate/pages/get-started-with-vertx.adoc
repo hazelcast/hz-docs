@@ -227,25 +227,7 @@ set-cookie: vertx-web.session=a1486c5ed6416972fdc356e4d91d2397; Path=/
 }
 ----
 
-We will fix that by using a Hazelcast Cluster Manager. There are two modules that provide Hazelcast Cluster Manager:
-
-- `io.vertx:vertx-hazelcast` - this module is maintained by the Vert.x team, with contributions from Hazelcast, and is built on top of open-source Hazelcast
-- `com.hazelcast:vertx-hazelcast-enterprise` - this module is maintained by the Hazelcast team and is built on top of the `vertx-hazelcast` but uses Hazelcast Enterprise instead. You need an enterprise license to use Hazelcast Enterprise.
-
-You can use either module for most of this tutorial. At the end of this tutorial you will need the `vertx-hazelcast-enterprise` module.
-
-NOTE: You can get your trial key at https://hazelcast.com/get-started/?utm_source=docs-website[hazelcast.com] or you can use `vertx-hazelcast` and a community edition of Hazelcast.
-
-Add the following dependency to the `pom.xml`:
-
-[source,xml]
-----
-<dependency>
-  <groupId>com.hazelcast</groupId>
-  <artifactId>vertx-hazelcast-enterprise</artifactId>
-  <version>{vertx.version}</version>
-</dependency>
-----
+We will fix that by using a Hazelcast Cluster Manager. This resides in the `io.vertx:vertx-hazelcast` module, which is maintained by the Vert.x team with contributions from Hazelcast and is based on Hazelcast {open-source-product-name}.
 
 Change the following part of the `start` method:
 
@@ -276,8 +258,6 @@ We also need to provide a Hazelcast configuration file, and create a file cluste
   xsi:schemaLocation="http://www.hazelcast.com/schema/config
            https://www.hazelcast.com/schema/config/hazelcast-config-5.5.xsd">
 
-  <license-key>replace/with/your/key</license-key> <!-- Only if using vertx-hazelcast-enterprise -->
-
   <network>
     <join>
       <multicast enabled="true"/>
@@ -296,18 +276,6 @@ We also need to provide a Hazelcast configuration file, and create a file cluste
   <map name="__vertx.nodeInfo">
     <backup-count>1</backup-count>
   </map>
-
-  <cp-subsystem>
-    <cp-member-count>0</cp-member-count>
-    <semaphores>
-      <semaphore>
-        <name>__vertx.*</name>
-        <jdk-compatible>false</jdk-compatible>
-        <initial-permits>1</initial-permits>
-      </semaphore>
-    </semaphores>
-  </cp-subsystem>
-</hazelcast>
 ----
 
 Now rebuild the project and start the application. You will see more verbose output as Hazelcast prints its own startup logs:
@@ -421,41 +389,3 @@ set-cookie: vertx-web.session=d9fb4cada5c0fc625089a38f3de13e3c; Path=/
     "requestId": 1
 }
 ----
-
-== CP Subsystem backed Lock and Counter
-
-The module `vertx-hazelcast-enterprise` provides a different implementation of the `io.vertx.core.shareddata.Counter` and `io.vertx.core.shareddata.Lock` data structures. The implementation in `vertx-hazelcast` is based on the IMap data structure and provides guarantees defined in the xref:architecture:data-partitioning.adoc#best-effort-consistency[Best-effort consistency] section. This means that under certain network partition conditions the counter doesn't provide strong consistency guarantees and can generate duplicate values.
-
-The module `vertx-hazelcast-enterprise` uses the CP Subsystem from {enterprise-product-name} to implement the Lock and Counter.
-
-NOTE: For the rest of this tutorial you need to have an {enterprise-product-name} license.
-
-Make sure you have the following dependency:
-
-[source,xml]
-----
-<dependency>
-  <groupId>com.hazelcast</groupId>
-  <artifactId>vertx-hazelcast-enterprise</artifactId>
-  <version>{vertx.version}</version>
-</dependency>
-----
-
-and your XML config contains a valid license key:
-
-[source,xml]
-----
-...
-  <license-key>replace/with/your/key</license-key>
-...
-----
-
-Enable the CP subsystem, and in cluster.xml change the value of the `` property to `3`:
-
-[source,xml]
-----
-    <cp-member-count>3</cp-member-count>
-----
-
-You need to start at least 3 instances for the cluster to form successfully. For complete documentation, see the xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem] section.
-

@@ -63,14 +63,18 @@ config.getCPSubsystemConfig()
 
 To enable xref:cp-subsystem:cp-subsystem.adoc#persistence[CP Subsystem persistence], set the <<persistence-enabled, `persistence-enabled`>> option to `true`.
 
-When CP Subsystem persistence is enabled, all Hazelcast cluster members -- including AP members -- create a directory under the base `cp-data` directory. CP members persist CP state in these sub-directories. AP members persist only their status as non-CP members. Ensure that you do not delete these directories.
+When CP Subsystem persistence is enabled, all Hazelcast cluster members -- including AP members -- create a directory under the base `cp-data` directory. CP members persist CP state in these sub-directories. AP members persist only their status as non-CP members. Ensure that you do not delete these directories unless you need to remove stale data to recover the system as described in <<ap-cp, CP Subsystem persistence and AP persistence>>.
 
 To change the base directory, set a value in the <<base-dir, `base-dir`>> option.
 
 [[ap-cp]]
 === CP Subsystem persistence and AP persistence
 
-Hazelcast also offers xref:storage:persistence.adoc[persistence] for some AP data structures. If you persist AP and CP data structures in a single Hazelcast cluster, be aware that member or cluster restarts can fail if the persisted state (CP or AP) becomes stale. You can configure AP and CP members to automatically remove stale data with the `auto-remove-stale-data` option -- see xref:storage:configuring-persistence.adoc[Configuring persistence]. Otherwise, you will need to remove stale data manually.
+Hazelcast also offers xref:storage:persistence.adoc[persistence] for some AP data structures. If you persist AP and CP data structures in a single Hazelcast cluster, be aware that member or cluster restarts can fail if the persisted data (CP or AP) becomes stale.
+
+You can configure AP members to automatically remove stale data with the `auto-remove-stale-data` option -- see xref:storage:configuring-persistence.adoc[Configuring persistence]. Otherwise, you will need to remove stale data manually.
+
+CP members can usually rejoin the cluster after a restart. The CP group leader will reissue any missing operations to catch up the rejoining member's Raft log. However, if a CP member gets significantly out of sync, you may need to remove stale data manually.
 
 == Choose a group size
 
@@ -78,7 +82,7 @@ For all xref:cp-subsystem.adoc#cp-groups[CP groups], you can set the number of C
 
 To scale out throughput and memory capacity, you can choose a CP group size that is smaller than the <<cp-member-count, CP member count>> to distribute your CP data structures to multiple CP groups.
 
-NOTE: If you want to distribute CP data to a group other than `DEFAULT, you must specify the group name when creating or fetching the CP data structure proxy.
+NOTE: If you want to distribute CP data to a group other than `DEFAULT`, you must specify the group name when creating or fetching the CP data structure proxy.
 
 CP groups must consist of three, five, or seven members. An odd number of CP members avoids stalemate scenarios in leadership elections and quorum calculations.
 

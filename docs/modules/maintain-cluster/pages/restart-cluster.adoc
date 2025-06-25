@@ -1,0 +1,114 @@
+= Restart a cluster
+:description: Static configuration is configuration that cannot be changed while members are running. To apply updates to static configuration, you must restart the cluster.
+
+{description}
+
+There are two options for restarting a cluster:
+
+* <<rolling>>
+* <<whole>>
+
+To minimize disruption, you should restart each member one at a time. This is known as a rolling restart. In a rolling restart, each member is shut down gracefully and its partitions are migrated to another member. This minimizes the risk of data loss.
+
+You can also use this process for canarying: testing changes on a single member before rolling them out across the cluster.
+
+Some configuration needs to be consistent across all members in a cluster. To apply this configuration, you must restart the whole cluster simultaneously. This causes all data in the cluster to be lost. To avoid downtime, you will need to divert traffic to another Hazelcast cluster before restarting.
+
+== 
+
+[[rolling]]
+== Perform a rolling restart
+
+Depending on the scope of your configuration changes, you may need update a single member, a cluster, or multiple clusters. The process is the same in all cases.
+
+To perform a rolling restart:
+
+// Check cluster/members are in a safe state first?
+. Update the static configuration as required.
+
+. Select a member and make a note of its name to help you keep track.
+
+. Gracefully shut down the member.
++
+See xref:shutdown.adoc#shutting-down-a-hazelcast-member[Shutting Down a Hazelcast Member].
+// Import these instructions
+
+. Wait until all partition migrations are completed.
++
+During migrations, members cannot join or leave the cluster.
+// How can you view/check partition migration status?
+
+. Start the member and wait until it joins the cluster.
+// Should we wait until partitions are redistributed across the cluster before shutting another member down? How do you check a member has joined the cluster?
+
+. Repeat this process for each member until all members have been restarted with the updated configuration.
+
+[[whole]]
+== Perform a whole cluster restart
+
+To perform a whole cluster restart:
+
+. Divert traffic to another Hazelcast cluster.
+
+. Update the static configuration as required.
+
+. Shut down the cluster:
++
+[tabs]
+====
+CLI::
++
+--
+[source,bash]
+----
+bin/hz-cluster-admin -a <address> -c <cluster-name> -o shutdown
+----
+--
+
+
+Java::
++
+--
+[source,java]
+----
+HazelcastInstance.getCluster().shutdown()
+----
+--
+
+Management Center::
++
+
+--
+Go to *Administration* > *Cluster State* and select *Shutdown*.
+--
+====
+
+. Start the cluster:
++
+[tabs]
+====
+CLI::
++
+--
+
+[source,bash]
+----
+hz start
+----
+--
+
+Java::
++
+--
+[source,java]
+----
+
+----
+--
+
+Management Center::
++
+
+--
+
+--

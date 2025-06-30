@@ -598,6 +598,47 @@ Olly is in IT department
 
 This time, we added only the sales employees but we get the list of all known employees including the ones in IT. That is because our map lives in the cluster and no matter which client we use, we can access the whole map.
 
+=== Use a sample project
+
+There is an example project in the https://github.com/hazelcast/hazelcast-cpp-client/tree/master/sample_project[sample project] directory. Run this as follows:
+
+If you use Linux or Mac:
+
+```sh
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=[path to vcpkg]/scripts/buildsystems/vcpkg.cmake
+cmake --build build
+./build/client
+```
+
+If you use Windows:
+
+```bat
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=[path to vcpkg]\scripts\buildsystems\vcpkg.cmake && ^ 
+cmake --build build && ^
+.\build\Debug\client
+```
+
+The sample code creates a client, and the client automatically connects to the cluster.
+It creates a map named `personnel_map` and puts the records inside it.
+It then gets all the entries from the cluster and prints them.
+```c++
+#include <hazelcast/client/hazelcast_client.h>
+int main() {
+    auto hz = hazelcast::new_client().get(); // Connects to the cluster
+
+    auto personnel = hz.get_map("personnel_map").get();
+    personnel->put<std::string, std::string>("Alice", "IT").get();
+    personnel->put<std::string, std::string>("Bob", "IT").get();
+    personnel->put<std::string, std::string>("Clark", "IT").get();
+    std::cout << "Added IT personnel. Logging all known personnel" << std::endl;
+    for (const auto &entry : personnel->entry_set<std::string, std::string>().get()) {
+        std::cout << entry.first << " is in " << entry.second << " department." << std::endl;
+    }
+    
+    return 0;
+}
+```
+
 == Next steps
 
 For information about supported data structures and features, and about configuring the {cpp} client, serialization, query support and available APIs, see the https://github.com/hazelcast/hazelcast-cpp-client[Hazelcast {cpp} Client GitHub repo]. 

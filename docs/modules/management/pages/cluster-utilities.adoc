@@ -1,47 +1,112 @@
-= Cluster Utilities
+= Cluster utilities
+:description: Hazelcast Platform is provided with a range of programmatic utilities you can use to manage your Hazelcast clusters, including a CLI and a range of scripts. These tools are included in the `bin` directory in your Hazelcast package.
 
-This section provides information about the Hazelcast command line and
-other programmatic utilities you can use to listen to
-the cluster events, to change the state of your cluster,
-to check whether the cluster and/or members are safe before shutting down a member and
-to define the minimum number of cluster members required for the cluster to remain up and running.
-It also gives information about the Hazelcast Lite Member.
+{description}
 
-These tools are included with the Hazelcast package.
+All of these tools are compatible with Unix-like systems. `.bat` files are compatible with Microsoft Windows.
 
-== `hz` CLI
+`hazelcast-enterprise-{ee-version}/bin` contains the following files. 
 
-The `hz` CLI allows you to start a Hazelcast instance from a Unix-like shell. This is the easiest way to start the software from a binary distribution and provides an option to integrate into a script or orchestration system.
+[cols="30%,70%"]
+|=======
+|Filename | Description
 
-To start a standalone Hazelcast member with the default configuration:
+|`common.bat`, `common.sh`
+|Shared code called by other scripts.
 
-. Navigate to the `/bin` directory in your Hazelcast package:
-+
-[source,bash]
-----
-cd hazelcast-enterprise-{ee-version}/bin
-----
+|`hz`
+|Starts a Hazelcast member with various configuration options. See <<hz-cli>>.
 
-. Start the software:
+|`hz-cli`, `hz-cli.bat`
+|Manages jobs and snapshots on a running cluster. Also used to launch the Hazelcast console and SQL shell. See <<hz-cli-cli>>.
+
+|`hz-cluster-admin`
+|Performs cluster lifecycle operations and manages HTTPS certificates. See <<using-the-hz-cluster-admin-script>>.
+
+|`hz-cluster-cp-admin`
+|Manages the CP Subsystem. See xref:cp-subsystem:management.adoc[].
+
+|`hz-healthcheck`
+|Retrieves cluster state from the HTTP health check endpoint. See xref:maintain-cluster:monitoring.adoc#health-check-script[].
+
+|`hz-start`, `hz-start.bat`
+|Starts a Hazelcast member with the default settings.
+
+|`hz-stop`, `hz-stop.bat`
+|Gracefully shuts down all running Hazelcast members on the local device.
+
+|=======
+
+[[hz-cli]]
+== `hz` command line interface
+
+The `hz` CLI allows you to start a Hazelcast instance from the shell. The CLI automates the steps required to install and start the software and supports several options to override the default settings. 
+
+To create and start a Hazelcast member:
+
+. Navigate to the `hazelcast-enterprise-{ee-version}/bin` directory in your Hazelcast package.
+
+. Start the software.
+
+** Start the software with the default settings:
 +
 [source,bash]
 ----
 ./hz start
 ----
 
-For more information, see xref:getting-started:get-started-cli.adoc[].
+** Alternatively, add an option to override the default configuration. For example, to specify a port number:
++
+[source,bash]
+----
+./hz start -p 5705
+----
++
+To specify a custom configuration file:
++
+[source,bash]
+----
+./hz start -c path/to/file.xml
+----
+
+For the full list of options, refer to the CLI help:
+
+[source,bash]
+----
+./hz start -h
+----
+
+For a tutorial using this tool to start a cluster, see xref:getting-started:get-started-cli.adoc[].
+
+[[hz-cli-cli]]
+== `hz-cli` command line interface
+
+The `hz-cli` tool has a range of uses:
+
+* xref:pipelines:job-management.adoc[Managing Jet streaming jobs] and job snapshots.
+* Launching the xref:sql:sql-overview.adoc[SQL shell], which you can use to run SQL queries.
+* Launching the xref:getting-started:get-started-cli.adoc#step-4-write-data-to-memory[Hazelcast console], which you can use to write data to a map for testing and evaluation (not recommended for production).
+
+To use `hz-cluster-admin`, you must enable the xref:enterprise-rest-api.adoc[].
+
+For the full list of options, refer to the CLI help:
+
+[source,bash]
+----
+./hz-cli -h
+----
+
+For a tutorial using this tool to start a cluster and run the SQL shell, see xref:getting-started:get-started-binary.adoc[].
 
 [[using-the-hz-cluster-admin-script]]
 == `hz-cluster-admin` script
 
-You can use the script `hz-cluster-admin` to perform cluster operations such as changing state, changing the software version or shutting down the cluster.
+You can use the script `hz-cluster-admin` to perform cluster lifecycle operations such as changing state, changing the software version or shutting down the cluster.
 
 To use `hz-cluster-admin`:
 
-* Ensure the `curl` command to be available in your environment.
+* Ensure the `curl` command is available in your environment.
 * Enable the xref:enterprise-rest-api.adoc[].
-
-NOTE: The script `hz-cluster-admin` uses `curl` command and `curl` must be installed to be able to use the script.
 
 `hz-cluster-admin` takes the following parameters. If these parameters are not provided, the default values are used.
 
@@ -81,7 +146,6 @@ See the xref:clusters:creating-clusters.adoc[Creating Clusters section].
 |`-P` or `--password`
 |`dev-pass`
 |Defines the password of a cluster (valid only for Hazelcast releases older than 3.8.2).
-See the xref:clusters:creating-clusters.adoc[Creating Clusters section].
 
 |`-v` or `--version`
 |_no argument expected_
@@ -113,86 +177,60 @@ the `change-cluster-version` operation.
 |Disables member certificate verification.
 |===
 
-The script `hz-cluster-admin` is self-documented; you can see the parameter descriptions using
-the command `./hz-cluster-admin -h` or `./hz-cluster-admin --help`.
+For the full list of options, refer to the script help: `./hz-cluster-admin -h`.
 
-NOTE: You can perform the above operations using the *Persistence* tab of Hazelcast Management Center or
-using the REST API. See xref:{page-latest-supported-mc}@management-center:monitor-imdg:cluster-administration.adoc#persistence[Persistence]
-in the Hazelcast Management Center documentation, and xref:maintain-cluster:rest-api.adoc#using-rest-api-for-cluster-management[Managing Cluster's State].
+NOTE: You can also perform the above operations using the *Persistence* tab of Hazelcast Management Center or
+using the REST API. See xref:{page-latest-supported-mc}@management-center:clusters:persistence.adoc[Persistence]
+in the Hazelcast Management Center documentation and xref:maintain-cluster:rest-api.adoc#managing-clusters-state[Managing Cluster's State].
 
 include::clients:partial$rest-deprecation.adoc[]
 
-=== Example Usages for hz-cluster-admin
+=== Using `hz-cluster-admin`
 
 Let's say you have a cluster running on remote machines and one Hazelcast member is running on the IP `172.16.254.1` and on the port
-`5702`. The cluster name and password of the cluster are `test` and `test`.
+`5702`. The cluster name is `test`. All commands are run from the `hazelcast-enterprise-{ee-version}/bin` directory in your Hazelcast package.
 
 **Getting the cluster state:**
 
-To get the state of the cluster, use the following command:
+To get the state of the cluster:
 
 `./hz-cluster-admin -o get-state -a 172.16.254.1 -p 5702 -g test -P test`
 
-The following also gets the cluster state, using the alternative parameter names, e.g., `--port` instead of `-p`:
-
-`./hz-cluster-admin --operation get-state --address 172.16.254.1 --port 5702 --clustername test --password test`
-
 **Changing the cluster state:**
 
-To change the state of the cluster to `frozen`, use the following command:
+To change the state of the cluster to `frozen`:
 
 `./hz-cluster-admin -o change-state -s frozen -a 172.16.254.1 -p 5702 -g test -P test`
 
-Similarly, you can use the following command for the same purpose:
-
-`./hz-cluster-admin --operation change-state --state frozen --address 172.16.254.1 --port 5702 --clustername test --password test`
-
 **Shutting down the cluster:**
 
-To shutdown the cluster, use the following command:
+To shut down the cluster:
 
 `./hz-cluster-admin -o shutdown -a 172.16.254.1 -p 5702 -g test -P test`
 
-Similarly, you can use the following command for the same purpose:
-
-
-`./hz-cluster-admin --operation shutdown --address 172.16.254.1 --port 5702 --clustername test --password test`
-
 **Triggering a partial-start on the cluster:**
 
-To trigger a partial-start when Persistence is enabled, use the following command:
+To trigger a partial-start when Persistence is enabled:
 
 `./hz-cluster-admin -o partial-start -a 172.16.254.1 -p 5702 -g test -P test`
 
-Similarly, you can use the following command for the same purpose:
-
-`./hz-cluster-admin --operation partial-start --address 172.16.254.1 --port 5702 --clustername test --password test`
-
 **Triggering a force-start the cluster:**
 
-To trigger a force-start when Persistence is enabled, use the following command:
+To trigger a force-start when Persistence is enabled:
 
 `./hz-cluster-admin -o force-start -a 172.16.254.1 -p 5702 -g test -P test`
 
-Similarly, you can use the following command for the same purpose:
-
-`./hz-cluster-admin --operation force-start --address 172.16.254.1 --port 5702 --clustername test --password test`
-
 **Getting the current cluster version:**
 
-To get the cluster version, use the following command:
+To get the cluster version:
 
 `./hz-cluster-admin -o get-cluster-version -a 172.16.254.1 -p 5702 -g test -P test`
 
-The following also gets the cluster state, using the alternative parameter names, e.g., `--port` instead of `-p`:
-
-`./hz-cluster-admin --operation get-cluster-version --address 172.16.254.1 --port 5702 --clustername test --password test`
-
 **Changing the cluster version:**
 
-See the xref:maintain-cluster:rolling-upgrades.adoc[Rolling Member Upgrades chapter] to learn more about the cases when you should change the cluster version.
+See xref:maintain-cluster:rolling-upgrades.adoc[Rolling Upgrades] to learn more about the cases when you should change the cluster version.
 
-To change the cluster version to `X.Y`, use the following command:
+To change the cluster version to `X.Y`:
 
 `./hz-cluster-admin -o change-cluster-version -v X.Y -a 172.16.254.1 -p 5702 -g test -P test`
 
@@ -208,7 +246,7 @@ When the member has TLS configured, use the `--https` argument to instruct `hz-c
   --operation get-state --address member1.example.com --port 5701
 ----
 
-If the default set of trusted certificate authorities is not sufficient, e.g, you use a self-signed certificate,
+If the default set of trusted certificate authorities is not sufficient, e.g. you use a self-signed certificate,
 you can provide a custom file with the root certificates:
 
 [source,sh]
@@ -228,9 +266,9 @@ When the TLS mutual authentication is enabled, you have to provide the client ce
   --operation get-state --address member1.example.com --port 5701
 ----
 
-NOTE: Currently, this script is not supported on the Windows platforms.
+== Integrity checker
 
-== Integrity Checker
+//This isn't a /bin utility so would ideally live elsewhere, and isn't referenced in any other documentation
 
 The integrity checker is a utility developed for Java developers who build Hazelcast applications.
 It checks the classpath of your applications built with Hazelcast JAR dependencies (e.g., `hazelcast` or `hazelcast-sql`, using the assembly or other uber-JAR plugins).

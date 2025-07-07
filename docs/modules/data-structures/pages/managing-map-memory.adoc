@@ -183,6 +183,14 @@ hazelcast:
 ----
 ====
 
+=== Partition-based eviction and LRU edge cases
+
+In Hazelcast, eviction is performed on a per-partition basis. When a map reaches its configured size limit, Hazelcast checks each partition individually to determine if eviction is needed. The LRU (Least Recently Used) policy is then applied within that partition: entries in the partition are sorted by their last access time, and the least recently used entry is evicted.
+
+However, in certain edge cases, this can lead to situations where the newest (not the oldest) entries are evicted. For example, if each new key is assigned to a different partition and is the only entry in that partition, then when eviction is triggered, Hazelcast will evict the only entry in the partition—even if it is the newest entry in the entire map. This happens because eviction decisions are made locally within each partition, not globally across the entire map. 
+
+As a result, the global LRU order is not guaranteed, and the eviction may remove newer entries if they happen to be the only ones in their respective partitions. This partition-based approach is designed for scalability and performance but can lead to counterintuitive eviction outcomes in edge cases.
+
 
 == Setting an Expiration Policy and an Eviction Policy
 

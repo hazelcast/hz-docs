@@ -91,7 +91,7 @@ If you want to set this element to any size other than 0, you must also set the 
 When configuring the maximum size of maps, you can choose one of the follow attributes to define what to measure.
 
 * `max-size-policy`: Maximum size policy for eviction of the map. Available values are as follows:
-** `PER_NODE`: Maximum number of map entries in each cluster member. This is the default policy.
+** `PER_NODE`: Maximum number of map entries in each cluster member. This is the default policy. Note that because the limit is enforced at the partition level, the actual number of entries allowed per member is dynamic and depends on the current cluster size and partition distribution.
 ** `PER_PARTITION`: Maximum number of map entries within each partition. Storage size depends
 on the partition count in a cluster member. This attribute should not be used often. For instance,
 avoid using this attribute with a small cluster. If the cluster is small, it hosts more partitions,
@@ -182,6 +182,14 @@ hazelcast:
         size: 75
 ----
 ====
+
+=== Partition-based eviction and LRU behavior
+
+In Hazelcast, eviction is performed on a per-partition basis. When a map reaches its configured size limit, Hazelcast checks each partition individually to determine if eviction is needed. The Least Recently Used (LRU) policy is then applied within that partition: entries in the partition are sampled (15 entries by default) then sorted by their last access time, and the least recently used entry is evicted.
+
+In certain edge cases, this can cause the newest (not the oldest) entries to be evicted. For example, if each new key is assigned to a different partition and is the only entry in that partition, then when eviction is triggered, Hazelcast will evict the only entry in the partition even if it is the newest entry in the entire map. This happens because eviction decisions are made locally within each partition, not globally across the entire map. 
+
+As a result, the global LRU order is not guaranteed, and the eviction may remove newer entries if they happen to be the only ones in their respective partitions. This partition-based approach is designed for scalability and performance but can lead to counterintuitive eviction outcomes in edge cases.
 
 
 == Setting an Expiration Policy and an Eviction Policy

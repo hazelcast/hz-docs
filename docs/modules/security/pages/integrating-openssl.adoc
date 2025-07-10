@@ -222,3 +222,67 @@ For the
 information, e.g., `TLSv1.3`. It ensures the engine won't allow a fallback to an old, insecure version.
 
 * `validateIdentity`: Flag which allows enabling endpoint identity validation. It means, during the TLS handshake client verifies if the server's hostname (or IP address) matches the information in X.509 certificate (Subject Alternative Name extension). Possible values are `"true"` and `"false"` (default).
+
+== Troubleshooting FIPS setup
+
+This topic helps you resolve errors sometimes encountered when enabling FIPS mode.
+
+**Problem: Failed to load libraries**
+
+You get an error similar to:
+
+[source]
+----
+java.lang.IllegalArgumentException: Failed to load any of the given libraries: [netty_tcnative_linux_aarch_64_fedora, netty_tcnative_linux_aarch_64, netty_tcnative_aarch_64, netty_tcnative]
+----
+
+**Reason**
+
+This error can occur if you use the generic netty-tcnative jar file rather than the platform-specific version.
+
+**Resolution**
+
+To ensure the correct library is used, specify the platform-specific netty-tcnative jar file. For example, for aarch_64:
+
+`netty-tcnative-2.0.69.Final-linux-aarch_64.jar`
+
+NOTE: At the time of writing, this jar file is unavailable in Maven Central, so you may need to build it manually.
+
+**Problem: BCFKS not found**
+
+You get an error similar to:
+
+`com.hazelcast.core.HazelcastException: java.security.KeyStoreException: BCFKS not found`
+
+**Reason**
+
+This error occurs when the Java runtime doesn't recognize the BCFKS keystore type, which is provided by the BouncyCastle provider. This can happen for several reasons — for example, the issue may be caused by using the wrong keystore type.
+
+**Resolution**
+
+Switch to BCFKS for the keystore and truststore to resolve the problem.
+
+**Problem: Java module access**
+
+You get an error similar to:
+
+`java.lang.IllegalAccessError or unnamed module cannot access class`
+
+**Reason**
+
+These are general Java module access issues which are not specific to Hazelcast or FIPS. A typical example is given below.
+
+**Resolution**
+
+Try adding the export option to the Java command. One method is to include the following in your Java command to allow access to internal classes: -add-exports java.base/sun.security.provider=ALL-UNNAMED
+
+For example:
+
+[source]
+----
+export JAVA_OPTS="\
+--add-exports java.base/sun.security.provider=ALL-UNNAMED \
+-Djava.security.properties=/home/ec2-user/app/attachments/java.security -Dorg.bouncycastle.fips.approved_only=true
+"
+----
+

@@ -1,9 +1,68 @@
 = Testing Overview
 
-Testing is important to make sure that changes to your code are working as expected. Learn how to test Hazelcast applications before you go into production.
+Testing is essential to ensure the correctness, reliability, and performance of applications that integrate with Hazelcast.
+Given Hazelcast’s distributed nature and its capabilities for caching, streaming, and distributed execution, tests must cover not just business logic, but also how that logic interacts with the Hazelcast runtime.
 
-Hazelcast offers the following testing tools:
+It's therefore very important to create these tests as part of the application development activities, and being able to run them continuously locally and in a CI/CD in a fast and reliable manner.
 
-- xref:testing.adoc[Unit tests]: For testing classes, components or modules used by your software. Unit tests are in general quite cheap to automate and can be run very quickly by a continuous integration server.
+Hazelcast applications typically include:
 
-- xref:ROOT:simulator.adoc[Simulator]: For testing potential production problems such as real-life failures, network problems, overloaded CPU, and failing members.
+ - Application-managed logic executed on local threads that access Hazelcast shared and replicated data structures
+ - Hazelcast-managed logic (e.g., entry processors, jobs, listeners) executed on distributed nodes
+
+Tests should be written at multiple levels. Each level addresses different aspects of the system and helps identify different categories of problems. Specifically:
+
+1. *Unit Tests* validate small pieces of functionality in isolation. They are used to test individual classes or methods, often using mocks or stubs to isolate the system under test. These tests are fast, deterministic, and designed to catch logic errors and enforce the contract of individual units.
+
+2. *Component Tests* validate the interaction between a single unit (e.g. a service or data handler) and its direct dependencies. These tests may use real instances of dependencies, such as an in-memory Hazelcast instance or a `MapStore`, to verify correct integration points like persistence, data loading, or listener execution.
+
+3. *Integration Tests* validate the interaction between multiple components or services. They are typically executed in environments with multiple Hazelcast members or clients and validate cross-cutting behaviour like data replication, failover handling, and distributed execution logic.
+
+4. *Performance and Benchmarking* tests are used to validate how the system behaves under load. These tests focus on metrics like latency, throughput, and resource utilisation.
+Hazelcast provides tooling to simulate real-world distributed environments and inject failures or network conditions, enabling realistic performance verification in simulated production-like deployment.
+
+Hazelcast provides a set of programmatic tools and test utilities that can be used at each of these levels. These include:
+ - `HazelcastTestSupport`and `TestHazelcastFactory`: for in-JVM multi-node testing of distributed state
+ - `JetTestSupport`: for deterministic testing of streaming pipelines
+ - `Hazelcast Simulator`: for full-scale benchmarking, fault injection, and capacity testing
+ - A set of annotations and assertions to increase test execution parallelism, and help the verification
+steps of synchronous and asynchronous code
+
+The testing approach described in this documentation is complementary to testing against a remote Hazelcast cluster. It does not aim to replace remote or system-level integration testing, but rather to reduce the reliance on it during most stages of development.
+
+By using the Hazelcast-provided testing utilities covered here, developers can validate the majority of their application logic locally, without requiring a network connection to a running Hazelcast cluster. This results in tests that are:
+
+ - Faster to execute
+ - Simpler to configure
+ - Less brittle due to fewer external dependencies
+ - More deterministic, reducing the chance of intermittent failures caused by environment conditions
+
+This allows developers to focus on validating the logic and behaviour of their code, while deferring more complex test infrastructure setup (e.g. provisioning remote nodes, securing connections) to a later stage in the testing pipeline and for a reduced number of tests.
+
+== Advantages of using Hazelcast test support vs Hazelcast embedded
+
+Hazelcast can be started in embedded mode by calling `Hazelcast.newHazelcastInstance()`. While this is fully functional and equivalent to production use, startup and shutdown operations are much slower as their succesfull execution requires a fully configured network stack.
+
+Test support classes provide an alternative approach. When members are started using HazelcastTestSupport, they use mock network stackwhich doesn't require TCP/IP binding and port allocation.
+
+Members in both cases are functionally equivalent and all core Hazelcast features behave the same in both modes
+
+This makes the test support mode well-suited for unit, component, and integration testing where speed and isolation are more important than simulating full network behaviour. For scenarios where real network interactions must be validated (e.g., WAN replication, TLS configuration), embedded mode or remote cluster testing remains appropriate.
+
+== Testing with JUnit
+
+Hazelcast provides testing support classes such as `HazelcastTestSupport` and `JetTestSupport`, which are designed as extensions of JUnit 4 base classes. These support classes offer built-in utility methods for managing Hazelcast instances, generating unique resource names, synchronising cluster state, and asserting distributed behaviour.
+
+If you are using JUnit 5 or a different test framework (e.g., TestNG) use `TestHazelcastFactory` to programmatically create and manage embedded Hazelcast members in a test context.
+
+Assertions provided by Hazelcast test support classes (e.g., `assertOpenEventually`, `assertTrueEventually`) are framework-agnostic and can be used in any test setup.
+
+== Next steps
+
+The following sections detail how to use these tools.
+
+- xref:testing-setup.adoc[Setting up for testing]: How to setup your dependencies and tests
+- xref:testing-caches.adoc[Testing Hazelcast ata structures]: For testing application logic relying on Hazelcast data structures and distributed logic
+- xref:testing-streaming.adoc[Unit tests]: For testing streaming pipelines
+- xref:testing-performance.adoc[Simulator]: For testing performance and benchmarking cluster deployments
+

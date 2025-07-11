@@ -1,0 +1,145 @@
+= RaftLogFileExporter Utility Documentation
+:doctype: article
+:toc:
+:toclevels: 2
+:sectnums:
+
+== Why Use This Tool?
+
+Starting with version 6.0, RAFT snapshots use a new format due to the introduction of chunked snapshot transfers. If you ever need to downgrade a cluster from version 6.0 to 5.5, this tool allows the existing RAFT data to be used with the older version. It ensures that data can still be loaded and used after the downgrade.
+
+== Overview
+The `RaftLogFileExporter` is a utility tool that helps migrate Raft log files between different Hazelcast cluster versions (specifically from v6.0 to v5.5). It creates a clean copy of CP member directories with converted Raft state files.
+
+== System Requirements
+
+* Java 8 or higher
+* Minimum heap size: 2GB (recommended: 4GB for large datasets)
+* Disk space: At least 2x the size of your source Raft log directory
+
+== Usage
+
+=== Basic Command
+[source,bash]
+----
+java -Xms2g -Xmx4g -cp hazelcast-enterprise.jar com.hazelcast.cp.RaftLogFileExporter \
+    --source=/path/to/raft/logs \
+    --output=migrated_output \
+    --max-uncommitted-entries=10000
+----
+
+=== Parameters
+|===
+| Parameter | Required | Description | Default Value
+
+| `--source=<dir>`
+| Yes
+| Path to directory containing Raft logs
+|
+
+| `--output=<dir>`
+| Yes
+| Name for output directory (created in same parent as source)
+|
+
+| `--max-uncommitted-entries=<n>`
+| Yes
+| Configured max uncommitted entries value (positive integer)
+|
+
+| `--sourceVersion=<ver>`
+| No
+| Source Hazelcast version (must be 6.0)
+| 6.0
+
+| `--targetVersion=<ver>`
+| No
+| Target Hazelcast version (must be 5.5)
+| 5.5
+|===
+
+=== Help Command
+[source,bash]
+----
+java -cp hazelcast-enterprise.jar com.hazelcast.cp.RaftLogFileExporter --help
+----
+
+=== Example
+
+This example demonstrates migrating Raft logs from a Hazelcast 6.0 cluster to 5.5 format.
+
+*Before running the command*:
+
+[source,text]
+----
+/data/hazelcast/
+└── cp-data/
+    ├── cp-member-1234/
+    │   ├── raft-log-1
+    │   ├── members
+    │   └── term
+    └── cp-member-5678/
+        ├── raft-log-1
+        ├── members
+        └── term
+----
+
+*Command execution*:
+
+[source,bash]
+----
+java -Xms2g -Xmx4g -cp hazelcast-enterprise.jar com.hazelcast.cp.RaftLogFileExporter \
+    --source=/data/hazelcast/cp-data \
+    --output=migrated_v55 \
+    --max-uncommitted-entries=10000
+----
+
+*After successful execution*:
+
+[source,text]
+----
+/data/hazelcast/
+├── cp-data/                    # Original source (unchanged)
+│   ├── cp-member-1234/
+│   └── cp-member-5678/
+└── migrated_v55/               # New converted output
+    ├── cp-member-1234/
+    │   ├── raft-log-1          # Converted to v5.5 format
+    │   ├── members
+    │   └── term
+    └── cp-member-5678/
+        ├── raft-log-1          # Converted to v5.5 format
+        ├── members
+        └── term
+----
+
+*Transformation Results:*
+
+. The original data in `cp-data/` is not modified in any way.
+. A new directory named `migrated_v55/` is created alongside it, with the same structure.
+. All `raft-log-*` files are automatically converted to the v5.5 format.
+. Metadata files (`members`, `term`) and the folder structure are copied exactly as-is.
+. The tool does not modify any existing files—it always creates new copies.
+. The new cluster must be configured to use the `migrated_v55/` directory.
+
+== Important Notes
+
+* The new cluster must be configured to use the newly created export directory.
+* The tool will fail if the output directory already exists
+* Only converts from Hazelcast 6.0 to 5.5 (other versions not supported)
+* Processes all CP member directories found in the source path
+* Creates a complete copy of the directory structure before converting files
+
+== Troubleshooting
+
+=== Memory Issues
+If you encounter memory issues, try increasing heap size:
+[source,bash]
+----
+java -Xms4g -Xmx8g -cp hazelcast-enterprise.jar com.hazelcast.cp.RaftLogFileExporter ...
+----
+
+=== Other Errors
+* Check the error message and verify your parameters match the expected format
+* Ensure you have read permissions for source directory and write permissions for output location
+* Verify the source directory contains valid CP member data

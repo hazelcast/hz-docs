@@ -1,0 +1,315 @@
+= Introduction to Hazelcast Performance Testing with Simulator
+
+== Overview
+
+https://github.com/hazelcast/hazelcast-simulator[Hazelcast Simulator]
+ is a high-performance, production-grade testing framework for running performance, stress, and latency tests on Hazelcast clusters. It allows engineers to simulate complex workloads and evaluate distributed systems in a realistic and reproducible manner.
+
+Simulator supports testing both open-source and enterprise editions of Hazelcast and is particularly suited for:
+
+- Validating new features
+- Detecting regressions
+- Measuring throughput and latency under varying loads
+- Simulating real-world failures (e.g., network latency, node crashes)
+- Running tests against cloud-deployed Hazelcast clusters
+
+== Key Capabilities
+
+- Supports both *throughput* and *latency*-oriented testing modes.
+- Orchestrates tests across multiple clients and members, with configurable topologies.
+- Provides out-of-the-box support static infrastructure, (support for cloud deployments is not yet available).
+- Integrates with monitoring tools and profilers for system-level analysis.
+- Enables custom test logic with a flexible Java-based test API.
+
+== Supported Test Types
+
+Simulator enables the execution of a variety of performance test types:
+
+- *Load Tests:* Combined throughput and latency under realistic load.
+- *Max Throughput Tests:* Identify system saturation points under increasing concurrency.
+- *Latency Tests:* Measure operation response time at fixed request rates.
+- *Spike and Soak Tests:* Evaluate short bursts and long-term stability.
+- *Stress Tests:* Push the system until failure to observe limits.
+
+== Performance Testing Strategy
+
+Before executing tests:
+
+- Use a test plan to define test scope, goals, and configurations.
+- Choose appropriate *machine types*, *network configuration*, and *topology*.
+- Consider persistence, CPU, memory, and network bandwidth requirements.
+
+During test execution:
+
+- Start with a small cluster and gradually increase load (`threadCount`, `ratePerSecond`).
+- Monitor key metrics (TPS, latency percentiles, CPU, memory).
+- Use Simulator’s latency and ramp-up utilities for controlled testing.
+
+== Configuration and Setup
+
+Test scenarios are defined in a `tests.yaml` file which specifies:
+
+- Cluster size (`members`, `clients`)
+- JVM arguments and Hazelcast version
+- Test classes and their parameters
+- Load profiles (e.g., `putProb: 0.2`, `getProb: 0.8`)
+- Rate controls (`ratePerSecond`, `interval`)
+
+Hazelcast Simulator uses an `inventory.yaml` file to manage machine provisioning and network setup. Tests can be executed on any static set of hosts (support for cloud deployments coming soon).
+
+== Advanced Features
+
+- **Network Latency Simulation:** Inject delays between groups of machines.
+- **CP Subsystem Testing:** Configure CP member priorities using `cp_priorities`.
+- **Flight Recorder Integration:** Enable JFR for profiling with `member_args`.
+- **Warmup/Cooldown:** Configure warmup and cooldown periods to improve report accuracy.
+
+== Tooling and Reporting
+
+Simulator supports automated HTML report generation via `perftest report`. Reports include:
+
+- Throughput and latency graphs
+- Resource utilization (CPU, memory, network)
+- Comparison across multiple benchmarks
+
+For analysis and profiling, the following tools are commonly used:
+
+- `async-profiler`, `VisualVM`, `JFR`
+- `iperf`, `tc`, `fio` for system/network load
+- `dstat` for real-time system metrics
+
+== Best Practices
+
+- Use small clusters for early iteration, scale gradually as needed.
+- Avoid burstable cloud instances; prefer fixed-bandwidth machines.
+- Archive test artifacts and reports for regression tracking.
+- Prefer deterministic test logic to reduce noise and variability.
+
+== Installing and Running Hazelcast with Simulator
+
+This section outlines how to install Hazelcast, configure it for testing, and run performance tests using Hazelcast Simulator.
+
+=== Install Hazelcast Enterprise
+
+Tested on: Ubuntu Server 24.04
+
+Follow the official guide to start a local cluster:
+xref:https://docs.hazelcast.com/tutorials/cli-local-cluster[Start a Local Cluster with the CLI]
+
+Install Hazelcast Enterprise:
+
+[source,shell]
+----
+sudo apt update && sudo apt install hazelcast-enterprise=5.5.6
+----
+
+Apply the license key as described in:
+xref:https://docs.hazelcast.com/hazelcast/latest/licensing/manage-license[Managing Enterprise Edition License Keys]
+
+Edit `/usr/lib/hazelcast/config/hazelcast.xml`:
+
+[source,xml]
+----
+<hazelcast>
+  <license-key>YOUR_LICENSE_KEY</license-key>
+  ...
+</hazelcast>
+----
+
+Verify installation:
+
+[source,shell]
+----
+which hz
+hz start
+----
+
+(Press `CTRL+C` to stop the node.)
+
+=== Configuration
+
+Hazelcast configuration directory: `/usr/lib/hazelcast/config`
+
+Adjust `jvm.options`:
+
+[source]
+----
+-XX:+UseZGC
+-Xms4g
+-Xmx4g
+----
+
+Update `hazelcast.xml`:
+
+[source,xml]
+----
+<property name="hazelcast.socket.bind.any">true</property>
+----
+
+=== Test with CLI Client
+
+On a separate host:
+
+1. Unpack `hazelcast-enterprise-5.5.6`.
+2. Edit `config/hazelcast-client.xml`:
+
+[source,xml]
+----
+<cluster-members>
+  <address>server_host_ip_address</address>
+</cluster-members>
+----
+
+3. Run:
+
+[source,shell]
+----
+bin/hz-cli cluster
+----
+
+Expected output:
+
+----
+State: ACTIVE
+Version: 5.5.6
+Size: 1
+ADDRESS         UUID
+[127.0.0.1]:5701   efd7b55e-...
+----
+
+=== Using Simulator for Performance Testing
+
+Hazelcast Simulator can be run via Docker. It organizes performance tests into "projects".
+
+The local directory for projects will be `$HOME/work/simulator-projects`.
+
+==== Create and Access a Project
+
+Create and access a project:
+
+[source,shell]
+----
+docker run --rm -it \
+  -v "$HOME/work/simulator-projects":/simulator/projects \
+  -w /simulator/projects \
+  --entrypoint bash \
+  hazelcast-simulator:latest
+----
+
+Create a new project named `test1`:
+
+[source,shell]
+----
+docker run --rm -it \
+  -v "$HOME/work/simulator-projects":/simulator/projects \
+  -w /simulator/projects \
+  hazelcast-simulator:latest \
+  create test1
+----
+
+Add the SSH public key to your cluster nodes:
+
+[source,shell]
+----
+cd test1/
+ssh-copy-id -i key.pub root@10.0.0.10
+ssh -i key root@10.0.0.10
+----
+
+Edit `hazelcast-client.xml` as before to connect to cluster members.
+
+==== Inventory Plan
+
+Create `test1/inventory.yaml`:
+
+[source,yaml]
+----
+loadgenerators:
+  hosts:
+    192.168.1.101:
+      ansible_ssh_private_key_file: key
+      ansible_user: root
+      private_ip: 192.168.1.101
+----
+
+==== Install Java and Simulator on Remote Hosts
+
+[source,shell]
+----
+docker run --rm -it \
+  -v "$HOME/work/simulator-projects":/simulator/projects \
+  -w /simulator/projects \
+  --entrypoint inventory \
+  hazelcast-simulator:latest \
+  install java
+
+docker run --rm -it \
+  -v "$HOME/work/simulator-projects":/simulator/projects \
+  -w /simulator/projects \
+  --entrypoint inventory \
+  hazelcast-simulator:latest \
+  install simulator
+----
+
+=== Basic Test Configuration
+
+Create `test1/tests.yaml` with the following content:
+
+[source,yaml]
+----
+- name: read_only
+  duration: 10s
+  repetitions: 1
+  clients: 1
+  members: 1
+  version: maven=5.5.6
+  driver: hazelcast-enterprise5
+  license_key: <put your license here>
+  client_args: >
+    -Xms1g
+    -Xmx1g
+    --add-modules java.se
+    --add-exports java.base/jdk.internal.ref=ALL-UNNAMED
+    --add-opens java.base/java.lang=ALL-UNNAMED
+    --add-opens java.base/sun.nio.ch=ALL-UNNAMED
+    --add-opens java.management/sun.management=ALL-UNNAMED
+    --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED
+  member_args: >
+    -Xms3g
+    -Xmx3g
+    --add-modules java.se
+    --add-exports java.base/jdk.internal.ref=ALL-UNNAMED
+    --add-opens java.base/java.lang=ALL-UNNAMED
+    --add-opens java.base/sun.nio.ch=ALL-UNNAMED
+    --add-opens java.management/sun.management=ALL-UNNAMED
+    --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED
+  loadgenerator_hosts: loadgenerators
+  node_hosts: nodes
+  verify_enabled: False
+  performance_monitor_interval_seconds: 1
+  warmup_seconds: 0
+  cooldown_seconds: 0
+  test:
+    - class: com.hazelcast.simulator.tests.map.LongByteArrayMapTest
+      name: map
+      threadCount: 40
+      getProb: 1
+      putProb: 0
+      keyDomain: 1_000_000
+      valueCount: 100
+      minValueLength: 1_000
+      maxValueLength: 1_000
+----
+
+=== Running the Test
+
+[source,shell]
+----
+docker run --rm -it \
+  -v "$HOME/work/simulator-projects":/simulator/projects \
+  -w /simulator/projects/test1 \
+  hazelcast-simulator:latest \
+  run tests.yaml
+----
+
+You can now inspect the output and generate reports. For further guidance, refer to the full https://github.com/hazelcast/hazelcast-simulator[simulator documentation].

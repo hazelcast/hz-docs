@@ -1,0 +1,204 @@
+= Common test utilities across caching and streaming applications
+
+== Repeating Tests
+
+Use `@Repeat(n)` (provided by Hazelcast) to repeat a test multiple times. This is useful to execute a test multiple time to trigger flaky behaviour.
+
+[source,java]
+----
+@Repeat(5)
+@Test
+public void testFlakyBehaviour() {
+    // ...
+}
+----
+
+== Test Runners
+
+Hazelcast provides custom runners:
+
+- `HazelcastSerialClassRunner`: runs tests sequentially
+- `HazelcastParallelClassRunner`: runs tests in parallel
+
+[source,java]
+----
+@RunWith(HazelcastParallelClassRunner.class)
+public class MyClusterTest extends HazelcastTestSupport {
+    // ...
+}
+----
+
+== Isolating Clusters by Name
+
+Use `randomName()` to avoid interference when tests run in parallel.
+
+[source,java]
+----
+String clusterName = randomName();
+Config config = new Config().setClusterName(clusterName);
+HazelcastInstance[] members = factory.newInstances(config, 2);
+
+ClientConfig clientConfig = new ClientConfig().setClusterName(clusterName);
+HazelcastInstance client = factory.newHazelcastClient(clientConfig);
+----
+
+=== Cleaning Up Resources
+
+Use `shutdownAll()` to clean up all Hazelcast instances at the end of each test or test class.
+
+JUnit 4:
+[source,java]
+----
+@After
+public void tearDown() {
+    factory.shutdownAll();
+}
+----
+
+JUnit 5:
+[source,java]
+----
+@AfterAll
+static void tearDownCluster() {
+    factory.shutdownAll();
+}
+----
+
+You can also shutdown a single instance to mimic failure scenarios `ìnstance.shutdown()`.
+
+== Testing distributed logic
+
+It' possible to test distributed logic with a combination of Hazelcast test support and mock object. This is useful to test the wiring of the callbacks.
+
+For example let's consider an event listener on an `IMap` to illustrate the pattern.
+
+You can test the invocation of the listener mock listener and verifying its invocation.
+
+[source,java]
+----
+import com.hazelcast.core.EntryEvent;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.map.listener.EntryUpdatedListener;
+import com.hazelcast.test.HazelcastTestSupport;
+import org.junit.Test;
+
+import static org.mockito.Mockito.*;
+
+public class MyMapListenerTest extends HazelcastTestSupport {
+
+    @Test
+    public void testUpdateTriggersListener() {
+        // create Hazelcast member
+        HazelcastInstance instance = createHazelcastInstance();
+
+        // create mock listener
+        EntryUpdatedListener<String, String> mockListener = mock(EntryUpdatedListener.class);
+
+        // register the listener
+        IMap<String, String> map = instance.getMap("test-map");
+        map.addEntryListener(mockListener, true);
+
+        // insert and update an entry
+        map.put("key1", "initial");
+        map.put("key1", "updated");
+
+        // verify the listener received the update
+        verify(mockListener, timeout(1000).times(1)).entryUpdated(any(EntryEvent.class));
+    }
+}
+----
+
+In this other example we test the invocation of an asynchronous `MapStore`. When using Hazelcast `IMap` with `MapStore`, entries can be loaded from or persisted to an external data source. This example shows how to validate the integration between `IMap` and a `MapStore` using a real backing store and `TestHazelcastFactory` in a JUnit 5 context.
+
+[source,java]
+----
+import com.hazelcast.config.Config;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.MapStore;
+import com.hazelcast.test.TestHazelcastFactory;
+import org.junit.jupiter.api.*;
+
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+class MyMapStoreTest {
+
+    private static TestHazelcastFactory factory;
+    private static HazelcastInstance hz;
+
+    @BeforeAll
+    static void setup() {
+        factory = new TestHazelcastFactory();
+
+        // Create a mock MapStore that throws on load
+        @SuppressWarnings("unchecked")
+        MapStore<String, String> mockMapStore = mock(MapStore.class);
+        when(mockMapStore.load("fail")).thenThrow(new RuntimeException("Simulated failure"));
+        when(mockMapStore.load("key1")).thenReturn("value1");
+
+        // Configure Hazelcast to use the mock MapStore
+        Config config = new Config();
+        config.setClusterName("mock-mapstore-test");
+        config.getMapConfig("testMap")
+              .getMapStoreConfig()
+              .setEnabled(true)
+              .setImplementation(mockMapStore);
+
+        hz = factory.newHazelcastInstance(config);
+    }
+
+    @AfterAll
+    static void teardown() {
+        if (hz != null) {
+            hz.shutdown();
+        }
+        factory.shutdownAll();
+    }
+
+    @Test
+    void testSuccessfulLoadFromMock() {
+        var map = hz.getMap<String, String>("testMap");
+
+        // This triggers MapStore.load("key1")
+        String result = map.get("key1");
+        assertEquals("value1", result);
+    }
+
+    @Test
+    void testLoadFailureHandled() {
+        var map = hz.getMap<String, String>("testMap");
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () -> {
+            map.get("fail"); // triggers MapStore.load("fail")
+        });
+
+        assertEquals("Simulated failure", ex.getMessage());
+    }
+
+    @Test
+    void testStoreIsInvoked() {
+        @SuppressWarnings("unchecked")
+        MapStore<String, String> mockMapStore = mock(MapStore.class);
+
+        // Configure and start another instance for the store test
+        Config config = new Config().setClusterName("store-test");
+        config.getMapConfig("storeMap")
+              .getMapStoreConfig()
+              .setEnabled(true)
+              .setImplementation(mockMapStore);
+
+        HazelcastInstance storeHz = factory.newHazelcastInstance(config);
+        var storeMap = storeHz.getMap<String, String>("storeMap");
+
+        storeMap.put("k2", "v2");
+
+        // Verify that store was called
+        verify(mockMapStore, timeout(1000)).store("k2", "v2");
+
+        storeHz.shutdown();
+    }
+}
+----

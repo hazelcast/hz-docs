@@ -1,0 +1,198 @@
+= Testing Distributed Applications
+
+This guide explains how to write unit, component, integration, and in-JVM tests for Hazelcast clusters and clients using Hazelcast’s built-in test support utilities.
+
+It covers:
+
+- Creating mock clusters
+- Managing members and clients in test code
+- Injecting custom configurations
+- Isolating tests and cleaning up resources
+- Using assertion utilities for distributed state and asynchronous behaviour
+
+Hazelcast provides two primary test support mechanisms:
+
+- `HazelcastTestSupport` for JUnit 4-based testing
+- `TestHazelcastInstanceFactory` for JUnit 5 (Jupiter) and general test framework compatibility
+
+For dependencies and tests setup, see: xref:testing-setup.adoc[Testing setup].
+
+== JUnit 4: `HazelcastTestSupport`
+
+Extend `HazelcastTestSupport` to access utility methods for managing in-memory Hazelcast clusters and writing assertions on distributed state.
+
+[source,java]
+----
+public class MyClusterTest extends HazelcastTestSupport {
+    // ...
+}
+----
+
+Use `createHazelcastInstanceFactory()` to spin up in-process Hazelcast members using a mock network.
+
+[source,java]
+----
+TestHazelcastInstanceFactory factory = createHazelcastInstanceFactory(2);
+HazelcastInstance member1 = factory.newHazelcastInstance();
+HazelcastInstance member2 = factory.newHazelcastInstance();
+----
+
+To provide a custom configuration:
+
+[source,java]
+----
+Config config = new Config().setProperty("hazelcast.some.property", "value");
+HazelcastInstance[] members = factory.newInstances(config, 2);
+----
+
+== JUnit 5: `TestHazelcastInstanceFactory`
+
+In JUnit 5, use `TestHazelcastInstanceFactory` directly.
+
+[source,java]
+----
+class MyJupiterClusterTest {
+
+    private static TestHazelcastFactory factory;
+    private static HazelcastInstance member1;
+    private static HazelcastInstance member2;
+    private static HazelcastInstance client;
+
+    @BeforeAll
+    static void setupCluster() {
+        factory = new TestHazelcastFactory(2);
+        member1 = factory.newHazelcastInstance();
+        member2 = factory.newHazelcastInstance();
+        client = factory.newHazelcastClient();
+    }
+
+    @AfterAll
+    static void tearDownCluster() {
+        factory.shutdownAll();
+    }
+
+    @Test
+    void testClusterFormed() {
+        assertEquals(2, member1.getCluster().getMembers().size());
+    }
+}
+----
+
+To customise configuration:
+
+[source,java]
+----
+Config config = new Config().setProperty("hazelcast.some.property", "value");
+HazelcastInstance member1 = factory.newHazelcastInstance(config);
+HazelcastInstance member2 = factory.newHazelcastInstance(config);
+----
+
+Note: this class can be used with other test frameworks.
+
+== Creating Clients
+
+Use `TestHazelcastFactory` to create both member and client instances:
+
+[source,java]
+----
+// JUnit4
+TestHazelcastFactory factory = createHazelcastFactory(2);
+HazelcastInstance[] members = factory.newInstances(2);
+HazelcastInstance client = factory.newHazelcastClient();
+
+// JUnit5
+import com.hazelcast.client.test.TestHazelcastFactory;
+
+TestHazelcastFactory factory = new TestHazelcastFactory(2);
+HazelcastInstance[] members = factory.newInstances(2);
+HazelcastInstance client = factory.newHazelcastClient();
+----
+
+For example:
+
+[source,java]
+----
+public class MyClusterClientTest {
+
+    @Test
+    public void testClientPutAndGetAcrossCluster()
+            throws Exception {
+        // given: a 2-node in-process cluster with client
+        TestHazelcastFactory factory = new TestHazelcastFactory(2);
+        HazelcastInstance member1 = factory.newHazelcastInstance();
+        HazelcastInstance member2 = factory.newHazelcastInstance();
+
+        HazelcastInstance client = factory.newHazelcastClient();
+
+        member2.getMap("map").put("key0", "value0");
+        // when: client puts an entry
+        IMap<String, String> clientMap = client.getMap("map");
+        clientMap.put("key1", "value1");
+
+        // then: client and cluster see the entry
+        assertClusterSizeEventually(2, member1);
+        assertTrueEventually(() -> assertEquals("value0", clientMap.get("key0")));
+        assertTrueEventually(() -> assertEquals("value1", clientMap.get("key1")));
+    }
+
+}
+----
+
+== Assertion Methods
+
+`HazelcastTestSupport` offers a rich set of static assertion methods to validate both cluster state and asynchronous behavior. Below are the most commonly used ones.
+
+=== Static imports
+
+For brevity, statically import the methods you need:
+
+[source,java]
+----
+import static com.hazelcast.test.HazelcastTestSupport.assertClusterSize;
+import static com.hazelcast.test.HazelcastTestSupport.assertClusterSizeEventually;
+import static com.hazelcast.test.HazelcastTestSupport.assertTrueEventually;
+import static com.hazelcast.test.HazelcastTestSupport.assertOpenEventually;
+// ...
+----
+
+=== Cluster topology assertions
+
+- `assertClusterSize(int expected, HazelcastInstance instance)`
+Immediately checks that the given instance sees exactly expected members in its cluster.
+- `assertClusterSizeEventually(int expected, HazelcastInstance instance)`
+Polls until the cluster reaches the expected size (or fails after a default timeout).
+
+=== Asynchronous condition assertions
+
+`assertTrueEventually(AssertTask task)` repeatedly invokes `task.run()` until it completes without throwing an exception, or a timeout is reached. Use this whenever you need to wait for an async condition to become true.
+
+[source,java]
+----
+// wait up to the default timeout for the map to contain 3 entries
+assertTrueEventually(() -> assertEquals(3, map.size()));
+----
+
+Using `assertTrueEventually` for `"false"` conditions you can invert any check by throwing on success. For example, to wait until an entry has been removed:
+
+[source,java]
+----
+assertTrueEventually(() -> assertFalse(map.containsKey("1")));
+----
+
+The following assertions can be used to wait on futures and latches
+
+* `assertOpenEventually(CountDownLatch latch)`
+Blocks until `latch.await()` returns, or the default timeout elapses.
+* `assertOpenEventually(ICompletableFuture<?> future)`
+Waits for the given Hazelcast future to complete.
+
+Overloads accepting a timeout parameter let you customize wait durations:
+
+[source,java]
+----
+assertOpenEventually(latch, 30);          // seconds
+assertTrueEventually(task, 60);          // seconds
+----
+
+These methods—especially `assertTrueEventually` and `assertOpenEventually` are indispensable for testing asynchronous behavior in Hazelcast-powered applications. For the full API, see the `HazelcastTestSupport` source in the hazelcast-tests classifier.
+

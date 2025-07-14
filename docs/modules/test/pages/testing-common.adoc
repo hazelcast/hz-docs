@@ -2,7 +2,7 @@
 
 == Repeating Tests
 
-Use `@Repeat(n)` (provided by Hazelcast) to repeat a test multiple times. This is useful to execute a test multiple time to trigger flaky behaviour.
+Use `@Repeat(n)` (`com.hazelcast.test.annotation.Repeat`) to repeat a test multiple times. This is useful to execute a test multiple time to trigger flaky behaviour. The test passes _only_ if all repeated execution succeed.
 
 [source,java]
 ----
@@ -28,13 +28,15 @@ public class MyClusterTest extends HazelcastTestSupport {
 }
 ----
 
+Tests run with these runners may fail if some other test doesn't shutdown client or member instances correctly.
+
 == Isolating Clusters by Name
 
 Use `randomName()` to avoid interference when tests run in parallel.
 
 [source,java]
 ----
-String clusterName = randomName();
+String clusterName = HazelcastTestSupport.randomName();
 Config config = new Config().setClusterName(clusterName);
 HazelcastInstance[] members = factory.newInstances(config, 2);
 
@@ -51,7 +53,11 @@ JUnit 4:
 ----
 @After
 public void tearDown() {
-    factory.shutdownAll();
+    client.shutdown();
+    member1.shutdown();
+
+    // or
+    shutdownGracefullyNodeFactory();
 }
 ----
 
@@ -60,19 +66,25 @@ JUnit 5:
 ----
 @AfterAll
 static void tearDownCluster() {
+    client.shutdown();
+    member1.shutdown();
+
+    // or
     factory.shutdownAll();
 }
 ----
 
-You can also shutdown a single instance to mimic failure scenarios `ìnstance.shutdown()`.
+Shutting down a single instance can be used to mimic failure scenarios `ìnstance.shutdown()`.
 
 == Testing distributed logic
 
-It' possible to test distributed logic with a combination of Hazelcast test support and mock object. This is useful to test the wiring of the callbacks.
+It' possible to test distributed logic with a combination of Hazelcast test support and mock object. This is useful particularly to test the wiring of the callbacks.
+
+=== Testing map events
 
 For example let's consider an event listener on an `IMap` to illustrate the pattern.
 
-You can test the invocation of the listener mock listener and verifying its invocation.
+You can test the invocation of the mocked listener and verifying its invocation.
 
 [source,java]
 ----
@@ -199,6 +211,69 @@ class MyMapStoreTest {
         verify(mockMapStore, timeout(1000)).store("k2", "v2");
 
         storeHz.shutdown();
+    }
+}
+----
+
+=== Testing member failure scenarios
+
+Application logic that handles failure scenarios can be tested by explicitly calling members' shutdown. In this example we can capture and test the logic of a listener (here mocked for simplicity) programmed to react to a member being stopped:
+
+[source,java]
+----
+public class MyClusterFailureTest {
+
+    private HazelcastInstance client;
+    private HazelcastInstance member1;
+    private HazelcastInstance member2;
+    private MembershipListener mockListener;
+
+    @BeforeEach
+    void setupCluster() {
+        TestHazelcastFactory factory = new TestHazelcastFactory(2);
+        member1 = factory.newHazelcastInstance(getConfig("1"));
+        member2 = factory.newHazelcastInstance(getConfig("2"));
+
+        ClientConfig clientConfig = new ClientConfig();
+        mockListener = mock(MembershipListener.class);
+        ListenerConfig listenerConfig = new ListenerConfig(mockListener);
+        listenerConfig.setImplementation(mockListener);
+        clientConfig.addListenerConfig(listenerConfig);
+        client = factory.newHazelcastClient(clientConfig);
+    }
+
+    private static Config getConfig(String v) {
+        MemberAttributeConfig mAttr = new MemberAttributeConfig();
+        mAttr.setAttribute("m", v);
+        Config config = new Config();
+        config.setMemberAttributeConfig(mAttr);
+        return config;
+    }
+
+    @AfterEach
+    void tearDownCluster() {
+        client.shutdown();
+        if (member1 != null) {
+            member1.shutdown();
+        }
+        if (member2 != null) {
+            member2.shutdown();
+        }
+    }
+
+    @Test
+    public void testClusterFailure() {
+        assertClusterSizeEventually(2, client);
+        member1.getMap("testMap").put("key1", "value1");
+        assertEqualsEventually(() -> client.getMap("testMap").get("key1"), "value1");
+        member1.shutdown();
+        assertClusterSizeEventually(1, client);
+        member1 = null;
+        assertEqualsEventually(() -> client.getMap("testMap").get("key1"), "value1");
+        ArgumentCaptor<MembershipEvent> membershipCaptor = ArgumentCaptor.forClass(MembershipEvent.class);
+        verify(mockListener).memberRemoved(membershipCaptor.capture());
+        MembershipEvent membershipEvent = membershipCaptor.getValue();
+        assertEqualsEventually(() -> membershipEvent.getMember().getAttribute("m"), "1");
     }
 }
 ----

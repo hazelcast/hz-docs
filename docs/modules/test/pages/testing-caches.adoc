@@ -13,7 +13,7 @@ It covers:
 Hazelcast provides two primary test support mechanisms:
 
 - `HazelcastTestSupport` for JUnit 4-based testing
-- `TestHazelcastInstanceFactory` for JUnit 5 (Jupiter) and general test framework compatibility
+- `TestHazelcastFactory` for JUnit 5 (Jupiter) and other testing framework compatibility (use `TestHazelcastInstanceFactory` to also create client instances.)
 
 For dependencies and tests setup, see: xref:testing-setup.adoc[Testing setup].
 
@@ -45,9 +45,9 @@ Config config = new Config().setProperty("hazelcast.some.property", "value");
 HazelcastInstance[] members = factory.newInstances(config, 2);
 ----
 
-== JUnit 5: `TestHazelcastInstanceFactory`
+== JUnit 5: `TestHazelcastFactory`
 
-In JUnit 5, use `TestHazelcastInstanceFactory` directly.
+In JUnit 5, use `TestHazelcastFactory` directly to create hazelcast instances and clients:
 
 [source,java]
 ----
@@ -87,16 +87,17 @@ HazelcastInstance member1 = factory.newHazelcastInstance(config);
 HazelcastInstance member2 = factory.newHazelcastInstance(config);
 ----
 
-Note: this class can be used with other test frameworks.
 
 == Creating Clients
 
-Use `TestHazelcastFactory` to create both member and client instances:
+`TestHazelcastFactory` is an extension of `TestHazelcastInstanceFactory` which adds static methods to create clients. If your tests don't need client objects, you can use the latter. Both classes can be used with other test frameworks than JUnit 4.
+
+To create both member and client instances:
 
 [source,java]
 ----
 // JUnit4
-TestHazelcastFactory factory = createHazelcastFactory(2);
+TestHazelcastFactory factory = createHazelcastFactory(config, 2);
 HazelcastInstance[] members = factory.newInstances(2);
 HazelcastInstance client = factory.newHazelcastClient();
 
@@ -138,13 +139,18 @@ public class MyClusterClientTest {
 }
 ----
 
+**IMPORTANT** make sure to shutdown the instances appropriately:
+
+[source,java]
+----
+client.shutdown();
+member1.shutdown();
+member2.shutdown();
+----
+
 == Assertion Methods
 
 `HazelcastTestSupport` offers a rich set of static assertion methods to validate both cluster state and asynchronous behavior. Below are the most commonly used ones.
-
-=== Static imports
-
-For brevity, statically import the methods you need:
 
 [source,java]
 ----
@@ -154,6 +160,8 @@ import static com.hazelcast.test.HazelcastTestSupport.assertTrueEventually;
 import static com.hazelcast.test.HazelcastTestSupport.assertOpenEventually;
 // ...
 ----
+
+The xref:testing-helpers.adoc[helpers summary] page reports all the available assertions. Some assertions are described below.
 
 === Cluster topology assertions
 
@@ -170,12 +178,6 @@ Polls until the cluster reaches the expected size (or fails after a default time
 ----
 // wait up to the default timeout for the map to contain 3 entries
 assertTrueEventually(() -> assertEquals(3, map.size()));
-----
-
-Using `assertTrueEventually` for `"false"` conditions you can invert any check by throwing on success. For example, to wait until an entry has been removed:
-
-[source,java]
-----
 assertTrueEventually(() -> assertFalse(map.containsKey("1")));
 ----
 
@@ -193,6 +195,3 @@ Overloads accepting a timeout parameter let you customize wait durations:
 assertOpenEventually(latch, 30);          // seconds
 assertTrueEventually(task, 60);          // seconds
 ----
-
-These methods—especially `assertTrueEventually` and `assertOpenEventually` are indispensable for testing asynchronous behavior in Hazelcast-powered applications. For the full API, see the `HazelcastTestSupport` source in the hazelcast-tests classifier.
-

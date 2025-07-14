@@ -1,14 +1,16 @@
-= Testing Overview
+= Overview
 
 Testing is essential to ensure the correctness, reliability, and performance of applications that integrate with Hazelcast.
-Given Hazelcast’s distributed nature and its capabilities for caching, streaming, and distributed execution, tests must cover not just business logic, but also how that logic interacts with the Hazelcast runtime.
+Given Hazelcast’s distributed nature and its capabilities for caching, streaming, and distributed execution, tests must cover not just business logic using data structures (`IMap`s, `Pipeline`s, etc.), but also custom logic expected to be executed within the Hazelcast cluster (`MapStore`s, `EventListener`s, etc).
 
-It's therefore very important to create these tests as part of the application development activities, and being able to run them continuously locally and in a CI/CD in a fast and reliable manner.
+It's therefore very important to test all these parts during of the application development activities to validate the functionality, drive the application design, and, ultimately, being able to run them continuously locally and in a CI/CD in a fast and reliable manner.
 
 Hazelcast applications typically include:
 
  * Application-managed logic executed on local threads that access Hazelcast shared and replicated data structures
  * Hazelcast-managed logic (e.g., entry processors, jobs, listeners) executed on distributed nodes
+
+== Types of tests
 
 Tests should be written at multiple levels. Each level addresses different aspects of the system and helps identify different categories of problems. Specifically:
 
@@ -21,12 +23,14 @@ Tests should be written at multiple levels. Each level addresses different aspec
 4. *Performance and Benchmarking* tests are used to validate how the system behaves under load. These tests focus on metrics like latency, throughput, and resource utilisation.
 Hazelcast provides tooling to simulate real-world distributed environments and inject failures or network conditions, enabling realistic performance verification in simulated production-like deployment.
 
-Hazelcast provides a set of programmatic tools and test utilities that can be used at each of these levels. These include:
- * `HazelcastTestSupport`and `TestHazelcastFactory`: for in-JVM multi-node testing of distributed state
- * `JetTestSupport`: for deterministic testing of streaming pipelines
- * `Hazelcast Simulator`: for full-scale benchmarking, fault injection, and capacity testing
- * A set of annotations and assertions to increase test execution parallelism, and help the verification
-steps of synchronous and asynchronous code
+== APIs and tools overview
+
+Hazelcast provides a set of APIs and test utilities that can be used at each of these levels. These include the classes `HazelcastTestSupport` and `TestHazelcastFactory` (for in-JVM multi-node testing of distributed data structures), `JetTestSupport` (for testing of streaming pipelines); a set of static assertion methods to help the verification
+steps of synchronous and asynchronous code and annotations to configure test execution parallelism.
+
+As well as the APIs, `Hazelcast Simulator` is a standalone tool for full-scale benchmarking, fault injection, and capacity testing
+
+== Testing with a remote cluster
 
 The testing approach described in this documentation is complementary to testing against a remote Hazelcast cluster. It does not aim to replace remote or system-level integration testing, but rather to reduce the reliance on it during most stages of development.
 
@@ -37,23 +41,22 @@ By using the Hazelcast-provided testing utilities covered here, developers can v
  * Less brittle due to fewer external dependencies
  * More deterministic, reducing the chance of intermittent failures caused by environment conditions
 
-This allows developers to focus on validating the logic and behaviour of their code, while deferring more complex test infrastructure setup (e.g. provisioning remote nodes, securing connections) to a later stage in the testing pipeline and for a reduced number of tests.
+Testing using embedded instances is therefore recommended for the bulk of tests validating the application integration logic with the cluster. Complex tests requiring infrastructure setup (e.g. provisioning remote nodes, securing connections) can be minimised and deferred to a later stage in the testing pipeline.
 
 == Advantages of using Hazelcast test support vs Hazelcast embedded
 
-Hazelcast can be started in embedded mode by calling `Hazelcast.newHazelcastInstance()`. While this is fully functional and equivalent to production use, startup and shutdown operations are much slower as their succesfull execution requires a fully configured network stack.
+Hazelcast can be started in embedded mode by calling `Hazelcast.newHazelcastInstance()`. While this is fully functional and equivalent to production use, startup and shutdown operations are much slower as their successful execution requires a fully configured network stack.
 
-Test support classes provide an alternative approach. When members are started using HazelcastTestSupport, they use mock network stack which doesn't require TCP/IP binding and port allocation.
+Test support classes provide an alternative approach. When members are started using `HazelcastTestSupport`, they use mock network stack which doesn't require TCP/IP binding and port allocation.
 
-Members in both cases are functionally equivalent and all core Hazelcast features behave the same in both modes
+Members in both cases are functionally equivalent and all core Hazelcast features behave the same in both modes.
 
-This makes the test support mode well-suited for unit, component, and integration testing where speed and isolation are more important than simulating full network behaviour. For scenarios where real network interactions must be validated (e.g., WAN replication, TLS configuration), embedded mode or remote cluster testing remains appropriate.
+This makes the test support mode ideal for unit, component, and integration testing where speed and isolation are more important than simulating full network behaviour. For scenarios where real network interactions must be validated (e.g., WAN replication, TLS configuration), embedded mode or remote cluster testing remains the preferred choice.
 
-== Testing with JUnit
+== Choice of a testing framework
 
-Hazelcast provides testing support classes such as `HazelcastTestSupport` and `JetTestSupport`, which are designed as extensions of JUnit 4 base classes. These support classes offer built-in utility methods for managing Hazelcast instances, generating unique resource names, synchronising cluster state, and asserting distributed behaviour.
-
-If you are using JUnit 5 or a different test framework (e.g., TestNG) use `TestHazelcastInstanceFactory` to programmatically create and manage embedded Hazelcast members in a test context. Alternatively if you want to create both Hazelcast clients and servers use `TestHazelcastFactory` which extends the former and provides factory methods for both clients and members.
+`HazelcastTestSupport` and `JetTestSupport` are compatible with JUnit 4 as they extend its core classes. which are designed as extensions of JUnit 4 base classes.
+JUnit 5 or different test frameworks (e.g., TestNG) should use `TestHazelcastFactory` or `TestHazelcastInstanceFactory` (an extension of `TestHazelcastFactory` that can create client instances).
 
 Assertions provided by Hazelcast test support classes (e.g., `assertOpenEventually`, `assertTrueEventually`) are framework-agnostic and can be used in any test setup.
 
@@ -84,4 +87,5 @@ The following sections detail how to use these tools.
 - xref:testing-common.adoc[Common utilities]: Common utilities that works for streaming and caching application testing
 - xref:testing-performance.adoc[Performance testing]: For testing performance and benchmarking cluster deployments
 - xref:testing-bestpractices.adoc[Best practices]: Tips to create effective test strategies
+- xref:testing-helpers.adoc[Summary of helpers]: Summary of the available helper tools
 

@@ -95,7 +95,7 @@ public class CustomLoginModuleTest {
             try {
                 callbackHandler.handle(new Callback[] { credcb });
             } catch (IOException | UnsupportedCallbackException e) {
-                throw new LoginException("Unable to retrieve credentials");
+                throw new LoginException("Unable to retrieve credetials");
             }
             Credentials credentials = credcb.getCredentials();
             if (credentials instanceof PasswordCredentials) {

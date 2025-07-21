@@ -1,20 +1,132 @@
 = Go Client
 :page-api-reference: https://pkg.go.dev/github.com/hazelcast/hazelcast-go-client@v{page-latest-supported-go-client}
 
-TIP: For the latest Go API documentation, see https://pkg.go.dev/github.com/hazelcast/hazelcast-go-client@v{page-latest-supported-go-client}[Hazelcast Go Client docs].
+== Overview
 
-The Hazelcast native Go client is an official library that allows Go applications to connect to and interact with Hazelcast clusters. It is implemented using the Hazelcast Open Binary Client Protocol. The key features and benefits include:
+This section provides information about the Go client for Hazelcast, and explains how to install and get started with the client. 
 
-* Distributed Data Structures: supports various distributed implementations like Map, Queue, Set, List, MultiMap, and Replicated Map, mimicking natural interfaces of these structures in Go
-* SQL Support: allows running SQL queries on Hazelcast 5.x clusters, enhancing data querying capabilities
-* JSON Support: declarative configuration support via JSON
-* High Performance: offers high-performance aggregation functions such as sum, average, max, and min, for Hazelcast Map entries. They can run in parallel for each partition and are highly optimized for speed and low-memory consumption
-* Near Cache: improves read performance for frequently accessed data, optimizing application speed
-* External Smart Client Discovery: allows for dynamic discovery of cluster members, enhancing scalability and fault tolerance
+TIP: To learn how to get started quickly with the Hazelcast Go client, follow our simple xref:clients:go-client-getting-started.adoc[Get started with Go] tutorial.
 
-The Hazelcast Go client provides a robust, efficient, and Go-friendly way to work with Hazelcast clusters, enabling developers to build scalable and distributed applications with ease.
+The official Hazelcast Go client allows Go applications to connect to and interact with Hazelcast clusters. 
+The key features and benefits include:
+
+* Distributed data structures: supports Hazelcast distributed data structures like Map, Queue, Set, List, MultiMap, and Replicated Map.
+* SQL support: allows running SQL queries on Hazelcast 5.x clusters using our proprietary API or via the DBAPI driver. See: https://pkg.go.dev/github.com/hazelcast/hazelcast-go-client/sql/driver[Driver documentation].
+* High performance: offers high-performance aggregation functions such as sum, average, max, and min, for Hazelcast Map entries. See: https://pkg.go.dev/github.com/hazelcast/hazelcast-go-client/aggregate[Aggregation functions].
+* Near cache: client-side cache that improves read performance for frequently accessed data. See: https://pkg.go.dev/github.com/hazelcast/hazelcast-go-client#hdr-Using_the_Near_Cache-Map[Using the Near Cache].
+* External client public address discovery: enables using public addresses instead of private ones in Kubernetes clusters. See: https://pkg.go.dev/github.com/hazelcast/hazelcast-go-client/cluster#hdr-External_Client_Public_Address_Discovery[External Client Public Address Discovery].
+
+The Hazelcast Go client provides a robust, efficient, and Go-friendly way to work with Hazelcast clusters, enabling you to build scalable and distributed applications with ease.
+
+TIP: For the latest Go API documentation, see https://pkg.go.dev/github.com/hazelcast/hazelcast-go-client@v{page-latest-supported-go-client}[Hazelcast Go Client documentation].
+
+== Install the Go client
+
+This section explains how to install the Hazelcast Go client.
+
+Requirements:
+
+- The Hazelcast Go client is compatible with Hazelcast 4.x, and upwards.
+- Hazelcast supports the two most recent versions of the Go programming language at the time each new Go client is released.
+
+In your Go module-enabled project, add a dependency to `github.com/hazelcast/hazelcast-go-client`:
+
+[source]
+----
+go get github.com/hazelcast/hazelcast-go-client@latest
+----
+
+== Quick start
+
+The Hazelcast Go client requires a working Hazelcast cluster to run. The cluster handles storage and manipulation of the user data. Clients are a way to connect to the Hazelcast cluster and access the data.
+
+To start a free trial of Hazelcast {enterprise-product-name}, see https://hazelcast.com/get-started/[Get started].
+
+=== Start the default client
+
+Start the client with the default Hazelcast host and port using `hazelcast.StartNewClient`, when Hazelcast is running locally with the default options:
+
+```go
+ctx := context.TODO()
+client, err := hazelcast.StartNewClient(ctx)
+```
+TIP: For more information, see: https://hazelcast.com/blog/unboxing-hazelcast-go-client-v1/[Unboxing Hazelcast Go Client].
+
+=== Start the client with given options
+
+If you want to change the default configuration, you can specify options at runtime.
+
+Note that `Config` structs are not thread-safe. Complete creation of the configuration in a single goroutine.
+
+In the following example, you create the default configuration, optionally set member addresses manually, create and start the client with the given configuration, and handle a client start error:
+
+```go
+config := hazelcast.Config{}
+config.Cluster.Network.SetAddresses("member1.example.com:5701", "member2.example.com:5701")
+client, err := hazelcast.StartNewClientWithConfig(ctx, config)
+```
+
+== Sample code
+
+The following example creates a Go client instance, connects to a cluster, gets and populates a map and prints the data.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/hazelcast/hazelcast-go-client"
+)
+
+func main() {
+	ctx := context.TODO()
+	// create the client and connect to the cluster on localhost
+	client, err := hazelcast.StartNewClient(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// get a map
+	people, err := client.GetMap(ctx, "people")
+	if err != nil {
+		log.Fatal(err)
+	}
+	personName := "Jane Doe"
+	// set a value in the map
+	if err = people.Set(ctx, personName, 30); err != nil {
+		log.Fatal(err)
+	}
+	// get a value from the map
+	age, err := people.Get(ctx, personName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%s is %d years old.\n", personName, age)
+	// stop the client to release resources
+	client.Shutdown(ctx)
+}
+```
+
+== Get support
+
+Join us in the https://hazelcastcommunity.slack.com/channels/go-client[Go Client channel].
+
 
 == Next steps
 
-For more information, see the https://github.com/hazelcast/hazelcast-go-client[Hazelcast Go client GitHub repo].
+Hazelcast Go Client documentation is hosted at https://pkg.go.dev/github.com/hazelcast/hazelcast-go-client[pkg.go.dev].
+
+Use godoc to view the documentation locally:
+```  
+godoc -http=localhost:5500
+```
+
+Note that godoc is not installed by default with the base Go distribution. You can install it using:
+```
+go get -u golang.org/x/tools/...`
+```
+
+See also the https://github.com/hazelcast/hazelcast-go-client[Hazelcast Go client GitHub repo]
 and https://github.com/hazelcast/hazelcast-go-client/tree/master/examples[code samples^].

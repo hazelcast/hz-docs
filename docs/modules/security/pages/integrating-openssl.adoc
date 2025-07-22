@@ -222,3 +222,58 @@ For the
 information, e.g., `TLSv1.3`. It ensures the engine won't allow a fallback to an old, insecure version.
 
 * `validateIdentity`: Flag which allows enabling endpoint identity validation. It means, during the TLS handshake client verifies if the server's hostname (or IP address) matches the information in X.509 certificate (Subject Alternative Name extension). Possible values are `"true"` and `"false"` (default).
+
+== Troubleshooting tips
+
+This section helps you resolve errors sometimes encountered when enabling FIPS mode.
+
+**Problem: Failed to load libraries**
+
+You get an error similar to:
+
+`java.lang.IllegalArgumentException: Failed to load any of the given libraries: [netty_tcnative_linux_aarch_64_fedora, netty_tcnative_linux_aarch_64, netty_tcnative_aarch_64, netty_tcnative]`
+
+**Reason**
+
+This error can occur if you use the generic netty-tcnative JAR file rather than the platform-specific version.
+
+**Resolution**
+
+To ensure the correct library is used, specify the platform-specific netty-tcnative JAR file. For example, for aarch_64:
+
+`netty-tcnative-2.0.69.Final-linux-aarch_64.jar`
+
+NOTE: If the JAR file is unavailable in Maven Central, you may need to build it manually.
+
+For more information, see: xref:security:integrating-openssl.adoc#netty-libraries[Netty Libraries].
+
+**Problem: BCFKS not found**
+
+You get an error similar to:
+
+`com.hazelcast.core.HazelcastException: java.security.KeyStoreException: BCFKS not found`
+
+**Reason**
+
+This error occurs when the Java runtime doesn't recognize the BCFKS keystore type, which is provided by the BouncyCastle provider. This can happen for several reasons — for example, the issue may be caused by using the wrong keystore type. Note that this error can also occur in non-FIPS mode.
+
+**Resolution**
+
+Switch to BCFKS for the keystore and truststore to resolve the problem.
+
+To use BCFKS, change the properties to:
+
+[source,xml]
+----
+<properties>
+    <property name="protocol">TLSv1.2</property>
+    <property name="keyStore">keystore.bcfks</property>
+    <property name="keyStorePassword">password</property>
+    <property name="keyStoreType">BCFKS</property>
+    <property name="trustStore">truststore.bcfks</property>
+    <property name="trustStorePassword">password</property>
+    <property name="trustStoreType">BCFKS</property>
+</properties>
+----
+
+For more information about configuring properties, see: xref:security:tls-ssl.adoc#tls-for-hazelcast-members[TLS for Hazelcast Members].

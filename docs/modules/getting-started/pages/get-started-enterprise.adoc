@@ -1,0 +1,229 @@
+= Get Started with Hazelcast {enterprise-product-name}
+:description: This quickstart will get you started with Hazelcast Platform {enterprise-product-name} and take you from installation all the way through to a working three member cluster with persistence enabled.
+:page-enterprise: true
+:page-aliases: enterprise-overview.adoc
+
+{description}
+
+== What you'll learn
+
+In this tutorial, you’ll do the following:
+
+* Install Hazelcast Enterprise with a trial license
+* Create a cluster with three members with persistence enabled
+* Create a map and view the data in Management Center
+* Restart the cluster and check the data persists
+
+The tutorial should take approximately 20 minutes to complete.
+// get feedback on timing
+
+== Step 1: Pull the Hazelcast {enterprise-product-name} Docker image
+
+include::install-enterprise.adoc[tag=docker]
+
+== Step 2: Get your {enterprise-product-name} license
+
+include::deploy:enterprise-licenses.adoc[tag=get-license]
+
+== Step 3: Create Docker network for Hazelcast
+
+. Create a Docker network for Hazelcast, using the following command:
++
+[source,shell]
+----
+docker network create hazelcast-network
+----
++
+You should see a confirmation message (showing the full NETWORK ID) similar to this:
++
+[source,shell]
+----
+fdf9adf0a3795bfdfb6944b9816d873d30a56d5a94b6b0c0964ce3bce5ec4819
+----
++
+If you have run this command previously (and not deleted the network), you will see confirmation that `network with name hazelcast-network already exists`.
+
+== Step 4: Start a member with persistence enabled
+
+. To start the first member in a cluster called `hello-world`, run the following Docker command:
++
+[source,shell,subs="attributes+"]
+----
+docker run \
+    --name first-member --network hazelcast-network \
+    --rm \
+    -e HZ_NETWORK_PUBLICADDRESS=docker.host.internal:5701 \ <1>
+    -e HZ_CLUSTERNAME=hello-world \
+    -e HZ_LICENSEKEY=<your_license_key> \ <2>
+    -e HZ_PERSISTENCE_ENABLED=true \
+    -e HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true \
+    -v ~/persist:/opt/hazelcast/persistence \ <3>
+    -p 5701:5701 hazelcast/hazelcast-enterprise:{ee-version} <4>
+----
+<1> You can replace `docker.host.internal` with the IP address of your Docker host. Either will work but you will need to know the IP address for connecting, for example, a SQL client to a specific member.
+// Some examples do same IP address but different ports - does this also work?
+<2> Replace the `<your_license_key>` placeholder with the Hazelcast {enterprise-product-name} license key from step 2.
+<3> By default, Hazelcast creates the `/opt/hazelcast/persistence` directory to store the persisted data.
+However, using a Docker image, you cannot create any files inside the container. This line of the command mounts a directory
+on your local drive to the container, which in this case is `persist` under the home directory. This way, the container will use this local
+directory to save the persisted data. You need to define a separate persist mapping for each member e.g. the second member example below uses `~/persist2`.
+// more info / verification of this section
+<4> The first port number should match the port assigned in <1>. For subsequent members (e.g. second, third), you should increment the first port number but keep the second port number i.e. 5702:5701, 5703:5701.
+
+Your first member is started now, and you can see from the terminal logs that persistence is enabled:
+[source,shell,subs="+quotes,attributes+"]
+----
+[ INFO] [main] [c.h.i.c.o.ExternalConfigurationOverride]: Detected external configuration entries in environment variables: [*hazelcast.persistence.enabled=true*,hazelcast.clustername=hello-world,hazelcast.licensekey=******,hazelcast.map.mydistributedmap.datapersistence.enabled=true]
+[ INFO] [main] [c.h.i.h.HotRestartIntegrationService]: [LOCAL] [hello-world] [{full-version}] Created new empty hot-restart directory: /opt/hazelcast/persistence/611ffa80-b653-44b9-8cf1-f9ffa5bfa1cb
+[ INFO] [main] [c.h.s.logo]: [172.18.0.2]:5701 [hello-world] [{ee-version}]
+----
+
+== Step 5: Start more members
+
+Run each of the following Docker commands in a separate terminal, replacing the `<your_license_key>` placeholder with your Hazelcast {enterprise-product-name} license key.
+
+. Open a *new* terminal window and run the following command to start a second member:
++
+[source,shell,subs="attributes+"]
+----
+docker run \
+    --name second-member --network hazelcast-network \
+    --rm \
+    -e HZ_NETWORK_PUBLICADDRESS=docker.host.internal:5702 \
+    -e HZ_CLUSTERNAME=hello-world \
+    -e HZ_LICENSEKEY=<your_license_key> \
+    -e HZ_PERSISTENCE_ENABLED=true \
+    -e HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true \
+    -v ~/persist:/opt/hazelcast/persistence \
+    -p 5702:5701 hazelcast/hazelcast-enterprise:{ee-version}
+----
++
+. Open another *new* terminal window and run the following command to start a third member:
++
+[source,shell,subs="attributes+"]
+----
+docker run \
+    --name third-member --network hazelcast-network \
+    --rm \
+    -e HZ_NETWORK_PUBLICADDRESS=docker.host.internal:5703 \
+    -e HZ_CLUSTERNAME=hello-world \
+    -e HZ_LICENSEKEY=<your_license_key> \
+    -e HZ_PERSISTENCE_ENABLED=true \
+    -e HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true \
+    -v ~/persist:/opt/hazelcast/persistence \
+    -p 5703:5701 hazelcast/hazelcast-enterprise:{ee-version}
+----
+
+You should see all three members forming a cluster, with confirmation that looks like:
+[source,shell]
+----
+Members {size:3, ver:3} [
+	Member [docker.host.internal]:5701 - d1917f97-49b4-4e8e-b8df-ab541c6c681b this  <1>
+	Member [docker.host.internal]:5702 - ed7d90a0-1819-40fc-a0fb-da64a43d9269
+	Member [docker.host.internal]:5703 - a7f2f072-cb1f-4c15-88b3-6dbefa212bb0
+]
+----
+<1> The *this* label at the end of the line indicates the current member i.e. this example shows Hazelcast logs from the first member's perspective.
+
+// Note the member IP addresses and ports since you will need them in the following steps.
+// need best reliable way of doing this - you can see in the terminal and the hint should be around 172.18.0.2 etc.
+// can you get this from MC? Why not?!?
+// kubectl logs hz-hazelcast-0
+
+== Step 6: Create a map
+
+In this step, you'll create a map called `mydistributedmap` with three entries.
+
+. In a *new* terminal window, replace `MEMBER_IP` with the IP address of one of your Hazelcast members and use the following code to start the SQL shell:
++
+[source,shell]
+----
+docker run --network hazelcast-network -it --rm hazelcast/hazelcast-enterprise:{ee-version} hz-cli --targets hello-world@MEMBER_IP sql
+----
+. Create the map:
++
+[source,sql]
+----
+CREATE MAPPING mydistributedmap TYPE IMap OPTIONS ('keyFormat'='varchar','valueFormat'='varchar');
+----
+. Add data to the map:
++
+[source,sql]
+----
+SINK INTO mydistributedmap VALUES
+('1', 'John'),
+('2', 'Mary'),
+('3', 'Jane');
+----
+. Exit the SQL shell using the `exit` command.
+
+== Step 7: View the map in Management Center
+
+. Open another *new* terminal and start Management Center using the following command:
++
+[source,shell,subs="attributes+"]
+----
+docker run \
+    --network hazelcast-network \
+    -p 8080:8080 hazelcast/management-center:{page-latest-supported-mc}
+----
+. In a web browser, go to `localhost:8080` and enable Dev Mode.
+// +
+// remove as unnecessary image:mc-dev-mode.png[Enabling Dev mode in Management Center]
+. You should now see a *Cluster Connections* screen. 
+.. Click *Connect Cluster*.
+.. Enter a *Cluster Name* of `hello-world`.
+.. Enter the IP addresses and ports of the three members in *Member Addresses*, using commas to separate entries.
+// need to check - example image shows same IP but different ports yet instructions are separate IP and ports
+.. Click *Connect* to connect to the cluster.
++
+image:connect-cluster.png[Connecting Management Center to the cluster]
+. You may have to wait 10 seconds or so for the cluster to show as active and with three members.
++
+image:cluster-connected.png[Management Center is now connected to the cluster]
+// resize image
+. Click *View Cluster* and go to **Storage > Maps**. You should be able to see the map you created has data with three entries. If you want to view the details for `mydistributedmap`, enable the *Map Statistics* box.
++
+image:cluster-maps.png[Map listing]
+// image:map-details.png[Map details]
+
+== Step 8: Restart the cluster
+
+. Go to **Cluster** > **Administration**, and select the **Cluster State** tab.
+. Click **Shutdown** and confirm the dialog that appears.
++
+Management Center should now show it is disconnected from the cluster, which you can confirm by checking your terminal windows, which should show the members exited to shell and similar output to:
++
+[source,shell,subs="attributes+"]
+----
+2025-07-18 15:21:50,538 [ INFO] [hz.eloquent_cannon..clusterShutdown] [c.h.i.i.Node]: [host.docker.internal]:5702 [hello-world] [5.5.6] Hazelcast Shutdown is completed in 124 ms.
+----
++
+. Restart the cluster by starting the members up again by rerunning the commands in steps 4 and 5 above
+. When the members have restarted you can view your map data in Management Center and confirm the entries still exist. If persistence was not enabled, the data would be lost after cluster shutdown. 
+
+== Step 9: Clean up
+
+. Repeat the steps to shutdown the cluster 
+. To delete the persist directories created above, use the following command:
+[source,shell,subs="attributes+"]
+----
+rm -rf ~/persist*
+----
+
+== Summary
+
+In this tutorial, you learned how to:
+
+* Deploy Hazelcast {enterprise-product-name} with persistence enabled
+* Create a simple Hazelcast map using SQL
+* View the data in Management Center
+* Restart the Hazelcast cluster and check the data persists
+
+== Next steps
+
+Continue your journey by following another tutorial in this series:
+
+* xref:getting-started:authenticate-clients.adoc[Authenticate Client Connections]
+* xref:getting-started:wan.adoc[Synchronize Maps in Two Different Clusters]
+* xref:getting-started:blue-green.adoc[Set Up Blue/Green Deployment]

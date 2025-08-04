@@ -2,22 +2,133 @@
 :page-api-reference: http://hazelcast.github.io/hazelcast-csharp-client/{page-latest-supported-csharp-client}/api/index.html
 [[net-client]]
 
-TIP: For the latest .NET API documentation, see http://hazelcast.github.io/hazelcast-csharp-client/{page-latest-supported-csharp-client}/api/index.html[Hazelcast .NET Client docs].
+== Overview
 
+This section provides information about the .NET client for Hazelcast, and explains how to install and get started with the client. 
 
-The Hazelcast native .NET client is an official library that allows .NET applications to connect to and interact with Hazelcast clusters. The key features and benefits include:
+TIP: To learn how to get started quickly with the Hazelcast .NET client, follow our simple xref:clients:csharp-client-getting-started.adoc[Get started with .NET] tutorial.  
 
-* Distributed Data Structures: it provides access to Hazelcast's distributed data structures such as maps, queues, topics, and more
-* SQL Support: ihe client allows running SQL queries over distributed data
-* Near Cache: it supports Near Cache for faster read speeds. Eventual consistency is also supported
-* Security Features: the client offers SSL support and Mutual Authentication for enterprise-level security needs
-* JSON Object Support: it allows using and querying JSON objects
-* Zero Downtime Upgrades: Blue/Green failover for zero downtime during upgrades is supported
-* Scalability: the Hazelcast .NET Client is designed to scale up to hundreds of members and thousands of clients, making it suitable for large-scale applications
+The official Hazelcast .NET client allows .NET applications to connect to and interact with Hazelcast clusters. 
+The key features and benefits include:
+
+* Distributed Data Structures: it provides access to Hazelcast's distributed data structures such as maps, queues, topics, and more.
+* SQL Support: the client allows running SQL queries over distributed data.
+* Near Cache: it supports Near Cache for faster read speeds. Eventual consistency is also supported.
+* Security Features: the client offers SSL support and Mutual Authentication for enterprise-level security needs.
+* JSON Object Support: it allows using and querying JSON objects.
+* Zero Downtime Upgrades: Blue/Green failover for zero downtime during upgrades is supported.
+* Scalability: the Hazelcast .NET Client is designed to scale up to hundreds of members and thousands of clients, making it suitable for large-scale applications.
 
 These features make the Hazelcast .NET Client ideal for .NET applications requiring high-performance, scalable, and distributed data processing capabilities.
 
+TIP: For the latest .NET API documentation, see http://hazelcast.github.io/hazelcast-csharp-client/{page-latest-supported-csharp-client}/api/index.html[Hazelcast .NET Client docs].
+
+== Install the .NET client
+
+This section explains how to download and install the Hazelcast .NET client using the published Hazelcast.Net package from NuGet. 
+
+=== Requirements
+
+The Hazelcast .NET client is distributed as a NuGet package that targets .NET Standard versions 2.0 and 2.1, and specific .NET versions starting with 5.0. It can therefore be used in any application targetting .NET versions that support these .NET Standard versions:
+
+* .NET Framework 4.6.2 and above, on Windows
+* .NET Core, on Windows, Linux and MacOS
+
+For details about the exact versions supported by the client, see http://hazelcast.github.io/hazelcast-csharp-client/versions.html[versions]. 
+
+=== Distribution
+
+The .NET client is distributed via NuGet as a package named `Hazelcast.Net``. It can be installed like any other NuGet package, either via the Visual Studio GUI, or using the package manager:
+
+```
+PM> Install-Package Hazelcast.Net
+```
+Or via the .NET CLI:
+
+```
+> dotnet add package Hazelcast.Net
+```
+Or manually added to the project as a package reference:
+
+```
+<PackageReference Include="Hazelcast.Net" Version="4.0.0" />
+```
+
+=== Binding redirects
+
+When including the Hazelcast.Net package in a .NET Framework project, note that some binding redirects may be required. Although every attempt has been made to align all our dependencies, some inconsistencies even within Microsoft's own packages mean that it's not possible to avoid redirects entirely. 
+
+You can enable <AutoGenerateBindingRedirects> in your project file, and Visual Studio will populate your application config files with the appropriate binding redirects.
+
+Alternatively, apply the following redirects:
+
+```
+<assemblyBinding xmlns="urn:schemas-microsoft-com:asm.v1">
+  <dependentAssembly>
+    <assemblyIdentity name="System.Buffers" publicKeyToken="cc7b13ffcd2ddd51" culture="neutral" />
+    <bindingRedirect oldVersion="0.0.0.0-4.0.3.0" newVersion="4.0.3.0" />
+  </dependentAssembly>
+</assemblyBinding>
+<assemblyBinding xmlns="urn:schemas-microsoft-com:asm.v1">
+  <dependentAssembly>
+    <assemblyIdentity name="System.Runtime.CompilerServices.Unsafe" publicKeyToken="b03f5f7f11d50a3a" culture="neutral" />
+   <bindingRedirect oldVersion="0.0.0.0-5.0.0.0" newVersion="5.0.0.0" />
+  </dependentAssembly>
+</assemblyBinding>
+```
+
+== Use the client
+
+After installing the Hazelcast .NET client, you can begin using it by creating a new client instance and connecting to your Hazelcast cluster. Here's a minimal example to get you started:
+
+1. **Create a .NET console project and add the Hazelcast client:**
+
+   ```sh
+   dotnet new console -n hazelcast-example
+   cd hazelcast-example
+   dotnet add package Hazelcast.Net
+   ```
+
+2. **Edit your `Program.cs` file with the following code:**
+
+   ```csharp
+   using System.Threading.Tasks;
+   using Hazelcast;
+
+   class Program
+   {
+       public static async Task Main()
+       {
+           // Create default options and connect to a Hazelcast server running on localhost
+           var options = new HazelcastOptionsBuilder().Build();
+           await using var client = await HazelcastClientFactory.StartNewClientAsync(options);
+
+           // Use the client (e.g., get a distributed map)
+           var map = await client.GetMapAsync<string, string>("my-distributed-map");
+           await map.SetAsync("key", "value");
+           var value = await map.GetAsync("key");
+           System.Console.WriteLine($"Value for 'key': {value}");
+
+           // Dispose the client when done
+           await client.DisposeAsync();
+       }
+   }
+   ```
+   
+   This example connects to a Hazelcast server running on `localhost` with default settings. You can further configure the client using the `HazelcastOptionsBuilder` if needed.
+
+   
+3. **Run your application:**
+
+   ```sh
+   dotnet run
+   ```
+
+This will connect your .NET application to a Hazelcast cluster and allow you to interact with distributed data structures like maps. For more advanced configuration (e.g., connecting to Hazelcast Cloud, using SSL, or customizing logging), refer to the https://hazelcast.github.io/hazelcast-csharp-client/latest/doc/getting-started.html#using-the-client[Getting Started documentation] and the https://hazelcast.com/developers/clients/dotnet/[code samples]. 
+
+NOTE: Always dispose of the client when finished to properly close connections and release resources.
+
 == Next steps
 
-For more information about configuring, starting, and using the client, see the Hazelcast .NET client GitHub http://hazelcast.github.io/hazelcast-csharp-client/latest/doc/download-install.html[documentation^]. You can also find https://github.com/hazelcast/hazelcast-csharp-client/tree/master/src/Hazelcast.Net.Examples[code samples^]
-for the client in this repo.
+For more information about configuring, starting, and using the client, see the Hazelcast .NET client GitHub http://hazelcast.github.io/hazelcast-csharp-client/latest/doc/download-install.html[documentation^]. 
+You can also find https://github.com/hazelcast/hazelcast-csharp-client/tree/master/src/Hazelcast.Net.Examples[code samples^] for the client in this repo.

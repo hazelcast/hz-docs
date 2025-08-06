@@ -47,8 +47,13 @@ These approaches are described in the following sections.
 [[synchronizing-wan-target-cluster]]
 == Full WAN Synchronization
 
-Full WAN synchronization sends all the data of an IMap to a target cluster to align the state of target IMap with source IMap.
-It is useful if two remote clusters lost their synchronizations due to overflow in the WAN queue or in restart scenarios.
+Full WAN synchronization updates or adds entries in the target IMap to match the source IMap, but does not remove entries that exist only in the target.
+If you are concerned about extraneous entries on the target IMap, you should consider clearing it before initiating a WAN synchronization.
+Clearing an IMap can be done programmatically by calling `IMap#clear()`, through Management Center's
+xref:{page-latest-supported-mc}@management-center:data-structures:map.adoc#clear-map[Clear Data action], 
+or using Hazelcast’s xref:maintain-cluster:rest-api-swagger#tag/Data-Controller/operation/clearMap[REST API].
+
+Full WAN synchronization is useful if two remote clusters lost their synchronizations due to overflow in the WAN queue or in restart scenarios.
 This is the default synchronization option.
 
 Full WAN Synchronization can be initiated through
@@ -131,7 +136,7 @@ synchronized, not even if `MapLoader` is configured.
 == Delta WAN Synchronization
 
 As explained in the previous section, the default <<synchronizing-wan-target-cluster, Full WAN Synchronization>> feature
-synchronizes  the maps in different clusters by transferring all the entries from the source to the target cluster.
+synchronizes the maps in different clusters by transferring all the entries from the source to the target cluster.
 This may be not efficient since some of the entries have remained unchanged on both clusters and
 do not require to be transferred. Also, for the entries to be transferred, they need to be copied to
 on-heap on the source cluster. This may cause spikes in the heap usage, especially if using large off-heap stores.
@@ -142,9 +147,9 @@ It is a data structure used for efficient comparison of the difference in the co
 The precision of this comparison is defined by Merkle tree's depth.
 Merkle tree hash exchanges can detect inconsistencies in the map data and
 synchronize only the different entries when using WAN synchronization, instead of sending all the map entries.
+As in a full WAN synchronization, entries that only exist in the target IMap are not removed.
 
 NOTE: Currently, Delta WAN Synchronization is implemented only for Hazelcast IMap.
-It will be implemented also for ICache in the future releases.
 
 [[requirements-for-delta-wan-sync]]
 === Requirements

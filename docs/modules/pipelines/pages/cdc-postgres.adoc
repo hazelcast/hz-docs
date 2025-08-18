@@ -268,6 +268,8 @@ import com.hazelcast.jet.config.JobConfig;
 import com.hazelcast.jet.pipeline.Pipeline;
 import com.hazelcast.jet.pipeline.StreamSource;
 
+import java.util.concurrent.ThreadLocalRandom;
+
 public class JetJob {
 
     public static void main(String[] args) {
@@ -276,6 +278,8 @@ public class JetJob {
                 .setDatabaseCredentials("postgres", "postgres")
                 .setDatabaseName("postgres")
                 .setTableIncludeList("inventory.customers")
+                .setProperty("plugin.name", "pgoutput")
+                .setProperty("publication.name", "dbz_publication" + ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE))
                 .build();
 
         Pipeline pipeline = Pipeline.create();
@@ -293,6 +297,7 @@ public class JetJob {
 
 }
 ----
+
 --
 {open-source-product-name}::
 +
@@ -339,6 +344,8 @@ public class JetJob {
 ----
 --
 ====
+
+NOTE: We are setting `publication.name`, so that 2 jobs run concurrently won't cause problems with Primary Keys of publications. It's highly suggested to provide this parameter's value to some meaningful value if you are using `pgoutput` (PostgreSQL's built-in) decoding plugin.
 
 The `Customer` class we map change events to is quite simple too:
 

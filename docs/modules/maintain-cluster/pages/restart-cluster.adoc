@@ -1,0 +1,219 @@
+= Restart a cluster
+:description: Static configuration is configuration that cannot be changed while members are running. To apply updates to static configuration, you must restart the cluster.
+
+{description}
+
+There are two options for restarting a cluster:
+
+* <<rolling>>
+* <<whole>>
+
+Where possible, you should perform a rolling restart. In a rolling restart, members are stopped one at a time and each member's data is automatically repartitioned across the remaining cluster members before shutting down. This minimizes the risk of service interruptions and data loss. When the replacement member joins the cluster, data is partitioned across the cluster again.
+
+Depending on the scope of your configuration changes, you may need update a single member, a cluster, or multiple clusters. The process is the same in all cases.
+
+TIP: You can also use the rolling restart process for canarying: testing changes on a single member before updating the rest of the cluster.
+
+Some configuration needs to be consistent across all members in a cluster. To update this configuration, you must restart the whole cluster simultaneously. This causes all data in the cluster to be lost. To avoid data loss, you must enable xref:storage:persistence.adoc[persistence]. To avoid downtime, you must divert traffic to another Hazelcast cluster before restarting.
+
+Note that members are not restarted. In all cases, members are destroyed, and new members are created to replace them.
+
+You should perform restarts in a low utilization or maintenance window to reduce the risk of service impacts.
+
+== Persistence
+
+If xref:storage:persistence.adoc[persistence] is enabled, replacement members will adopt the UUIDs of the destroyed members and attempt to load persisted data from disk. This avoids the repartitioning process, helping the cluster recover more quickly during a rolling restart.
+
+Persistence is required to avoid data loss during a whole cluster restart. See xref:storage:configuring-persistence.adoc[] for details.
+
+[[rolling]]
+== Perform a rolling restart
+
+You should check the cluster is healthy before and after making changes. The best way to do this is to run a xref:{page-latest-supported-mc}@management-center:clusters:healthcheck.adoc[Healthcheck] in Management Center. For other options, see xref:maintain-cluster:monitoring.adoc[].
+
+To perform a rolling restart:
+
+. Update the static configuration as required.
+
+. Choose a member and make a note of its name or IP address to help you keep track.
+
+. Gracefully shut down the member.
++
+[tabs]
+====
+CLI::
++
+IMPORTANT: This command shuts down all running members on the local device.
++
+--
+[source,bash]
+----
+bin/hz-stop
+----
+--
+
+Java::
++
+--
+[source,java]
+----
+HazelcastInstance.shutdown()
+----
+--
+
+Management Center::
++
+--
+Go to *Members*, select the member's row in the table and select *Shutdown*.
+--
+
+Docker::
++
+--
+[source,bash]
+----
+docker stop <container name>
+----
+--
+====
+
+. Wait until all partition migrations are completed. You can monitor the progress of migrations on the xref:{page-latest-supported-mc}@management-center:clusters:dashboard.adoc[cluster dashboard] in Management Center.
+
+. Start a new member.
++
+[tabs]
+====
+CLI::
++
+--
+[source,bash]
+----
+bin/hz start
+----
+--
+
+Java::
++
+--
+[source,java]
+----
+Hazelcast.newHazelcastInstance()
+----
+--
+
+Docker::
++
+--
+[source,bash]
+----
+docker start <container name>
+----
+--
+====
+
+. Wait until the new member joins the cluster and all partition migrations are completed. Again, you can monitor progress using the xref:{page-latest-supported-mc}@management-center:clusters:dashboard.adoc[cluster dashboard] in Management Center.
+
+. Repeat this process until all members have been restarted with the updated configuration.
+
+[[whole]]
+== Perform a whole cluster restart
+
+You should check the cluster is healthy before and after making changes. The best way to do this is to run a xref:{page-latest-supported-mc}@management-center:clusters:healthcheck.adoc[Healthcheck] in Management Center. For other options, see xref:maintain-cluster:monitoring.adoc[].
+
+To perform a whole cluster restart:
+
+. Update the static configuration as required.
+
+. Divert traffic to another Hazelcast cluster. How to do this depends on how your Hazelcast deployment is architected. For example, you may use a load balancer between your clients and clusters.
++
+Management Center provides an easy way to xref:{page-latest-supported-mc}@management-center:clusters:client-filtering.adoc[manage client connections] using filtering rules.
+
+. Gracefully shut down the cluster:
++
+[tabs]
+====
+CLI::
++
+--
+[source,bash]
+----
+bin/hz-cluster-admin -a <member-address> -c <cluster-name> -o shutdown
+----
+--
++
+You can specify the IP address of any member in the cluster.
+
+Java::
++
+--
+[source,java]
+----
+HazelcastInstance.getCluster().shutdown()
+----
+--
+
+Management Center::
++
+--
+Go to *Administration* > *Cluster State* and select *Shutdown*.
+--
+
+Docker::
++
+Use `docker stop` to shut down each container as required.
++
+--
+[source,bash]
+----
+docker stop <container name>
+----
+--
+====
+
+. Check that all members are in `SHUT_DOWN` state using the xref:{page-latest-supported-mc}@management-center:clusters:dashboard.adoc[cluster dashboard] in Management Center.
+
+. Recreate the cluster:
++
+[tabs]
+====
+CLI::
++
+Use `hz start` to create each new member as required. They will form a cluster automatically.
++
+--
+[source,bash]
+----
+bin/hz start
+----
+--
+
+Java::
++
+Call `newHazelcastInstance` to create each new member as required. They will form a cluster automatically. The following example creates a new three member cluster.
++
+--
+[source,java]
+----
+HazelcastInstance hz = Hazelcast.newHazelcastInstance();
+HazelcastInstance hz2 = Hazelcast.newHazelcastInstance();
+HazelcastInstance hz3 = Hazelcast.newHazelcastInstance();
+----
+--
+
+Docker::
++
+Use `docker start` to restart the containers and create each new member as required. They will form a cluster automatically.
++
+--
+[source,bash]
+----
+docker start <container name>
+----
+--
+====
+
+. Check that all members are in `ACTIVE` state using the xref:{page-latest-supported-mc}@management-center:clusters:dashboard.adoc[cluster dashboard] in Management Center.
+
+. Confirm the cluster is healthy, for example by running a xref:{page-latest-supported-mc}@management-center:clusters:healthcheck.adoc[Healthcheck].
+
+. Restore traffic to the cluster.

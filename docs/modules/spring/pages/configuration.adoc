@@ -70,7 +70,7 @@ Spring recommend using Java-based configuration. The following example provides 
 
 [source,java]
 ----
-import javax.management.MXBean;@Configuration(proxyBeanMethods = false)
+@Configuration(proxyBeanMethods = false)
 public class SpringHazelcastConfiguration {
 
     @Bean
@@ -111,13 +111,51 @@ public class SpringApplication {
 
     @Autowired
     private HazelcastInstance instance;
-
-    @Autowired
-    @Qualifier(value = "testMap") // Qualifier is needed because we configured two IMaps, so there are two beans with the same type
-    private IMap<String, String> testMap;
 ----
 
 As `@SpringBootApplication` is also a `@Configuration` class, you could instead move the `hazelcastInstance` bean declaration to `SpringApplication` and remove `SpringHazelcastConfiguration`. However, splitting configuration and usage provides more flexibility. For example, you can use application context creation directly from Java with `AnnotationConfigApplicationContext`.
+
+=== Hazelcast Data Structures as beans
+
+Since 5.6, all Hazelcast data structures declared in the configuration (using for example `addMapConfig` for IMap) are automatically registered as beans when using Spring Boot.
+
+It is possible to configure behaviour of this feature or enable it on non-Boot Spring application using `@ExposeHazelcastObjects` annotation, for example to exclude IMaps from being declared as beans, you can write:
+[source,java]
+----
+/// (...)
+@SpringBootApplication
+@ExposeHazelcastObjects(excludeByType = IMap.class)
+public class SpringApplication {
+
+    @Bean
+    public HazelcastInstance hazelcastInstance() { // (1)
+        Config config = new Config();
+        config.setClusterName("spring-hazelcast-cluster-from-java");
+
+        NetworkConfig networkConfig = config.getNetworkConfig();
+        networkConfig.getInterfaces().addInterface("127.0.0.1");
+
+        // testMap and otherTestMap will be registered as beans
+        config.addMapConfig(new MapConfig("testMap").setBackupCount(2));
+        config.addMapConfig(new MapConfig("otherTestMap"));
+        return Hazelcast.newHazelcastInstance(config);
+    }
+}
+----
+
+Beans will have the name identical to data structure's name. If you manually create bean with conflicting name, Hazelcast won't create second bean.
+
+==== Disabling automatic bean creation autoconfiguration
+To disable automatic bean creation, please use `exclude` property of `@SpringBootApplication` annotation:
+[source,java]
+----
+/// (...)
+@SpringBootApplication (exclude = HazelcastObjectExtractionConfiguration.class)
+public class SpringApplication {
+
+    @Autowired
+    private HazelcastInstance instance;
+----
 
 == Declare beans using XML configuration
 

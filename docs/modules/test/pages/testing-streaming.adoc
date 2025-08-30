@@ -212,6 +212,117 @@ pipeline.readFrom(TestSources.itemStream(10))
 
 This allows testing streaming pipelines without running them indefinitely.
 
+== Sinks
+
+Use simple, in-memory sinks in tests so you can assert results without external dependencies. The following are the most useful when validating pipelines.
+
+=== `Sinks.list(...)` (capture all items)
+
+Writes items to an `IList`, preserving per-processor arrival order (no global ordering guarantee). Ideal for asserting on the full output of bounded pipelines.
+
+[source,java]
+----
+Pipeline p = Pipeline.create();
+p.readFrom(TestSources.items(1, 2, 3))
+.writeTo(Sinks.list("out"));
+
+Job job = instance.getJet().newJob(p);
+job.join(); // bounded job completes
+
+IList<Integer> out = instance.getList("out");
+assertEquals(List.of(1, 2, 3), out);
+----
+
+TIP: Clear the list at the start of each test: `instance.getList("out").clear();`.
+
+=== `Sinks.map(...)` (keyed “last-write-wins”)
+
+Writes to an `IMap` using key/value functions. Useful when you want the latest value per key, or to assert on deduplicated/enriched outputs.
+
+[source,java]
+----
+Pipeline p = Pipeline.create();
+p.readFrom(TestSources.items("c1","c2","c1"))
+.map(s -> tuple2(s, Instant.now().toEpochMilli()))
+.writeTo(Sinks.map("byId", Tuple2::f0, Tuple2::f1));
+
+instance.getJet().newJob(p).join();
+
+IMap<String, Long> byId = instance.getMap("byId");
+assertTrue(byId.containsKey("c1"));
+assertTrue(byId.containsKey("c2")); // last value per key retained
+----
+
+NOTE: Because `IMap` is partitioned and parallel, don’t rely on write order across the cluster. Assert on contents, not ordering.
+
+=== `Sinks.logger()` (debug/trace)
+
+Emits each item to the test logs. Handy during development or when combining with in-pipeline assertions for streaming jobs.
+
+[source,java]
+----
+pipeline.readFrom(TestSources.items(1, 2, 3))
+.writeTo(Sinks.logger()); // visible in test output
+----
+
+=== `Sinks.noop()` (throughput/baseline)
+
+Discards items while exercising the full pipeline. Useful to isolate source/transform performance from sink overhead.
+
+[source,java]
+----
+pipeline.readFrom(TestSources.items(1, 2, 3))
+.writeTo(Sinks.noop());
+----
+
+=== `Sinks.observable("name")` (push to the test thread)
+
+Publishes items to a named `Observable so the test can subscribe and assert incrementally—especially helpful for streaming jobs that don’t terminate.
+
+[source,java]
+----
+Observable<Long> obs = instance.getJet().getObservable("obs");
+List<Long> received = Collections.synchronizedList(new ArrayList<>());
+obs.addObserver(received::add);
+
+pipeline.readFrom(TestSources.itemStream(5))
+.withoutTimestamps()
+.map(TimestampedEntry::getValue)
+.writeTo(Sinks.observable("obs"));
+
+Job job = instance.getJet().newJob(pipeline);
+
+// Await a condition, then cancel/complete as needed for the test
+assertTrueEventually(() -> assertTrue(received.size() > 20));
+job.cancel();
+----
+
+TIP: Pair `Sinks.observable` with streaming assertions (see <<Streaming assertions>>) to stop the job automatically once your condition is satisfied.
+
+=== Fault tolerance & semantics (tests)
+
+Hazelcast Jet guarantees at-least-once delivery for items: each record will be written to the sink at least once, but in some failure/restart scenarios it may be written more than once.
+
+For example, if you write to `Sinks.list("out"), after a member failure and job restart, some items could appear twice in the list. This is correct behaviour according to at-least-once semantics.
+
+Because duplicates are possible, asserting strict sequence equality (e.g., [1,2,3]) may fail even though the pipeline is correct. Instead, design assertions that are idempotent—not affected by duplicates. Examples:
+
+- Assert the set of values (`{1,2,3}`), not the exact list with ordering.
+- Assert that at least N items were produced.
+- Assert that a map contains expected keys/values (since overwriting the same key twice doesn’t matter).
+
+This avoids tests that fail intermittently due to harmless duplicates.
+
+For custom pass/fail logic that should end the job when satisfied, use the <<Assertion sink builder>> below rather than implementing your own processor.
+
+If you want a test to stop automatically when a condition is met (e.g., “we’ve seen 100 items, so the job is successful”), you shouldn’t write your own processor.
+
+Instead, use the Assertion Sink Builder API (`Assertions.assertionSink(...)`) documented in the next paragraph. It is designed for:
+
+- Collecting items in-memory during the job.
+- Running your condition either continuously (for streaming) or at completion (for batch).
+- Throwing the correct exception (AssertionCompletedException or AssertionError) to end the job cleanly.
+
 == Assertion sink builder
 
 For advanced use cases, a lower-level API allows building custom assertion sinks using the `assertionSink(...)` builder.

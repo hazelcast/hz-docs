@@ -1,4 +1,4 @@
-= Test distributed applications
+= Testing distributed applications
 :description: This guide explains how to write unit, component, integration, and in-JVM tests for Hazelcast clusters and clients using Hazelcast’s built-in test support utilities.
 
 {description}
@@ -11,44 +11,18 @@ It covers:
 - Isolating tests and cleaning up resources.
 - Using assertion utilities for distributed state and asynchronous behavior.
 
-Hazelcast provides two primary test support mechanisms:
+Hazelcast provides two primary test support classes:
 
-- `HazelcastTestSupport` for JUnit 4-based testing.
-- `TestHazelcastFactory` for JUnit 5 (Jupiter) and other testing frameworks (or `TestHazelcastInstanceFactory` to create client instances).
+- `TestHazelcastFactory` to create Hazelcast client and server instances and manage their lifecycle.
+- `HazelcastTestSupport` provides utility methods to create instances and assert conditions. It uses internally the factory classes.
 
 For dependencies and test setup, see: xref:testing-setup.adoc[Testing setup].
 
-== JUnit 4: `HazelcastTestSupport`
+Both classes can be used with any test framework (JUnit, TestNG, etc.).
 
-Extend `HazelcastTestSupport` to access utility methods for managing in-memory Hazelcast clusters and writing assertions on distributed state:
+== Cluster creation and management
 
-[source,java]
-----
-public class MyClusterTest extends HazelcastTestSupport {
-    // ...
-}
-----
-
-Use `createHazelcastInstanceFactory()` to spin up in-process Hazelcast members using a mock network:
-
-[source,java]
-----
-TestHazelcastInstanceFactory factory = createHazelcastInstanceFactory(2);
-HazelcastInstance member1 = factory.newHazelcastInstance();
-HazelcastInstance member2 = factory.newHazelcastInstance();
-----
-
-To provide a custom configuration:
-
-[source,java]
-----
-Config config = new Config().setProperty("hazelcast.some.property", "value");
-HazelcastInstance[] members = factory.newInstances(config, 2);
-----
-
-== JUnit 5: `TestHazelcastFactory`
-
-In JUnit 5, use `TestHazelcastFactory` directly to create Hazelcast instances and clients:
+`TestHazelcastFactory` can  be used directly to create Hazelcast instances and clients:
 
 [source,java]
 ----
@@ -88,23 +62,28 @@ HazelcastInstance member1 = factory.newHazelcastInstance(config);
 HazelcastInstance member2 = factory.newHazelcastInstance(config);
 ----
 
+== Configuration factories
+
+`HazelcastTestSupport` provides a set of static factory methods to create Config objects pre-tuned for test scenarios to reduce boilerplate.
+
+- `smallInstanceConfig()` creates a lightweight Config suitable for small test clusters. It reduces partition count and thread counts, while keeping Jet and metrics enabled.
+- `smallInstanceConfigWithoutJetAndMetrics()` creates a lightweight Config with reduced partition count and threads, but disables Jet and metrics entirely. This is useful if your tests don’t require Jet pipelines or metrics collection and you want to minimise overhead. Key adjustments:
+    - Partition count set to 11
+    - Reduced thread pool sizes (partition-operation=2, generic-operation=2, event=1)
+    - Logging set to log4j2
+    - Jet disabled
+    - Metrics disabled
+- `shrinkInstanceConfig(Config config)` takes an existing Config, applies the same resource-reduction settings as above, but keeps Jet and metrics enabled. Jet is configured with only 2 cooperative threads.
+- `regularInstanceConfig()` returns a default Config with Jet explicitly enabled. Use this if you want a full-featured cluster in tests but still need to control Jet availability.
+- `withoutNetworkJoin(Config config)` Disables automatic member discovery (TCP/IP join and auto-detection). Use this when you want isolated clusters in tests, created only via factories.
+
 == Create clients
 
-`TestHazelcastFactory` is an extension of `TestHazelcastInstanceFactory` that adds static methods to create clients. Both classes can be used with JUnit 5 (Jupiter) and other testing frameworks.
-
-To create both member and client instances:
+Use `TestHazelcastFactory` to create both member and client instances:
 
 [source,java]
 ----
-// JUnit4 - you need to explicitly create a TestHazelcastFactory
 TestHazelcastFactory factory = new TestHazelcastFactory(config, 2);
-HazelcastInstance[] members = factory.newInstances(2);
-HazelcastInstance client = factory.newHazelcastClient();
-
-// JUnit5
-import com.hazelcast.client.test.TestHazelcastFactory;
-
-TestHazelcastFactory factory = new TestHazelcastFactory(2);
 HazelcastInstance[] members = factory.newInstances(2);
 HazelcastInstance client = factory.newHazelcastClient();
 ----
@@ -116,8 +95,7 @@ For example:
 public class MyClusterClientTest {
 
     @Test
-    public void testClientPutAndGetAcrossCluster()
-            throws Exception {
+    public void testClientPutAndGetAcrossCluster() throws Exception {
         // given: a 2-node in-process cluster with client
         TestHazelcastFactory factory = new TestHazelcastFactory(2);
         HazelcastInstance member1 = factory.newHazelcastInstance();
@@ -142,12 +120,15 @@ public class MyClusterClientTest {
 
 [source,java]
 ----
-client.shutdown();
+if (client!=null) client.shutdown();
+if (factory!=null) factory.shutdownAll();
+
+// alternatively, instances can be shutdown manually (useful to model failure scenarios):
 member1.shutdown();
 member2.shutdown();
 ----
 
-TIP: perform the cleanup in an `@After` annotated method to be sure that resources are correctly released.
+TIP: perform the cleanup in an `@After` or `@AfterAll` annotated method to be sure that resources are correctly released.
 
 == Assertion methods
 

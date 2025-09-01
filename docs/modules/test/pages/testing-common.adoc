@@ -60,7 +60,7 @@ public void tearDown() {
     member1.shutdown();
 
     // or
-    shutdownGracefullyNodeFactory();
+    factory.shutdownAll();
 }
 ----
 
@@ -77,7 +77,7 @@ static void tearDownCluster() {
 }
 ----
 
-Shutting down a single instance (via `ìnstance.shutdown()`) can be used to mimic failure scenarios.
+Shutting down a single instance via `ìnstance.shutdown()` will trigger a graceful shutdown. The method `instance.getLifecycleService().terminate()` can be used to trigger an ungraceful termination, which can be used to mimic failure scenarios.
 
 == Test distributed logic
 
@@ -219,7 +219,7 @@ class MyMapStoreTest {
 
 === Test member failure scenarios
 
-Application logic that handles failure scenarios can be tested by explicitly calling members' shutdown. In this example, we can capture and test the logic of a listener (mocked here for simplicity) programmed to react to a member being stopped:
+Application logic that handles scenarios where nodes fail or the cluster size changes can be tested by explicitly calling members' shutdown. In this example, we can capture and test the logic of a listener (mocked here for simplicity) programmed to react to a member being stopped:
 
 [source,java]
 ----
@@ -267,7 +267,10 @@ public class MyClusterFailureTest {
         assertClusterSizeEventually(2, client);
         member1.getMap("testMap").put("key1", "value1");
         assertEqualsEventually(() -> client.getMap("testMap").get("key1"), "value1");
+        // for graceful shutdown
         member1.shutdown();
+        // for abrupt termination
+        // member1.getLifecycleService().terminate()
         assertClusterSizeEventually(1, client);
         member1 = null;
         assertEqualsEventually(() -> client.getMap("testMap").get("key1"), "value1");

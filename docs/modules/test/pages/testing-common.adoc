@@ -49,7 +49,7 @@ HazelcastInstance client = factory.newHazelcastClient(clientConfig);
 
 === Clean up resources
 
-Use `shutdownAll()` to clean up all Hazelcast instances at the end of each test or test class.
+At the end of each test or test class, use `shutdown()` on individual Hazelcast instances, or a factory's `shutdownAll()` method to clean up all Hazelcast instances.
 
 JUnit 4:
 [source,java]
@@ -154,7 +154,7 @@ class MyMapStoreTest {
 
         // Configure Hazelcast to use the mock MapStore
         Config config = new Config();
-        config.setClusterName("mock-mapstore-test");
+        config.setClusterName(randomName());
         config.getMapConfig("testMap")
               .getMapStoreConfig()
               .setEnabled(true)
@@ -165,10 +165,9 @@ class MyMapStoreTest {
 
     @AfterAll
     static void teardown() {
-        if (hz != null) {
-            hz.shutdown();
+        if (factory != null) {
+            factory.shutdownAll();
         }
-        factory.shutdownAll();
     }
 
     @Test
@@ -188,7 +187,9 @@ class MyMapStoreTest {
             map.get("fail"); // triggers MapStore.load("fail")
         });
 
-        assertEquals("Simulated failure", ex.getMessage());
+        assertThatThrownBy(() ->  map.get("fail"))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("Simulated failure");
     }
 
     @Test
@@ -253,12 +254,11 @@ public class MyClusterFailureTest {
 
     @AfterEach
     void tearDownCluster() {
-        client.shutdown();
-        if (member1 != null) {
-            member1.shutdown();
+        if (client != null) {
+            client.shutdown();
         }
-        if (member2 != null) {
-            member2.shutdown();
+        if (factory != null) {
+            factory.shutdownAll();
         }
     }
 

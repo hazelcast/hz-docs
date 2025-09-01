@@ -5,7 +5,7 @@
 
 It covers:
 
-- Creating mock clusters.
+- Creating test clusters.
 - Managing members and clients in test code.
 - Injecting custom configurations.
 - Isolating tests and cleaning up resources.
@@ -90,7 +90,7 @@ HazelcastInstance member2 = factory.newHazelcastInstance(config);
 
 == Create clients
 
-`TestHazelcastInstanceFactory` is an extension of `TestHazelcastFactory` that adds static methods to create clients. Both classes can be used with JUnit 5 (Jupiter) and other testing frameworks.
+`TestHazelcastFactory` is an extension of `TestHazelcastInstanceFactory` that adds static methods to create clients. Both classes can be used with JUnit 5 (Jupiter) and other testing frameworks.
 
 To create both member and client instances:
 
@@ -131,7 +131,6 @@ public class MyClusterClientTest {
         clientMap.put("key1", "value1");
 
         // then: client and cluster see the entry
-        assertClusterSizeEventually(2, member1);
         assertTrueEventually(() -> assertEquals("value0", clientMap.get("key0")));
         assertTrueEventually(() -> assertEquals("value1", clientMap.get("key1")));
     }
@@ -148,6 +147,8 @@ member1.shutdown();
 member2.shutdown();
 ----
 
+TIP: perform the cleanup in an `@After` annotated method to be sure that resources are correctly released.
+
 == Assertion methods
 
 `HazelcastTestSupport` offers a rich set of static assertion methods to validate both cluster state and asynchronous behavior. The following are the most commonly used ones:
@@ -158,6 +159,7 @@ import static com.hazelcast.test.HazelcastTestSupport.assertClusterSize;
 import static com.hazelcast.test.HazelcastTestSupport.assertClusterSizeEventually;
 import static com.hazelcast.test.HazelcastTestSupport.assertTrueEventually;
 import static com.hazelcast.test.HazelcastTestSupport.assertOpenEventually;
+import static com.hazelcast.test.HazelcastTestSupport.assertAllInSafeState;
 // ...
 ----
 
@@ -181,17 +183,3 @@ assertTrueEventually(() -> assertEquals(3, map.size()));
 assertTrueEventually(() -> assertFalse(map.containsKey("1")));
 ----
 
-The following assertions can be used to wait on futures and latches:
-
-* `assertOpenEventually(CountDownLatch latch)`
-Blocks until `latch.await()` returns, or the default timeout elapses.
-* `assertOpenEventually(ICompletableFuture<?> future)`
-Waits for the given Hazelcast future to complete.
-
-Overloads accepting a timeout parameter let you customize wait durations:
-
-[source,java]
-----
-assertOpenEventually(latch, 30);          // seconds
-assertTrueEventually(task, 60);          // seconds
-----

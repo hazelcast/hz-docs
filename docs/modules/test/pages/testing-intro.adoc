@@ -27,13 +27,13 @@ Tests should be written at multiple levels. Each level addresses different aspec
 
 * *Performance and benchmarking* tests are used to validate how the system behaves under load. These tests focus on metrics like latency, throughput, and resource utilization.
 
-Hazelcast provides tooling to simulate real-world distributed environments and inject failures or network conditions, enabling realistic performance verification in simulated production-like deployment.
+[Hazelcast Simulator](https://github.com/hazelcast/hazelcast-simulator) can be used to simulate real-world distributed environments and inject failures or network conditions, enabling realistic performance verification in simulated production-like deployment.
 
 == APIs and tools overview
 
 Hazelcast provides a set of APIs and test utilities that can be used at each of these levels. These include the classes `HazelcastTestSupport` and `TestHazelcastFactory` for in-JVM multi-node testing of distributed data structures, `JetTestSupport` for testing of streaming pipelines, a set of static assertion methods to help verify synchronous and asynchronous code, and annotations to configure test execution parallelism.
 
-Hazelcast also provides `Hazelcast Simulator`, a standalone tool for full-scale benchmarking, fault injection, and capacity testing.
+Hazelcast also provides [Hazelcast Simulator](https://github.com/hazelcast/hazelcast-simulator), a standalone tool for full-scale benchmarking, fault injection, and capacity testing.
 
 == Testing with a remote cluster
 
@@ -52,9 +52,9 @@ Testing using embedded instances is therefore recommended for the bulk of tests 
 
 Hazelcast can be started in embedded mode by calling `Hazelcast.newHazelcastInstance()`. While this is fully functional and equivalent to production use, startup and shutdown operations are much slower because their successful execution requires a fully configured network stack.
 
-Test support classes provide an alternative approach. When members are started using `HazelcastTestSupport`, they use a mock network stack that doesn't require TCP/IP binding and port allocation.
+Test support classes provide an alternative approach. When members are started using factory classes, such as `TestHazelcastFactory, they use a mock network stack that doesn't require TCP/IP binding and port allocation.
 
-This makes test support mode ideal for unit, component, and integration testing where speed and isolation are more important than simulating full network behavior. For scenarios where real network interactions must be validated (e.g., WAN replication, TLS configuration), embedded mode or remote cluster testing remains the preferred choice.
+This approach is ideal for unit, component, and integration testing where speed and isolation are more important than simulating full network behavior. For scenarios where real network interactions must be validated (e.g., WAN replication, TLS configuration), embedded mode or remote cluster testing remains the preferred choice.
 
 Members in both cases are functionally equivalent and all core Hazelcast features behave the same in both modes.
 
@@ -63,6 +63,8 @@ Members in both cases are functionally equivalent and all core Hazelcast feature
 Mocking frameworks such as Mockito are commonly used in unit tests to isolate the class under test by replacing its dependencies with controlled substitutes, or _mocks_. When a class depends on a Hazelcast data structure, such as an `IMap`, it may seem convenient to mock the interface directly.
 
 This approach is not recommended. Mocking Hazelcast interfaces should be done only in exceptional cases. It is considered an antipattern to mock interfaces that your code does not own. See paragraph 4.1 of link:http://jmock.org/oopsla2004.pdf[this paper] for further details.
+
+However, in some cases mocking can be beneficial, for example, when testing code paths that depend on Hazelcast event listeners, verifying wiring and configuration, or exercising behaviours that are otherwise difficult to reproduce in a lightweight unit test. These situations should be treated as exceptions, and for most scenarios a real in-JVM Hazelcast instance (via the test support factories) provides a more reliable mechanism for unit testing.
 
 Mocking external APIs like Hazelcast's can introduce several problems:
 

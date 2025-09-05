@@ -16,9 +16,9 @@ Depending on the scope of your configuration changes, you may need to update a s
 
 TIP: You can also use the rolling restart process for canarying: testing changes on a single member before updating the rest of the cluster.
 
-Some configuration needs to be consistent across all members in a cluster. To update this configuration, you must restart the whole cluster simultaneously. By default, this causes all data in the cluster to be lost. To avoid data loss, you must enable xref:storage:persistence.adoc[persistence]. To avoid downtime, you must divert traffic to another Hazelcast cluster before restarting.
+Some configuration needs to be consistent across all members in a cluster. To update this configuration, you must restart the whole cluster simultaneously. By default, this causes all data in the cluster to be lost. To avoid data loss, you must enable xref:storage:persistence.adoc[persistence]. To avoid downtime, you must divert traffic to another Hazelcast cluster before restarting. Hazelcast supports xref:getting-started:blue-green.adoc[blue-green deployments] to facilitate this.
 
-Note that member processes are not reused. In all cases, members are terminated, and new members are created to replace them. The new member may retain some attributes of the terminated one (member address, member UUID if Persistence is enabled).
+Note that member processes are not reused. In all cases, members are terminated, and new members are created to replace them. The new member may retain some attributes of the terminated one (member address, member UUID if persistence is enabled).
 
 === Persistence
 
@@ -45,9 +45,7 @@ To perform a rolling restart:
 
 . Update the static configuration as required.
 
-. Choose a member and make a note of its name or IP address to help you keep track.
-
-. Gracefully shut down the member.
+. Gracefully shut down the first member:
 +
 [tabs]
 ====
@@ -116,12 +114,9 @@ To perform a whole cluster restart:
 
 . Update the static configuration as required.
 
-. Divert traffic to another Hazelcast cluster. How to do this depends on how your Hazelcast deployment is architected.
-+
-Management Center provides an easy way to xref:{page-latest-supported-mc}@management-center:clusters:client-filtering.adoc[manage client connections] using filtering rules.
+. Divert traffic to another Hazelcast cluster. How to do this depends on how your Hazelcast deployment is architected. Management Center provides an easy way to xref:{page-latest-supported-mc}@management-center:clusters:client-filtering.adoc[manage client connections] using filtering rules.
 
-. Change cluster state to `NO_MIGRATION` or `FROZEN` state as/if needed with Persistence
-. Gracefully shut down the cluster:
+. If you have enabled persistence, change the cluster state to `NO_MIGRATION` or `FROZEN`:
 +
 [tabs]
 ====
@@ -130,11 +125,33 @@ CLI::
 --
 [source,bash]
 ----
-hz-cluster-admin -a <MEMBER_ADDRESS> -c <CLUSTER_NAME> -o shutdown
+hz-cluster-admin -a <MEMBER_ADDRESS> -c <CLUSTER_NAME> -s no_migration
 ----
 --
 +
 You can specify the IP address of any member in the cluster.
+
+Management Center::
++
+--
+Go to *Administration* > *Cluster State* and select *No Migration* or *Frozen*.
+--
+
+
+. Gracefully shut down the cluster:
++
+[tabs]
+====
+CLI::
++
+IMPORTANT: This command shuts down all running members on the local machine.
++
+--
+[source,bash]
+----
+hz-stop
+----
+--
 
 Management Center::
 +
@@ -154,7 +171,7 @@ docker stop <CONTAINER_NAME>
 --
 ====
 
-. Check that all members are in `SHUT_DOWN` state using the xref:{page-latest-supported-mc}@management-center:clusters:dashboard.adoc[cluster dashboard] in Management Center.
+. Check that all members are shut down. The xref:{page-latest-supported-mc}@management-center:clusters:dashboard.adoc[cluster dashboard] in Management Center shows which members are in `SHUT_DOWN` state. If all members are shut down, Management Center will disconnect from the cluster.
 
 . Recreate the cluster:
 +

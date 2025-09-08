@@ -268,6 +268,8 @@ import com.hazelcast.jet.config.JobConfig;
 import com.hazelcast.jet.pipeline.Pipeline;
 import com.hazelcast.jet.pipeline.StreamSource;
 
+import java.util.concurrent.ThreadLocalRandom;
+
 public class JetJob {
 
     public static void main(String[] args) {
@@ -276,6 +278,8 @@ public class JetJob {
                 .setDatabaseCredentials("postgres", "postgres")
                 .setDatabaseName("postgres")
                 .setTableIncludeList("inventory.customers")
+                .setProperty("plugin.name", "pgoutput")
+                .setProperty("publication.name", "dbz_publication" + ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE))
                 .build();
 
         Pipeline pipeline = Pipeline.create();
@@ -293,6 +297,7 @@ public class JetJob {
 
 }
 ----
+
 --
 {open-source-product-name}::
 +
@@ -339,6 +344,8 @@ public class JetJob {
 ----
 --
 ====
+
+NOTE: At the time of writing, there was a known https://github.com/apache/camel-quarkus/issues/6911[issue] affecting Debezium PostgreSQL connector. In our internal tests, we encountered problems with the `decoderbufs plugin`. As a result, we recommend using the `pgoutput` plugin by setting `plugin.name` = `pgoutput`. If the default configuration does not work for you, consider switching to `pgoutput`, which is PostgreSQL’s built-in logical decoding plugin. Note also that we explicitly set the `publication.name` parameter to avoid conflicts when running multiple jobs concurrently, which could otherwise cause issues with publication primary keys. We strongly recommend you assign a meaningful value to this parameter when using the `pgoutput` decoding plugin.
 
 The `Customer` class we map change events to is quite simple too:
 

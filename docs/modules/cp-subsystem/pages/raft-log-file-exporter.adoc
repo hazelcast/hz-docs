@@ -1,0 +1,156 @@
+= Migrate Raft log files
+:description: The RaftLogFileExporter is a tool that helps migrate persisted CP state between different Hazelcast versions. It creates a copy of CP member directories with Raft log files converted into the alternative format.
+
+{description}
+
+== Overview
+
+From Hazelcast {enterprise-product-name} version 5.6, Raft snapshots in the CP Subsystem use a new format due to the introduction of chunked snapshot transfers. If you need to downgrade a cluster from version 5.6 to 5.5, you can use the RaftLogFileExporter tool to convert the existing Raft data to the earlier format. The tool ensures that data can still be loaded and used after the downgrade.
+
+The RaftLogFileExporter tool:
+
+* Creates a complete copy of the existing directory before converting files.
+* Processes all CP member directories found in the source path.
+* Will fail if the output directory already exists.
+* Only converts from version 5.6 to 5.5. Other versions are not supported.
+
+The tool is included in `hazelcast-enterprise.jar`. Note that you must configure the new cluster to use the new directory.
+
+== System requirements
+
+* Java 17 or later.
+* Minimum heap size: 2GB (4GB recommended for large datasets).
+* Disk space: At least 2x the size of your source Raft log directory.
+
+== Usage
+
+Run the RaftLogFileExporter tool, specifying the following parameters:
+
+[source,bash]
+----
+java -Xms2g -Xmx4g -cp hazelcast-{full-version}.jar com.hazelcast.cp.RaftLogFileExporter \ <1>
+    --source=/path/to/raft/logs \ <2>
+    --output=migrated_output \ <3>
+    --max-uncommitted-entries=10000 <4>
+----
+<1> Minimum and maximum heap size and the JAR file to use.
+<2> Path to the current Raft log.
+<3> Output directory name.
+<4> Maximum number of uncommitted entries.
+
+|===
+| Parameter | Required | Description | Default value
+
+| `--source=<dir>`
+| Yes
+| Path to directory containing Raft logs
+|
+
+| `--output=<dir>`
+| Yes
+| Name for output directory (created in same parent as source)
+|
+
+| `--max-uncommitted-entries=<n>`
+| Yes
+| Configured max uncommitted entries value (positive integer)
+|
+
+| `--sourceVersion=<ver>`
+| No
+| Source Hazelcast version (must be 5.6)
+| 5.6
+
+| `--targetVersion=<ver>`
+| No
+| Target Hazelcast version (must be 5.5)
+| 5.5
+|===
+
+You can also view these parameters using the help command:
+
+[source,bash]
+----
+java -cp hazelcast-{full-version}.jar com.hazelcast.cp.RaftLogFileExporter --help
+----
+
+== Example
+
+The following example migrates Raft logs from a Hazelcast V5.6 cluster to V5.5 format.
+
+. Before running the tool, the directory structure is as follows:
++
+[source,text]
+----
+/data/hazelcast/
+└── cp-data/
+    ├── cp-member-dir-1/
+    │   ├── raft-log-1
+    │   ├── members
+    │   └── term
+    └── cp-member-dir-2/
+        ├── raft-log-1
+        ├── members
+        └── term
+----
+
+. Run the tool:
++
+[source,bash]
+----
+java -Xms2g -Xmx4g -cp hazelcast-{full-version}.jar com.hazelcast.cp.RaftLogFileExporter \
+    --source=/data/hazelcast/cp-data \
+    --output=migrated_v55 \
+    --max-uncommitted-entries=10000
+----
+
+. The tool creates a copy of the V5.6 source and converts it to the V5.5 format. The V5.6 source is retained.
++
+[source,text]
+----
+/data/hazelcast/
+└── cp-data/
+    ├── cp-member-dir-1/         # Source data
+    │   ├── raft-log-1
+    │   ├── members
+    │   └── term
+    └── cp-member-dir-2/
+        ├── raft-log-1
+        ├── members
+        └── term
+└── migrated_v55/               # Output data
+    ├── cp-member-dir-1/
+    │   ├── raft-log-1          # Converted to V5.5 format
+    │   ├── members
+    │   └── term
+    └── cp-member-dir-2/
+        ├── raft-log-1          # Converted to V5.5 format
+        ├── members
+        └── term
+----
+
+. Results:
+** The original data in `cp-data/` is not modified in any way.
+** A new directory named `migrated_v55/` is created alongside it, with the same structure.
+** All `raft-log-*` files are automatically converted to the V5.5 format.
+** Metadata files (`members`, `term`) and the folder structure are copied exactly as-is.
+
+. Configure the cluster to use the new `migrated_v55/` directory as the base directory for persisted CP state. See `base-dir` in xref:cp-subsystem:configuration.adoc#base-dir[Configure the CP Subsystem].
+
+== Troubleshooting
+
+If you encounter an out of memory error, try increasing the Java heap size. The following example uses `-Xmx8g` to set the maximum heap size to 8GB:
+
+[source,bash]
+----
+java -Xms2g -Xmx8g -cp hazelcast-{full-version}.jar com.hazelcast.cp.RaftLogFileExporter \
+    --source=/path/to/raft/logs \
+    --output=migrated_output \
+    --max-uncommitted-entries=10000
+----
+
+For any other errors:
+
+* Check the error message and verify your parameters match the expected format.
+* Ensure you have read permissions for the source directory and write permissions for the output location.
+* Check that the source directory contains Raft log files.

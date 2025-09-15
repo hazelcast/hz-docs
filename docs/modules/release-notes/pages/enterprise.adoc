@@ -1,0 +1,239 @@
+= Enterprise Edition Release Notes
+:description: These release notes list any new features, enhancements, fixes and breaking changes that were made for Hazelcast Platform {enterprise-product-name}.
+:page-aliases: releases:5.5.7.adoc, releases:5.5.6.adoc, releases:5.5.5.adoc, releases:5.5.4.adoc, releases:5.5.3.adoc, releases:5.5.2.adoc, releases:5.5.1.adoc, releases:5.5.0.adoc,
+
+For help downloading Hazelcast {enterprise-product-name}, see xref:getting-started:install-enterprise.adoc[] or https://hazelcast.com/trial-request/?utm_source=docs-website[request a trial license key].
+
+== 5.5.7
+
+**Release date**: 2025-07-22
+
+This is a maintenance release for {enterprise-product-name}. 
+
+For help downloading Hazelcast {enterprise-product-name}, see xref:getting-started:install-enterprise.adoc[] or https://hazelcast.com/trial-request/?utm_source=docs-website[request a trial license key].
+
+=== Security
+
+* **Security Fix for CVE-2025-30065 – Remote code execution via parquet-avro in hazelcast-sql module:** Resolved https://nvd.nist.gov/vuln/detail/CVE-2025-30065[CVE-2025-30065], a critical vulnerability in the `org.apache.parquet:parquet-avro:1.14.1` transitive dependency used by the hazelcast-sql module. The issue allows remote code execution via malicious Avro schema deserialization when reading Avro-encoded Parquet files.
+
+=== Fixes
+
+* **Fixed poor near cache invalidation performance under high client load:** Resolved an issue where operation latency increased steadily with large client counts and near cache enabled. The root cause was that all invalidation events were scheduled on a single event thread, leading to an overloaded queue. This fix distributes invalidation events across the event thread pool. As a result, load is balanced more effectively, significantly improving performance and scalability under heavy client workloads.
+
+* **Fixed NullPointerException during Continuous Query Cache event serialization under load:** Resolved an issue where Continuous Query Cache (CQC) events were frequently lost under high load due to internal NullPointerException during event serialization. The root cause was a missing null check in the event encoding logic, leading to failures in dispatching CQC updates and resulting in stale cache data. The fix adds proper null handling to ensure reliable event delivery even in large, high-throughput clusters.
+
+* **Fixed misleading XML parsing error when loading YAML configuration:** Resolved an issue where Hazelcast 5.5.2 logged a misleading XML parsing error (`Content is not allowed in prolog`) when started with a valid YAML configuration file. This occurred because the system attempted to parse the configuration as XML before falling back to YAML, resulting in an error message even though the configuration was successfully loaded. The fix ensures that the configuration format is determined before parsing, preventing unnecessary and confusing log entries during startup when using YAML files.
+
+== 5.5.6
+
+**Release date**: 2025-05-19
+
+This is a maintenance release for {enterprise-product-name}. 
+
+For help downloading Hazelcast {enterprise-product-name}, see xref:getting-started:install-enterprise.adoc[] or https://hazelcast.com/trial-request/?utm_source=docs-website[request a trial license key].
+
+=== Security
+* **Updated exception handling for non-existent JAAS classes**: Resolved an issue where specifying a non-existent class for JAAS configuration did not result in an appropriate exception being logged. Previously, this caused a lack of visibility into configuration errors, making it harder to diagnose issues. The fix ensures that when a non-existent class is specified for JAAS, an `InvalidConfigurationException` is properly logged in the server logs, replacing the incorrect reference to `ClassNotFoundException`.
+* **Security Fix for CVE-2025-31651 - Improper neutralization of escape, meta, or control sequences vulnerability in Apache Tomcat**: We have resolved
+ https://nvd.nist.gov/vuln/detail/CVE-2025-31651[CVE-2025-31651], a critical vulnerability in Apache Tomcat where for a subset of unlikely rewrite rule configurations, it was possible for a specially crafted request to bypass some rewrite rules.
+* **Security Fix for CVE-2025-24813 - Remote code execution and/or information disclosure and/or malicious content added to uploaded files via write enabled Default Servlet in Apache Tomcat**: We have resolved
+ https://nvd.nist.gov/vuln/detail/CVE-2025-24813[CVE-2025-24813], a critical vulnerability in Apache Tomcat where in some circumstances a malicious user was able to view security sensitive files and/or inject content into those files. 
+* **Security Fix for CVE-2025-31650 - Improper input validation vulnerability in Apache Tomcat**: We have resolved
+ https://nvd.nist.gov/vuln/detail/CVE-2025-31650[CVE-2025-31650], a high vulnerability in Apache Tomcat where incorrect error handling for some invalid HTTP priority headers resulted in incomplete clean-up of the failed request which created a memory leak. 
+* **Security Fix for CVE-2024-38286 - Allocation of resources without limits or throttling vulnerability in Apache Tomcat**: We have resolved
+ https://nvd.nist.gov/vuln/detail/CVE-2024-38286[CVE-2024-38286], a high vulnerability in Apache Tomcat where under certain configurations on any platform, it allows an attacker to cause an OutOfMemoryError by abusing the TLS handshake process.
+
+=== Fixes
+* **Fixed TTL eviction issue for entries loaded from MapLoader**: Resolved an issue where entries loaded from a `MapLoader` into an `IMap` with TTL-based eviction enabled were not evicted after the configured TTL. This caused entries to persist indefinitely, contrary to the expected behavior where such entries should expire after the TTL. The fix restores the correct behavior, ensuring that entries loaded from a `MapLoader` respect the configured TTL and are evicted as expected.
+* **Fixed inconsistency between map.size() and map.keySet().size() when ExpirationPolicy throws an exception**: Resolved an issue where a discrepancy could occur between `map.size()` and `map.keySet().size()` when an `ExpirationPolicy` threw an exception. This issue was triggered in scenarios where an index was defined for a non-existing field, causing an error during indexing without affecting the storage of entries. The fix ensures that `map.size()` and `map.keySet().size()` remain consistent, even in cases where exceptions are thrown during expiration or indexing.
+* **Fixed exception when using CREATE MAPPING with SQL statement-timeout-millis configured**: Resolved an issue where setting a non-zero value for `statement-timeout-millis` in the SQL configuration caused exceptions for statements that do not support timeouts, such as `CREATE MAPPING`. Previously, executing such statements would result in a descriptive but unnecessary exception (`CREATE MAPPING does not support timeout`), which could prevent client applications from starting if `CREATE MAPPING` was part of the initialization process. The fix ensures that non-timeout-supported statements like `CREATE MAPPING` succeed as expected, regardless of the `statement-timeout-millis` configuration.
+* **Fixed issue with hot backup failing after changing the backup folder during a rolling restart**: Resolved an issue where hot backups would fail if the underlying backup folder was changed during a rolling restart and a hot backup was subsequently initiated from Management Center (MC). This fix ensures that hot backups function correctly even after the backup folder is updated during a rolling restart.
+* **Fixed server exception caused by clients connecting to non-CP clusters with cp-direct-to-leader-routing enabled**: Resolved an issue where a client connecting to a non-CP cluster with `cp-direct-to-leader-routing: true` would trigger an exception in the server logs after 60 seconds. The exception (`HazelcastException: CP Subsystem is not enabled!`) caused unnecessary confusion for users. This fix ensures that clients with `cp-direct-to-leader-routing` enabled no longer trigger server exceptions when connected to non-CP clusters.
+* **Improved client error message for unsupported CP subsystem in {open-source-product-name} clients**: Resolved an issue where a {open-source-product-name} client attempting to interact with an {enterprise-product-name} cluster using the CP subsystem would produce a misleading error message: "CP subsystem is a licensed feature. Please ensure you have an Enterprise license that enables CP." The error incorrectly suggested a licensing issue with the cluster, rather than indicating the actual problem with the client. The fix updates the error message to clearly indicate that the issue lies with the client, helping users identify and resolve the problem of using an incompatible client package more easily.
+* **Fixed misleading warning about enabling Merkle trees when already enabled**: Resolved an issue where a warning was logged suggesting that Merkle trees should be enabled, even when they were already enabled. This issue caused unnecessary and confusing log messages. The fix ensures that the warning is not produced when Merkle trees are already enabled, improving clarity in the logs.
+* **Fixed performance degradation for large input lengths in ByteArrayObjectDataOutput**: Resolved an issue where providing an input length greater than `Integer.MAX_VALUE` / 2 caused significant performance degradation (up to 100x). This was due to the buffer resizing in small increments instead of a single large increment, as the doubling strategy would overflow and result in a negative value. The fix ensures that in cases of overflow, the buffer length is set to `MAX_ARRAY_SIZE`, which is approximately the largest supported array size in the JVM.  
+* **Fixed issue with SSL property configuration using environment variables**: Resolved an issue where SSL properties could not be configured through environment variables (e.g., in Docker) because all property keys were converted to lowercase during processing. This behavior, while appropriate for most configuration options, broke SSL functionality. The fix ensures that SSL properties are handled correctly, enabling proper SSL configuration through environment variables.
+* **Fixed handling of DestroyQueryCacheOperation after cache configuration removal**: Resolved an issue where calling `DestroyQueryCacheOperation` after a cache configuration was removed resulted in a `NullPointerException`. The fix ensures that a `NullPointerException` is no longer thrown in this scenario. Instead, the operation now handles the exception gracefully and logs a finest-level entry, improving robustness and debuggability of cache operations.
+* **Improved latency distribution tracking for InvocationProfiler and OperationProfiler**: Enhanced the `InvocationProfiler` and `OperationProfiler` DiagnosticPlugins to record latency distributions with finer granularity by distinguishing operations wrapped in the `OperationFactoryWrapper` class. This improvement provides better visibility into cluster activity and helps diagnose performance issues more effectively. 
+* **Fixed handling of expired entries when depopulating global indexes**: Resolved an issue where expired entries were skipped during the cleanup of global indexes on migration source nodes. This caused query threads to encounter dangling pointers in the index, leading to JVM crashes. The fix ensures that expired entries are included when depopulating global indexes, preventing such crashes and improving system stability.
+
+== 5.5.5
+
+**Release date**: 2025-03-19
+
+This is a maintenance release for {enterprise-product-name}. 
+
+For help downloading Hazelcast {enterprise-product-name}, see xref:getting-started:install-enterprise.adoc[] or https://hazelcast.com/trial-request/?utm_source=docs-website[request a trial license key].
+
+=== Security
+* **Security Fix for CVE-2024-47561**: We have resolved https://github.com/advisories/GHSA-r7pg-v2c8-mfg3[CVE-2024-47561], a critical vulnerability in the Apache Avro Java SDK (versions 1.11.3 and earlier) that allowed attackers to execute arbitrary code through maliciously crafted Avro schemas.
+
+=== Fixes
+* **Fixed NATIVE memory inconsistency after recovery**: Resolved an issue where NATIVE High-Density (HD) IMap memory usage could unexpectedly increase after two cluster members shut down simultaneously and rejoined. This caused incorrect metrics, such as `map.usedMemory` and `map.entryCount`, displaying persistent “ghost entries” even after clearing the maps, leading to misleading memory reports and, in extreme cases, potential cluster instability due to continuous memory growth.
+* **Fixed NPE when destroying a cache during replication**: Resolved an issue where calling `ICache.destroy()` while a Cache Replication operation was in progress could result in a NullPointerException (NPE) due to the cache configuration being removed prematurely. This prevented backup operations from being completed, potentially leading to data loss. The fix ensures that cache destruction does not interfere with ongoing replication, maintaining correct backup behavior and preventing misleading error states.
+* **Fixed NPE when upgrading to 5.5 with CP enabled**:
+Resolved an issue where upgrading a Hazelcast cluster from a version earlier than 5.5 to 5.5 with CP mode enabled could result in a NullPointerException (NPE). This issue caused repeated exceptions even after the upgraded cluster was fully formed, potentially impacting CP cluster availability. The fix ensures a smooth upgrade process without unexpected errors.
+
+== 5.5.4
+
+**Release date**: 2025-02-19
+
+This is a maintenance release for {enterprise-product-name}. 
+
+For help downloading Hazelcast {enterprise-product-name}, see xref:getting-started:install-enterprise.adoc[] or https://hazelcast.com/trial-request/?utm_source=docs-website[request a trial license key].
+
+=== Fixes
+* **Fixed inheritance issue for `ConsumerEx` / `RunnableEx`**: Resolved a serialization compatibility issue in version 5.5.3 that caused job submission failures and potential SQL execution issues due to an incompatible `serialVersionUID` leading to `JetException` (InvalidClassException) errors.
+
+== 5.5.3
+
+CAUTION: There is a known issue with release 5.5.3 of Hazelcast Platform Enterprise Edition that may occur during deployment of stream processing (Jet) jobs and SQL execution. Please DO NOT upgrade to this release; install xref:release-notes:5-5-4.adoc[version 5.5.4] instead. If you have already upgraded to 5.5.3 and you are using these features, please contact Hazelcast Support if you would like additional information. 
+
+**Release date**: 2025-02-12
+
+This is a maintenance release for {enterprise-product-name}. 
+
+For help downloading Hazelcast {enterprise-product-name}, see xref:getting-started:install-enterprise.adoc[] or https://hazelcast.com/trial-request/?utm_source=docs-website[request a trial license key].
+
+=== Enhancements
+* **Added IPv6 support to the AWS discovery plugin**: The AWS discovery plugin now supports IPv6 by checking for an `ipv6address`` field in the instance description and adding an extra entry for private-to-public mapping as (`ipv6address`, `ipv6address`). If the client is inside AWS, it will prioritize using the private IPv6, which ensures better connectivity in IPv6-enabled environments.
+* **Updated BouncyCastle to support FIPS compliance**: Hazelcast now supports FIPS-compliant mode with an updated BouncyCastle implementation. Previously, a public key used by Hazelcast was not endorsed in FIPS-approved mode under BouncyCastle version 2.0.0.
+* **Enhanced error message received by clients using FencedLock**: During a CP Subsystem reset, clients using FencedLock previously received a `NotLeaderException` stating “null is not LEADER of null. Known leader is: N/A". This message now reads "Lock[<lock-name>] is no longer valid in the CP group [<group-id>] as the cluster has no information about Lock[<lock-name>]. Please recreate the lock or rejoin the cluster to obtain a valid reference."
+
+For more details on new features, see xref:ROOT:whats-new.adoc[What's new in 5.5].
+
+=== Security
+* **Security Fix for CVE-2023-45676**: We have resolved https://github.com/advisories/GHSA-gcg6-xv4f-f749[CVE-2023-45676], a dependency vulnerability related to improper authorization checks in certain scenarios. This issue could potentially allow attackers to bypass expected permission restrictions.
+
+=== Fixes
+* **Fixed task config publishing in Kafka Connect**: Fixed an issue in `LateJoiningListener` where a race condition in `ringbuffer.tailSequence()` could result in a missed message if a message was published between two calls to `tailSequence()`. Also resolved a race condition where a message could be processed before `sourceConnector` and `taskRunner` were fully initialized, causing a hidden NullPointerException (NPE). The listener is now registered only after these fields are set and additional logging is added for exceptions in `processMessage` to help identify issues like the hidden NPE.
+* **Fixed migration issues with UCN classes in `InMemoryFormat.OBJECT`**: Fixed an issue where inserting an entry with classes from User Code Namespace (UCN) into an IMap and other data structures configured with `InMemoryFormat.OBJECT` resulted in migration failures.
+
+=== Known issues
+* There is currently a known issue that has potential for causing a memory leak in Vector collections in some scenarios. For more information, including a workaround, see xref:data-structures:vector-collections.adoc#known-issue[Vector Collection Known Issue].
+
+== 5.5.2 
+
+**Release date**: 2024-10-17
+
+This is a maintenance release for {enterprise-product-name}. 
+
+For help downloading Hazelcast {enterprise-product-name}, see xref:getting-started:install-enterprise.adoc[] or https://hazelcast.com/trial-request/?utm_source=docs-website[request a trial license key].
+
+=== New features
+* Debezium 2.x support added in {enterprise-product-name} 
+* Hazelcast Cluster Manager available in Vert.x version 5
+
+For more details on new features, see xref:ROOT:whats-new.adoc[What's new in 5.5].
+
+=== Known issues
+* There is currently a known issue that has potential for causing a memory leak in Vector collections in some scenarios (AI-133). For more info, including a workaround, see xref:data-structures:vector-collections.adoc#known-issue[Vector Collection Known Issue].
+
+=== Fixes
+* Fix NodeEngine context missing in cached executor service (HZG-186)
+* Introduce new method with maxBatchSize in PythonTransforms (SUP-497)
+* Rapid graceful cluster shutdown after data insertion causes data loss (HZG-110)
+* 14775: IllegalStateException - NodeEngine context is not available for Namespaces in Hazelcast 5.5.0 (SUP-572)
+
+== 5.5.1
+
+**Release date**: 2024-09-13
+
+This is a maintenance release for {enterprise-product-name}. 
+
+For help downloading Hazelcast {enterprise-product-name}, see xref:getting-started:install-enterprise.adoc[] or https://hazelcast.com/trial-request/?utm_source=docs-website[request a trial license key].
+
+=== Known issues
+* There is currently a known issue that has potential for causing a memory leak in Vector collections in some scenarios (AI-133). For more info, including a workaround, see xref:data-structures:vector-collections.adoc#known-issue[Vector Collection Known Issue].
+
+=== Fixes
+* Fix partition table snapshot selection when partitions not distributed correctly after all members restarted and persistence is enabled (SUP-538)
+* Fix some invocations not de-registered due to invocation method (SUP-543)
+* Fix `ClassCastException` when Offloadable EntryProcessor used with Interceptor (SUP-551)
+* Fix HD memory exception with Thread-Per-Core (TPC) (SUP-502)
+* Disable TPC if `ALL_MEMBERS` routing is not configured (HZG-69)
+
+== 5.5.0
+
+**Release date**: 2024-07-30
+
+The 5.5.0 release is available for {enterprise-product-name} and {open-source-product-name}. 
+
+For help downloading Hazelcast {enterprise-product-name}, see xref:getting-started:install-enterprise.adoc[] or https://hazelcast.com/trial-request/?utm_source=docs-website[request a trial license key].
+
+For help downloading Hazelcast {open-source-product-name}, see xref:getting-started:install-hazelcast.adoc[].
+
+=== New features
+* Vector collection data structure
+* Multi-member routing for Java clients
+* Jet job placement control
+* Long-term Support (LTS) releases
+* Feast feature store integration
+* Dynamic configuration using REST API
+
+For more details on new features, see xref:ROOT:whats-new.adoc[What's new in 5.5].
+
+=== Breaking changes
+* For {open-source-product-name} users only - CP Subsystem is now an {enterprise-product-name} only feature
+* Thread-per-core (TPC) requires `ALL_MEMBERS` cluster routing (previously known as smart routing) to function on clients
+
+=== Known issues
+* There is currently a known issue that has potential for causing a memory leak in Vector collections in some scenarios. For more info, including a workaround, see xref:data-structures:vector-collections.adoc#known-issue[Vector Collection Known Issue].
+
+=== Enhancements
+* Replace smart-routing with cluster-routing options
+* Update cluster routing mode compatibility for TPC
+* Introduce queue cap props for persistence
+* Allow EE member to join OS cluster 
+* Client connectivity logging 
+* Add needsFsync to Clear task 
+* Shade vector JAR in main enterprise JAR 
+* Manual index cleanup operation 
+* Re-introduce RU code for 5.2 -> 5.5 upgrade 
+* Configuration for number of neighbours fetched from partitions 
+* Fail-fast if specify CP config in a Community version 
+* Allow 5.5 member join clusters with version 5.0-5.4 
+* Add JobBuilder to JetService 
+* Introduce a common parent POM for hazelcast and hazelcast-enterprise
+* Improve float array serialization performance
+* Add CP direct-to-leader operation sending for `ADVANCED_CP` licensed clients
+* Add ZGC bean names to support GC stats https://github.com/hazelcast/hazelcast/pull/26329[#26329]
+
+=== Fixes
+* Fix Jet vulnerabilities: CVE-2022-3171, CVE-2023-2976, CVE-2024-36114
+* Delete Jet job resources immediately after job finishes
+* Fix completed op count metric in OperationThread
+* Fix incorrect results of parallel SQL queries with reusable processor meta-suppliers 
+* Restore previous ExecutionService graceful shutdown timeout value
+* Improve float array serialization performance in client protocol
+* Explicitly release netty release counted netty ssl engine
+* Exclude non-WAN address aliases during WAN MemberHandshake 
+* JobConfig#add() not using derived id for some resources 
+* GCS connection issue workaround 
+* Correct UserCodeNamespaceService#reset behaviour 
+* Prevent SystemPropertiesConfigParser throwing ClassCastException on startup with non-String properties
+* Don't use the default password from the SymmetricEncryptionConfig 
+* Make AddIndexBackupOperation allowed in passive state 
+* Execute PostJoin operations if member hot restart start is forced 
+* Fix partition migrating lock during concurrent migration and replication
+* Fix known CP issue that caused OOMs due to leadership races
+* Fix partitions initial offsets in Kafka connector https://github.com/hazelcast/hazelcast/pull/25769[#25769]
+* IMap.delete operations don't update the LocalMapStats https://github.com/hazelcast/hazelcast/issues/26212[#26212]
+* Updated StringUtil::trim() to consider all type of white space https://github.com/hazelcast/hazelcast/pull/25804[#25804]
+
+=== Removed/Deprecated features
+* The `smart-routing` client configuration option has been deprecated in favor of the new `cluster-routing` options
+
+=== Contributors
+
+We would like to thank the contributors from our open source community
+who worked on this release:
+
+* https://github.com/RobbanHoglund[Robert Höglund]
+* https://github.com/rickymemphis[Ricky Memphis]
+* https://github.com/anestoruk[Andrzej Nestoruk]
+* https://github.com/Gauravsalunke5[Gaurav Salunke]
+
+
+
+

@@ -1,5 +1,5 @@
 = Replicate a Map over Clusters in a WAN
-:description: This tutorial introduces you to WAN Replication by replicating map entries across two clusters: London and Tokyo. At the end of this tutorial, you'll know how to synchronize a map from one cluster to another.
+:description: This tutorial introduces you to WAN Replication (also known as Geo-Replication) by replicating map entries across two clusters: London and Tokyo. At the end of this tutorial, you'll know how to synchronize a map from one cluster to another.
 :page-enterprise: true
 
 {description}
@@ -32,7 +32,17 @@ To complete this tutorial, you need the following:
 |Docker network with the name `hazelcast-network`
 |Use the `docker network create hazelcast-network` command 
 
+|The Dockerhost IP address (once the network has been created)
+|Use the `docker network inspect hazelcast-network \| grep Gateway` command
+
 |===
+By creating the `hazelcast-network` Docker network, you can ensure that the two clusters and Management Center can communicate with each other.
+
+Now that the network is created, we are going to start two clusters:
+
+- `london` is the passive cluster which will automatically have the data synced to it using WAN Replication.
+- `tokyo` is the active cluster.  WAN Replication is configured on this active cluster to send a specific map called `cities` to the passive cluster. This cluster will have the Jet enabled so that we can issue SQL commands.
+- we will connect Management Center to both clusters.
 
 == Step 1. Start the Passive Cluster
 
@@ -42,25 +52,32 @@ which means it does not need WAN Replication to be configured. Run the following
 [source,shell,subs="attributes+"]
 ----
 docker run \
+    -p 5701:5701 \
+    --name hazelcast-london \
     --network hazelcast-network \
     -e HZ_NETWORK_PUBLICADDRESS=<host_ip>:5701 \ <1>
     -e HZ_LICENSEKEY=<your license key> \ <2>
+    -e HZ_MANAGEMENTCENTER_CONSOLEENABLED=true \ <3>
     -e HZ_CLUSTERNAME=london \
     hazelcast/hazelcast-enterprise:{ee-version}
 ----
-<1> Replace the `<host_ip>` placeholder with the IP address of your Docker host.
+<1> Replace the `<host_ip>` placeholder with the IP address of your Docker host (see above).
 <2> Replace the `<your license key>` placeholder with your Hazelcast {enterprise-product-name} license key.
+<3> This is optional and enables the Management Center CLC Console command.
 
 The member is up and running now.
 
 [source,shell,subs="attributes+"]
 ----
-2021-11-23 11:08:15,055 [ INFO] [main] [c.h.i.c.ClusterService]: [172.18.0.3]:5701 [london] [{full-version}] 
+2025-11-23 11:08:15,055 [ INFO] [main] [c.h.i.c.ClusterService]: [172.18.0.1]:5701 [london] [{full-version}] 
 
 Members {size:1, ver:1} [
-	Member [172.18.0.3]:5701 - bed20746-1505-449b-9f4a-548bcdbe12b8 this
+	Member [172.18.0.1]:5701 - bed20746-1505-449b-9f4a-548bcdbe12b8 this
 ]
+2025-11-23 11:08:16,756 [ INFO] [main] [c.h.c.LifecycleService]: [172.18.0.1]:5701 [london] [{full-version}] [172.18.0.1]:5701 is STARTED
 ----
+
+Make a note of the IP address shown in the output for this member as we will need to in the next step.  Note your IP addresses may be different.
 
 == Step 2. Start the Active Cluster
 
@@ -82,22 +99,33 @@ YAML::
 ----
 hazelcast:
   cluster-name: tokyo
-  license-key: <your license key>
+  license-key: <your license key> <1>
+
+  # Enable Jet engine (required for SQL)
+  jet:
+    enabled: true
+    
+  # Enable Management Center console
+  management-center:
+    console-enabled: true
+
   wan-replication:
     london-wan-rep:
       batch-publisher:
         londonPublisherId:
           cluster-name: london
-          target-endpoints: <host_ip>:5701
+          target-endpoints: <host_ip>:5701 <2>
   map:
-    cities: <1>
+    cities: <3>
       wan-replication-ref:
-        london-wan-rep: <2>
+        london-wan-rep: <4>
           republishing-enabled: false
 ----
 --
-<1> Name of the map you are going to create.
-<2> Name of the WAN Replication configuration (given under the `wan-replication` tag) which provides the details on where the map data will be replicated.
+<1> Add the Enterprise license key.
+<2> Add the IP address of the `london` cluster as configure in Step 1.
+<3> Name of the map you are going to create.
+<4> Name of the WAN Replication configuration (given under the `wan-replication` tag) which provides the details on where the map data will be replicated.
 
 XML::
 +
@@ -106,6 +134,13 @@ XML::
 <hazelcast>
     <cluster-name>tokyo</cluster-name>
     <license-key>"your license key"</license-key>
+
+    <!-- Enable Jet engine (required for SQL) -->
+    <jet enabled="true" />
+
+    <!-- Enable Management Center console -->
+    <management-center console-enabled="true" />
+
     <wan-replication name="london-wan-rep">
         <batch-publisher>
             <cluster-name>london</cluster-name>
@@ -123,18 +158,20 @@ XML::
 ----
 docker run \
      --network hazelcast-network \
-     -e JAVA_OPTS="-Dhazelcast.config=/opt/hazelcast/config_ext/hazelcast.yaml" -v ~/config-tokyo:/opt/hazelcast/config_ext hazelcast/hazelcast-enterprise:{ee-version}
+     --name hazelcast-tokyo \
+     -e JAVA_OPTS="-Dhazelcast.config=/custom-config/hazelcast.yaml" -v ~/config-tokyo:/custom-config hazelcast/hazelcast-enterprise:{ee-version}
 ----
 
 Here is your other single-member cluster:
 
 [source,shell,subs="attributes+"]
 ----
-2021-11-23 11:39:14,198 [ INFO] [main] [c.h.i.c.ClusterService]: [172.18.0.4]:5701 [tokyo] [{full-version}] 
+2025-11-23 11:39:14,198 [ INFO] [main] [c.h.i.c.ClusterService]: [172.18.0.3]:5701 [tokyo] [{full-version}] 
 
 Members {size:1, ver:1} [
-	Member [172.18.0.4]:5701 - 98d9a815-5eb3-4341-bec1-e9816cee44b5 this
+	Member [172.18.0.3]:5701 - 98d9a815-5eb3-4341-bec1-e9816cee44b5 this
 ]
+2025-11-23 11:40:22,304 [ INFO] [main] [c.h.c.LifecycleService]: [172.18.0.3]:5701 [tokyo] [{full-version}] [172.18.0.3]:5701 is STARTED
 ----
 
 Note the member's IP address and port since you are going to use it while connecting Management Center.
@@ -175,7 +212,7 @@ In this step you switch to the SQL shell in a terminal, create a map called `cit
 +
 [source,shell,subs="attributes+"]
 ----
-docker run --network hazelcast-network -it --rm hazelcast/hazelcast:{os-version} hz-cli --targets tokyo@172.18.0.4:5701 sql
+docker run --network hazelcast-network -it --rm hazelcast/hazelcast:{os-version} hz-cli --targets tokyo@<active cluster IP address>:5701 sql
 ----
 . Once you see the SQL shell (`sql>`), type the following command and press kbd:[Enter] to create the map.
 +
@@ -225,7 +262,26 @@ to the passive one (`london`). In this step, you'll verify that the `cities` map
 . In Management Center, select *london* in the dropdown field left to *Cluster Connections* on top of the user interface.
 . Go to *Storage* > *Maps* and see that the *cities* map is there.
 
-Additionally, you can query the map entries on the `london` cluster using the SQL browser in Management Center.
+You can query the data in the `cities` map by running the following in the Command Line Client (CLC):
+
+. While viewing the `london` cluster (check the pull down at the top bar of Management Center).
+. Select Console under Tools in the left menu (requires MC 5.8.0 or later).
+. In the Console, type `\map entry-set -n cities`  and press kbd:[Enter].
+
+You should see a table with the entries of the `cities` map that have been replicated from the `tokyo` cluster to the `london` cluster.
+
+```| Key | Country       | City          |
+|-----|---------------|---------------|
+| 1   | Australia     | Canberra      |
+| 2   | Croatia       | Zagreb       |
+| 3   | Czech Republic | Prague       |
+| 4   | England       | London       |
+| 5   | Turkey        | Ankara       |
+| 6   | United States | Washington, DC|
+```
+You can see all the CLC commands for maps by running `\map` in the Console.
+
+Alternatively, you can query the map entries on the `london` cluster using the SQL browser in Management Center.
 
 . You first need to create the mapping so that the `london` cluster can read the map entries.
 Open the SQL browser, type in the following query.
@@ -271,6 +327,11 @@ If you do the modification first on the passive cluster, you'd see that the modi
 
 Shut down the cluster you've created in this tutorial so that you can start a fresh one when you
 move to the other tutorials. To shut down, close the terminals in which the members are running or press kbd:[Ctrl+C] in each terminal.
+
+The Docker network that was created for this tutorial can be removed with the following command:
+```
+docker network rm hazelcast-network
+```
 
 == Next Steps
 

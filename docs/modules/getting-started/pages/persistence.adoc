@@ -16,7 +16,7 @@ In this tutorial, you will complete the following steps:
 . Shut down the whole cluster to simulate a graceful shutdown, such as for maintenance purposes.
 . Restart the cluster and see that the map entries are restored from disk and put back in memory.
 
-== Before You Begin
+== Before you begin
 
 To complete this tutorial, you need the following:
 
@@ -32,7 +32,7 @@ To complete this tutorial, you need the following:
 
 |===
 
-== Step 1. Start a Member with Persistence Enabled
+== Step 1. Start a member with persistence enabled
 
 You'll start the first member in a cluster called `hello-world`. Run the following Docker command:
 
@@ -41,28 +41,30 @@ You'll start the first member in a cluster called `hello-world`. Run the followi
 docker run \
     --name first-member --network hazelcast-network \
     --rm \
-    -e HZ_NETWORK_PUBLICADDRESS=<host_ip>:5701 \ <1>
+    -e HZ_NETWORK_PUBLICADDRESS=host.docker.internal:5701 \ <1>
     -e HZ_CLUSTERNAME=hello-world \
-    -e HZ_LICENSEKEY=<your license key> \ <2>
+    -e HZ_LICENSEKEY=<YOUR_LICENSE_KEY> \ <2>
     -e HZ_PERSISTENCE_ENABLED=true \ <3>
     -e HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true \ <4>
     -v ~/persist:/opt/hazelcast/persistence \ <5>
-    -p 5701:5701 hazelcast/hazelcast-enterprise:{ee-version}
+    -p 5701:5701 hazelcast/hazelcast-enterprise:{ee-version} <6>
 ----
-<1> Replace the `<host_ip>` placeholder with the IP address of your Docker host.
-<2> Replace the `<your license key>` placeholder with your Hazelcast {enterprise-product-name} license key.
-<3> The environment variable to enable the persistence feature for the member
-<4> The environment variable to enable the persistence feature for a map
-<5> By default, the persistence feature creates the `/opt/hazelcast/persistence` directory to store the persisted data.
+<1> You can replace `host.docker.internal` with the IP address of your Docker host; either will work but you will need to know the IP address for connecting, for example, a SQL client to a specific member.
+// Some examples do same IP address but different ports - does this also work?
+<2> Replace the `<YOUR_LICENSE_KEY>` placeholder with your Hazelcast {enterprise-product-name} license key.
+<3> Enables persistence for the member.
+<4> Enables persistence for the map.
+<5> By default, Hazelcast creates the `/opt/hazelcast/persistence` directory to store the persisted data.
 However, using a Docker image, you cannot create any files inside the container. This line of the command mounts a directory
 on your local to the container, which in this case is `persist` under the home directory. This way, the container will use this local
-directory to save the persisted data.
+directory to save the persisted data. You need to define a separate persist mapping for each member e.g. the second member example uses `~/persist2`.
+<6> The first port number should match the port assigned in <1>. For subsequent members (e.g. second, third) you should increment the first port number but keep the second port number i.e. 5702:5701, 5703:5701.
 
-Note the `HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true` line which enables persistence for a map called `mydistributedmap`.
-It is a best practice to provide the configuration for a data structure, in this case a map, before it is created.
-This way, the map will have the already-provided configuration when it is created, which you'll perform in Step 3 below.
+NOTE: The `HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true` command enables persistence for a map called `mydistributedmap`.
+We recommend providing the configuration for a data structure, in this case a map, before it is created.
+This way, the map will have the correct configuration on creation, which you'll perform in Step 3 below.
 
-Your first member is started now, you can see from its terminal logs that persistence is enabled:
+Your first member is started now, and you can see from the terminal logs that persistence is enabled:
 
 [source,shell,subs="+quotes,attributes+"]
 ----
@@ -70,14 +72,12 @@ Your first member is started now, you can see from its terminal logs that persis
 [ INFO] [main] [c.h.i.h.HotRestartIntegrationService]: [LOCAL] [hello-world] [{full-version}] Created new empty hot-restart directory: /opt/hazelcast/persistence/611ffa80-b653-44b9-8cf1-f9ffa5bfa1cb
 [ INFO] [main] [c.h.s.logo]: [172.18.0.2]:5701 [hello-world] [{full-version}]
 ----
-
-== Step 2. Start More Members
+ 
+== Step 2. Start more members
 
 Run each of the following Docker commands in a separate terminal.
 
-Replace the `<host_ip>` placeholders with the IP address of your Docker host.
-
-Replace the `<your license key>` placeholders with your Hazelcast {enterprise-product-name} license key.
+Replace the `<YOUR_LICENSE_KEY>` placeholders with your Hazelcast {enterprise-product-name} license key.
 
 .Command to start a second member.
 [source,shell,subs="attributes+"]
@@ -85,9 +85,9 @@ Replace the `<your license key>` placeholders with your Hazelcast {enterprise-pr
 docker run \
     --name second-member --network hazelcast-network \
     --rm \
-    -e HZ_NETWORK_PUBLICADDRESS=<host_ip>:5702 \
+    -e HZ_NETWORK_PUBLICADDRESS=host.docker.internal:5702 \
     -e HZ_CLUSTERNAME=hello-world \
-    -e HZ_LICENSEKEY=<your license key> \
+    -e HZ_LICENSEKEY=<YOUR_LICENSE_KEY> \
     -e HZ_PERSISTENCE_ENABLED=true \
     -e HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true \
     -v ~/persist:/opt/hazelcast/persistence \
@@ -101,37 +101,41 @@ docker run \
 docker run \
     --name third-member --network hazelcast-network \
     --rm \
-    -e HZ_NETWORK_PUBLICADDRESS=<host_ip>:5703 \
+    -e HZ_NETWORK_PUBLICADDRESS=host.docker.internal:5703 \
     -e HZ_CLUSTERNAME=hello-world \
-    -e HZ_LICENSEKEY=<your license key> \
+    -e HZ_LICENSEKEY=<YOUR_LICENSE_KEY> \
     -e HZ_PERSISTENCE_ENABLED=true \
     -e HZ_MAP_MYDISTRIBUTEDMAP_DATAPERSISTENCE_ENABLED=true \
     -v ~/persist:/opt/hazelcast/persistence \
     -p 5703:5701 hazelcast/hazelcast-enterprise:{ee-version}
 ----
 
-You can now see all three members are started on the terminal forming a cluster:
+You should now see all three members forming a cluster:
 
 [source,shell]
 ----
 Members {size:3, ver:3} [
-	Member [172.18.0.2]:5701 - d1917f97-49b4-4e8e-b8df-ab541c6c681b this
-	Member [172.18.0.3]:5701 - ed7d90a0-1819-40fc-a0fb-da64a43d9269
-	Member [172.18.0.4]:5701 - a7f2f072-cb1f-4c15-88b3-6dbefa212bb0
+	Member [host.docker.internal]:5701 - d1917f97-49b4-4e8e-b8df-ab541c6c681b this  <1>
+	Member [host.docker.internal]:5702 - ed7d90a0-1819-40fc-a0fb-da64a43d9269
+	Member [host.docker.internal]:5703 - a7f2f072-cb1f-4c15-88b3-6dbefa212bb0
 ]
 ----
+<1> The *this* label at the end of the line indicates the current member i.e. this examples shows logs from the first member's perspective.
 
 Note the member IP addresses and ports since you will need them in the following steps.
+// need best reliable way of doing this - you can see in the terminal and the hint should be around 172.18.0.2 etc.
+// can you get this from MC? Why not?!?
+// kubectl logs hz-hazelcast-0
 
-== Step 3. Create a Map
+== Step 3. Create a map
 
 In this step, you'll create a map called `mydistributedmap` with three entries.
 
-. In a new terminal window, start the SQL shell. Replace the `<IP address of one of the members>` placeholder with the IP address of one of your Hazelcast members.
+. In a new terminal window, start the SQL shell. Replace `<MEMBER_IP>` with the IP address of one of your Hazelcast members.
 +
 [source,shell]
 ----
-docker run --network hazelcast-network -it --rm hazelcast/hazelcast:{os-version} hz-cli --targets hello-world@<IP address of one of the members> sql
+docker run --network hazelcast-network -it --rm hazelcast/hazelcast-enterprise:{ee-version} hz-cli --targets hello-world@<MEMBER_IP> sql
 ----
 . Create the map.
 +
@@ -150,7 +154,7 @@ SINK INTO mydistributedmap VALUES
 ----
 . Exit the SQL shell using the `exit` command.
 
-== Step 4. Monitor the Map
+== Step 4. Monitor the map
 
 Now, check the map in Management Center.
 
@@ -164,8 +168,9 @@ docker run \
 ----
 . In a web browser, go to localhost:8080 and enable Dev Mode.
 +
-image:mc-dev-mode.png[Enabling dev mode in Management center]
+image:mc-dev-mode.png[Enabling Dev mode in Management Center]
 . You will see a **Connect** box on the screen; click on it and enter your cluster's name (`hello-world`) and IP addresses/ports of three members.
+// need explicit guidance on how to do this - example shows same IP but different ports yet instructions are separate IP and ports
 +
 image:connect-cluster.png[Connecting Management Center to the cluster]
 . Once you click on the **Connect** button, you should see that the cluster is in an active state and has three members.
@@ -178,7 +183,7 @@ image:cluster-maps.png[Map listing]
 +
 image:map-details.png[Map details]
 
-== Step 5. Shut Down the Cluster
+== Step 5. Shut down the cluster
 
 Now, you'll shut down the whole cluster using Management Center.
 
@@ -190,21 +195,25 @@ image:cluster-state.png[Shutting down the cluster]
 Management Center now shows that it is disconnected from the cluster. You can also confirm
 this by checking the terminals where you started the members; they are now exited to the shell, meaning all the members are gone.
 
+// 2025-07-18 15:21:50,538 [ INFO] [hz.eloquent_cannon..clusterShutdown] [c.h.i.i.Node]: [host.docker.internal]:5702 [hello-world] [5.5.6] Hazelcast Shutdown is completed in 124 ms.
+
 == Step 6. Restart the Cluster
 
 Restart the cluster by starting all the members; run the commands in Step 1 and Step 2 above.
 
-== Step 7. Check the Map Data
+== Step 7. Check the map data
 
 Once all the members are started, go to Management Center, and you can see that it reconnects to the cluster.
 Check your map as instructed in Step 4 above; you will see the map and its data has been recovered.
 If the persistence was not enabled, the data would be lost in case of a cluster shutdown. 
 
-== Step 8. Shut Down the Cluster
+== Step 8. Shut down the cluster
 
 Shut down the cluster you've created in this tutorial so that you can start a fresh one when you
 move to the other tutorials. To shutdown, close the terminals in which the members are running or press kbd:[Ctrl+C] in each terminal.
 You may also consider to delete the `persist` directory you've created while starting the members in Step 1 and 2.
+
+// rm -rf ~/persist*
 
 == Next Steps
 

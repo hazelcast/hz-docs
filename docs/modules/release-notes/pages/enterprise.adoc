@@ -1,6 +1,6 @@
 = Enterprise Edition Release Notes
-:description: These release notes list any new features, enhancements, fixes and breaking changes that were made for Hazelcast Platform {enterprise-product-name}.
-:page-aliases: releases:5.5.7.adoc, releases:5.5.6.adoc, releases:5.5.5.adoc, releases:5.5.4.adoc, releases:5.5.3.adoc, releases:5.5.2.adoc, releases:5.5.1.adoc, releases:5.5.0.adoc,
+:description: These release notes list any new features, enhancements, fixes, security issues and breaking changes that were made for Hazelcast Platform {enterprise-product-name}.
+:page-enterprise: true
 
 {description}
 
@@ -8,4 +8,162 @@ For help downloading Hazelcast {enterprise-product-name}, see xref:getting-start
 
 == 5.6.0
 
-**Release date**: 
+**Release date**: 2025-10-09
+
+* <<new-features>>
+* <<breaking-changes>>
+* <<enhancements>>
+* <<fixes>>
+* <<deprecations>>
+* <<security>>
+
+=== New features
+
+* *CP Snapshot Chunking*: The CP subsystem now transfers large snapshots in smaller, manageable chunks, improving memory efficiency during synchronization. This reduces network congestion, lowers tail latencies, and improves overall speed and cluster performance. This improvement is fully transparent to users and requires no configuration.
+
+* *Dynamic Diagnostic Logging (BETA)*: Diagnostic Logging can now be controlled dynamically through Management Center and Hazelcast Operator without requiring a cluster restart. An optional auto-off timer can also be configured.
+
+For more details on new features, see xref:ROOT:whats-new.adoc[What's new].
+
+=== Breaking changes
+
+* *Templating disabled in the REST API by default*: To prevent value injection and disclosure of system properties, REST configuration templating is now disabled by default. Deployments that relied on templating will no longer resolve templates unless explicitly enabled. To continue using templating, start each Hazelcast member with the JVM system property `-Dhazelcast.rest.allow.config.templating=true`.
+
+* *Fixed inconsistent handling of null and empty serialized data*: Fixed an issue with inconsistent handling of null and empty serialized data. Previously, certain non-standard representations of null (such as zero-length `HeapData` or `Data` values with type id `CONSTANT_TYPE_NULL`) could be written to data structures. With this change, non-canonical nulls are always represented as canonical while still remaining compatible with older or non-Java clients. Previous behavior can be restored by starting each Hazelcast member with the JVM system property `-Dhazelcast.serialization.keep.noncanonical.null=true`, but this should only be used in exceptional circumstances.
+
+* *Changed RoutingMode in ClusterRoutingConfig API*: The `RoutingMode` enum, introduced into the public configuration APIs in version 5.5.0, has been replaced by introducing a new `RoutingMode` enum. `ClusterRoutingConfig.setRoutingMode(...)` and `ClusterRoutingConfig.getRoutingMode(...)`. See the Deprecation section below for more information.
+
+* *Minimum Python version supported is Python 3.9*: `mapUsingPython` requires a minimum Python version of 3.9. This is to satisfy a requirement from grpcio.
+
+=== Enhancements
+
+* *Snapshot serialization*: The CP snapshot serialization has been optimized by eliminating redundant steps, resulting in lower memory usage.
+
+* *Raft log reconciliation for new CP group followers*: Improved the CP subsystem log synchronization process to reduce the number of transmissions required for Raft leaders to reconcile outdated logs with followers. This enables faster recovery of desynchronized followers and improved availability of CP groups.
+
+* *Logging for CP Subsystem after group reset*: Improved the CP Subsystem to reduce excessive failure logs when clients continue sending requests to a non-existent group after a reset. A new `FrequentLogSuppressor` mechanism now suppresses identical failure logs based on configurable parameters. This improvement also ensures correct propagation of the `groupId` from members to clients when a `CPGroupDestroyedException` is thrown.
+
+* *RaftLogFileExporter command-line utility*: Added a new command-line tool, which enables exporting and converting Raft log files between Hazelcast cluster versions (notably from 5.6 to 5.5). This tool is essential for CP Subsystem users who need to downgrade a cluster due to the changes introduced with CP chunked snapshot support. The utility is not required when performing upgrades. For more information, see xref:cp-subsystem:raft-log-file-exporter.adoc[].
+
+* *CP Smart Client*: Introduced a new mechanism that improves CP group leadership awareness across cluster members. This enables clients to route requests directly to CP group leaders, improving the performance of CP operations. Clients will need to have `cp-direct-to-leader-routing` set to true in their configurations.
+
+* *Enhanced User Code Namespaces (UCN) with merge policy support*: Added merge policy support in UCN for all data structures that use the `SplitBrainMergePolicyProvider`. This enhancement provides additional options and flexibility for configuring split-brain merge behavior across user-deployed code, enabling consistent handling of split-brain scenarios.
+
+* *User Code Namespace (UCN) support for Jet jobs*: Jet jobs can now specify namespaces in their job config, enabling a consistent classloader that persists beyond the job lifecycle. This enhancement improves compatibility between jobs, facilitates the sharing of resources and reduces the risk of classloader conflicts.
+
+* *Vector Search (BETA) enhancements*:
+
+** *Fault tolerance*: Added support for synchronous and asynchronous backups and all standard fault tolerance mechanisms available in other AP data structures.  
+
+** *Split-brain protection*: Added split-brain protection support with configurable merge policies and custom merge policy capabilities for vector collections.
+
+** *Vector index optimization*: Mutating operations like put and delete are no longer blocked during vector index optimization. They may still be briefly paused if they target a partition being optimized, but overall latency is improved. Optimized the execution of vector index maintenance on backup replicas.
+
+** *Vector search performance*: Introduction of a configurable dedicated thread pool for vector search tasks sized according to the host CPU. Applicable to ARM and Intel.
+
+** *Cosine metric performance in Vector*: Optimized non-vectorized cosine metric implementation for faster, more accurate similarity calculations.
+
+** *Performance metrics*: New metrics have been added including tracking visited nodes, search counts per index, and backup versus owned entries to aid monitoring.
+
+** *Search list sizing*: Added user-configurable sizing via the `efSearch` parameter for improved result quality, particularly for smaller topK queries.
+
+** *Upgraded JVector library*: JVector has been upgraded to version 3.0.6 which results in better performance.
+
+** *Similarity scoring performance*: Enhanced performance of vectorized dot product computations for similarity scoring.
+
+** *Default heuristics for vector search parameters*: Enhanced the selection of default values for `efSearch` and `partitionLimit` to provide more reasonable search performance without requiring manual tuning. The new heuristics balance result quality and performance by adapting parameter values to query size and index configuration, ensuring better out-of-the-box search behavior.
+
+** *Error messaging*: Enhanced error messages include detailed context such as `efSearch` values and neighbor counts for better diagnostics.
+
+** *Equality and hashing methods*: Improvements ensure consistency in search options behavior.
++
+NOTE: Whilst in BETA, rolling upgrade compatibility guarantees do not apply to Vector collections. We recommend you delete existing vector collections before migrating to this version of Hazelcast. Vector collection by default uses 1 synchronous backup, but vector collection configurations created in the previous version do not have backups enabled. The meaning of `maxDegree` index parameter has been changed. To keep the same behavior as before, the value used in version 5.5 must be multiplied by 2.
+
+* *Enhanced IMap index observability with new metrics*: New metrics provide better visibility into index usage and potential causes of index misses (`map.indexesSkippedQueryCount`, `map.noMatchingIndexQueryCount`, `map.index.partitionsIndexed`, `map.index.partitionUpdatesStarted`, `map.index.partitionUpdatesFinished`, `map.index.notReadyQueryCount`). 
+
+* *Improved performance of IMap entry processor operations*: Enhanced the efficiency of `executeOnKey` and `executeOnEntries` by removing redundant serialization in the IMap module. This optimization reduces garbage generation and improves performance in some cases.
+
+* *Improved SQL job option handling for User Code Namespaces (UCN)*: SQL now correctly rejects the UCN job option when provided in statements, preventing potential errors in job execution.
+
+* *Exposed DataConnectionService API via HazelcastInstance*: The DataConnectionService is now more easily accessible within the HazelcastInstance interface, allowing for improved integration when configuring data connections. 
+
+* *Exposed TCP write queue metrics*: `tcp_connection_out_writeQueuePendingBytes` and  `priorityWriteQueuePendingBytes` metrics are now available by default, improving visibility into network performance without requiring diagnostic logging. This enhancement enables the monitoring of internal network queues. This information is available via the JMX endpoint on the members and via Management Center’s Prometheus Exporter.
+
+* *Improved observability of backup promotions*: Added logging for backup promotion statistics, including the number of promotions and the time taken. This improvement provides better visibility into promotion behavior and enables users to observe and benchmark promotion duration during resiliency testing or after a member crash.
+
+* *Exposed Hazelcast objects as Spring beans*: This update allows you to expose Hazelcast maps (IMap) and other distributed objects as Spring beans, improving consistency with XML-based configuration and simplifying Java configuration. Users can now easily autowire these objects without the need for custom bean definitions for each distributed object, enhancing integration and usability. 
+
+* *Added Spring Cache integration with HazelcastCache*: Enhanced the HazelcastCache implementation with asynchronous retrieval via `CompletableFuture`. This improvement ensures better compatibility with Spring Cache and enables the use of non-blocking cache access patterns.
+
+* *Upgraded Debezium in Change Data Capture (CDC)*: Updated the embedded Debezium version used in the CDC module to 3.1.3. This upgrade provides access to the latest features and improvements, including compatibility with MySQL 8.4.
+
+=== Fixes
+
+* *Double serialization in CP Subsystem*: Resolved redundant serialization during large CP snapshots by removing extra serialization paths and eliminating `FixedBufferObjectDataOutput`. The fix adds the `hazelcast.cp.disk.output.buffer.size` property to better handle larger snapshot writes (especially with higher commit-index-advance-count-to-snapshot settings). This reduces overhead and improves snapshot performance.
+
+* *Error message on REST timeouts for CP endpoints*: Resolved an issue where the REST API endpoint for CP members would return a null error message after a 30-second timeout. This fix results in a more informative error message when the request exceeds the configured timeout, improving troubleshooting capabilities.
+
+* *Fixed backups not reconciled after split-brain merge*: Resolved a race condition where merge tasks could run before partition replica owners were fully established, potentially causing some backup operations to be skipped. The fix improves coordination during merges to ensure backups and WAN replication remain consistent.
+
+* *Fixed issue with HD IMap entry processors missing entries during expiration*: Resolved an issue in HD IMaps where entry processors could miss processing some entries and log `NullPointerException` errors if entries expired during execution. The fix ensures that all entries are processed or removed correctly during expiration and that no errors are logged in this scenario.
+
+* *Fixed inefficiency for HD memory indexes*: Resolved an issue where temporary index key storage added unnecessary overhead and contention. Benchmarks show a throughput improvement of up to 20–30% in update-heavy workloads for indexed HD IMaps.
+
+* *Fixed REST API response for invalid license keys*: Resolved an issue where providing an invalid license key through the REST API resulted in a `500 Internal Server Error` instead of the correct `400 Bad Request`. The fix ensures that invalid input is reported with the appropriate error code.
+
+* *Fixed REST API module configuration handling*: Adjusted the REST API module to rely only on explicitly imported Spring configurations rather than classpath-based autoconfiguration. This avoids unexpected behavior when third-party dependencies are present, as Spring autoconfiguration could introduce unwanted components.
+
+* *Fixed support for non-file-based keystores*: Fixed an issue where Hazelcast did not correctly handle keystore/truststore types that are not backed by files, such as PKCS11 used for Hardware Security Modules (HSM). These keystores are configured at the Java Security level and may not have a corresponding file on disk, which previously caused failures during SSL initialization. 
+
+* *Fixed issue with client schema fetching in compact serialization*: Resolved a problem where client operations using compact serialization could be blocked when fetching a missing schema from the cluster. The fix ensures smoother schema fetching and correct client behavior.
+
+* *Fixed unclear exception during member handshake deserialization*: Resolved an issue where a deserialization failure during member handshake resulted in a generic HazelcastSerializationException with only the root cause. The fix improves the error message to clearly indicate a handshake failure.
+
+* *Fixed IMap state issue during migration*: Resolved a problem where an incorrect lock was used during IMap migration. The fix ensures the correct mutex is applied, preserving IMap state and consistency across cluster members.
+
+* *Fixed Predicate query result inconsistency after migration during initial MapLoader execution*: Resolved an issue where a migration when MapLoader was still loading the data could lead to Predicates returning incorrect results. The fix ensures that migrations are finalized safely and that Predicate queries always return correct results.
+
+* *Fixed IMap interceptor behavior for get operations*: Resolved an issue where `interceptGet()` was not executed on backup partitions, while `afterGet()` was, and where interception logic could run twice. The fix ensures that `interceptGet()` runs correctly on backups and that interception is applied only once, restoring expected Map interceptor behavior.
+
+* *Fixed excessive logging of IMap client invocations*: Introduced the cluster property `hazelcast.expensive.imap.invocation.reporting.threshold` (default: 100) to control when expensive client invocations are logged. This prevents excessive logging of normal operations, such as Jet snapshot information retrieval.
+
+* *Fixed includeValue behavior for local IMap listeners*: Resolved an issue where local listeners in embedded deployments were sending values even when configured with include-value=false. This created confusing behavior and added unnecessary overhead. The fix ensures that local IMap listeners now respect the `include-value` setting, providing consistent and expected listener behavior.
+
+* *Fixed over-aggressive backup acknowledgment*: Resolved an issue where backup acknowledgment compensation was applied in all cases, allowing invocations to complete before all synchronous backups were executed. When `hazelcast.operation.fail.on.indeterminate.state` or `hazelcast.client.operation.fail.on.indeterminate.state` is enabled, the fix disables this compensation to preserve guarantees that an exception is thrown if backup execution cannot be confirmed.
+
+* *Fixed misleading success on cluster shutdown before join completion*: Resolved an issue where attempting to shut down the cluster before the node had fully joined resulted in a misleading success message while the cluster remained active. This fix ensures that a CONFLICT HTTP is returned instead, preventing silent failures and ensuring users receive accurate status updates. 
+
+* *Fixed Kafka Connector Compatibility*: Resolved an issue where some Kafka Connect connectors were incompatible with Jet’s Kafka Connect connector due to Runtime > 3.9.0 missing kafka-clients utilities present in past versions. This caused connector failures during runtime. The fix ensures that the kafka-clients dependency is included, restoring compatibility for affected connectors.
+
+=== Deprecations
+
+* *Deprecated `SqlResult.updateCount()` API*: The `updateCount()` method in `SqlResult` has been deprecated because it always returns 0 for DML statements.
+
+* *Deprecated RoutingMode enum in internal package*: The RoutingMode enum previously required by public APIs such as `ClusterRoutingConfig.setRoutingMode(...)` was incorrectly defined in the internal package `com.hazelcast.client.impl.connection.tcp`. This visibility mismatch has been resolved by introducing a new `RoutingMode` enum in the public `com.hazelcast.client.config package`. Users should check usage of `get/setRoutingMode` APIs and update imports to the public package.
+
+=== Security
+
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2025-41249[CVE-2025-41249] in Rest API* – Fixed improper input validation in Spring Framework dependency by upgrading to a secure version.
+
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2024-25638[CVE-2024-25638] in Hazelcast Jet Hadoop Connector* – Fixed improper input validation in Dnsjava dependency by upgrading to a secure version.
+
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2025-27817[CVE-2025-27817] in Change Data Capture (CDC)* – Fixed vulnerability in Kafka dependency.
+
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2024-7254[CVE-2024-7254] in Protobuf* – Fixed information disclosure vulnerability in Protobuf dependency.
+
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2025-55163[CVE-2025-55163] in Netty* – Fixed HTTP/2 control frame handling vulnerability in Netty dependency.
+
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2023-33546[CVE-2023-33546] in Janino* – Fixed unsafe deserialization vulnerability in Janino dependency.
+
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2024-13009[CVE-2024-13009], https://nvd.nist.gov/vuln/detail/CVE-2024-45801[CVE-2024-45801], https://nvd.nist.gov/vuln/detail/CVE-2024-47875[CVE-CVE-2024-47875], and https://nvd.nist.gov/vuln/detail/CVE-2025-26791[CVE-2025-26791] in Jetty* - Fixed multiple vulnerabilities by upgrading to a secure version.
+
+* *Fixed sensitive data exposure in logs when using JAVA_OPTS*: Resolved an issue where sensitive values such as SSL passwords were logged in plain text when passed through JAVA_OPTS. A new maskOpts option has been introduced to specify which option keys should be masked. Only the listed keys are masked in logs, preventing accidental disclosure of sensitive information while maintaining visibility of non-sensitive options.
+	
+* *Implemented user account lockout for REST API authentication*: Added protection against brute-force login attempts on the REST API by introducing account lockout. After a configurable number of consecutive failed login attempts, the user account is locked for a configurable duration. This enhancement strengthens REST API security by limiting repeated unauthorized login attempts.
+
+* *Prevented caching of sensitive REST API configuration responses*: Resolved an issue where responses from the `GET /hazelcast/rest/api/v1/cluster/config` and `GET /hazelcast/rest/api/v1/cluster/config/\{member-uuid}` endpoints could be cached by browsers, potentially exposing sensitive data. The fix adds the `Cache-Control: no-store` header to these responses, ensuring sensitive configuration data is not stored.
+
+
+
+
+

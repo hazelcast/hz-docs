@@ -1,43 +1,103 @@
 = Community Edition Release Notes
-:description: These release notes list any new features, enhancements, fixes and breaking changes that were made for Hazelcast Platform {open-source-product-name}.
+:description: These release notes list any new features, enhancements, fixes, security issues and breaking changes that were made for Hazelcast Platform {open-source-product-name}.
 
 {description}
 
-NOTE: Hazelcast Platform {open-source-product-name} is available in major and minor releases only (e.g. x.0, x.1, x.2, etc.). From release 5.4, patch releases are only available for {enterprise-product-name} i.e. no patch releases (e.g. x.1.1, x.2.3) will be made available for {open-source-product-name}.
+NOTE: Hazelcast Platform {open-source-product-name} is available in major and minor releases only (e.g. x.0, x.1, x.2, etc.). From release 5.4, patch releases are only available for {enterprise-product-name} i.e. no patch releases (e.g. 5.4.1, 5.5.2)  will be made available for {open-source-product-name}.
 
 For help downloading Hazelcast {open-source-product-name}, see xref:getting-started:install-hazelcast.adoc[].
 
 == 5.6.0
 
-**Release date**: 
+**Release date**: 2025-10-09
+
+* <<new-features>>
+* <<breaking-changes>>
+* <<enhancements>>
+* <<fixes>>
+* <<deprecations>>
+* <<security>>
+
+=== New features
+
+* *Dynamic Diagnostic Logging (BETA)*: Diagnostic Logging can now be controlled dynamically through Management Center and Hazelcast Operator without requiring a cluster restart. An optional auto-off timer can also be configured.
+
+For more details on new features, see xref:ROOT:whats-new.adoc[What's new].
+
+=== Breaking changes
+
+* *Fixed inconsistent handling of null and empty serialized data*: Fixed an issue with inconsistent handling of null and empty serialized data. Previously, certain non-standard representations of null (such as zero-length `HeapData` or `Data` values with type id `CONSTANT_TYPE_NULL`) could be written to data structures. With this change, non-canonical nulls are always represented as canonical while still remaining compatible with older or non-Java clients. Previous behavior can be restored by starting each Hazelcast member with the JVM system property `-Dhazelcast.serialization.keep.noncanonical.null=true`, but this should only be used in exceptional circumstances.
+
+* *Changed RoutingMode in ClusterRoutingConfig API*: The `RoutingMode` enum, introduced into the public configuration APIs in version 5.5.0, has been replaced by introducing a new `RoutingMode` enum. `ClusterRoutingConfig.setRoutingMode(...)` and `ClusterRoutingConfig.getRoutingMode(...)`. See the Deprecation section below for more information.
+
+* *Minimum Python version supported is Python 3.9*: `mapUsingPython` requires a minimum Python version of 3.9. This is to satisfy a requirement from grpcio.
+
+=== Enhancements
+
+* *Enhanced IMap index observability with new metrics*: New metrics provide better visibility into index usage and potential causes of index misses (`map.indexesSkippedQueryCount`, `map.noMatchingIndexQueryCount`, `map.index.partitionsIndexed`, `map.index.partitionUpdatesStarted`, `map.index.partitionUpdatesFinished`, `map.index.notReadyQueryCount`). 
+
+* *Improved performance of IMap entry processor operations*: Enhanced the efficiency of `executeOnKey` and `executeOnEntries` by removing redundant serialization in the IMap module. This optimization reduces garbage generation and improves performance in some cases.
+
+* *Improved SQL job option handling for User Code Namespaces (UCN)*: SQL now correctly rejects the UCN job option when provided in statements, preventing potential errors in job execution.
+
+* *Exposed DataConnectionService API via HazelcastInstance*: The DataConnectionService is now more easily accessible within the HazelcastInstance interface, allowing for improved integration when configuring data connections. 
+
+* *Exposed TCP write queue metrics*: `tcp_connection_out_writeQueuePendingBytes` and  `priorityWriteQueuePendingBytes` metrics are now available by default, improving visibility into network performance without requiring diagnostic logging. This enhancement enables the monitoring of internal network queues. This information is available via the JMX endpoint on the members and via Management Center’s Prometheus Exporter.
+
+* *Improved observability of backup promotions*: Added logging for backup promotion statistics, including the number of promotions and the time taken. This improvement provides better visibility into promotion behavior and enables users to observe and benchmark promotion duration during resiliency testing or after a member crash.
+
+* *Exposed Hazelcast objects as Spring beans*: This update allows you to expose Hazelcast maps (IMap) and other distributed objects as Spring beans, improving consistency with XML-based configuration and simplifying Java configuration. Users can now easily autowire these objects without the need for custom bean definitions for each distributed object, enhancing integration and usability. 
+
+* *Added Spring Cache integration with HazelcastCache*: Enhanced the HazelcastCache implementation with asynchronous retrieval via `CompletableFuture`. This improvement ensures better compatibility with Spring Cache and enables the use of non-blocking cache access patterns.
+
+* *Upgraded Debezium in Change Data Capture (CDC)*: Updated the embedded Debezium version used in the CDC module to 3.1.3. This upgrade provides access to the latest features and improvements, including compatibility with MySQL 8.4.
+
+=== Fixes
+
+* *Fixed issue with client schema fetching in compact serialization*: Resolved a problem where client operations using Compact serialization could be blocked when fetching a missing schema from the cluster. The fix ensures smoother schema fetching and correct client behavior.
+
+* *Fixed unclear exception during member handshake deserialization*: Resolved an issue where a deserialization failure during member handshake resulted in a generic HazelcastSerializationException with only the root cause. The fix improves the error message to clearly indicate a handshake failure.
+
+* *Fixed IMap state issue during migration*: Resolved a problem where an incorrect lock was used during IMap migration. The fix ensures the correct mutex is applied, preserving IMap state and consistency across cluster members.
+
+* *Fixed Predicate query result inconsistency after migration during initial MapLoader execution*: Resolved an issue where a migration when MapLoader was still loading the data could lead to Predicates returning incorrect results. The fix ensures that migrations are finalized safely and that Predicate queries always return correct results.
+
+* *Fixed IMap interceptor behavior for get operations*: Resolved an issue where `interceptGet()` was not executed on backup partitions, while `afterGet()` was, and where interception logic could run twice. The fix ensures that `interceptGet()` runs correctly on backups and that interception is applied only once, restoring expected Map interceptor behavior.
+
+* *Fixed excessive logging of IMap client invocations*: Introduced the cluster property `hazelcast.expensive.imap.invocation.reporting.threshold` (default: 100) to control when expensive client invocations are logged. This prevents excessive logging of normal operations, such as Jet snapshot information retrieval.
+
+* *Fixed includeValue behavior for local IMap listeners*: Resolved an issue where local listeners in embedded deployments were sending values even when configured with include-value=false. This created confusing behavior and added unnecessary overhead. The fix ensures that local IMap listeners now respect the `include-value` setting, providing consistent and expected listener behavior.
+
+* *Fixed over-aggressive backup acknowledgment*: Resolved an issue where backup acknowledgment compensation was applied in all cases, allowing invocations to complete before all synchronous backups were executed. When `hazelcast.operation.fail.on.indeterminate.state` or `hazelcast.client.operation.fail.on.indeterminate.state` is enabled, the fix disables this compensation to preserve guarantees that an exception is thrown if backup execution cannot be confirmed.
+
+* *Fixed misleading success on cluster shutdown before join completion*: Resolved an issue where attempting to shut down the cluster before the node had fully joined resulted in a misleading success message while the cluster remained active. This fix ensures that a CONFLICT HTTP is returned instead, preventing silent failures and ensuring users receive accurate status updates. 
+
+* *Fixed Kafka Connector Compatibility*: Resolved an issue where some Kafka Connect connectors were incompatible with Jet’s Kafka Connect connector due to Runtime > 3.9.0 missing kafka-clients utilities present in past versions. This caused connector failures during runtime. The fix ensures that the kafka-clients dependency is included, restoring compatibility for affected connectors.
+
+=== Deprecations
+
+* *Deprecated SqlResult.updateCount() API*: The `updateCount()` method in `SqlResult` has been deprecated because it always returns 0 for DML statements.
+
+* *Deprecated RoutingMode enum in internal package*: The RoutingMode enum previously required by public APIs such as `ClusterRoutingConfig.setRoutingMode(...)` was incorrectly defined in the internal package `com.hazelcast.client.impl.connection.tcp`. This visibility mismatch has been resolved by introducing a new `RoutingMode` enum in the public `com.hazelcast.client.config package`. Users should check usage of `get/setRoutingMode` APIs and update imports to the public package.
 
 === Security
-The following table shows an overview of CVEs fixed in this Hazelcast Platform release compared to {open-source-product-name} 5.5.0:
-[cols="h,a"]
-|===
-|Severity| CVEs fixed in 5.6.0
 
-|Critical
-|4
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2025-41249[CVE-2025-41249] in Rest API* – Fixed improper input validation in Spring Framework dependency by upgrading to a secure version.
 
-|High
-|2
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2024-25638[CVE-2024-25638] in Hazelcast Jet Hadoop Connector* – Fixed improper input validation in Dnsjava dependency by upgrading to a secure version.
 
-|Medium
-|1
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2025-27817[CVE-2025-27817] in Change Data Capture (CDC)* – Fixed vulnerability in Kafka dependency.
 
-|Low
-|0
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2024-7254[CVE-2024-7254] in Protobuf* – Fixed information disclosure vulnerability in Protobuf dependency.
 
-|===
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2025-55163[CVE-2025-55163] in Netty* – Fixed HTTP/2 control frame handling vulnerability in Netty dependency.
 
-==== CVEs and security issues (originally fixed in {enterprise-product-name} 5.5.7, released 2025-07-22):
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2023-33546[CVE-2023-33546] in Janino* – Fixed unsafe deserialization vulnerability in Janino dependency.
+
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2024-13009[CVE-2024-13009], https://nvd.nist.gov/vuln/detail/CVE-2024-45801[CVE-2024-45801], https://nvd.nist.gov/vuln/detail/CVE-2024-47875[CVE-CVE-2024-47875], and https://nvd.nist.gov/vuln/detail/CVE-2025-26791[CVE-2025-26791] in Jetty* - Fixed multiple vulnerabilities by upgrading to a secure version.
 
 * **Security Fix for CVE-2025-30065 – Remote code execution via parquet-avro in hazelcast-sql module:** Resolved https://nvd.nist.gov/vuln/detail/CVE-2025-30065[CVE-2025-30065], a critical vulnerability in the `org.apache.parquet:parquet-avro:1.14.1` transitive dependency used by the hazelcast-sql module. The issue allows remote code execution via malicious Avro schema deserialization when reading Avro-encoded Parquet files.
 
-==== CVEs and security issues (originally fixed in {enterprise-product-name} 5.5.6, released 2025-05-19):
-
-* **Updated exception handling for non-existent JAAS classes**: Resolved an issue where specifying a non-existent class for JAAS configuration did not result in an appropriate exception being logged. Previously, this caused a lack of visibility into configuration errors, making it harder to diagnose issues. The fix ensures that when a non-existent class is specified for JAAS, an `InvalidConfigurationException` is properly logged in the server logs, replacing the incorrect reference to `ClassNotFoundException`.
 * **Security Fix for CVE-2025-31651 - Improper neutralization of escape, meta, or control sequences vulnerability in Apache Tomcat**: We have resolved
  https://nvd.nist.gov/vuln/detail/CVE-2025-31651[CVE-2025-31651], a critical vulnerability in Apache Tomcat where for a subset of unlikely rewrite rule configurations, it was possible for a specially crafted request to bypass some rewrite rules.
 * **Security Fix for CVE-2025-24813 - Remote code execution and/or information disclosure and/or malicious content added to uploaded files via write enabled Default Servlet in Apache Tomcat**: We have resolved
@@ -47,28 +107,14 @@ The following table shows an overview of CVEs fixed in this Hazelcast Platform r
 * **Security Fix for CVE-2024-38286 - Allocation of resources without limits or throttling vulnerability in Apache Tomcat**: We have resolved
  https://nvd.nist.gov/vuln/detail/CVE-2024-38286[CVE-2024-38286], a high vulnerability in Apache Tomcat where under certain configurations on any platform, it allows an attacker to cause an OutOfMemoryError by abusing the TLS handshake process.
 
-==== CVEs and security issues (originally fixed in {enterprise-product-name} 5.5.5, released 2025-03-19):
-
 * **Security Fix for CVE-2024-47561**: We have resolved https://github.com/advisories/GHSA-r7pg-v2c8-mfg3[CVE-2024-47561], a critical vulnerability in the Apache Avro Java SDK (versions 1.11.3 and earlier) that allowed attackers to execute arbitrary code through maliciously crafted Avro schemas. 
-
-==== CVEs and security issues (originally fixed in {enterprise-product-name} 5.5.3, released 2024-10-17):
 
 * **Security Fix for CVE-2023-45676**: We have resolved https://github.com/advisories/GHSA-gcg6-xv4f-f749[CVE-2023-45676], a dependency vulnerability related to improper authorization checks in certain scenarios. This issue could potentially allow attackers to bypass expected permission restrictions.
 
-=== New features
-
-=== Breaking changes
-
-=== Known issues
-
-=== Enhancements
-
-=== Fixes
-
-=== Removed/Deprecated features
-
 === Contributors
 
+We would like to thank the contributors from our open source community who worked on this release:
 
+* https://github.com/steinv[Stein Vanmassenhove]
 
 

@@ -4,10 +4,10 @@
 
 NOTE: For information on threading in Thread-Per-Core (TPC) environments, see xref:thread-per-core-tpc.adoc[].
 
-== I/O Threading
+== I/O threading
 
 Hazelcast uses a pool of threads for I/O. A single thread does not perform all the I/O.
-Instead, multiple threads perform the I/O. On each cluster member, the I/O threading is split up in three types of I/O threads:
+Instead, multiple threads perform the I/O. On each cluster member, the I/O threading is split into three types of I/O threads:
 
 * I/O thread for the accept requests
 * I/O threads to read data from other members/clients
@@ -33,7 +33,7 @@ then sent to the system where it is de-multiplexed. If the `Packet` header signa
 over to the operation service (see the <<operation-threading, Operation Threading section>>). If the `Packet` is an event, it is handed
 over to the event service (see the <<event-threading, Event Threading section>>).
 
-== Event Threading
+== Event threading
 
 Hazelcast uses a shared event system to deal with components that rely on events, such as topic, collections, listeners and Near Cache.
 
@@ -62,7 +62,7 @@ dropped. This means that the event system is a 'best effort' system. There is no
 event. Topic A might have a lot of pending messages and therefore B cannot receive messages because the queue
 has no capacity and messages for B are dropped.
 
-== IExecutor Threading
+== IExecutor threading
 
 Executor threading is straight forward. When a task is received to be executed on Executor E, then E will have its
 own `ThreadPoolExecutor` instance and the work is placed in the work queue of this executor.
@@ -71,7 +71,7 @@ Thus, Executors are fully isolated, but still share the same underlying hardware
 You can configure the IExecutor using the `ExecutorConfig` (programmatic configuration) or
 using `<executor>` (declarative configuration). See also the xref:computing:executor-service.adoc#configuring-executor-service[Configuring Executor Service section].
 
-== Operation Threading
+== Operation threading
 
 The following are the operation types:
 
@@ -80,7 +80,7 @@ The following are the operation types:
 
 Each of these operation types has a different threading model explained in the following sections.
 
-=== Partition-aware Operations
+=== Partition-aware operations
 
 To execute partition-aware operations, an array of operation threads is created.
 The default value of this array's size is the number of cores and it has a minimum value of `2`.
@@ -91,7 +91,7 @@ operation needs to be scheduled, the right thread is found using the formula bel
 
 `threadIndex = partitionId % partition thread-count`
 
-After the `threadIndex` is determined, the operation is put in the work queue of that operation thread. This means the following:
+After the `threadIndex` is determined, the operation is put in the work queue of that operation thread. This means that:
 
 * A single operation thread executes operations for multiple partitions;
 if there are 271 partitions and 10 partition threads, then roughly every operation thread executes operations for 27 partitions.
@@ -102,12 +102,12 @@ once a partition-aware operation is put in the work queue of a partition-aware o
 
 Because of this threading strategy, there are two forms of false sharing you need to be aware of:
 
-* False sharing of the partition - two completely independent data structures share the same partition.
+* False sharing of the partition: two completely independent data structures share the same partition.
 For example, if there is a map `employees` and a map `orders`,
 the method `employees.get("peter")` running on partition 25 may be blocked by
 the method `orders.get(1234)` also running on partition 25.
 If independent data structures share the same partition, a slow operation on one data structure can slow down the other data structures.
-* False sharing of the partition-aware operation thread - each operation thread is responsible for executing
+* False sharing of the partition-aware operation thread: each operation thread is responsible for executing
  operations on a number of partitions. For example, *thread 1* could be responsible for partitions 0, 10, 20 and so on, and *thread-2* could be responsible for partitions
  1, 11, 21 and so on. If an operation for partition 1 takes a lot of time, it blocks the execution of an operation for partition
  11 because both of them are mapped to the same operation thread.
@@ -125,7 +125,7 @@ until one of the partitions is finished, even though there are other free partit
 Take a cluster with three members. Two members have 90 primary partitions and one member has 91 primary partitions. Let's
 say you have one CPU and four cores per CPU. By default, four operation threads will be allocated to serve 90 or 91 partitions.
 
-=== Non-Partition-aware Operations
+=== Non-partition-aware operations
 
 To execute operations that are not partition-aware - for example, `IExecutorService.executeOnMember(command, member)` - generic operation
 threads are used. When the Hazelcast instance is started, an array of operation threads is created. The size of this array
@@ -138,13 +138,13 @@ A non-partition-aware operation thread does not execute an operation for a speci
 Unlike the partition-aware operation threads, all the generic operation threads share the same work queue: `genericWorkQueue`.
 
 If a non-partition-aware operation needs to be executed, it is placed in that work queue and any generic operation
-thread can execute it. The big advantage is that you automatically have work balancing since any generic operation
+thread can execute it. The main advantage is that you automatically have work balancing since any generic operation
 thread is allowed to pick up work from this queue.
 
 The disadvantage is that this shared queue can be a point of contention. You may not see this contention in
 production since performance is dominated by I/O and the system does not run many non-partition-aware operations.
 
-=== Priority Operations
+=== Priority operations
 
 In some cases, the system needs to run operations with a higher priority; for example, an important system operation.
 To support priority operations, Hazelcast has the following features:
@@ -175,7 +175,7 @@ it eventually is executed. Upon execution, a response is returned and placed on 
 "generic operation thread". This thread signals the `future` and notifies the blocked thread that a response is available.
 Hazelcast has a plan of exposing this `future` to the outside world, and we will provide the ability to register a completion listener so you can perform asynchronous calls.
 
-=== Local Calls
+=== Local calls
 
 When a local partition-aware call is done, an operation is made and handed over to the work queue of the correct partition operation thread,
 and a `future` is returned. When the calling thread calls `get` on that `future`, it acquires a lock and waits for the result
@@ -185,9 +185,9 @@ In the future, this will be optimized to reduce the amount of expensive systems 
 interaction with the operation-queue. Probably, we will add support for a caller-runs mode, so that an operation is directly run on
 the calling thread.
 
-== CPU Thread Affinity
+== CPU thread affinity
 
-Hazelcast offers configuring CPU threads so that you have a lot better control
+Hazelcast allows you to configure CPU threads so that you have more control
 on the latency and a better throughput. This configuration provides you
 with the CPU thread affinity, where certain threads can have affinity for particular CPUs.
 
@@ -285,7 +285,7 @@ The `SlowOperationDetector` is configured using the following system properties.
 
 See the xref:ROOT:system-properties.adoc[System Properties appendix] for explanations of these properties.
 
-=== Logging of Slow Operations
+=== Logging of slow operations
 
 The detected slow operations are logged as warnings in the Hazelcast log files:
 
@@ -306,7 +306,7 @@ Stacktraces are always reported to the Management Center, but by default they ar
 If logging of stacktraces is enabled, the full stacktrace is printed every 100 invocations.
 All other invocations print a shortened version.
 
-=== Purging of Slow Operation Logs
+=== Purging of slow operation logs
 
 Since a Hazelcast cluster can run for a very long time, Hazelcast purges the slow operation logs periodically to prevent an OOME.
 You can configure the purge interval and the retention time for each invocation.
@@ -315,12 +315,12 @@ The purging removes each invocation whose retention time is exceeded.
 When all invocations are purged from a slow operation log, the log is deleted.
 
 [[int-response-queue]]
-== Setting Response Thread
+== Setting response thread
 
 You can set the response thread for internal operations both on the members and clients.
 By setting the backoff mode on and depending on the use case, you can get a
 5-10% performance improvement. However, this increases the CPU utilization.
-To enable backoff mode please set the following property for Hazelcast cluster members: 
+To enable backoff mode, set the following property for Hazelcast cluster members: 
 
 ```
 -Dhazelcast.operation.responsequeue.idlestrategy=backoff  

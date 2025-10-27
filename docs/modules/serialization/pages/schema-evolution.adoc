@@ -1,5 +1,7 @@
-== Introduction: What Schema Evolution Means
-:description:Comprehensive guide to schema evolution in Hazelcast Compact serialization, explaining how to safely evolve object schemas across rolling upgrades, clients, and persisted clusters without data loss or downtime. Covers backward and forward compatibility, deterministic writes, versioned maps, MapStore and persistence considerations, SQL and index evolution, and best practices for zero-downtime migrations in distributed environments.
+== Introducing schema evolution
+:description: This topic introduces schema evolution in Hazelcast Compact serialization and explains how to safely evolve object schemas across rolling upgrades, clients, and persisted clusters without data loss or downtime. It covers backward and forward compatibility, deterministic writes, versioned maps, MapStore and persistence considerations, SQL and index evolution, and best practices for zero-downtime migrations in distributed environments.
+
+{description}
 
 Schema evolution refers to the ability of Hazelcast to handle changes in the structure of serialized objects without requiring downtime, full data reloads, or strict synchronization across cluster members and clients.
 
@@ -13,7 +15,7 @@ Schema evolution in Hazelcast focuses on three goals:
 
 Hazelcast achieves this through Compact serialization, which stores object schemas as independent metadata and identifies each version using a unique 64-bit fingerprint. When an object changes, Hazelcast detects the new schema automatically, assigns it a distinct fingerprint, and propagates it across the cluster. As a result, multiple versions of a class can safely coexist and interoperate during rolling upgrades, migrations, or client refreshes.
 
-While most schema changes can be made safely, **backward incompatibility** may occur when a change prevents old readers from interpreting previously written data correctly. This typically happens in cases such as field renames (changing a field’s name rather than adding/removing it), narrowing a type (for example, `long` to `int`), altering a field’s semantic meaning, or modifying the partitioning key used for data routing. When backward incompatibility is introduced, migration strategies must be applied—such as deploying a temporary pipeline or migration job to transform existing data, introducing versioned maps (`Order_v1`, `Order_v2`), or scheduling controlled rollouts with data export and reimport. These approaches ensure data integrity and consistent behaviour during cluster upgrades or schema transitions.
+While most schema changes can be made safely, **backward incompatibility** may occur when a change prevents old readers from interpreting previously written data correctly. This typically happens in cases such as field renames (changing a field’s name rather than adding/removing it), narrowing a type (for example, `long` to `int`), altering a field’s semantic meaning, or modifying the partitioning key used for data routing. When backward incompatibility is introduced, migration strategies must be applied—such as deploying a temporary pipeline or migration job to transform existing data, introducing versioned maps (`Order_v1`, `Order_v2`), or scheduling controlled rollouts with data export and reimport. These approaches ensure data integrity and consistent behavior during cluster upgrades or schema transitions.
 
 [cols="1,3", options="header"]
 |===
@@ -44,10 +46,10 @@ While most schema changes can be made safely, **backward incompatibility** may o
 
 [NOTE]
 ====
-The following guide applies to cases where Compact serialization is used. There's no guarantee that it works when Java Serialization or other supported serialization mechanisms are used
+The following information applies to cases where Compact serialization is used. There's no guarantee that it works when Java Serialization or other supported serialization mechanisms are used
 ====
 
-== Core Principles and Strategies
+== Core principles and strategies
 
 Schema evolution in Hazelcast is guided by a set of core principles designed to ensure that data changes remain predictable, compatible, and easy to manage across rolling upgrades, mixed client versions, and persistent clusters.
 
@@ -58,7 +60,7 @@ The `typeName` forms the logical link between different schema versions of the s
 
 Maintaining a stable `typeName` allows new and old members to exchange data transparently, because Hazelcast treats each version of the same `typeName` as an evolution rather than a different entity.
 
-=== Deterministic Writes
+=== Deterministic writes
 
 Hazelcast derives a schema fingerprint from the fields written in the serializer’s `write` method.
 The structure and order of these writes must be **deterministic** — meaning they do not depend on runtime conditions or object state.
@@ -71,7 +73,7 @@ To ensure deterministic writes:
 * Avoid conditional or state-dependent logic inside the `write` method.
 * Keep field names and their corresponding `FieldKind` stable between releases.
 
-=== Schema Evolution Approaches
+=== Schema evolution approaches
 
 Hazelcast supports two primary approaches to managing schema evolution, depending on operational needs and compatibility requirements.
 
@@ -89,24 +91,25 @@ Hazelcast supports two primary approaches to managing schema evolution, dependin
 
 Choosing between these two strategies depends on the degree of backward compatibility required.
 In general:
+
 * Use **Single Map Evolution** for additive, backward-compatible changes.
 * Use **Versioned Maps** for incompatible or semantically breaking changes.
 
-=== Compact Schema Propagation
+=== Compact schema propagation
 
 Each Compact schema version is identified by its fingerprint and propagated automatically across the cluster when new data is written.
 Members and clients cache these schemas locally and can fetch missing versions on demand.
 This mechanism allows heterogeneous environments, where not all members are upgraded simultaneously, to continue operating safely during rolling upgrades or failover scenarios.
 
-=== Consistency and Partitioning
+=== Consistency and partitioning
 
 When Compact-serialized objects are used as map keys, any change to the fields that participate in partitioning (for example, the key field or composite key fields) alters the data distribution across the cluster.
 Such changes are considered **incompatible** and require migration or rekeying.
 Hazelcast treats these as structural rather than schema-level changes, and they must be handled through data transformation pipelines or controlled rebalancing processes.
 
-== Decision Flow for Schema Changes
+== Decision flow for schema changes
 
-When evolving Compact-serialized objects, different kinds of changes have different effects on compatibility and runtime behaviour.
+When evolving Compact-serialized objects, different kinds of changes have different effects on compatibility and runtime behavior.
 This section helps determine whether a change is **safe**, **requires caution**, or **is incompatible** and needs migration.
 
 === Overview
@@ -121,7 +124,7 @@ Schema changes fall into five broad categories:
 
 Each category has different implications for Compact serialization, compatibility, and data migration.
 
-=== Decision Table
+=== Decision table
 
 [cols="1,2,2,2", options="header"]
 |===
@@ -179,11 +182,11 @@ Each category has different implications for Compact serialization, compatibilit
 
 |===
 
-=== Example: Applying the Decision Flow to `Order`
+=== Example: Applying the decision flow to `Order`
 
 The following example illustrates how the `Order` type evolves across versions, showing which changes are compatible and when migration is required.
 
-==== V1 — Initial Version
+==== V1 — Initial version
 
 The initial version defines a simple `Order` record.
 All fields are written deterministically with a stable `typeName`.
@@ -228,7 +231,7 @@ final class OrderSerializer implements CompactSerializer<Order> {
 }
 ----
 
-==== V2 — Add a Field (Compatible Change)
+==== V2 — Add a field (compatible change)
 
 In version 2, the `currency` field is added.
 This change is **additive** and both backward and forward compatible:
@@ -289,7 +292,7 @@ final class OrderV2Serializer implements CompactSerializer<OrderV2> {
 This evolution requires no migration.
 Both V1 and V2 data can coexist in the same map, and clients continue to read and write normally.
 
-==== V3 — Breaking Change (Requires Migration)
+==== V3 — Breaking change (requires migration)
 
 Version 3 introduces two incompatible changes:
 
@@ -379,7 +382,7 @@ public final class OrdersToV3Migration {
 }
 ----
 
-==== Verification and Cleanup
+==== Verification and cleanup
 
 After migration:
 
@@ -391,14 +394,14 @@ After migration:
 
 * **V1 to V2:** Additive, compatible change: same map and `typeName`.
 * **V2 to V3:** Rename and partitioning change: incompatible, new map and migration required.
-* Stable `typeName`s, deterministic writes, and explicit migration steps ensure safe schema evolution and predictable behaviour.
+* Stable `typeName`s, deterministic writes, and explicit migration steps ensure safe schema evolution and predictable behavior.
 
-== Integrating Schema Evolution with MapStore
+== Integrate schema evolution with MapStore
 
 When a map is backed by a MapStore, schema evolution affects both the in-memory data and the external persistence layer.
 Coordinating schema changes with MapStore operations and migration pipelines is critical to prevent data loss or inconsistency during upgrades.
 
-=== Compatible Schema Changes
+=== Compatible schema changes
 
 For additive or type-widening changes (for example, adding a `currency` field):
 
@@ -409,16 +412,16 @@ For additive or type-widening changes (for example, adding a `currency` field):
 
 This approach allows MapStore to act as a bridge between schema versions until all members are upgraded.
 
-=== Incompatible Schema Changes
+=== Incompatible schema changes
 
-For backward-incompatible changes the existing map and external store cannot safely hold mixed data.
+For backward-incompatible changes, the existing map and external store cannot safely hold mixed data.
 
 In these cases:
 
 * Create a **new map** (`orders_v3`) with a new `typeName` and a corresponding `v3` MapStore implementation.
 * Use a **Jet pipeline** to migrate data from the old map to the new one.
 
-=== Synchronising MapStore and Migration Pipelines
+=== Synchronising MapStore and migration pipelines
 
 When both the MapStore and Jet pipeline operate on the same target map, the order of operations determines which value persists.
 Understanding how these mechanisms interact helps ensure predictable outcomes.
@@ -432,19 +435,29 @@ When a Jet pipeline writes to a map (using `Sinks.map`, `Sinks.mapWithMerging`, 
 it overwrites the value for that key in memory.
 The operation _should_ be idempotent: restarts or retries do not create duplicates.
 
-**Conflict Resolution Rules:**
+**Conflict resolution rules:**
 
-| Scenario | Behaviour |
-|-----------|------------|
-| Key not yet loaded by MapStore | Hazelcast first loads the value from the external store, then the pipeline overwrites it. |
-| Key already in memory | The pipeline overwrites the in-memory value and may trigger a `store` if write-through is enabled. |
-| MapStore loading and pipeline writing simultaneously | The operations are serialized by Hazelcast on the same key and last one wins. |
+[cols="1,3", options="header"]
+|===
+| Scenario | Behavior
+
+| Key not yet loaded by MapStore 
+| Hazelcast first loads the value from the external store, then the pipeline overwrites it. 
+
+| Key already in memory 
+| The pipeline overwrites the in-memory value and may trigger a `store` if write-through is enabled. 
+
+| MapStore loading and pipeline writing simultaneously 
+| The operations are serialized by Hazelcast on the same key and last one wins.
+
+|===
 
 If conflict resolution is required (for example, partial field merging or conditional updates), use:
+
 * `Sinks.mapWithMerging()` with a merge function, or
 * `Sinks.mapWithEntryProcessor()` to apply custom merging logic.
 
-=== Migration Pipeline with Continuous Synchronisation
+=== Migration pipeline with continuous synchronization
 
 The migration pipeline copies all existing entries from the old map to the new map and keeps the new map up to date
 by consuming updates from the source map’s event journal until old clients are removed.
@@ -474,17 +487,17 @@ When all clients have switched to the new version:
 3. Validate record counts and consistency.
 4. Retire or archive the old map.
 
-=== Zero-Downtime Migration Summary
+=== Zero-downtime migration summary
 
 * Use additive schema changes wherever possible.
 * For incompatible changes, use a new map and MapStore implementation.
 * The pipeline overwrites any loaded or existing value: implement merging if required.
-* Continue synchronising through the event journal until legacy clients are retired.
+* Continue synchronizing through the event journal until legacy clients are retired.
 * Optionally validate data integrity before removing the old map.
 
-== Integrating Schema Evolution with Near Cache
+== Integrate schema evolution with Near Cache
 
-When Near Cache is enabled on a map or client, Compact’s schema evolution does not affect Near Cache behaviour.
+When Near Cache is enabled on a map or client, Compact’s schema evolution does not affect Near Cache behavior.
 
 Each Near Cache entry is stored as a serialized binary representation of the object, typically in the client or member process that owns the cache.
 Because Near Cache is scoped per map, its lifecycle and contents are isolated from other maps and schemas.
@@ -493,11 +506,12 @@ When schema changes are introduced, old clients continue using their existing ma
 Since each map maintains its own Near Cache, cached data remains valid and operations continue normally.
 
 In summary:
+
 * Near Cache entries are independent per map and unaffected by schema changes in other maps.
 * Old clients using the original schema continue to operate with their existing Near Cache.
 * New clients use their own cache for the evolved schema or new map.
 
-== When Persistence Is Enabled
+== When persistence is enabled
 
 When Hazelcast Persistence (Hot Restart) is enabled, Compact schemas are stored alongside the map data.
 Each record references the exact schema fingerprint used when it was written, allowing Hazelcast to restore the cluster to its previous state after a restart.
@@ -510,7 +524,7 @@ Each record references the exact schema fingerprint used when it was written, al
 
 If class definitions change but the fingerprints differ, Hazelcast cannot deserialize the persisted data.
 
-=== Compatible Schema Changes
+=== Compatible schema changes
 
 Additive or type-widening changes (for example, adding a new field) are compatible with persisted data.
 
@@ -520,7 +534,7 @@ Additive or type-widening changes (for example, adding a new field) are compatib
 
 You can perform safely rolling upgrades without clearing persistence when changes are backward compatible.
 
-=== Incompatible Schema Changes
+=== Incompatible schema changes
 
 For incompatible changes (for example, field renames, type narrowing, or new partitioning keys),
 the old data on disk cannot be read by the new schema.
@@ -537,13 +551,13 @@ there is no conflict between them.
 
 Alternatively, delete the persistence directory and reload the map via MapStore or other means.
 
-== SQL and Mapping Evolution
+== SQL and mapping evolution
 
 When using Hazelcast SQL, schema evolution affects how queries, field names, and mappings behave.
 SQL mappings define how a map’s key and value structures are exposed as columns.
 When Compact schemas change, you may need to evolve these mappings to reflect new or renamed fields.
 
-=== Compatible Schema Changes
+=== Compatible schema changes
 
 For additive or type-widening changes, existing mappings and queries continue to work without modification.
 
@@ -585,15 +599,15 @@ COLUMNS (
 
 No data migration is needed; the schema extension is handled automatically at runtime.
 
-=== Hitting Old Records After Recreating a Mapping with New Fields
+=== Hitting old records after recreating a mapping with new fields
 
-When you update a SQL mapping to include an extra field that did not exist in older Compact schemas, queries over **old records** behave predictably:
+When you update an SQL mapping to include an extra field that did not exist in older Compact schemas, queries over **old records** behave predictably:
 
 * **Missing fields read as `NULL`.**
 If a row’s underlying Compact schema has no such field, the column resolves to `NULL` at query time. This is schema-on-read; it does not error.
 
 * **Filters and expressions follow SQL three-valued logic.**
-Predicates like `WHERE currency = 'GBP'` will **exclude** rows where `currency` is `NULL`. Use `IS NULL`, `COALESCE`, or explicit backfill if you want different behaviour.
+Predicates like `WHERE currency = 'GBP'` will **exclude** rows where `currency` is `NULL`. Use `IS NULL`, `COALESCE`, or explicit backfill if you want different behavior.
 
 * **Aggregations handle `NULL`s normally.**
 `COUNT(currency)` ignores `NULL`s; `COUNT(*)` counts all rows; `SUM`/`AVG` ignore `NULL`s.
@@ -601,7 +615,7 @@ Predicates like `WHERE currency = 'GBP'` will **exclude** rows where `currency` 
 * **Type must be compatible across versions.**
 If you widened the type (e.g., `INT` → `BIGINT`), SQL will unify correctly. Narrowing across mixed rows can fail and should be avoided or migrated.
 
-=== Incompatible Schema Changes
+=== Incompatible schema changes
 
 Backward-incompatible changes (for example, field renames, type narrowing, or new key structures)
 require a new map and a new SQL mapping.
@@ -640,7 +654,7 @@ SELECT id, accountId, amount FROM orders_v3;
 
 Each versioned map has its own mapping and query surface, so schema incompatibility never breaks existing queries.
 
-=== Using Views for a Stable SQL Layer
+=== Using Views for a stable SQL layer
 
 If you want to expose a single SQL interface while migrating between versions, create a VIEW that merges both schemas:
 
@@ -654,25 +668,25 @@ SELECT id, accountId AS customerId, amount, status, currency FROM orders_v3;
 
 Applications can query `orders_latest` without needing to know which schema version is active.
 
-== Index Evolution
+== Index evolution
 
 Schema changes can affect how indexes are defined and used.
 This section explains when you can keep existing indexes, when you must recreate them, and how to handle indexes during migrations.
 
-=== Compatible Schema Changes
+=== Compatible schema changes
 
 Additive or type-widening changes (for example, adding `currency` or widening `int` → `bigint`) do not invalidate existing indexes on unchanged fields.
 
 * Indexes on old fields continue to work.
 * You may add new indexes for newly introduced fields at any time.
 
-=== Incompatible Schema Changes
+=== Incompatible schema changes
 
 Backward-incompatible changes (field rename, removal, type narrowing, or new key structure) require new index definitions aligned with the new schema.
 
 * **Field rename/removal:** drop the old index and create a new one on the new field.
 * **Type narrowing:** avoid in place; migrate to a new map and define indexes there.
-* **Partitioning/key change (e.g., composite key):** create indexes on the **new map** only.
+* **Partitioning/key change (e.g. composite key):** create indexes on the **new map** only.
 
 [NOTE]
 ====
@@ -683,7 +697,7 @@ Create these indexes on the **target map first** (so queries are efficient as da
 == Caveats and warnings
 
 * Compact fingerprint is not guaranteed to be stable across different versions of the Compact protocol or across language versions. The schema compatibility is indeed tied to the Hazelcast cluster version.
-* When persistence is enabled, Hot Restart stores schema definitions in the same directory, but version mismatches can also occur if cluster version changed and a Compact protocol version has been upgrade.
+* When persistence is enabled, Hot Restart stores schema definitions in the same directory, but version mismatches can also occur if the cluster version changed and a Compact protocol version has been upgraded.
 * Certain field kinds (e.g. ARRAY_OF_COMPACT, COMPACT) have restricted evolution semantics (cannot change element kind or switch between nullable/non-nullable).
 * With Compact serialization, when a field is missing, Hazelcast provides type-specific defaults (0, false, null). This is relevant in cases when fields are removed.
 

@@ -26,4 +26,15 @@ jobs:
       - name: Maven compile
         run: |
           HZ_VERSION=$(grep full-version docs/antora.yml|sed "s/.*:[ ]*'\(.*\)'/\1/")
-          mvn --show-version --batch-mode --no-transfer-progress test "-Dhazelcast.version=$HZ_VERSION"
+          mvn --show-version test --batch-mode --no-transfer-progress "-Dversion.hazelcast=${HZ_VERSION}"
+
+      - name: Slack notification
+        uses: 8398a7/action-slack@v3
+        if: failure() && github.event_name == 'schedule'
+        with:
+          status: failure
+          fields: repo,job,workflow
+          text: "👎 Test Maven compilation failed."
+          channel: "#docs-notifications"
+        env:
+          SLACK_WEBHOOK_URL: ${{ inputs.SLACK_WEBHOOK }}

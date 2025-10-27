@@ -1,0 +1,92 @@
+= Overview
+:description: Overview of the main Hazelcast clients and APIs
+
+Hazelcast clients and programming language APIs allow you to extend the benefits of operational in-memory computing to applications in these languages.
+
+This topic explains how we use these terms and discusses the pros and cons of using clients or APIs.
+
+NOTE: Not all features are available in every client. For an overview of what each client offers, 
+see the link:https://hazelcast.com/developers/clients/?utm_source=docs-website[clients page].
+
+== Use a Client or API?
+
+Hazelcast provides clients and programming language APIs to interact with Hazelcast clusters and leverage their distributed computing capabilities. The choice between using a client or an API depends on your specific use case, performance requirements, and the programming languages you're using in your project. The following examines the key differences and considerations.
+
+NOTE: *Clients* refer to the Hazelcast _libraries_ used to connect to a Hazelcast cluster and exchange data. Clients use a xref:clients:client-protocol.adoc[binary protocol] for communication with the cluster and encode the data in various formats such as Compact, JSON, etc. Clients are available in various programming languages. 
+*APIs*, by comparison, are the _interfaces_ with the Hazelcast platform. These do not require the use of specific libraries to connect and are generally text based — for example, the REST interface.
+
+=== Clients
+
+Hazelcast clients must be installed locally to communicate with the server.
+
+NOTE: For detailed information on the client protocol used, see xref:clients:client-protocol.adoc[].
+
+==== Benefits of using Hazelcast clients
+
+* Language flexibility: Hazelcast offers clients in multiple programming languages, allowing you to use Hazelcast in various environments. 
+Clients are available for xref:java.adoc[Java], xref:dotnet.adoc[.NET], xref:python.adoc[Python], xref:cplusplus.adoc[C++], xref:go.adoc[Go], and xref:nodejs.adoc[Node.js]
+* Independent scaling: in client/server mode, you can scale the Hazelcast cluster independently from your application. For details, see: https://docs.hazelcast.com/hazelcast/latest/deploy/choosing-a-deployment-option[Choosing an Application Topology]
+* Polyglot applications: client/server mode allows you to write polyglot applications that can all connect to the same cache cluster
+* Decoupling application from data: the application and cached data are separated, which can be beneficial for management and security purposes
+
+==== Disadvantages
+
+* More complex setup: client/server mode requires setting up and managing a separate Hazelcast cluster, which can be more complex than embedding Hazelcast directly in your application
+
+==== Maximum number of client connections per member
+
+The maximum recommended number of clients per member is 100.
+Members use different executors, each with a different thread count, for handling different types of client message tasks:
+
+* Query tasks: `core count` threads
+* Blocking tasks: `core count * 20` threads
+* All other tasks: `core count` threads
+
+These values, as well as each member's xref:cluster-performance:threading.adoc#io-threading[I/O Thread] counts, need to be taken into consideration when determining the appropriate client connection limits for clusters.
+
+==== Serialization in client/server mode
+
+In xref:deploy:choosing-a-deployment-option.adoc[client/server topologies], you can serialize your data
+on the client side before sending it to a member. For example, you can serialize data in
+Kryo and add it to a map. This option is useful if you plan on using Hazelcast to store your
+data in binary. The serialization can be handled on the client-side without the members needing to know how to do so.
+
+For details about why you need to serialize data and the options for doing so, see xref:serialization:serialization.adoc[Serialization].
+
+=== APIs
+
+If you do not want to use a client, you can use APIs to configure Hazelcast in embedded mode, where Hazelcast members run in the same Java process as your application. 
+
+APIs are server-side and do not require to be installed. Instead, you simply enable the API on the cluster, and this allows you to be serverless.
+
+==== Benefits of using APIs
+
+* Lower latency: for data kept in the embedded member, embedded mode offers faster data access because applications do not need to send requests to the cache cluster over the network
+* Simplicity: for Java applications, embedded mode is simpler to set up and use, because you only need to add the Hazelcast JAR to your classpath
+
+==== Disadvantages
+
+* Permissions (such as for IMap read/write) cannot be enforced so the embedded member has access to everything
+* Limited to Java: embedded mode is only available for Java applications, limiting its use in other programming environments
+* Coupled scaling: in embedded mode, the application and the cluster must be scaled together, which may not be ideal for all use cases
+* Less flexibility: each instance of your application starts a Hazelcast member, which may lead to unnecessary cluster members if you don't need them. 
+However, you can avoid this by creating a member only when necessary
+
+NOTE: Hazelcast offers a xref:clients:java.adoc#configuring-client-near-cache[Near Cache] feature for clients which can reduce latency in client/server mode by storing frequently used data in the client's local memory.
+
+== Next steps
+
+For detailed information and code samples for each client, see:
+
+* xref:java.adoc[Java]
+* xref:dotnet.adoc[.NET]
+* xref:python.adoc[Python]
+* xref:cplusplus.adoc[C++]
+* xref:go.adoc[Go]
+* xref:nodejs.adoc[Node.js]
+
+For help getting started with the Hazelcast clients, see the client tutorials in xref:clients:hazelcast-clients.adoc[Get started with a Hazelcast Client].
+
+For details about using Memcache to communicate directly with a Hazelcast cluster, see xref:memcache.adoc[Memcache].
+
+For information about using the REST API for simple operations, see: xref:rest.adoc[REST].

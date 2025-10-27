@@ -106,11 +106,21 @@ automatically added to the members' classpaths as well.
 It's also possible to add all the classes in a given package (and
 recursively in all its subpackages) using `JobConfig.addPackage()` or
 even a whole JAR file with `JobConfig.addJar()`.
++
+[WARNING]
+====
+Jet job class loaders are destroyed after the job is completed. Asynchronous cleanup and finalizers do not block job completion because other thread(s) would be executing those finalization/cleanup steps.
+
+If there is some asynchronous cleanup in attached classes, or some classes use a finalization mechanism, then those mechanisms may try to load some classes after the class loaders are destroyed, resulting in class loader leaks or other memory leaks.
+
+If you need to use any code (libraries or your own code) that uses async cleanup or finalizers, consider using xref:clusters:user-code-namespaces.adoc[User Code Namespaces] to upload job resources or place necessary JARs in the `lib` directory of Hazelcast distribution.
+====
+
 - Add JAR files to the `<HAZELCAST_HOME>/lib` directory.
 +
 Hazelcast automatically picks up any dependencies placed in this directory during startup.
 +
-NOTE: After making changes to the `lib` directory, you must restart the member before it will recognize the new files.
+NOTE: After making changes to the `lib` directory, you must xref:maintain-cluster:restart-cluster.adoc[restart] the member before it will recognize the new files.
 - Add the path to your JAR files, using the `CLASSPATH=<path_to_jar>` environment variable when starting a Hazelcast member.
 
 [WARNING]
@@ -178,7 +188,7 @@ If your job uses classes that aren't already in your members classpath, you can 
 Hazelcast automatically picks up any dependencies placed in this directory during
 startup.
 +
-NOTE: After making changes to the `lib` directory, you must restart the member before it will recognize the new files.
+NOTE: After making changes to the `lib` directory, you must xref:maintain-cluster:restart-cluster.adoc[restart] the member before it will recognize the new files.
 - Add the path to your JAR files, using the `CLASSPATH=<path_to_jar>` environment variable when starting a Hazelcast member.
 
 == Submitting a Job from a Dockerfile
@@ -274,7 +284,7 @@ Hazelcast automatically picks up any dependencies placed on this directory durin
 startup. Several out-of-the-box modules (such as connectors for
 Kafka, Hadoop) are already available in the `lib` directory and can simply
 be used. Any changes to `lib` directory
-requires the node to be restarted to take effect.
+requires the node to be xref:maintain-cluster:restart-cluster.adoc[restarted] to take effect.
 
 Alternatively, you can use the `CLASSPATH` environment variable
 to add additional classes:

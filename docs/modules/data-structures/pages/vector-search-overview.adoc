@@ -249,7 +249,7 @@ To decrease pressure on heap memory, you can decrease the number of parallel mig
 
 == Capacity planning
 
-=== Memory usage of Vector Collection
+=== Memory
 
 A few major elements contribute to Vector Collection memory requirements:
 
@@ -287,6 +287,19 @@ If all members have the same heap size, the vector collection will need a cluste
 `number of members = ceil(total memory footprint / (heap size * 60%))`
 
 If other data will also be stored in the cluster, eg. IMaps, this also has to be accounted for.
+
+=== CPU
+
+The `VectorCollection` makes heavy use of operations over the `float` data type, e.g. computing the distance between `float` instances. 
+Most operations upon a `VectorCollection`, e.g. adding, searching and optimizing, result in such `float` operations being performed.
+By default Hazelcast will use half the host's reported CPU count for executing these operations, however this can be adjusted by configuring the `hz:vector-query` executor size.
+The default size of `hz:vector-query` will generally result in approximately 50% CPU utilisation for search dominant use cases across both Intel and ARM CPUs.
+Examples of how to configure the `hz:vector-query` executor can be found xref:#tuning-tips[here].
+
+NOTE: Intel CPUs with https://en.wikipedia.org/wiki/Hyper-threading[Hyper-Threading] enabled will not observe significant performance increases when increasing `hz:vector-query` beyond the physical core count; by contrast, ARM CPUs can benefit significantly by increasing `hz:vector-query` to that of the reported CPU count.
+
+We recommend monitoring CPU headroom in your Hazelcast cluster to determine an appropriate size for `hz:vector-query` if the default is insufficient for servicing your `VectorCollection` workloads.
+This is particularly important if your Hazelcast cluster services requests for data structures and services beyond that of `VectorCollection`.
 
 == Tuning tips
 

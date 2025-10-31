@@ -27,10 +27,10 @@ import com.hazelcast.core.HazelcastInstance;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.session.MapSession;
-import org.springframework.session.hazelcast.HazelcastIndexedSessionRepository;
-import org.springframework.session.hazelcast.HazelcastSessionSerializer;
-import org.springframework.session.hazelcast.PrincipalNameExtractor;
-import org.springframework.session.hazelcast.config.annotation.web.http.EnableHazelcastHttpSession;
+import com.hazelcast.spring.session.HazelcastIndexedSessionRepository;
+import com.hazelcast.spring.session.HazelcastSessionSerializer;
+import com.hazelcast.spring.session.PrincipalNameExtractor;
+import com.hazelcast.spring.session.config.annotation.web.http.EnableHazelcastHttpSession;
 
 // tag::config[]
 @EnableHazelcastHttpSession // <1>

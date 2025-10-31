@@ -1,0 +1,86 @@
+= Security best practices
+:description: This section provides a set of best practices and recommendations for security, including planning, performance impact, authorization and authentication, and integration. 
+
+{description}
+
+Security has architectural, performance, and coding implications that must be considered from the start of a project. Planning early ensures that introducing authentication, encryption, and authorization later does not require re-architecture or re-testing.
+
+== Key considerations
+
+*Plan security from the outset*. Security configuration affects how your cluster is structured, especially whether it runs in client-server mode or embedded mode.
+
+Best practice:
+
+* Design for client-server deployments if you will need authorization/access control (RBAC). In embedded mode, application code and data share the same JVM and memory space, meaning data can be accessed without permission.
+Client-server separation enforces true security boundaries: data resides on the members; clients interact only through authenticated, authorized APIs.
+
+Migrating from embedded to client-server later is costly and disruptive, therefore, plan for the correct mode early, even if you enable security features later.
+
+*Performance impact*. Network encryption (TLS/SSL) adds CPU overhead for encrypting and decrypting packets.
+
+Best practice:
+
+* Enable xref:security:tls-ssl.adoc[TLS/SSL] between all members and clients for data-in-transit protection. Expect a small throughput impact (typically 1-2%, though up to 10% in some environments).
+* Benchmark under realistic workloads — CPU overhead reduces available capacity for other processing (like serialization).
+* Consider modern cipher suites to minimize the cost.
+
+Security should not come at the expense of cluster stability, so it's important to understand the overhead of enabling TLS to ensure that you size the cluster correctly for stability.
+
+TIP: See xref:performance-tips.adoc#tls-ssl-perf[TLS Tuning] for information on tuning TLS performance.
+
+*Authentication and connection management*. Authentication ensures that only trusted clients and members can join or communicate with the cluster.
+
+Best practice:
+
+* Use identity providers such as xref:security:ldap-authentication.adoc[LDAP], Active Directory, or custom token-based authentication for centralized management.
+* Keep connections persistent: authentication overhead is negligible for long-lived clients but significant for short-lived, one-shot requests.
+* Where possible, pool or reuse connections to minimize repeated authentication latency.
+
+Secure connection establishment can become a bottleneck if many clients connect briefly or frequently.
+
+*Authorization and Role-Based Access Control (RBAC)*. Each operation (read, write, compute) can be checked against the user’s permissions.
+
+Best practice:
+
+* Use Hazelcast's xref:security:authentication-overview.adoc[role-based access control] to assign least-privilege permissions, for example, read-only users for analytics, full access for administration.
+* Be aware that every authorized operation adds a small CPU cost. When many operations occur, the total overhead can become measurable. Combine multiple operations into batched calls (putAll(), getAll()) when appropriate — one authorization per bulk request instead of per item.
+
+Properly configured RBAC limits exposure while maintaining performance.
+
+*Coding for secure outcomes*. Once security is enabled, operations may fail with new types of exceptions (e.g. AccessControlException) that did not occur previously.
+
+Best practice:
+
+* Review all client and member-side code that accesses distributed data structures.
+* Handle authorization exceptions gracefully and log them for auditing.
+* Never assume a null result always means “no value”; it could also mean “access denied.”
+* Incorporate exception handling into unit and integration tests once security is active.
+
+Adding security changes functional behavior. Code that assumes simple null/not-null logic can break silently without proper handling.
+
+*Integration and compliance*. Security settings may need to align with organizational policies (for example, encryption standards, audit requirements, or data-handling regulations).
+
+Best practice:
+
+* Engage compliance teams early.
+* Plan for secure key and certificate management (rotation, expiration, and revocation).
+* Use Hazelcast audit logging features and secure configuration storage.
+
+Compliance-driven environments often require certification evidence or change control before go-live — retrofitting compliance is expensive.
+
+== Summary
+
+* Plan for security at design time, not at go-live.
+* Prefer client–server architecture for deployments requiring authentication or RBAC.
+* Enable TLS/SSL early and benchmark to understand performance impact.
+* Use centralized authentication and persistent connections for efficiency.
+* Apply least-privilege RBAC and combine operations where possible.
+* Update code and tests to handle new security exceptions.
+* Coordinate with compliance and operations teams for key management and audit needs.
+
+== Further reading
+For information about:
+
+* Security hardening, see xref:secure-cluster:hardening-recommendations.adoc[].
+* Tuning TLS performance, see xref:performance-tips.adoc#tls-ssl-perf[TLS Tuning] 
+* Data at rest encryption, see xref:storage:configuring-persistence.adoc[].

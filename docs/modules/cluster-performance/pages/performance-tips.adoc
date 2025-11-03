@@ -379,15 +379,72 @@ higher heap usage. It will also incur an object serialization step on every remo
 
 == Serialization tuning
 
+Serialization plays a critical role in the performance and scalability of a Hazelcast cluster. Almost every distributed operation (reads, writes, replication, backups, and persistence) requires objects to be serialized and deserialized. The serialization strategy you choose directly affects CPU usage, memory footprint, network throughput, and overall cluster efficiency.
+
+The following section provides best practice and tuning tips for selecting and optimizing serialization in Hazelcast.
+
+=== Key considerations
+
+==== Interoperability
+ 
+This is the ability for serialized data to be shared across different languages or components within a system. Hazelcast supports multiple serialization options, but not all formats are language-agnostic.
+
+Best practices:
+
+* Unless your application has niche requirements, use an industry-standard, platform-independent serialization library.
+* Avoid using Java-only mechanisms such as java.io.Serializable or DataSerializable unless you are certain that your deployment will remain Java-only. These formats tend to produce large serialized payloads.
+
+==== Data size and storage cost
+
+The smaller the serialized form, the less memory, disk, and backup space Hazelcast requires to store and replicate data. Compact data improves cache density and reduces backup replication overhead.
+
+Best practices:
+
+* Optimize the serialization format for high-volume data to reduce cluster hardware and memory costs.
+* For small or rarely accessed data, readability or simplicity may take priority over compactness.
+* When compression is available and beneficial, measure the trade-off between size reduction and CPU cost.
+
+==== Transmission time and network impact
+
+Every serialized object that crosses the network contributes to transmission overhead. Larger objects take longer to send, and if they exceed a network buffer's maximum transmission unit (MTU), they must be split into multiple packets. Each split increases the number of transmission operations and network round-trips.
+
+Best practices:
+
+* Keep serialized objects small enough to fit within a typical network buffer (e.g., MTU or socket buffer) to avoid fragmentation and additional network hops.
+* Minimize object size to reduce latency and throughput degradation across cluster members and clients.
+* Understand that serialization time, deserialization time, and transmission time are tightly linked: larger or more complex objects not only take longer to serialize, but also spend more time in transit and increase network congestion.
+
+==== Serialization and deserialization time
+
+Converting objects to and from binary format consumes CPU cycles. Poorly optimized serialization can create bottlenecks under high load.
+
+Best practices:
+
+* Choose formats that balance speed and compactness.
+* For high-frequency operations (e.g. IMap.get() and IMap.put()), prioritise low serialization/deserialization latency.
+* For archival, analytical, or bulk data, prioritize smaller footprint over speed.
+* Compression can significantly reduce size but increases CPU cost—measure before enabling it.
+* Remember: Serialization speed affects network efficiency. Faster serialization reduces the time data spends waiting to be transmitted, improving both network throughput and end-to-end latency.
+
+==== Technical debt and maintainability
+
+Custom serialization logic can improve performance but increases complexity and maintenance effort.
+
+Best practices:
+
+* Avoid writing manual serialization unless you have robust test coverage.
+* When using third-party libraries, confirm licensing, long-term support, and compatibility with your Hazelcast version.
+
+=== Serialization recommendations
 Hazelcast supports a range of object serialization mechanisms,
 each with their own costs and benefits. Choosing the best serialization
 scheme for your data and access patterns can greatly increase the performance
-of your cluster. 
-
-For an overview of serialization options with comparative advantages and disadvantages, see xref:serialization:serialization.adoc[].  
+of your cluster. For an overview of serialization options with comparative advantages and disadvantages, see xref:serialization:serialization.adoc[].  
 
 [[serialization-opt-recommendations]]
 === Serialization optimization recommendations
+
+In addition to the general practices above, the following tuning options can improve performance at runtime:
 
 * Use `IMap.set()` on maps instead of `IMap.put()` if you don’t
 need the old value. This eliminates unnecessary deserialization of the old value.
@@ -404,7 +461,17 @@ back-reference an object pointing to a previously serialized instance.
 If set to `false`, every instance is considered unique and copied separately
 even if they point to the same instance. The default configuration is false.
 
-See also the xref:serialization:serialization-configuration.adoc[Serialization Configuration Wrap-Up section] for details.
+See also xref:serialization:serialization-configuration.adoc[].
+
+=== Summary
+
+* Plan your serialization strategy early as changing later requires data reloads.
+* Minimize object size to stay within a single network buffer.
+* Avoid unnecessary compression unless space savings outweigh CPU cost.
+* Use IMap.set() to prevent redundant deserialization when the old value is not needed.
+* Enable native byte order and unsafe copying for faster primitive serialization.
+* Test and benchmark—serialization performance depends heavily on your data shape and workload.
+* Time spent optimizing serialization can reduce CPU and network load by an order of magnitude in busy clusters.
 
 [[exec-svc-opt]]
 == Executor service

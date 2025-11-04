@@ -9,8 +9,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
-import static java.lang.String.format;
-
 //tag::personms[]
 public class PersonEntryStore implements EntryStore<Long, Person> {
 
@@ -32,8 +30,9 @@ public class PersonEntryStore implements EntryStore<Long, Person> {
     public synchronized void delete(Long key) {
         System.out.println("Delete:" + key);
         try {
-            con.createStatement().executeUpdate(
-                    format("delete from person where id = %s", key));
+            PreparedStatement stmt = con.prepareStatement("delete from person where id = ?");
+            stmt.setLong(1, key);
+            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -42,8 +41,11 @@ public class PersonEntryStore implements EntryStore<Long, Person> {
     @Override
     public synchronized void store(Long key, MetadataAwareValue<Person> value) {
         try {
-            con.createStatement().executeUpdate(
-                    format("insert into person values(%s,'%s', %d)", key, value.getValue().getName(), value.getExpirationTime()));
+            PreparedStatement stmt = con.prepareStatement("insert into person (id, name, expiration-date) values (?, ?, ?)");
+            stmt.setLong(1, key);
+            stmt.setString(2, value.getValue().getName());
+            stmt.setLong(3, value.getExpirationTime());
+            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -66,17 +68,15 @@ public class PersonEntryStore implements EntryStore<Long, Person> {
     @Override
     public synchronized MetadataAwareValue<Person> load(Long key) {
         try {
-            ResultSet resultSet = con.createStatement().executeQuery(
-                    format("select name,expiration-date from person where id =%s", key));
-            try {
+            PreparedStatement stmt = con.prepareStatement("select name, expiration-date from person where id = ?");
+            stmt.setLong(1, key);
+            try (ResultSet resultSet = stmt.executeQuery()) {
                 if (!resultSet.next()) {
                     return null;
                 }
                 String name = resultSet.getString(1);
                 Long expirationDate = resultSet.getLong(2);
                 return new MetadataAwareValue<>(new Person(key, name), expirationDate);
-            } finally {
-                resultSet.close();
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -92,8 +92,9 @@ public class PersonEntryStore implements EntryStore<Long, Person> {
         return result;
     }
 
+    @Override
     public Iterable<Long> loadAllKeys() {
-        return new StatementIterable<Long>(allKeysStatement);
+        return new StatementIterable<>(allKeysStatement);
     }
 }
 //end::personms[]

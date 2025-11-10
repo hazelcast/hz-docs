@@ -469,33 +469,33 @@ by consuming updates from the source map’s event journal until old clients are
 // Step 1: snapshot new entries
 Pipeline tail = Pipeline.create();
 
-StreamStage<Map.Entry<Long, OrderV1>> journal = tail
-        .readFrom(Sources.<Long, OrderV1>mapJournal(hz.getMap("orders"), JournalInitialPosition.START_FROM_CURRENT))
+StreamStage<Map.Entry<Long, OrderV2>> journal = tail
+        .readFrom(Sources.<Long, Order>mapJournal(hz.getMap("orders"), JournalInitialPosition.START_FROM_CURRENT))
         .withIngestionTimestamps();
 
 // upserts
-journal.filter((PredicateEx<Map.Entry<Long, OrderV1>>) e -> e.getValue() != null)
-       .map(e -> Map.entry(e.getKey(), OrderV2.fromV1(e.getValue(), "JTA")))
-       .writeTo(Sinks.map(v2Map));
+journal.filter((PredicateEx<Map.Entry<Long, OrderV2>>) e -> e.getValue() != null)
+       .map(e -> Map.entry(e.getKey(), OrderV3.fromV2(e.getValue()))
+       .writeTo(Sinks.map("orders_v3"));
 
 // deletes
 journal.filter(new ValueIsNullFilter())
-       .writeTo(Sinks.fromProcessor("v2-remove-sink", MapRemoveP.metaSupplier("orders_v2")));
+       .writeTo(Sinks.fromProcessor("v3-remove-sink", MapRemoveP.metaSupplier("orders_v3")));
 
 JobConfig cfg = new JobConfig()
-        .setName("tail-v1-to-v2")
+        .setName("tail-v2-to-v3")
         .setProcessingGuarantee(ProcessingGuarantee.AT_LEAST_ONCE);
 
 hz.getJet().newJob(tail, cfg);
 
 // Step 2: snapshot existing entries (batch)
 Pipeline bulk = Pipeline.create();
-bulk.readFrom(Sources.<Long, OrderV1>map("orders"))
-    .map( e -> Map.entry(e.getKey(), OrderV2.fromV1(e.getValue(), "JBU")))
-    .writeTo(Sinks.map("order_v2"));
+bulk.readFrom(Sources.<Long, OrderV2>map("orders"))
+    .map( e -> Map.entry(e.getKey(), OrderV3.fromV2(e.getValue()))
+    .writeTo(Sinks.map("order_v3"));
 
 JobConfig cfg = new JobConfig()
-        .setName("bulk-v1-to-v2-jet")
+        .setName("bulk-v2-to-v3-jet")
         .setProcessingGuarantee(ProcessingGuarantee.AT_LEAST_ONCE);
 
 hz.getJet().newJob(bulk, cfg).join();
@@ -529,26 +529,26 @@ To handle these cases, use a per-key `version` that always increases (for exampl
 
 [source,java]
 ----
-IAtomicLong versionGen = hz.getCPSubsystem().getAtomicLong("orders_v2_version");
+IAtomicLong versionGen = hz.getCPSubsystem().getAtomicLong("orders_v3_version");
 
 Pipeline bulk = Pipeline.create();
 
 // Configure the job
 JobConfig bulkJobCfg = new JobConfig();
-bulkJobCfg.setName("bulk-v1-to-v2");
+bulkJobCfg.setName("bulk-v2-to-v3");
 bulkJobCfg.setProcessingGuarantee(ProcessingGuarantee.AT_LEAST_ONCE);
 
-bulk.readFrom(Sources.<Long, OrderV1>map("orders"))
+bulk.readFrom(Sources.<Long, OrderV2>map("orders"))
     .writeTo(Sinks.mapWithEntryProcessor(
-        "orders_v2",
+        "orders_v3",
         Map.Entry::getKey,
         e -> {
             long version = versionGen.incrementAndGet();
-            OrderV2 v2 = OrderV2.fromV1(e.getValue(), "JBU");
-            V2Row newRow = new V2Row(v2, version, "JBU", false);
+            OrderV3 v3 = OrderV3.fromV2(e.getValue());
+            V3Row newRow = new V3Row(v2, version, false);
 
-            return (EntryProcessor<Long, V2Row, Void>) entry -> {
-                V2Row current = entry.getValue();
+            return (EntryProcessor<Long, V3Row, Void>) entry -> {
+                V3Row current = entry.getValue();
                 long currentVer = current == null ? Long.MIN_VALUE : current.version();
                 if (version > currentVer) {
                     entry.setValue(newRow);

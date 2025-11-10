@@ -1,4 +1,4 @@
-= Introducing schema evolution
+= Schema Evolution
 :description: This topic introduces schema evolution in Hazelcast Compact serialization and explains how to safely evolve object schemas across rolling upgrades, clients, and persisted clusters without data loss or downtime. It covers backward and forward compatibility, deterministic writes, versioned maps, MapStore and persistence considerations, SQL and index evolution, and best practices for zero-downtime migrations in distributed environments.
 
 {description}
@@ -461,25 +461,51 @@ If conflict resolution is required (for example, partial field merging or condit
 
 === Migration pipeline with continuous synchronization
 
-The migration pipeline copies all existing entries from the old map to the new map and keeps the new map up to date
+The migration pipelines copy all existing entries from the old map to the new map and keeps the new map up to date
 by consuming updates from the source map’s event journal until old clients are removed.
 
 [source,java]
 ----
-Pipeline p = Pipeline.create();
+// Step 1: snapshot new entries
+Pipeline tail = Pipeline.create();
 
-// Step 1: snapshot existing entries (batch)
-...
-// Step 2: stream updates (journal)
-...
-// Step 3: write both to the same sink
-...
+StreamStage<Map.Entry<Long, OrderV1>> journal = tail
+        .readFrom(Sources.<Long, OrderV1>mapJournal(hz.getMap("orders"), JournalInitialPosition.START_FROM_CURRENT))
+        .withIngestionTimestamps();
+
+// upserts
+journal.filter((PredicateEx<Map.Entry<Long, OrderV1>>) e -> e.getValue() != null)
+       .map(e -> Map.entry(e.getKey(), OrderV2.fromV1(e.getValue(), "JTA")))
+       .writeTo(Sinks.map(v2Map));
+
+// deletes
+journal.filter(new ValueIsNullFilter())
+       .writeTo(Sinks.fromProcessor("v2-remove-sink", MapRemoveP.metaSupplier("orders_v2")));
+
+JobConfig cfg = new JobConfig()
+        .setName("tail-v1-to-v2")
+        .setProcessingGuarantee(ProcessingGuarantee.AT_LEAST_ONCE);
+
+hz.getJet().newJob(tail, cfg);
+
+// Step 2: snapshot existing entries (batch)
+Pipeline bulk = Pipeline.create();
+bulk.readFrom(Sources.<Long, OrderV1>map("orders"))
+    .map( e -> Map.entry(e.getKey(), OrderV2.fromV1(e.getValue(), "JBU")))
+    .writeTo(Sinks.map("order_v2"));
+
+JobConfig cfg = new JobConfig()
+        .setName("bulk-v1-to-v2-jet")
+        .setProcessingGuarantee(ProcessingGuarantee.AT_LEAST_ONCE);
+
+hz.getJet().newJob(bulk, cfg).join();
+
 ----
 
 This migration approach:
 
-* Migrates all existing records once the MapStore has finished loading.
-* Streams subsequent updates via the event journal, keeping the new map in sync.
+* Start a pipeline to stream updates via the origin map's event journal, keeping the new map in sync.
+* Then start migrating all existing records (once the MapStore has finished loading).
 * Ensures no data is lost while old clients are still writing to the old schema.
 
 When all clients have switched to the new version:
@@ -488,6 +514,55 @@ When all clients have switched to the new version:
 2. Cancel the migration job.
 3. Validate record counts and consistency.
 4. Retire or archive the old map.
+
+==== Edge cases
+
+Edge cases to take into account when migrating
+
+1. Bulk vs tail race: older data can overwrite newer tail updates for the same key.
+2. Delete vs upsert ordering: a delete event from the journal could arrive before/after a bulk upsert and incorrectly remove a fresh value or resurrect a deleted one.
+3. At-least-once duplicates: retries can appy the same write more than once
+4. Key reuse: a key deleted in V1 later gets re-created; ordering must be still correct
+5. Job restarts: after a restart, the tail resumes and bult may still be running, reintroducing (1)-(3)
+
+To handle these cases, use a per-key `version` that always increases (for example, from a link:https://docs.hazelcast.com/hazelcast/latest/data-structures/iatomiclong[`IAtomicLong`]). Apply updates only when `incoming.version` is greater than `existing.version`, using a `EntryProcessor` instead of direct writes or removes. This ensures tail data always overrides bulk data and makes race conditions, deletes, retries, restarts, and key reuse predictable.
+
+[source,java]
+----
+IAtomicLong versionGen = hz.getCPSubsystem().getAtomicLong("orders_v2_version");
+
+Pipeline bulk = Pipeline.create();
+
+// Configure the job
+JobConfig bulkJobCfg = new JobConfig();
+bulkJobCfg.setName("bulk-v1-to-v2");
+bulkJobCfg.setProcessingGuarantee(ProcessingGuarantee.AT_LEAST_ONCE);
+
+bulk.readFrom(Sources.<Long, OrderV1>map("orders"))
+    .writeTo(Sinks.mapWithEntryProcessor(
+        "orders_v2",
+        Map.Entry::getKey,
+        e -> {
+            long version = versionGen.incrementAndGet();
+            OrderV2 v2 = OrderV2.fromV1(e.getValue(), "JBU");
+            V2Row newRow = new V2Row(v2, version, "JBU", false);
+
+            // Inline EntryProcessor
+            return (EntryProcessor<Long, V2Row, Void>) entry -> {
+                V2Row current = entry.getValue();
+                long currentVer = current == null ? Long.MIN_VALUE : current.version();
+                if (version > currentVer) {
+                    entry.setValue(newRow);
+                }
+                return null;
+            };
+        }
+    ));
+
+jet.newJob(bulk, bulkJobCfg).join();
+----
+
+The tail pipeline will follow a similar approach.
 
 === Zero-downtime migration summary
 

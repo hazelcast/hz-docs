@@ -70,7 +70,7 @@ swap space left.
 *** If you still want to use the operating system's default memory management,
 you can set the allocator type to STANDARD in your native memory configuration.
 ** **POOLED**: This is the default option, Hazelcast's own pooling memory allocator.
-*** With this option, memory blocks are managed using internal memory pools. Each partition thread has its own local memory pool, and pages assigned to one thread are not shared with others.
+*** With this option, memory blocks are managed using internal memory pools.
 *** Memory is allocated in blocks called pages, each having a 4 MB size by default. These pages are divided into chunks or merged to create larger chunks when required.
 Sizing of these chunks follows the https://en.wikipedia.org/wiki/Buddy_memory_allocation[buddy memory allocation^]
 algorithm, i.e., power-of-two sizing.
@@ -79,17 +79,17 @@ Instead, it marks disposed memory blocks as available for reuse, so future alloc
 memory allocation and deallocation operations (except the ones
 requiring larger sizes than the page size) mostly do not interact with the
 operating system.
-*** When memory is needed, the allocator first tries to find a suitable free block inside its internal pools. If it cannot be found, then it interacts with the operating system to request a new page.
+*** When memory is needed, the allocator first tries to find a suitable free block inside the internal pools. If it cannot be found, then it interacts with the operating system to request a new page.
 *** Please note that the buddy memory allocation system may cause internal fragmentation depending on the size of the memory allocation request and configured page sizes. Since memory is allocated in block sizes that are a power-of-two, a request that does not exactly match the available block size will result in allocation of the next largest block, potentially leaving unused space. For example, when using 128 KB page sizes, a 68 KB request will result in the allocation of a 128 KB block, wasting 60 KB.
 *** The buddy memory allocation system reduces external fragmentation by merging contiguous free buddy blocks of the same size into larger ones. However, it may still lead to external fragmentation if the system does not have large enough free blocks to allocate for the request. As a result, larger memory requests might fail, even if the total free memory is enough.
 Because pages cannot be shared between threads, external fragmentation is more likely when:
 **** The total native memory is small.
 **** There is not enough memory available for each partition thread (2 GB total native memory and 8 partition threads means each thread will have ~256 MB).
 **** The workload includes frequent put/remove operations or a mix of small and large entries.
-*** Even if only a small amount of the memory is used, one partition thread may still run out of memory because it cannot borrow free blocks from others, and no free page is available from the operating system. As a result, a member can fail with NativeOutOfMemoryError even when total free memory appears large. This happens when a single thread's pool runs out of contiguous free blocks for the requested allocation size.
-*** To make fragmentation and memory usage easier to observe, the following metrics are provided:
+*** Even if only a small amount of the memory is used, one partition thread may still run out of memory because it cannot borrow free blocks from others, and no free page is available from the native memory. As a result, a member can fail with NativeOutOfMemoryError even when total free memory appears large. This happens when a single thread's pool runs out of contiguous free blocks for the requested allocation size.
+*** To make fragmentation and memory usage easier to observe, the following details are provided in the Native OOME message:
 **** **Max page fragmentation**: Shows how far a memory pool is from being able to provide a full-page-sized block. It indicates the thread with the highest fragmentation level. The value ranges between 0% (no fragmentation) and 100% (high fragmentation).
-**** **Imbalance memory distribution (CV)**: Measures how unevenly memory is distributed across partition threads. It is calculated as the Coefficient of Variation (CV) of memory usage among threads. A low CV indicates balanced memory usage, a high CV indicates that some threads use much more or much less memory than others, which can lead to early Native OOMEs.
+**** **Imbalance memory distribution (CV)**: Measures how unevenly memory is distributed across partition threads. It is calculated as the https://en.wikipedia.org/wiki/Coefficient_of_variation[Coefficient of Variation (CV)] of memory usage among threads. A low CV indicates balanced memory usage, a high CV indicates that some threads have much more or much less assigned memory than others, which can lead to early Native OOMEs.
 **** **Total unusable free memory**: Shows the total amount of free memory that cannot currently be used for allocations because one of the threads runs out of usable memory due to insufficient free space or because its remaining memory is fragmented into blocks too small to satisfy allocation requests.
 
 * **minimum block size:** Minimum size of the blocks in bytes to split and

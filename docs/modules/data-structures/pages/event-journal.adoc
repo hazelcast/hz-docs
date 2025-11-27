@@ -1,4 +1,4 @@
-= Event Journal
+= Event journal
 [[event-journal]]
 
 The event journal is a distributed data structure that stores the history
@@ -18,7 +18,7 @@ structured as a ringbuffer (partitioned by ringbuffer item) and shares many
 similarities with it.
 
 [[interaction-with-evictions-and-expiration-for-imap]]
-== Interaction with Evictions and Expiration for IMap
+== Interaction with evictions and expiration for IMap
 
 Configuring IMap with eviction and expiration can cause the event journal to
 contain different events on the different replicas of the same partition. You
@@ -38,7 +38,7 @@ store on that replica but the event journals and record stores between
 replicas are out-of-sync.
 
 [[configuring-event-journal-capacity]]
-== Configuring Event Journal Capacity
+== Configure event journal capacity
 
 By default, an event journal is configured with a `capacity` of 10000 items.
 This creates a single array per partition, roughly the size of the capacity
@@ -125,7 +125,7 @@ This means that potentially all maps and/or caches have one single
 event journal configuration.
 
 [[event-journal-partitioning]]
-== Event Journal Partitioning
+== Event journal partitioning
 
 The event journal is a partitioned data structure. The partitioning
 is done by the event key. Because of this, the map and cache entry
@@ -138,7 +138,7 @@ and no additional network traffic is introduced when appending events
 to the event journal.
 
 [[configuring-event-journal-ttl]]
-== Configuring Event Journal time-to-live
+== Configure event journal time to live
 
 You can configure Hazelcast event journal with a `time-to-live` in seconds.
 Using this setting, you can control how long the items remain in
@@ -190,23 +190,24 @@ hazelcast:
 
 
 [[detecting-lost-events]]
-== Detecting Lost Events
-The event journal is implemented as a fixed-size ringbuffer.
-When the journal reaches its configured capacity, newly appended events overwrite the oldest ones.
-If a consumer such as a Jet pipeline reads events slower than they are written,
-the reader may advance past overwritten items and miss events permanently.
-This situation is referred to as event loss.
+== Detect lost events
 
-To help users detect and react to such situations, Hazelcast provides explicit lost-event
+The event journal is implemented as a fixed-size ring buffer.
+When the journal reaches its configured capacity, newly appended events overwrite the oldest ones.
+If a consumer, such as a Jet pipeline, reads events slower than they are written,
+some events may be overwritten before they are read.
+This is referred to as event loss.
+
+To help you detect and react to event loss, Hazelcast provides lost event
 notifications through the `JournalSourceEntry` interface and specific journal sources.
-Hazelcast introduces the `JournalSourceEntry` interface which include a method for detecting lost events:
+The `JournalSourceEntry` interface includes a method for detecting lost events:
 
 [source,java]
 boolean isAfterLostEvents();
 
-This method returns true for the first event that follows a lost in the journal, otherwise false.
+This method returns `true` for the first event that follows a lost event in the journal, otherwise `false`.
 
-To obtain these enriched entries, use the new journal sources:
+To obtain these enriched entries, use the journal sources:
 [source,java]
 
 Sources.mapJournalEntries("myMap", START_FROM_OLDEST)
@@ -214,7 +215,7 @@ Sources.cacheJournalEntries("myCache", START_FROM_OLDEST)
 
 These sources emit `JournalSourceEntry<K, V>` instead of `Map.Entry<K, V>`.
 
-Example usage:
+For example:
 [source,java]
 ----
 p.readFrom(Sources.mapJournalEntries("myMap", START_FROM_OLDEST))
@@ -228,7 +229,8 @@ p.readFrom(Sources.mapJournalEntries("myMap", START_FROM_OLDEST))
     .writeTo(Sinks.logger());
 ----
 
-Projection-based sources also receive the `isAfterLostEvents` information. Projection functions can inspect it and decide how to handle lost events.
+Projection-based sources also receive the `isAfterLostEvents` information. Projection functions can inspect it and decide how to handle lost events:
+
 [source,java]
 ----
 var source = Sources.mapJournal(

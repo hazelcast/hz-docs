@@ -184,3 +184,59 @@ hazelcast:
         time-to-live-seconds: 180
 ----
 ====
+
+
+[[detecting-lost-events]]
+== Detecting Lost Events
+The event journal is implemented as a fixed-size ringbuffer.
+When the journal reaches its configured capacity, newly appended events overwrite the oldest ones.
+If a consumer such as a Jet pipeline reads events slower than they are written,
+the reader may advance past overwritten items and miss events permanently.
+This situation is referred to as event loss.
+
+To help users detect and react to such situations, Hazelcast provides explicit lost-event
+notifications through the JournalSourceEntry interface and specific journal sources.
+Hazelcast introduces the JournalSourceEntry interface which include a method for detecting lost events:
+
+[source,java]
+boolean isAfterLostEvents();
+
+This method returns true for the first event that follows a lost in the journal, otherwise false.
+
+To obtain these enriched entries, use the new journal sources:
+[source,java]
+
+Sources.mapJournalEntries("myMap", START_FROM_OLDEST)
+Sources.cacheJournalEntries("myCache", START_FROM_OLDEST)
+
+These sources emit JournalSourceEntry<K, V> instead of Map.Entry<K, V>.
+
+Example usage:
+[source,java]
+----
+p.readFrom(Sources.mapJournalEntries("myMap", START_FROM_OLDEST))
+    .withTimestamps(e -> System.currentTimeMillis(), 0)
+    .map(entry -> {
+        if (entry.isAfterLostEvents()) {
+            log.warn("Detected lost events in event journal");
+        }
+        return entry.getValue();
+    })
+    .writeTo(Sinks.logger());
+----
+
+Projection-based sources also receive the isAfterLostEvents information. Projection functions can inspect it and decide how to handle lost events.
+[source,java]
+----
+var source = Sources.mapJournal(
+    "myMap",
+    START_FROM_OLDEST,
+    event -> {
+        if (event.isAfterLostEvents()) {
+            return -1;   // special marker indicating lost events
+        }
+        return event.getNewValue();
+    },
+    event -> true
+);
+----

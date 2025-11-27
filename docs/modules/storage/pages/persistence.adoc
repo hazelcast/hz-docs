@@ -1,5 +1,5 @@
 = Persisting Data on Disk
-:description: Persistence allows individual members and whole clusters to recover data by persisting map entries, JCache data, and streaming job snapshots on disk. Members can use persisted data to recover from a planned shutdown (including rolling upgrades), a sudden cluster-wide crash, or a single member failure.
+:description: Persistence allows individual members and whole clusters to recover data by persisting map entries, JCache data, and streaming job snapshots on disk. Members can use persisted data to recover from planned cluster-wide shutdowns, unplanned cluster-wide failures, and to accelerate individual member restarts by reducing the volume of data sent over the network.
 :toc-levels: 3
 :page-enterprise: true
 
@@ -7,21 +7,45 @@
 
 == Why Persist Data
 
-Data in Hazelcast is usually stored in-memory (RAM) so that it's faster to access. However, data in RAM is volatile, meaning that when one or more members shut down, their data is lost. When you persist data on disk, members can load it upon a restart and continue to operate as usual.
+Data in Hazelcast is usually stored in-memory (RAM) so that it's faster to access. However, data in RAM is volatile, meaning that when a member shuts down, its data is lost. In-memory partition backups are the primary method for data resilience in Hazelcast, but additionally persisting data to disk can reduce downtime and data loss in certain scenarios.
 
-Clusters can use persisted data to recover from the following scenarios:
+When you persist data on disk, members can load it on restart, instead of waiting for other active members to send it over the network. In a cluster-wide failure - e.g. due to a data center power outage - there are no active members to receive data from, so persistence means that we can recover data that would otherwise be lost.
 
-- **Cluster-wide shutdown**:
+Clusters can use persisted data for the following scenarios:
 
-** **Planned**: A whole cluster is shut down and restarted with the same configuration, state, and data as before the restart. A planned shutdown includes rolling restarts, where the cluster is restarted member by member for scenarios such as installing an operating system patch or new hardware. xref:maintain-cluster:rolling-upgrades.adoc[Rolling upgrades] are an example of a rolling restart.
-** **Unplanned**: A cluster is restarted after all its members crashed at the same time due an event such as a power outage.
-- **A single member restart**: A single member is restarted for whatever reason.
+- **Cluster-wide shutdowns**:
+
+** **Planned**: A whole cluster is shut down and restarted with the same configuration, state, and data as before the restart. 
++
+[IMPORTANT]
+====
+In order for persistence to function correctly for planned cluster shutdowns you must first put the cluster into `PASSIVE` state before shutting down members. A list of methods for gracefully shutting down a cluster can be found in the xref:maintain-cluster:shutdown.adoc[shutdown] documentation.
+====
+** **Unplanned**: A cluster is restarted after all its members crash at the same time due to an event such as a power outage. Note that some data loss is expected unless `fsync` is set to `true`. For more information, see xref:storage:configuring-persistence.adoc#data-structures[Data structure options].
+
+- **Single member restarts**: 
+
+** **Planned**: During a rolling restart each cluster member is restarted one by one for scenarios such as updating static configuration, as described in xref:maintain-cluster:restart-cluster.adoc[Restart a cluster].
+** **Unplanned**: A single member may crash or terminate unexpectedly at any time, using persistence allows faster recovery by using the data on disk where possible. In some cases a member can recover entirely using the data on disk removing the need to transfer data over the network.
+
 
 == Supported Features
 
 You can persist the following:
 
 * Contents of map or JCache data structure
++
+[IMPORTANT]
+====
+Hazelcast does not persist the metadata of your data structure entries, including time-to-live (TTL), to disk when xref:storage:configuring-persistence.adoc#quickstart-configuration[Persistence is enabled].
+
+For example, assuming the following:
+
+* The cluster was started with persistence enabled and TTL configured to three hours for your map entries.
+* The cluster was shut down and restarted two hours after the initial cluster start up.
+
+As TTL is metadata, which is not persisted when the cluster restarts, it is reset to the configured three hours from the time of the restart. Two hours have already passed before the restart, so the map entries now have a TTL value of five hours.
+====
 * Streaming job snapshots
 * SQL metadata, to avoid loss of SQL mappings, data connections, or views after a cluster restart.
 
@@ -38,5 +62,7 @@ not possible to restore persisted data.
 == Related Resources
 
 xref:configuring-persistence.adoc[]
+
+xref:kubernetes:kubernetes-persistence.adoc[Running Hazelcast {enterprise-product-name} with Persistence under Kubernetes]
 
 xref:backing-up-persistence.adoc[]

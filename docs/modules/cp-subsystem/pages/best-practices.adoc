@@ -1,11 +1,16 @@
-= Best Practices
-:description: Consider the following, a wrap-up of the aforementioned recommendations, to get the best throughput out of your CP Subsystem use case.
+= CP Subsystem best practices
+:description: Follow these recommendations to get the best performance out of your CP Subsystem deployment.
 
 {description}
 
-* Try to reuse already created or existing xref:cp-subsystem:cp-subsystem.adoc#cp-members[CP objects] (AtomicReference, FencedLock, etc.) and try to avoid creating new ones since those will not automatically be garbage collected.
-* Since each Raft based data structure is bounded by a single xref:cp-subsystem:cp-subsystem.adoc#cp-groups[Raft group], a client will create a separate session on each Raft group which holds the session-based data structure and the client interacts with. And when idle, clients send separate heartbeat messages to each Raft group to keep the sessions alive. For instance, if five clients try to acquire four locks, where each lock is placed into a different Raft group, then there will be 5 x 4 = 20 heartbeat operations committed in total. However, if all locks are put into the same Raft group, there will be only five heartbeats in each period. Therefore, it is strongly recommended that you store all session-based CP data structures (locks and semaphores) in a single Raft group to avoid that cost.
-* Create the minimum number of xref:cp-subsystem:configuration.adoc#choosing-a-group-size[CP groups] that you think are sufficient for your CP subsystem use case.
+* Try to reuse already created or existing xref:cp-subsystem:cp-subsystem.adoc#cp-data-structures[CP objects] (AtomicReference, FencedLock, etc.) and try to avoid creating new ones because they will not be garbage collected.
 
+* Because each CP data structure is bounded by a single xref:cp-subsystem:cp-subsystem.adoc#cp-groups[CP group], a client will create a separate session on each CP group that holds the session-based data structure that the client interacts with. When idle, clients send separate heartbeat messages to each CP group to keep the sessions alive. For instance, if five clients try to acquire four locks, where each lock is placed into a different CP group, then there will be 5 x 4 = 20 heartbeat operations committed in total. However, if all locks are put into the same CP group, there will be only five heartbeats in each period. We strongly recommend that you store all session-based CP data structures (locks and semaphores) in a single CP group to avoid that cost.
 
+* If you use fenced locks or semaphores, we recommend using a minimal number of CP groups. For these data structures, a Hazelcast member or client starts a new xref:cp-subsystem:cp-subsystem.adoc#sessions[session] on the corresponding CP group when it makes its first acquisition request, and then periodically commits session heartbeats to this CP group to indicate its liveness. If fenced locks and semaphores are distributed to multiple CP groups, there will be a session management overhead on each CP group. For most use cases, the `DEFAULT` CP group should be sufficient to maintain all CP data structure instances.
 
+* Custom CP groups are recommended only when you benchmark your deployment and decide that performance of the `DEFAULT` CP group is not sufficient for your workload. In which case, you should use multiple xref:cp-subsystem:configuration.adoc#choosing-a-group-size[CP groups], spread CP data structures among those groups and try to distribute load evenly. This allows for more parallel processing across multiple leader nodes, reduces the size of individual group snapshots, and allows for snapshots to be persisted in parallel. We recommend creating the same number of CP groups as CP members to maximize throughput.
+
+* Distribute CP group members across three data centers to balance resilience and performance. For example, a group of seven members with a 3/3/1 split.
+
+* Minimize latency across your CP Subsystem deployment. Throughput is limited by the latency between the CP group leader and the slowest follower used for quorum calculations.

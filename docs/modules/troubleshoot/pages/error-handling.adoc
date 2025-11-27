@@ -1,9 +1,9 @@
-= Error Handling Strategies for Jobs
+= Error handling strategies for jobs
 :description: Jobs may not run as expected due to I/O errors in sources and sinks, or coding and input data errors in your pipelines. To handle these errors you can use one of the following strategies.
 
 {description}
 
-== Handling Errors in Sources and Sinks
+== Handle errors in sources and sinks
 
 Sources and sinks are often the points of contact with external data stores.
 Their various types have specific characteristics which enable error
@@ -21,7 +21,7 @@ communications failures with the remote cluster, is
 handled by the Hazelcast cluster. For
 further details and configuration options, see xref:clients:java.adoc#handling-failures[Handling Failures].
 
-== Handling Errors in Pipelines
+== Handle errors in pipelines
 
 The primary way of dealing with errors in pipelines is to
 make all jobs independent of each other. In a cluster,
@@ -29,12 +29,11 @@ there is an arbitrary number of independent jobs running in parallel.
 Hazelcast ensures that these jobs do not interact in any way, and one's
 failure does not lead to any consequences for the others.
 
-The concern of error handling becomes: what happens to a job once it
+Error handling is therefore concerned with what happens to a job once it
 encounters a problem. By default, Hazelcast fails a job that has thrown an
-error, but what one can do with such a failed job afterward is the
-interesting part.
+error, but what you do with such a failed job afterward is discussed below.
 
-=== Jobs Without Mutable State
+=== Jobs without mutable state
 
 For many streaming jobs, specifically the ones which don't have any
 processing guarantee configured, the pipeline definition and the job
@@ -42,21 +41,21 @@ config are the only parts we can identify as state, and those are
 immutable.
 
 One option for dealing with failure in immutable-state jobs is simply
-restarting them (once the cause of the failure has been addressed).
+to restart them (once the cause of the failure has been addressed).
 Restarted streaming jobs lacking mutable state can just resume
 processing the input data flow from the current point in time.
 
 Batch jobs don't strictly fall into this immutable-state category, but
 the generic, reliable way of dealing with their error in Hazelcast
-is also restarting them from the beginning and having them completely
+is also to restart them from the beginning and having them completely
 reprocess their input.
 
-=== Processing Guarantees
+=== Processing guarantees
 
 Streaming jobs with mutable state, those with a xref:fault-tolerance:fault-tolerance.adoc#processing-guarantee-is-a-shared-concern[processing guarantee]
-set, achieve fault tolerance by periodically saving xref:fault-tolerance:fault-tolerance.adoc#distributed-snapshot[recovery snapshots]. If a streaming job was allowed to fail, the snapshots would be deleted. For this reason, by default all streaming jobs are suspended on failure, instead of failing completely. For more details, see link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/config/JobConfig.html#setSuspendOnFailure(boolean)[`JobConfig.setSuspendOnFailure`]
+set, achieve fault tolerance by periodically saving xref:fault-tolerance:fault-tolerance.adoc#distributed-snapshot[recovery snapshots]. If a streaming job was allowed to fail, the snapshots would be deleted. For this reason, by default all streaming jobs are suspended on failure, instead of failing completely. For more details, see link:https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/jet/config/JobConfig.html#setSuspendOnFailure(boolean)[`JobConfig.setSuspendOnFailure`]
 and
-link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/Job.html#getSuspensionCause()[`Job.getSuspensionCause`].
+link:https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/jet/Job.html#getSuspensionCause()[`Job.getSuspensionCause`].
 
 NOTE: If you use the xref:sql:create-job.adoc#using-a-jobstatuslistener[CREATE JOB statement] to submit a job to your Hazelcast cluster, the job is automatically set to suspend on failure. 
 
@@ -64,20 +63,20 @@ A job in the suspended state has its snapshot preserved, and you can
 resume it without data loss once you have addressed the root cause of the
 failure.
 
-In the open-source version of Hazelcast, this scenario is limited to fixing the
+In the {open-source-product-name} of Hazelcast, this scenario is limited to fixing the
 input data by some external means and then simply xref:pipelines:job-management.adoc#restarting[resuming the job].
 
-The Enterprise version of Hazelcast has the added option of xref:pipelines:job-update.adoc[job upgrades]. In that case you can:
+The {enterprise-product-name} version of Hazelcast has the added option of xref:pipelines:job-update.adoc[job upgrades] which allows you to:
 
-* export the latest snapshot
-* update the pipeline, if needed, for example, to cope with unexpected
-  data
-* resubmit a new job based on the exported snapshot and the updated
-  pipeline
+* Export the latest snapshot.
+* Update the pipeline, if needed -- for example, to cope with unexpected
+  data.
+* Resubmit a new job based on the exported snapshot and the updated
+  pipeline.
 
 One caveat of the suspend-on-failure feature is that the latest snapshot
 is not a "failure snapshot". Hazelcast can't take a full snapshot right at the
-moment of the failure, because the Jet engine can produce accurate
-snapshots only when in a healthy state. Instead, Hazelcast simply keeps the
+moment of the failure, because the Jet engine can only produce accurate
+snapshots when in a healthy state. Instead, Hazelcast simply keeps the
 latest periodic snapshot it created. Even so, the recovery procedure
 preserves the at-least-once guarantee.

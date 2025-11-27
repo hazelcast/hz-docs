@@ -121,6 +121,55 @@ introduce a network connection between tasks, sending the data from one
 cluster node to the other. This is the basic principle behind
 auto-parallelization and distribution.
 
+== Word Count with Job Placement Control  
+
+Now we'll take the Word Count task above, but we'll define the location to use for the Jet processing job.
+
+NOTE: Your license key must include `Advanced Compute` to activate this feature.
+
+We'll use the same `ArrayList` that we used in the previous example, but we'll run the Jet processing job on lite members only.
+
+Create your `JobBuilder` for the pipeline:
+
+```java
+   /**
+     * Creates a JobBuilder for a new Jet job with Pipeline definition.
+     */
+    default JobBuilder newJobBuilder(Pipeline p) {
+        return new JobBuilder(this, p);
+    }
+}
+```
+
+Define your pipeline and any member selection override to submit your Jet job from your Hazelcast Java client:
+
+```java
+HazelcastInstance hz = HazelcastClient.newHazelcastClient();
+// ... 
+Map map = hz.getMap(MAP_NAME);
+
+Pipeline p = Pipeline.create()
+                .readFrom(Sources.map(map))
+                .map(Entry::getValue)
+                .writeTo(sink)
+                .getPipeline();
+
+Job job = hz.getJet()
+        .newJobBuilder(p)
+        .withMemberSelector(JetMemberSelector.ALL_LITE_MEMBERS)
+        .start();
+```
+
+In this form we can clearly identify individual steps taken by the computation:
+
+. Get the Map.
+. Read lines from the text source.
+. Get the value from the loaded Map.
+. Write to the sink.
+. Define the job using the `JobBuilder` API.
+. Override the default job placement of all cluster members, and select lite members only.
+. Run the processing job.
+
 == Core DAG Planner
 
 As you write a pipeline, you form the pipeline DAG and when you submit it for execution, the planner converts it to the core DAG.

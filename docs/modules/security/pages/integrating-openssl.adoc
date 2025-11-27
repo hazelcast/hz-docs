@@ -1,14 +1,10 @@
 = Integrating OpenSSL / BoringSSL
 :page-enterprise: true
 
-NOTE: You cannot integrate OpenSSL into Hazelcast when xref:encryption.adoc[Symmetric Encryption] is enabled.
-Also note that the symmetric encryption feature has been deprecated.
-
-TLS/SSL in Java is normally provided by the JRE. However, the performance overhead can be
-significant; even with AES intrinsics
-enabled. If you are using an x86_64 system (Linux, Mac, Windows), Hazelcast supports native
-integration for TLS/SSL which can provide significant performance
-improvements. There are two supported native TLS/SSL libraries available through
+TLS in Java is normally provided by the Java runtime (JRE). However, the performance overhead can be
+significant; even with AES intrinsics enabled. If you are using an x86_64 system (Linux, Mac, Windows), Hazelcast supports native
+integration for TLS which can provide significant performance
+improvements. There are two supported native TLS libraries available through
 https://netty.io/wiki/forked-tomcat-native.html[netty-tcnative^] libraries:
 
 * OpenSSL
@@ -26,14 +22,9 @@ configure the appropriate cipher suite(s).
 Check the https://netty.io/wiki/forked-tomcat-native.html[netty-tcnative^] page
 for installation details.
 
-NOTE: If the Java version is
-less than 11 and OpenSSL capabilities are detected
-(also the appropriate Java libraries are included) and if no
-explicit `SSLEngineFactory` is set, Hazelcast defaults to use OpenSSL.
-
 == Netty Libraries
 
-For the native TLS/SSL integration in Java, the https://netty.io/[Netty^] library is used.
+For native TLS integration in Java, the https://netty.io/[Netty^] library is used.
 
 Make sure the following libraries from the Netty framework and their dependencies are on the classpath:
 
@@ -42,11 +33,12 @@ Make sure the following libraries from the Netty framework and their dependencie
 ** either BoringSSL: `netty-tcnative-boringssl-static`
 ** or OpenSSL: `netty-tcnative` (for given OS architecture)
 
-NOTE: It is very important that the version of Netty JAR(s) corresponds to
-a very specific version of `netty-tcnative`. In case of doubt, the
-simplest thing to do is to download the `netty-<version>.tar.bz2` file
+NOTE: The `netty-handler` and `tcnative` artifacts have different versioning strategies.
+It is important that the these versions are compatible. The safe way
+is to download the `netty-<version>.tar.bz2` file
 from the https://netty.io/downloads.html[Netty^] website and check which
-`netty-tcnative` version is used for that Netty release.
+`netty-tcnative` version is used for that Netty release. Other possibility
+is to use import `netty-bom` in Maven for dependency management.
 
 == Using BoringSSL
 
@@ -57,16 +49,26 @@ Example Maven dependencies:
 
 [source,xml]
 ----
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-bom</artifactId>
+            <version>${netty.version}</version>
+            <scope>import</scope>
+            <type>pom</type>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+
 <dependencies>
     <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-tcnative-boringssl-static</artifactId>
-        <version>${netty-tcnative.version}</version>
     </dependency>
     <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-handler</artifactId>
-        <version>${netty.version}</version>
     </dependency>
 </dependencies>
 ----
@@ -88,17 +90,27 @@ Example Maven dependencies (for Linux):
 
 [source,xml]
 ----
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-bom</artifactId>
+            <version>${netty.version}</version>
+            <scope>import</scope>
+            <type>pom</type>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+
 <dependencies>
     <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-tcnative</artifactId>
-        <version>${netty-tcnative.version}</version>
         <classifier>linux-x86_64</classifier>
     </dependency>
     <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-handler</artifactId>
-        <version>${netty.version}</version>
     </dependency>
 </dependencies>
 ----
@@ -106,7 +118,7 @@ Example Maven dependencies (for Linux):
 == Configuring Hazelcast for OpenSSL
 
 Configuring OpenSSL in Hazelcast is straight forward. On the client and/or
-member side, the following snippet enables TLS/SSL
+member side, the following snippet enables TLS
 using OpenSSL:
 
 [tabs] 
@@ -156,7 +168,7 @@ hazelcast:
 ----
 ====
 
-The configuration is similar to a regular TLS/SSL integration. The main differences
+The configuration is similar to a regular TLS integration. The main differences
 are the `OpenSSLEngineFactory` factory class and the following properties:
 
 * `keyFile`: Path of your PKCS#8 key file in PEM format.
@@ -198,20 +210,70 @@ Available values are:
 ** `OPTIONAL` - server asks for a client certificate, but it doesn't
 require it
 * `ciphersuites`: Comma-separated list of cipher suite names allowed to be used.
-* `protocol`: Name of the algorithm which is used in your TLS/SSL. Its default
-value is `TLSv1.2`. Available values are:
-** `TLS`
-** `TLSv1`
-** `TLSv1.1`
+* `protocol`: Name of the algorithm which is used in your TLS. Its default
+value is empty, meaning the protocol version to use is not specified. Available
+values depend on the engine implementation but usually support:
+** `TLS` (equivalent to the empty value)
 ** `TLSv1.2`
-** `SSL` _(insecure!)_
-** `SSLv2` _(insecure!)_
-** `SSLv3` _(insecure!)_
+** `TLSv1.3`
 +
-All the algorithms listed above support Java 8 and higher versions. For the
-`protocol` property, we recommend you to provide SSL or TLS with its version
-information, e.g., `TLSv1.2`. Note that if you
-provide only `SSL` or `TLS` as a value for the `protocol` property, they are
-converted to `SSLv3` and `TLSv1.2`, respectively. We strongly recommend to avoid
-SSL protocols.
+For the
+`protocol` property, we recommend you to provide TLS with its version
+information, e.g., `TLSv1.3`. It ensures the engine won't allow a fallback to an old, insecure version.
+
 * `validateIdentity`: Flag which allows enabling endpoint identity validation. It means, during the TLS handshake client verifies if the server's hostname (or IP address) matches the information in X.509 certificate (Subject Alternative Name extension). Possible values are `"true"` and `"false"` (default).
+
+== Troubleshooting tips
+
+This section helps you resolve errors sometimes encountered when enabling FIPS mode.
+
+**Problem: Failed to load libraries**
+
+You get an error similar to:
+
+`java.lang.IllegalArgumentException: Failed to load any of the given libraries: [netty_tcnative_linux_aarch_64_fedora, netty_tcnative_linux_aarch_64, netty_tcnative_aarch_64, netty_tcnative]`
+
+**Reason**
+
+This error can occur if you use the generic netty-tcnative JAR file rather than the platform-specific version.
+
+**Resolution**
+
+To ensure the correct library is used, specify the platform-specific netty-tcnative JAR file. For example, for aarch_64:
+
+`netty-tcnative-2.0.69.Final-linux-aarch_64.jar`
+
+NOTE: If the JAR file is unavailable in Maven Central, you may need to build it manually.
+
+For more information, see: xref:security:integrating-openssl.adoc#netty-libraries[Netty Libraries].
+
+**Problem: BCFKS not found**
+
+You get an error similar to:
+
+`com.hazelcast.core.HazelcastException: java.security.KeyStoreException: BCFKS not found`
+
+**Reason**
+
+This error occurs when the Java runtime doesn't recognize the BCFKS keystore type, which is provided by the BouncyCastle provider. This can happen for several reasons — for example, the issue may be caused by using the wrong keystore type. Note that this error can also occur in non-FIPS mode.
+
+**Resolution**
+
+Switch to BCFKS for the keystore and truststore to resolve the problem.
+
+To use BCFKS, change the properties to:
+
+[source,xml]
+----
+<properties>
+    <property name="protocol">TLSv1.2</property>
+    <property name="keyStore">keystore.bcfks</property>
+    <property name="keyStorePassword">password</property>
+    <property name="keyStoreType">BCFKS</property>
+    <property name="trustStore">truststore.bcfks</property>
+    <property name="trustStorePassword">password</property>
+    <property name="trustStoreType">BCFKS</property>
+</properties>
+----
+
+For more information about configuring properties, see: xref:security:tls-ssl.adoc#tls-for-hazelcast-members[TLS for Hazelcast Members].

@@ -1,7 +1,149 @@
 = Python Client
 :page-api-reference: https://hazelcast.readthedocs.io/en/v{page-latest-supported-python-client}/index.html
 
-Python Client implementation for Hazelcast. It is implemented using the Hazelcast Open Binary Client Protocol.
+== Overview
 
-See Hazelcast Python client's GitHub https://github.com/hazelcast/hazelcast-python-client[repo^]
-for its documentation and https://github.com/hazelcast/hazelcast-python-client/tree/master/examples[code samples^].
+This section provides information about the Python client for Hazelcast, and explains how to install and use the client.
+
+TIP: To learn how to get started quickly with the Hazelcast Python client, follow our simple xref:clients:python-client-getting-started.adoc[Get started with Python] tutorial.
+
+The Hazelcast native Python client is an official library that allows Python applications to connect to and interact with Hazelcast clusters. It is implemented using the Hazelcast Open Binary Client Protocol. The key features and benefits include:
+
+* Distributed data structures: the client provides access to Hazelcast's distributed data structures such as maps, queues, topics, lists, sets, and more.
+* SQL support: it offers the ability to query Map data using standard SQL syntax.
+* JSON object support: it allows using and querying JSON objects. 
+* Compact serialization: the client supports compact serialization, which provides efficient serialization of objects.
+* DBAPI support: it implements the DBAPI interface on top of the SQL service, making it compatible with various libraries and tools.
+* Near cache: the client supports the near cache feature for faster reads on frequently accessed data.
+
+These features make the Hazelcast Python Client a powerful tool for Python applications requiring distributed computing, in-memory data processing, and real-time analytics capabilities.
+
+TIP: For the latest Python API documentation, see https://hazelcast.readthedocs.io/en/v{page-latest-supported-python-client}/index.html[Hazelcast Python Client docs].
+
+== Install the Python client
+
+This section explains how to set up a Hazelcast cluster and install the Hazelcast Python client.
+
+=== Set up a Hazelcast cluster
+
+The Hazelcast Python client requires a working Hazelcast cluster to run. The cluster handles storage and manipulation of the user data. Clients are a way to connect to the Hazelcast cluster and access the data.
+
+The quickest way to start a single member cluster for development purposes is to use our https://hub.docker.com/r/hazelcast/hazelcast/[Docker images].
+
+Launch a Hazelcast Docker Container by running the following command:
+
+```bash
+docker run -p 5701:5701 hazelcast/hazelcast:5.3.0
+```
+TIP: For a step-by-step guide, see the https://docs.hazelcast.com/hazelcast/latest/getting-started/get-started-docker[Start a local cluster in Docker] and https://docs.hazelcast.com/hazelcast/latest/getting-started/enterprise-overview[Get Started with Hazelcast Enterprise Edition] tutorials. 
+
+Alternatively, you can run standalone members by downloading and running distribution files from the Hazelcast website as follows:
+
+. Go to the download page and choose either the https://hazelcast.com/open-source-projects/downloads/[ZIP or TAR distribution] of Hazelcast.
+. Decompress the contents into the directory that you want to run members from.
+. Change into this directory and then start the Hazelcast member using the ``bin/hz-start`` script. 
+
+The Hazelcast log appears in the terminal showing that your 1-member cluster is ready to be used.
+
+For more information on setting up a Hazelcast cluster, see the https://hazelcast.readthedocs.io/en/latest/getting_started.html[Python client documentation].
+
+=== Download and install the client
+
+You can download and install the Python client from PyPI (the Python Package Index) using pip. This library allows your Python applications to connect to and interact with a Hazelcast cluster, enabling you to use distributed data structures and other Hazelcast features in your Python code. 
+
+To download and install the client, run:
+
+```bash
+pip install hazelcast-python-client
+```
+
+== Use the client
+
+This section shows how to connect to a Hazelcast cluster and perform some basic operations using the client. 
+
+*Example: Connect to a Hazelcast cluster*
+
+```python
+    import hazelcast
+
+    client = hazelcast.HazelcastClient()
+```
+
+*Example: Get or create the "distributed-map" on the cluster*
+
+```python
+    distributed_map = client.get_map("distributed-map")
+```
+
+*Example: Put "key", "value" pair into the "distributed-map"*
+
+In this example, you will have to wait for the request to complete.
+
+```python
+    distributed_map.set("key", "value").result()
+```
+
+*Example: Get the value associated with the given key from the cluster*
+
+In this example, you will attach a callback to be executed once the response for the get request is received. 
+Note that, the set request above is blocking since it calls ".result()" on the returned Future, 
+whereas the get request below is non-blocking.
+
+```python
+    get_future = distributed_map.get("key")
+    get_future.add_done_callback(lambda future: print(future.result()))
+```
+ 
+Note that further operations will not wait for the get request above to complete.
+
+*Example: Print the map and shut down the client*
+
+```python
+    print("Map size:", distributed_map.size().result())
+    client.shutdown()
+```
+
+For more code samples, see the https://github.com/hazelcast/hazelcast-python-client/tree/master/examples[Hazelcast Python examples]. 
+
+== Configure the client
+
+If you are running Hazelcast and the Python client on the same machine, the default configuration should work out-of-the-box. 
+However, if you run the client on a different computer to that of the cluster members, you may need to do some simple configuration, such as specifying member addresses, or customizing client properties. 
+
+The following shows some basic configuration settings: 
+
+```python
+    import hazelcast
+
+    client = hazelcast.HazelcastClient(
+        cluster_name="cluster-name",
+        cluster_members=[
+            "10.90.0.2:5701",
+            "10.90.0.3:5701",
+        ],
+        lifecycle_listeners=[
+            lambda state: print("Lifecycle event >>>", state),
+        ]
+    )
+
+    print("Connected to cluster")
+    client.shutdown()
+```
+
+For detailed network configurations and additional features of Hazelcast Python client configuration, see the  
+https://hazelcast.readthedocs.io/en/latest/configuration_overview.html#configuration-overview[Configuration overview]
+and https://hazelcast.readthedocs.io/en/latest/getting_started.html#configuring-hazelcast-python-client[Configuring Hazelcast Python client].
+
+== Get support
+
+Join us in the https://hazelcastcommunity.slack.com/channels/python-client[Python client channel]. 
+Get an invite via https://slack.hazelcast.com/[Slack].
+
+Raise an issue in the https://github.com/hazelcast/hazelcast-python-client/issues[GitHub repository].
+
+== Next steps
+
+For more information: 
+
+- See the Hazelcast Python Client GitHub https://github.com/hazelcast/hazelcast-python-client[repo^]
+- Find https://github.com/hazelcast/hazelcast-python-client/tree/master/examples[code samples^]

@@ -40,8 +40,7 @@ For more information, see the xref:consistency-and-replication:consistency.adoc[
 
 == Merge Policies
 
-Since Hazelcast 3.10 all merge policies implement
-the unified interface `com.hazelcast.spi.SplitBrainMergePolicy`.
+All merge policies implement the unified interface `com.hazelcast.spi.SplitBrainMergePolicy`.
 We provide the following out-of-the-box implementations:
 
 * `DiscardMergePolicy`: The entry from the smaller cluster is discarded.
@@ -73,9 +72,10 @@ The following data structures support split-brain recovery:
 * `IQueue`
 * `IList`
 * `ISet`
-* `RingBuffer`
+* `Ringbuffer`
 * `CardinalityEstimator`
 * `ScheduledExecutorService`
+* `VectorCollection` [.enterprise]*{enterprise-product-name}*
 
 The statistic based out-of-the-box merge policies are only supported by
 `IMap`, `ICache`, `ReplicatedMap` and `MultiMap`.
@@ -91,7 +91,7 @@ See also the <<merge-types, Merge Types section>> for a complete overview of
 supported merge types of each data structure. There is a config validation which
 checks these constraints to provide fail-fast behavior for invalid configurations.
 
-NOTE: For the other data structures, e.g., `ISemaphore`, `ICountdownLatch` and `ILock`,
+NOTE: For the other data structures, e.g., `ISemaphore`, `ICountDownLatch` and `ILock`,
 the instance from the smaller cluster is discarded during the split-brain recovery.
 
 == Configuring Merge Policies
@@ -136,6 +136,10 @@ XML::
     <atomic-long name="default">
         <merge-policy>PutIfAbsentMergePolicy</merge-policy>
     </atomic-long>
+
+    <vector-collection name="default">
+        <merge-policy batch-size="100">PutIfAbsentMergePolicy</merge-policy>
+    </vector-collection>
     ...
 </hazelcast>
 ----
@@ -169,6 +173,11 @@ hazelcast:
   atomic-long:
     default:
       merge-policy:
+        class-name: PutIfAbsentMergePolicy
+  vector-collection:
+    default:
+      merge-policy:
+        batch-size: 100
         class-name: PutIfAbsentMergePolicy
 ----
 ====
@@ -226,6 +235,7 @@ Config config = new Config()
   .addMapConfig(mapConfig);
 ----
 
+[#custom-merge-policies]
 == Custom Merge Policies
 
 To implement a custom merge policy you have to implement `com.hazelcast.spi.SplitBrainMergePolicy`:
@@ -243,6 +253,9 @@ public interface SplitBrainMergePolicy<V, T extends MergingValue<V>, R>
 
 NOTE: Please have in mind that `existingValue` can be `null`.
 This happens when a data structure or key-based entry was just created in the smaller cluster.
+
+NOTE: Custom merge policy classes must be present on the classpath of all member nodes. This can be achieved
+by updating the classpath for each node manually, or by using the {ucn} feature. See xref:clusters:user-code-namespaces.adoc[User Code Namespaces] for more information.
 
 === Merge Types
 
@@ -383,6 +396,10 @@ And the following table shows the merge types provided by each data structure:
 
 * `MergingEntry`
 | `ScheduledExecutorService`
+|
+
+* `MergingEntry`
+| `VectorCollection`
 |
 
 * `MergingEntry`
@@ -611,4 +628,6 @@ curl --data-urlencode "<username>" --data-urlencode "<password>" --data-urlencod
 For these requests to work, you need to enable the `CLUSTER_READ` and `CLUSTER_WRITE` endpoint groups, respectively, in the cluster members. See xref:maintain-cluster:rest-api.adoc#enabling-endpoint-groups[Enabling Endpoint Groups].
 
 By using this REST endpoint, you are able to add the missing addresses of the members from the other cluster to your members. Therefore, one cluster master member will find the other cluster's master member.
+
+include::clients:partial$rest-deprecation.adoc[]
 

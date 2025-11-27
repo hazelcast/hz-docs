@@ -1,0 +1,42 @@
+name: Compile Java source files
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '**/*.java'
+      - 'pom.xml'
+      - 'docs/antora.yml'
+      - '.github/workflows/maven-pr-builder.yaml'
+  schedule:
+    - cron: '15 2 * * 0'
+     
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Maven compile
+        run: |
+          HZ_VERSION=$(grep full-version docs/antora.yml|sed "s/.*:[ ]*'\(.*\)'/\1/")
+          mvn --show-version test --batch-mode --no-transfer-progress "-Dversion.hazelcast=${HZ_VERSION}"
+
+      - name: Slack notification
+        uses: 8398a7/action-slack@v3
+        if: failure() && github.event_name == 'schedule'
+        with:
+          status: failure
+          fields: repo,job,workflow
+          text: "👎 Test Maven compilation failed."
+          channel: "#docs-notifications"
+        env:
+          SLACK_WEBHOOK_URL: ${{ inputs.SLACK_WEBHOOK }}

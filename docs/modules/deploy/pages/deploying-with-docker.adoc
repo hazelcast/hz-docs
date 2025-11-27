@@ -1,42 +1,42 @@
-= Deploying on Docker
+= Deploy on Docker
 :description: In this deployment guide, you will learn how to form a cluster from Hazelcast member containers running on more than one Docker host in the same local area network (LAN).
 :page-aliases: installing-using-docker.adoc
 
 {description}
 
-== Starting a Cluster
+== Start a cluster
 
-The default network mode in Docker is bridge. In this mode, all containers run in a single network that is not accessible outside of the Docker host. If you run member Docker containers on different hosts, you must allow them to discover and connect to each other using one of the following methods:
+The default network mode in Docker is bridge. In this mode, all containers run in a single network that's not accessible outside of the Docker host. If you run member Docker containers on different hosts, you must allow them to discover and connect to each other using one of the following methods:
 
 - Host network mode (Linux only)
 - Port mapping
 
 include::deploy:partial$docker-ip-warning.adoc[]
 
-=== Host Network Mode
+=== Use host network mode
 
-To allow members and clients on different hosts to discover each other with multicast, you can use the `host` network mode. This mode allows members to share the host’s network stack from their Docker containers.
+To allow members and clients on different hosts to discover each other with multicast, you can use the `host` network mode. This mode allows members to share the host's network stack from their Docker containers.
 
 Members will discover and connect to each other automatically only if your local network supports multicast. If your network does not support multicast, members will not form a cluster. In this case, you can try <<port-mapping, port mapping>>.
 
 [tabs] 
 ==== 
-Open Source:: 
+{open-source-product-name}:: 
 + 
 --
 [source,bash,subs="attributes+"]
 ----
-docker run --rm --network host --name member1 hazelcast/hazelcast:{full-version}
-docker run --rm --network host --name member2 hazelcast/hazelcast:{full-version}
+docker run --rm --network host --name member1 hazelcast/hazelcast:{os-version}
+docker run --rm --network host --name member2 hazelcast/hazelcast:{os-version}
 ----
 --
-Enterprise:: 
+{enterprise-product-name}:: 
 + 
 --
 [source,bash,subs="attributes+"]
 ----
-docker run --rm --network host --name member1 hazelcast/hazelcast-enterprise:{full-version}
-docker run --rm --network host --name member2 hazelcast/hazelcast-enterprise:{full-version}
+docker run --rm --network host --name member1 hazelcast/hazelcast-enterprise:{ee-version}
+docker run --rm --network host --name member2 hazelcast/hazelcast-enterprise:{ee-version}
 ----
 --
 ====
@@ -44,7 +44,7 @@ docker run --rm --network host --name member2 hazelcast/hazelcast-enterprise:{fu
 
 In this mode, each member is available on the internal (private) IP address of the Docker host.
 
-=== Port Mapping
+=== Port mapping
 
 To allow members and clients on different hosts to discover each other over TCP/IP, you can map ports from the Docker host (the device that's running Docker) and tell Hazelcast to listen to your internal IP address.
 
@@ -104,7 +104,7 @@ hazelcast:
 [source,bash,subs="attributes+"]
 ----
 docker run --rm --name member1 \
-  -e HZ_NETWORK_PUBLICADDRESS=192.168.1.12:5701 -p 5701:5701 hazelcast/hazelcast:{full-version}
+  -e HZ_NETWORK_PUBLICADDRESS=192.168.1.12:5701 -p 5701:5701 hazelcast/hazelcast:{os-version}
 ----
 
 . Start another member on the second host.
@@ -112,7 +112,7 @@ docker run --rm --name member1 \
 [source,bash,subs="attributes+"]
 ----
 docker run --rm --name member1 \
-  -e HZ_NETWORK_PUBLICADDRESS=192.168.1.13:5701 -p 5701:5701 hazelcast/hazelcast:{full-version}
+  -e HZ_NETWORK_PUBLICADDRESS=192.168.1.13:5701 -p 5701:5701 hazelcast/hazelcast:{os-version}
 ----
 
 In the member logs, you should see that your members connected to each other:
@@ -134,8 +134,7 @@ for more information.
 
 You can configure various aspects of your cluster and environment with Docker.
 
-We recommend that you use the default
-configuration file as a starting point.
+We recommend that you use the default configuration file as a starting point.
 
 === Memory
 
@@ -147,7 +146,7 @@ GB assigned to the JVM:
 
 [source,bash,subs="attributes+"]
 ----
-docker run --memory 2g --rm hazelcast/hazelcast:{full-version}
+docker run --memory 2g --rm hazelcast/hazelcast:{os-version}
 ----
 
 === JAVA_OPTS
@@ -157,12 +156,12 @@ variable. Hazelcast passes it to the JVM when starting. For example:
 
 [source,bash,subs="attributes+"]
 ----
-docker run --memory 2g -e JAVA_OPTS="-XX:MaxRAMPercentage=85.0" --rm hazelcast/hazelcast:{full-version}
+docker run --memory 2g -e JAVA_OPTS="-XX:MaxRAMPercentage=85.0" --rm hazelcast/hazelcast:{os-version}
 ----
 
 Make sure to leave enough free RAM for metaspace and other overheads.
 
-=== Custom Hazelcast Configuration File
+=== Custom Hazelcast configuration file
 
 You can configure Hazelcast with your own YAML or XML file
 by replacing the default ones in the container at
@@ -170,7 +169,7 @@ by replacing the default ones in the container at
 
 [source,bash,subs="attributes+"]
 ----
-docker run --rm hazelcast/hazelcast:{full-version} \
+docker run --rm hazelcast/hazelcast:{os-version} \
 cat /opt/hazelcast/config/examples/hazelcast-docker.yaml \
 > hazelcast.yml
 ----
@@ -182,10 +181,10 @@ Now edit the file and apply it when starting Hazelcast:
 docker run \
 -v "$(pwd)"/hazelcast.yml:/opt/hazelcast/hazelcast.yml \
 -e HAZELCAST_CONFIG=hazelcast.yml \
--p:5701:5701 hazelcast/hazelcast:{full-version}
+-p:5701:5701 hazelcast/hazelcast:{os-version}
 ----
 
-=== Extend Hazelcast's CLASSPATH with Custom JARS and Files
+=== Extend Hazelcast's classpath with Custom JARS and Files
 
 If you have to add more classes or files to Hazelcast's classpath, one way to
 do it is to put them in a directory such as `ext`, mount it to the
@@ -196,7 +195,7 @@ container, and set the `CLASSPATH` environment variable:
 docker run \
 -v /path/to/ext:/opt/hazelcast/ext \
 -e CLASSPATH="/opt/hazelcast/ext/" \
--p:5701:5701 hazelcast/hazelcast:{full-version}
+-p:5701:5701 hazelcast/hazelcast:{os-version}
 ----
 
 If you have just one file to add, it's simpler to mount it directly to the
@@ -206,18 +205,18 @@ Hazelcast `lib` directory:
 ----
 docker run \
 -v /path/to/my.jar:/opt/hazelcast-jet/lib/my.jar \
--p:5701:5701 hazelcast/hazelcast:{full-version}
+-p:5701:5701 hazelcast/hazelcast:{os-version}
 
 ----
 
-=== Changing Logging Level
+=== Change logging level
 
 You can set the logging level using the `LOGGING_LEVEL` environment
 variable:
 
 [source,bash,subs="attributes+"]
 ----
-docker run -e LOGGING_LEVEL=DEBUG hazelcast/hazelcast:{full-version}
+docker run -e LOGGING_LEVEL=DEBUG hazelcast/hazelcast:{os-version}
 ----
 
 Available logging levels are (from highest to lowest): `FATAL`, `ERROR`,
@@ -228,17 +227,17 @@ If you need more control over logging, you can supply your own
 
 [source,bash,subs="attributes+"]
 ----
-docker run --rm hazelcast/hazelcast:{full-version} cat /opt/hazelcast/log4j2.properties > log4j2.properties
+docker run --rm hazelcast/hazelcast:{os-version} cat /opt/hazelcast/log4j2.properties > log4j2.properties
 ----
 
 Edit the file and mount it when starting Hazelcast:
 
 [source,bash,subs="attributes+"]
 ----
-docker run -v /path/to/log4j2.properties:/opt/hazelcast/log4j2.properties hazelcast/hazelcast:{full-version}
+docker run -v /path/to/log4j2.properties:/opt/hazelcast/log4j2.properties hazelcast/hazelcast:{os-version}
 ----
 
-== Building a Custom Image from the Slim Image
+== Build a custom image from the slim Docker image
 
 Hazelcast offers a xref:getting-started:editions.adoc#full-slim[slim] Docker image that
 contains only the core Hazelcast engine. When image size is a concern, you can use it
@@ -249,10 +248,10 @@ This example creates a Docker image for Hazelcast with the Kafka extension.
 
 [source,dockerfile,subs="attributes+"]
 ----
-FROM hazelcast:{full-version}-slim
+FROM hazelcast:{os-version}-slim
 ARG HZ_HOME=/opt/hazelcast
-ARG REPO_URL=https://repo1.maven.org/maven2/com/hazelcast
-ADD $REPO_URL/hazelcast-kafka/5.0/hazelcast-kafka-5.0-jar-with-dependencies.jar $HZ_HOME/lib/
+ARG REPO_URL=https://repo.maven.apache.org/maven2/com/hazelcast/jet
+ADD $REPO_URL/hazelcast-jet-kafka/{os-version}/hazelcast-jet-kafka-{os-version}-jar-with-dependencies.jar $HZ_HOME/lib/
 # ... more ADD statements ...
 ----
 

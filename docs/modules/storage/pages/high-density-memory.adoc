@@ -15,7 +15,7 @@ with small heaps (sizes of 2-4GB per member) run on a single physical hardware
 device to avoid garbage collection pauses. This results in oversized clusters
 to hold the data and leads to performance issues.
 
-In [navy]*Hazelcast Enterprise*, the High-Density Memory Store is
+In [navy]*Hazelcast {enterprise-product-name}*, the High-Density Memory Store is
 Hazelcast's enterprise in-memory storage solution. It solves garbage
 collection limitations so that applications can exploit hardware memory
 more efficiently without the need of oversized clusters. High-Density
@@ -41,16 +41,16 @@ features and implementations:
 * https://github.com/hazelcast/hazelcast-hibernate[Hibernate 2nd Level Caching^]
 * Paging and Partition Predicates
 
-== Configuring High-Density Memory Store
+== Configure High-Density Memory Store
 
-To use the High-Density memory storage, the native memory usage
+To use the High-Density Memory Store, the native memory usage
 must be enabled using the programmatic or declarative configuration.
 Also, you can configure its size, memory allocator type, minimum
 block size, page size and metadata space percentage.
 
 The following are the configuration element descriptions:
 
-* **size:** Size of the total native memory to allocate in megabytes.
+* **capacity:** The total native memory capacity to allocate.
 Its default value is **512 MB**.
 * **allocator type**: Type of the memory allocator. Available values are as follows:
 ** **STANDARD**: This option is used internally by Hazelcast's
@@ -83,17 +83,16 @@ requiring larger sizes than the page size) do not interact with the
 operating system mostly.
 *** For memory allocation, it tries to find the requested memory size inside
 the internal memory pools. If it cannot be found, then it interacts with the operating system.
+*** Please note that the buddy memory allocation system may cause internal fragmentation depending on the size of the memory allocation request and configured page sizes. Since memory is allocated in block sizes that are a power-of-two, a request that does not exactly match the available block size will result in allocation of the next largest block, potentially leaving unused space. For example, when using 128 KB page sizes, a 68 KB request will result in the allocation of a 128 KB block, wasting 60 KB.
+*** Although the buddy memory allocation system reduces external fragmentation by merging contiguous and free buddy blocks of the same size into larger ones, it may still lead to external fragmentation if the system does not have sufficiently large free buddy blocks to allocate for the request. As a result, larger memory requests might be rejected, even if the total free memory is sufficient.
 * **minimum block size:** Minimum size of the blocks in bytes to split and
 fragment a page block to assign to an allocation request. It is used only
 by the **POOLED** memory allocator. Its default value is **16 bytes**.
 * **page size:** Size of the page in bytes to allocate memory as a block.
 It is used only by the **POOLED** memory allocator. Its default value is `1 << 22` = **4194304 Bytes**, about **4 MB**.
-* **metadata space percentage:** Defines the percentage of the allocated
-native memory that is used for internal memory structures by the High-Density
-Memory for tracking the used and available memory blocks. It is used only by
-the **POOLED** memory allocator. Its default value is **12.5**. Please note that
-when the memory runs out, you get a `NativeOutOfMemoryException`;  if your store
-has a large number of entries, you should consider increasing this percentage.
+* **metadata space percentage:** Defines the percentage of the configured native memory that is estimated to be used 
+for internal High-Density Memory data structures. It is used only by the **POOLED** memory allocator. 
+Its default value is **12.5**. Hazelcast will allow the actual metadata usage to exceed this defined threshold but will send warning logs. See <<metadata>>.
 * **persistent-memory:** See <<using-persistent-memory, Using the High-Density Memory Store with Persistent Memory Devices>>.
 
 The following is the programmatic configuration example.
@@ -115,7 +114,7 @@ XML::
 <hazelcast>
     ...
     <native-memory allocator-type="POOLED" enabled="true">
-        <size unit="MEGABYTES" value="512"/>
+        <capacity unit="MEGABYTES" value="512"/>
         <min-block-size>16</min-block-size>
         <page-size>4194304</page-size>
         <metadata-space-percentage>12.5</metadata-space-percentage>
@@ -139,7 +138,7 @@ hazelcast:
   native-memory:
     enabled: true
     allocator-type: POOLED
-    size:
+    capacity:
       unit: MEGABYTES
       value: 512
     min-block-size: 16
@@ -159,8 +158,76 @@ requested number of bytes using the system property `hazelcast.hidensity.check.f
 See the xref:ROOT:system-properties.adoc[System Properties appendix] on how to use Hazelcast
 system properties.
 
+=== Enable High-Density Memory Store
+
+You need to perform a rolling restart on your cluster to start using High-Density Memory Store in your maps.
+
+For this you need to:
+
+. Update your cluster and map configurations:
+* Enable the native memory in your cluster.
+* Set the in-memory format of your maps on each member as `NATIVE`.
+. Perform a rolling restart of your members. See xref:maintain-cluster:restart-cluster.adoc#rolling[].
+
+Your maps are now backed with High-Density Memory Store.
+
+[[metadata]]
+== Metadata
+
+Metadata refers to the off-heap memory used by Hazelcast
+internal data structures holding user data and for tracking allocated memory
+blocks or pages when using the `POOLED` allocator. Metadata is
+included when calculating the total committed off-heap memory.
+
+There is no configurable limit for metadata usage -- it will expand as needed to
+accommodate user data. This means it is possible for total committed off-heap
+memory to exceed the configured limit. This is an important consideration in
+deployment environments such as Kubernetes, where containers in Pods can be
+terminated if allocated memory exceeds configured limits.
+
+While metadata usage expands as needed, this is not the case for user data. If
+you have 256MB native memory configured and 10MB of that is metadata, then you
+have 246MB available for storing your data. Exceeding that will result in a
+`NativeOutOfMemoryError`.
+
+=== Estimating usage
+
+You can estimate member sizing by benchmarking in a simulated
+production environment and monitoring the `memory.usedMetadata` metric.
+
+The majority of metadata usage comes from the space allocated for the underlying
+data structures holding the entries for `IMap` and `ICache`. These data structures
+are similar to a hashmap, with a buffer expanding by a factor of two each time the
+number of entries exceeds a load factor of 0.6 on the existing buffer size. Each
+slot in the buffer costs 16 bytes and the minimum buffer size is 128.
+
+You can define the rough cost of this structure in bytes for `n` entries with the
+following Python snippet:
+
+```python
+import math as m
+
+def mapCost(n):
+    nextPow2 = 2 ** m.ceil(m.log2(n))
+    return 16 * max(128, nextPow2 if n < 0.6 * nextPow2 else 2 * nextPow2)
+```
+
+Then for a cluster with `p` partitions and `m` members, you can estimate per
+member metadata usage for an `IMap` or `ICache` with `b` backups and `n` entries
+to be:
+
+```python
+(p * (b + 1) * mapCost(int(n / p))) / m
+```
+
+Using the `HazelcastJsonValue` type in an `IMap` will roughly double the
+metadata storage costs because structural information will be stored for each entry.
+
+Finally, the cost of tracking allocated memory blocks requires further metadata. 
+Increase the above estimate by about 25% to cover this.
+
 [[using-persistent-memory]]
-== Using the High-Density Memory Store with Persistent Memory Devices
+== Using the High-Density Memory Store with persistent memory devices
 
 To extend the memory available to the High-Density Memory Store, you can use persistent memory devices. This is a cost-efficient way to provide additional storage for data structures like IMap, ICache, and Near Cache.
 
@@ -172,7 +239,13 @@ NOTE: Although the example describes the configuration of a dual socket machine,
 
 === Configuring Intel(R) Optane(TM)
 
-CAUTION: Intel(R) has link:https://www.intel.co.uk/content/www/uk/en/support/articles/000057951/memory-and-storage/intel-optane-memory.html[discontinued support for Intel(R) Optane(TM) products]. As a result, Hazelcast does not recommend using this configuration.
+[CAUTION]
+.Deprecation Notice for Intel Optane
+====
+Intel(R) has link:https://www.intel.co.uk/content/www/uk/en/support/articles/000057951/memory-and-storage/intel-optane-memory.html[discontinued support for Intel(R) Optane(TM) products].
+
+Intel Optane support will be removed as of version 7.0.
+====
 
 Prerequisites:
 
@@ -182,12 +255,11 @@ Prerequisites:
 
 NOTE: Persistent memory devices running on Linux x86_64 is the only configuration currently supported.
 
-
-==== Example Configuration Elements and Attributes
+==== Example configuration
 
 The optional `persistent-memory` element in the `native-memory` configuration block enables the use of the persistent memory device and defines the directories where this memory is mounted along with its operational mode.
 
-**Declarative Configuration:**
+**Declarative configuration:**
 
 [tabs] 
 ==== 
@@ -233,7 +305,7 @@ hazelcast:
 ----
 ====
 
-**Programmatic Configuration:**
+**Programmatic configuration:**
 
 [source,java]
 ----
@@ -263,7 +335,7 @@ set the `enabled` attribute to `true`
 +
 If you don't specify a directory for the persistent memory device, standard RAM is used instead.
 
-=== Allocation Strategies
+=== Allocation strategies
 
 Since on multi-socket machines there could be multiple mount points for persistent memory devices, the memory allocations need to follow an allocation strategy. Starting with 4.1, Hazelcast supports two allocation strategies:
 
@@ -272,13 +344,13 @@ Since on multi-socket machines there could be multiple mount points for persiste
 
 Hazelcast's memory allocator chooses and statically caches one of them for every allocator thread for the entire lifetime of the Hazelcast instance.
 
-==== Round-robin Allocation Strategy
+==== Round-robin allocation strategy
 
 Hazelcast iterates over the configured memory directories and
 makes sure that every allocation is done in a different directory from the last. This is a best-effort attempt to distribute the allocations evenly on the memory modules, which is also important for memory utilization and
 performance. This is the default allocation strategy.
 
-==== NUMA-aware Allocation Strategy
+==== NUMA-aware allocation strategy
 
 The persistent memory modules are mounted in memory slots just like the
 regular memory modules, and share the same memory bus. Therefore, the same
@@ -308,14 +380,14 @@ for every directory configured for the persistent memory device.
 
 If both parts of the configuration are completed, the threads in the thread groups restricted to run on a single NUMA node will use the NUMA-aware allocation strategy. The rest of threads will still use the round-robin strategy. To identify the memory attached to a NUMA node, use the `ndctl list -v -m fsdax` command. From the output of `ndctl` you can you can check which mount point represents which persistent memory device.
 
-=== Allocation Overflowing
+=== Allocation overflowing
 
 Since both allocation strategies try to allocate from a single
 memory directory, lack of capacity can prevent the chosen directory from serving the allocation request. In this case, both strategies
 take the other directories and try to serve the allocation from those. This fallback option compromises the NUMA-aware strategy as there will
 be NUMA-remote accesses to memory on the persistent memory device.
 
-=== Performance of Memory Modules
+=== Performance of memory modules
 
 While the memory modules of a persistent memory device are mounted next to the regular memory modules, and share the same memory bus, they have
 different performance characteristics.
@@ -325,7 +397,7 @@ different performance characteristics.
 
 Despite the above facts, whether the higher latency of the memory from persistent memory devices impacts the performance of Hazelcast depends on multiple factors. 
 
-=== Performance Impacts on Different Use Cases
+=== Performance impacts
 
 Hazelcast is a distributed platform so the higher latency of memory on a persistent memory device can easily be hidden by the latency variance of the network. For certain use cases there may be no observable difference in the throughput whether Hazelcast stores its data on memory from a persistent memory device or on regular memory. An example of this is caching, where accessing the entries remotely through Hazelcast clients results in a very similar throughput.
 

@@ -34,7 +34,7 @@ still communicate with WAN target clusters
 As well as failures such as the examples above, data can become out-of-sync
 after manual interventions such as cluster restarts or failover of one cluster
 to another (for example disaster recovery). **After any such situation, you are
-advised to synchronize all WAN replicated data.**.
+advised to synchronize all WAN replicated data**.
 
 To overcome this out-of-sync issue, you can use either of the following approaches
 to synchronize your WAN replicated clusters:
@@ -47,13 +47,20 @@ These approaches are described in the following sections.
 [[synchronizing-wan-target-cluster]]
 == Full WAN Synchronization
 
-Full WAN synchronization sends all the data of an IMap to a target cluster to align the state of target IMap with source IMap.
-It is useful if two remote clusters lost their synchronizations due to overflow in the WAN queue or in restart scenarios.
+Full WAN synchronization updates or adds entries in the target IMap to match the source IMap, but does not remove entries that exist only in the target.
+If you are concerned about extraneous entries on the target IMap, you should consider clearing it before initiating a WAN synchronization.
+Clearing an IMap can be done programmatically by calling `IMap#clear()`, through Management Center's
+xref:{page-latest-supported-mc}@management-center:data-structures:map.adoc#clear-map[Clear Data action], 
+or using Hazelcast’s xref:maintain-cluster:rest-api-swagger#tag/Data-Controller/operation/clearMap[REST API].
+
+Full WAN synchronization is useful if two remote clusters lost their synchronizations due to overflow in the WAN queue or in restart scenarios.
 This is the default synchronization option.
 
 Full WAN Synchronization can be initiated through
 xref:{page-latest-supported-mc}@management-center:monitor-imdg:monitor-wan-replication.adoc#wan-sync[Management Center] and
 Hazelcast's REST API.
+
+include::clients:partial$rest-deprecation.adoc[]
 
 Below is the URL for the REST call;
 
@@ -73,9 +80,25 @@ Assume that you have configured an IMap with a WAN replication configuration as 
 
 [tabs] 
 ==== 
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  wan-replication name: london-wan-rep
+    batch-publisher:
+      cluster-name: istanbul
+  map:
+    my-map:
+      wan-replication-ref:
+        london-wan-rep:
+          merge-policy: com.hazelcast.spi.merge.PassThroughMergePolicy
+----
+--
+
 XML:: 
-+ 
--- 
++
 [source,xml]
 ----
 <hazelcast>
@@ -92,22 +115,6 @@ XML::
     </map>
     ...
 </hazelcast>
-----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  wan-replication name: london-wan-rep
-    batch-publisher:
-      cluster-name: istanbul
-  map:
-    my-map:
-      wan-replication-ref:
-        london-wan-rep:
-          merge-policy: com.hazelcast.spi.merge.PassThroughMergePolicy
 ----
 ====
 
@@ -131,7 +138,7 @@ synchronized, not even if `MapLoader` is configured.
 == Delta WAN Synchronization
 
 As explained in the previous section, the default <<synchronizing-wan-target-cluster, Full WAN Synchronization>> feature
-synchronizes  the maps in different clusters by transferring all the entries from the source to the target cluster.
+synchronizes the maps in different clusters by transferring all the entries from the source to the target cluster.
 This may be not efficient since some of the entries have remained unchanged on both clusters and
 do not require to be transferred. Also, for the entries to be transferred, they need to be copied to
 on-heap on the source cluster. This may cause spikes in the heap usage, especially if using large off-heap stores.
@@ -142,9 +149,9 @@ It is a data structure used for efficient comparison of the difference in the co
 The precision of this comparison is defined by Merkle tree's depth.
 Merkle tree hash exchanges can detect inconsistencies in the map data and
 synchronize only the different entries when using WAN synchronization, instead of sending all the map entries.
+As in a full WAN synchronization, entries that only exist in the target IMap are not removed.
 
 NOTE: Currently, Delta WAN Synchronization is implemented only for Hazelcast IMap.
-It will be implemented also for ICache in the future releases.
 
 [[requirements-for-delta-wan-sync]]
 === Requirements
@@ -163,14 +170,28 @@ To be able to use Delta WAN synchronization for a Hazelcast data structure:
 1 - Configure the WAN synchronization mechanism for your WAN publisher so that
 it uses the Merkle tree: If configuring declaratively, you can use the `consistency-check-strategy` sub-element of
 the `sync` element. If configuring programmatically, you can use the setter of the
-https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/config/WanSyncConfig.html[WanSyncConfig^] object.
+https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/config/WanSyncConfig.html[WanSyncConfig^] object.
 Here is a declarative example:
 
 [tabs] 
-==== 
+====
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  wan-replication:
+    wanReplicationScheme:
+      batch-publisher:
+        cluster-name: clusterName
+        sync:
+          consistency-check-strategy: MERKLE_TREES
+----
+--
+
 XML:: 
-+ 
--- 
++
 [source,xml]
 ----
 <hazelcast>
@@ -186,20 +207,6 @@ XML::
     ...
 </hazelcast>
 ----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  wan-replication:
-    wanReplicationScheme:
-      batch-publisher:
-        cluster-name: clusterName
-        sync:
-          consistency-check-strategy: MERKLE_TREES
-----
 ====
 
 2 - Bind that WAN synchronization configuration to the data structure (currently IMap):
@@ -209,9 +216,22 @@ Here is a declarative example:
 
 [tabs] 
 ==== 
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    myMap:
+      wan-replication-ref:
+        wanReplicationScheme:
+          ...
+----
+--
+
 XML:: 
-+ 
--- 
++
 [source,xml]
 ----
 <hazelcast>
@@ -224,19 +244,6 @@ XML::
     ...
 </hazelcast>
 ----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  map:
-    myMap:
-      wan-replication-ref:
-        wanReplicationScheme:
-          ...
-----
 ====
 
 3 - Finally, configure the Merkle tree using the `merkle-tree` element which is contained
@@ -244,9 +251,22 @@ in the `map` configuration:
 
 [tabs] 
 ==== 
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    myMap:
+      merkle-tree:
+        enabled: true
+        depth: 5
+----
+--
+
 XML:: 
-+ 
--- 
++
 [source,xml]
 ----
 <hazelcast>
@@ -259,32 +279,41 @@ XML::
     ...
 </hazelcast>
 ----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  map:
-    myMap:
-      merkle-tree:
-        enabled: true
-        depth: 5
-----
 ====
 
 You can programmatically configure it, too, using the
-https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/config/MerkleTreeConfig.html[MerkleTreeConfig^] object.
+https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/config/MerkleTreeConfig.html[MerkleTreeConfig^] object.
 
 Here is the full declarative configuration example showing how to
 enable Delta WAN Synchronization, bind it to a Hazelcast data structure (an IMap in this case) and specify its depth:
 
 [tabs] 
 ==== 
-XML:: 
-+ 
--- 
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    myMap:
+      wan-replication-ref:
+        wanReplicationScheme:
+          ...
+      merkle-tree:
+        enabled: true
+        depth: 10
+  wan-replication:
+    wanReplicationScheme:
+      batch-publisher:
+        cluster-name: clusterName
+        sync:
+          consistency-check-strategy: MERKLE_TREES
+----
+--
+
+XML::
++
 [source,xml]
 ----
 <hazelcast>
@@ -308,28 +337,6 @@ XML::
     </wan-replication>
     ...
 </hazelcast>
-----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  map:
-    myMap:
-      wan-replication-ref:
-        wanReplicationScheme:
-          ...
-      merkle-tree:
-        enabled: true
-        depth: 10
-  wan-replication:
-    wanReplicationScheme:
-      batch-publisher:
-        cluster-name: clusterName
-        sync:
-          consistency-check-strategy: MERKLE_TREES
 ----
 ====
 
@@ -400,6 +407,7 @@ http://{member IP address:port}/hazelcast/rest/wan/sync/map
 
 See the REST call details xref:rest-api.adoc#synchronizing-the-clusters[here].
 
+include::clients:partial$rest-deprecation.adoc[]
 
 ==== Memory Consumption
 
@@ -617,9 +625,25 @@ For instance, this is an example of an XML configuration to which you can dynami
 
 [tabs] 
 ==== 
-XML:: 
-+ 
--- 
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  wan-replication:
+    myWanReplication:
+  map:
+    myMap:
+      wan-replication-ref:
+        myWanReplication:
+          merge-policy: com.hazelcast.spi.merge.PassThroughMergePolicy
+          republishing-enabled: false
+----
+--
+
+XML::
++
 [source,xml]
 ----
 <hazelcast>
@@ -633,22 +657,6 @@ XML::
     </map>
     ...
 </hazelcast>
-----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  wan-replication:
-    myWanReplication:
-  map:
-    myMap:
-      wan-replication-ref:
-        myWanReplication:
-          merge-policy: com.hazelcast.spi.merge.PassThroughMergePolicy
-          republishing-enabled: false
 ----
 ====
 
@@ -888,15 +896,40 @@ WAN event replication queues by providing a filtering API.
 Using this API, you can monitor WAN replication events of each data structure
 separately.
 
+WAN replication adheres strictly to the filtering rules defined, ensuring that only the
+specified data flows between clusters. Filters can be configured to include or exclude
+specific map entries based on criteria such as keys, values, or custom rules. This allows
+for precise control over where the data is transferred and can be configured for compliance,
+regulatory, or other business requirements.
+
+WARNING: WAN synchronization is designed to synchronize entire data sets between clusters
+without applying any filtering rules. It aims to recover or reestablish consistency across
+clusters by replicating all entries, regardless of existing filters.
+
 You can attach filters to your data structures using the `filter` element of
 `wan-replication-ref` configuration inside `hazelcast.xml` as shown below.
 You can also configure it using the programmatic configuration.
 
 [tabs] 
 ==== 
-XML:: 
-+ 
--- 
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  map:
+    testMap:
+      wan-replication-ref:
+        test:
+          filters:
+            - com.example.MyFilter
+            - com.example.MyFilter2
+----
+--
+
+XML::
++
 [source,xml]
 ----
 <hazelcast>
@@ -912,21 +945,6 @@ XML::
     ...
 </hazelcast>
 ----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  map:
-    testMap:
-      wan-replication-ref:
-        test:
-          filters:
-            - com.example.MyFilter
-            - com.example.MyFilter2
-----
 ====
 
 As shown in the above configuration, you can define more than one filter. Filters are called in the order that they are introduced.
@@ -936,8 +954,8 @@ Map and Cache have different filter interfaces: `MapWanEventFilter` and
 `CacheWanEventFilter`. Both of these interfaces have the method `filter` which takes the following parameters:
 
 * `mapName`/`cacheName`: Name of the related data structure.
-* `entryView`: https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/core/EntryView.html[EntryView^]
-or https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/cache/CacheEntryView.html[CacheEntryView^] depending on the data structure.
+* `entryView`: https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/core/EntryView.html[EntryView^]
+or https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/cache/CacheEntryView.html[CacheEntryView^] depending on the data structure.
 * `eventType`: Enum type - `UPDATED(1)`, `REMOVED(2)` or `LOADED(3)` - depending on the event.
 
 NOTE: `LOADED` events are filtered out and not replicated to target cluster.
@@ -952,9 +970,35 @@ Following is the configuration snippet where `replicatedMap` and `replicatedCach
 
 [tabs] 
 ==== 
-XML:: 
-+ 
--- 
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  wan-replication:
+    london-wan-rep:
+      custom-publisher:
+        publisher-id: myCustomPublisher
+        class-name: com.my.WanPublisher
+        properties:
+          prop1: val1
+          prop2: val2
+  map:
+    replicatedMap:
+      wan-replication-ref:
+        london-wan-rep:
+          ...
+  cache:
+    replicatedCache:
+      wan-replication-ref:
+        london-wan-rep:
+          ...
+----
+--
+
+XML::
++
 [source,xml]
 ----
 <hazelcast>
@@ -982,32 +1026,6 @@ XML::
     ...
 </hazelcast>
 ----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  wan-replication:
-    london-wan-rep:
-      custom-publisher:
-        publisher-id: myCustomPublisher
-        class-name: com.my.WanPublisher
-        properties:
-          prop1: val1
-          prop2: val2
-  map:
-    replicatedMap:
-      wan-replication-ref:
-        london-wan-rep:
-          ...
-  cache:
-    replicatedCache:
-      wan-replication-ref:
-        london-wan-rep:
-          ...
-----
 ====
 
 The `custom-publisher` is used to configure a custom implementation of a WAN replication implementing
@@ -1030,9 +1048,24 @@ Below is a configuration example for specifying a custom WAN replication consume
 
 [tabs] 
 ==== 
-XML:: 
-+ 
--- 
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  wan-replication:
+    london-wan-rep:
+      consumer:
+        class-name: com.my.WanConsumer
+        properties:
+          prop1: val1
+          prop2: val2
+----
+--
+
+XML::
++
 [source,xml]
 ----
 <hazelcast>
@@ -1047,21 +1080,6 @@ XML::
         </consumer>
     </wan-replication>
 </hazelcast>
-----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  wan-replication:
-    london-wan-rep:
-      consumer:
-        class-name: com.my.WanConsumer
-        properties:
-          prop1: val1
-          prop2: val2
 ----
 ====
 
@@ -1089,9 +1107,31 @@ are processed.
 
 [tabs] 
 ==== 
-XML:: 
-+ 
--- 
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  wan-replication:
+    london-wan-rep:
+      consumer:
+        persist-wan-replicated-data: false
+  map:
+    replicatedMap:
+      wan-replication-ref:
+        london-wan-rep:
+          ...
+  cache:
+    replicatedCache:
+      wan-replication-ref:
+        london-wan-rep:
+          ...
+----
+--
+
+XML::
++
 [source,xml]
 ----
 <hazelcast>
@@ -1115,28 +1155,7 @@ XML::
     ...
 </hazelcast>
 ----
---
 
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  wan-replication:
-    london-wan-rep:
-      consumer:
-        persist-wan-replicated-data: false
-  map:
-    replicatedMap:
-      wan-replication-ref:
-        london-wan-rep:
-          ...
-  cache:
-    replicatedCache:
-      wan-replication-ref:
-        london-wan-rep:
-          ...
-----
 ====
 
 In the configuration above, you can see that the WAN Replication configuration is again matched by WAN replication
@@ -1145,7 +1164,7 @@ differently.
 
 The processing behavior is configured using the `consumer` element. It has the following sub-elements:
 
-* `persist-wan-replicated-data`: When set to `true`, an incoming event over WAN replication can be persisted to a database for example, otherwise it is not persisted. Default value is `false`.
+* `persist-wan-replicated-data`: When set to `true`, incoming WAN events received on the target cluster will be passed to the configured MapStore (if present), allowing the data to be persisted to the external system defined by the MapStore implementation. When set to `false` (the default), WAN events are applied only to the in-memory data structures and are not passed to MapStore, so no persistence to the external system occurs as a result of WAN replication. This setting allows you to control whether WAN-replicated data should be synchronized with your external data store via MapStore, or kept only in memory on the target cluster.
 
 [[securing-wan-connections]]
 == Securing the Connections for WAN Replication
@@ -1177,9 +1196,37 @@ The following is the equivalent declarative configuration:
 
 [tabs] 
 ==== 
-XML:: 
-+ 
--- 
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  advanced-network:
+    enabled: true
+    wan-endpoint-config:
+      endpoint-tokyo:
+        ssl:
+          enabled: true
+          factory-class-name: com.hazelcast.examples.MySSLContextFactory
+          properties:
+            endpoints: tokyo.example.com:11010
+  wan-replication:
+    replicate-to-tokyo:
+      batch-publisher:
+        cluster-name: clusterB
+        target-endpoints: ...
+        endpoint: endpoint-tokyo
+  map:
+    customer:
+      wan-replication-ref:
+        replicate-to-tokyo:
+          merge-policy-class-name: ...
+----
+--
+
+XML::
++
 [source,xml]
 ----
 <hazelcast>
@@ -1211,34 +1258,6 @@ XML::
     ...
 </hazelcast>
 ----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  advanced-network:
-    enabled: true
-    wan-endpoint-config:
-      endpoint-tokyo:
-        ssl:
-          enabled: true
-          factory-class-name: com.hazelcast.examples.MySSLContextFactory
-          properties:
-            endpoints: tokyo.example.com:11010
-  wan-replication:
-    replicate-to-tokyo:
-      batch-publisher:
-        cluster-name: clusterB
-        target-endpoints: ...
-        endpoint: endpoint-tokyo
-  map:
-    customer:
-      wan-replication-ref:
-        replicate-to-tokyo:
-          merge-policy-class-name: ...
-----
 ====
 
 The `wan-endpoint-config` element contains the same sub-elements as the
@@ -1260,9 +1279,29 @@ The following is the equivalent declarative configuration:
 
 [tabs] 
 ==== 
-XML:: 
-+ 
--- 
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  advanced-network:
+    enabled: true
+    wan-server-socket-endpoint-config:
+      tokyo:
+        port:
+          auto-increment: false
+          port: 11010
+        ssl:
+          enabled: true
+          factory-class-name: com.hazelcast.examples.MySSLContextFactory
+        properties:
+          foo: bar
+----
+--
+
+XML::
++
 [source,xml]
 ----
 <hazelcast>
@@ -1280,26 +1319,6 @@ XML::
     </advanced-network>
     ...
 </hazelcast>
-----
---
-
-YAML::
-+
-[source,yaml]
-----
-hazelcast:
-  advanced-network:
-    enabled: true
-    wan-server-socket-endpoint-config:
-      tokyo:
-        port:
-          auto-increment: false
-          port: 11010
-        ssl:
-          enabled: true
-          factory-class-name: com.hazelcast.examples.MySSLContextFactory
-        properties:
-          foo: bar
 ----
 ====
 

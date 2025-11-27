@@ -16,7 +16,7 @@ IMPORTANT: Expiration and eviction policies do not apply to locked map entries. 
 
 An expiration policy limits the lifetime of an entry stored inside a map. When an entry expires it can no longer be read from the map and is scheduled to be removed to release memory. The actual removal will occur during the next garbage collection cycle. 
 
-To configure an expiration policy, use the elements `time-to-live-seconds`and `max-idle-seconds`.
+To configure an expiration policy, use the elements `time-to-live-seconds` and `max-idle-seconds`.
 
 === time-to-live-seconds
 
@@ -25,7 +25,7 @@ This element is relative to the time of a map's last write. For example a time t
 - Default value: 0 (disabled)
 - Accepted values: Integers between 0 and `Integer.MAX VALUE`.
 
- By default, this configuration element applies to all entries in a map. To configure TTL for specific entries, see  <<evicting-specific-entries, Setting an Expiration Policy for Specific Entries>>.
+By default, this configuration element applies to all entries in a map. To configure TTL for specific entries, see  <<evicting-specific-entries, Setting an Expiration Policy for Specific Entries>>.
 
 === max-idle-seconds
 
@@ -91,7 +91,7 @@ If you want to set this element to any size other than 0, you must also set the 
 When configuring the maximum size of maps, you can choose one of the follow attributes to define what to measure.
 
 * `max-size-policy`: Maximum size policy for eviction of the map. Available values are as follows:
-** `PER_NODE`: Maximum number of map entries in each cluster member. This is the default policy.
+** `PER_NODE`: Maximum number of map entries in each cluster member. This is the default policy. Note that because the limit is enforced at the partition level, the actual number of entries allowed per member is dynamic and depends on the current cluster size and partition distribution.
 ** `PER_PARTITION`: Maximum number of map entries within each partition. Storage size depends
 on the partition count in a cluster member. This attribute should not be used often. For instance,
 avoid using this attribute with a small cluster. If the cluster is small, it hosts more partitions,
@@ -108,13 +108,13 @@ cannot be determined when data is put as `OBJECT`.
 ** `FREE_HEAP_PERCENTAGE`: Minimum free heap size percentage for each JVM. If, for example, a JVM
 is configured to have 1000 MB and this value is 10, then the map entries will be evicted when
 free heap size is below 100 MB.
-** `USED_NATIVE_MEMORY_SIZE`: ([navy]*Hazelcast Enterprise*) Maximum used native memory
+** `USED_NATIVE_MEMORY_SIZE`: ([navy]*Hazelcast {enterprise-product-name}*) Maximum used native memory
 size in megabytes per map for each Hazelcast instance.
-** `USED_NATIVE_MEMORY_PERCENTAGE`: ([navy]*Hazelcast Enterprise*) Maximum used native
+** `USED_NATIVE_MEMORY_PERCENTAGE`: ([navy]*Hazelcast {enterprise-product-name}*) Maximum used native
 memory size percentage per map for each Hazelcast instance.
-** `FREE_NATIVE_MEMORY_SIZE`: ([navy]*Hazelcast Enterprise*) Minimum free native memory
+** `FREE_NATIVE_MEMORY_SIZE`: ([navy]*Hazelcast {enterprise-product-name}*) Minimum free native memory
 size in megabytes for each Hazelcast instance.
-** `FREE_NATIVE_MEMORY_PERCENTAGE`: ([navy]*Hazelcast Enterprise*) Minimum free native
+** `FREE_NATIVE_MEMORY_PERCENTAGE`: ([navy]*Hazelcast {enterprise-product-name}*) Minimum free native
 memory size percentage for each Hazelcast instance.
 
 [[understanding-map-eviction]]
@@ -182,6 +182,14 @@ hazelcast:
         size: 75
 ----
 ====
+
+=== Partition-based eviction and LRU behavior
+
+In Hazelcast, eviction is performed on a per-partition basis. When a map reaches its configured size limit, Hazelcast checks each partition individually to determine if eviction is needed. The Least Recently Used (LRU) policy is then applied within that partition: entries in the partition are sampled (15 entries by default) then sorted by their last access time, and the least recently used entry is evicted.
+
+In certain edge cases, this can cause the newest (not the oldest) entries to be evicted. For example, if each new key is assigned to a different partition and is the only entry in that partition, then when eviction is triggered, Hazelcast will evict the only entry in the partition even if it is the newest entry in the entire map. This happens because eviction decisions are made locally within each partition, not globally across the entire map. 
+
+As a result, the global LRU order is not guaranteed, and the eviction may remove newer entries if they happen to be the only ones in their respective partitions. This partition-based approach is designed for scalability and performance but can lead to counterintuitive eviction outcomes in edge cases.
 
 
 == Setting an Expiration Policy and an Eviction Policy
@@ -259,7 +267,7 @@ As well as the method parameters, you can also use the `map.setTtl()` method to 
 
 [[forced-eviction]]
 == Forced Eviction for the HD Memory Store
-[.enterprise]*Enterprise*
+[.enterprise]*{enterprise-product-name}*
 
 Forced eviction is an automatic process that Hazelcast uses to remove data from the HD Memory Store. When your eviction policy does not free enough native memory, operations that add entries to a map or cache such as `map.put()` trigger the forced eviction process. 
 

@@ -5,7 +5,7 @@
 
 == Differences Between MapLoader and MapStore
 
-The link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/MapStore.html[`MapStore`] interface extends the link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/MapLoader.html[`MapLoader`] interface. Therefore, all methods and configuration parameters of the `MapLoader` are also available on the `MapStore` interface.
+The link:https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/map/MapStore.html[`MapStore`] interface extends the link:https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/map/MapLoader.html[`MapLoader`] interface. Therefore, all methods and configuration parameters of the `MapLoader` are also available on the `MapStore` interface.
 
 If you only want to load data from external systems into a map, use the `MapLoader` interface. If you also want to save map entries to an external system, use the `MapStore` interface. 
 
@@ -23,7 +23,7 @@ If you only want to load data from external systems into a map, use the `MapLoad
 [[managing-the-lifecycle-of-a-mapLoader]]
 == Connecting to an External System
 
-To connect to an external system, you must configure a connection to it, using either a third-party library or a JDBC driver in the `init()`  method of the link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/map/MapLoaderLifecycleSupport.html[`MapLoaderlifeCycleSupport`] implementation.
+To connect to an external system, you must configure a connection to it, using either a third-party library or a JDBC driver in the `init()`  method of the link:https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/map/MapLoaderLifecycleSupport.html[`MapLoaderlifeCycleSupport`] implementation.
 
 The external system that you choose must be a centralized system that is accessible to all Hazelcast members. Persistence to a local file system is not supported.
 
@@ -32,8 +32,6 @@ The `init()` method initializes the MapStore. Hazelcast calls this method when t
 TIP: By default, MapStores are loaded as soon as the first cluster member starts. If you want the cluster to wait until a certain number of members are available, you can use the `hazelcast.initial.min.cluster.size` system property. For example, if you set this value to `3`, the MapStore is not loaded until three cluster members are running.
 
 The `destroy()` method is called during the graceful shutdown of a Hazelcast member. You can override this method to clean up the resources held by the MapStore, such as closing the database connections.
-
-See an https://github.com/hazelcast/hazelcast-code-samples/blob/master/hazelcast-integration/mongodb/src/main/java/com/hazelcast/loader/MongoMapStore.java[example of this interface].
 
 [[configuring-a-connection-using-properties]]
 
@@ -86,8 +84,6 @@ hazelcast:
 include::ROOT:example$/dds/map/YourMapStoreImplementation.java[tag=ymsi]
 ----
 
-See a https://github.com/hazelcast/hazelcast-code-samples/tree/master/hazelcast-integration/mongodb[full example].
-
 [[init]]
 == Populating a New Map
 
@@ -115,7 +111,12 @@ If you xref:configuration-guide.adoc[configure] your MapStore to use the write-b
 
 === Batch Updates
 
-Batch operations are only allowed in write-behind mode. If your application performs a batch update or batch delete from a map, Hazelcast calls the `MapStore.storeAll(map)` and `MapStore.deleteAll(collection)` methods defined in your `MapStore` class to make all writes in a single call.
+Batch operations are only allowed in write-behind pattern.  In this mode, whether your application performs a batch update/delete operation in a map or not, Hazelcast calls the
+`MapStore.storeAll(map)` and `MapStore.deleteAll(collection)` methods defined in your `MapStore` class to make all operations in a single call.
+
+When your application issues batch (for example `putAll()`) or non-batch operations (for example `put()`), all the updates in the write-behind queue are batched and batch methods of the MapStore with write-behind caching pattern are invoked; that is `storeAll()` and `deleteAll()`.
+
+For example, if there are 50 put and 20 delete operations in the write-behind queue and it is time to flush the queue, batching results in a single invocation of `MapStore#storeAll()` for 50 put operations and a single invocation of `MapStore#deleteAll()` for 20 delete operations.
 
 [[post-processing-objects-in-map-store]]
 === Editing Entries in a Map Without Writing Back to the External System
@@ -137,7 +138,7 @@ class ProcessingStore implements MapStore<Integer, Employee>, PostProcessingMapS
 }
 ----
 
-NOTE: If you edit entries in combination with xref:computing:entry-processor.adoc[Entry Processors], edited values are be saved to in-memory backups.
+NOTE: If you edit entries in combination with xref:data-structures:entry-processor.adoc[Entry Processors], edited values are be saved to in-memory backups.
 
 [[forcing-all-keys-to-be-loaded]]
 == Forcing All Keys To Be Loaded

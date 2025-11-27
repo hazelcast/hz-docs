@@ -12,12 +12,12 @@ the Kafka cluster.
 
 This connector is included in the full distribution of Hazelcast.
 
-If you're using the slim distribution, you must add the link:https://mvnrepository.com/artifact/com.hazelcast.jet/hazelcast-jet-kafka/{full-version}[`hazelcast-jet-kafka` module] to your member's classpath.
+If you're using the slim distribution, you must add the link:https://mvnrepository.com/artifact/com.hazelcast.jet/hazelcast-jet-kafka/{os-version}[`hazelcast-jet-kafka` module] to your member's classpath.
 
 == Permissions
-[.enterprise]*Enterprise*
+[.enterprise]*{enterprise-product-name}*
 
-If xref:security:enabling-jaas.adoc[security] is enabled, your clients may need permissions to use this connector. For details, see xref:pipelines:job-security.adoc[].
+If xref:security:enable-security.adoc[security] is enabled, your clients may need permissions to use this connector. For details, see xref:pipelines:job-security.adoc[].
 
 == Configuration Options
 
@@ -75,6 +75,12 @@ committing using `enable.auto.commit` and configuring
 link:https://kafka.apache.org/22/documentation.html[Kafka documentation]
 for the descriptions of these properties.
 
+You can also explicitly specify exact initial offsets for the Kafka source using https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/jet/kafka/KafkaSources.html#kafka(java.util.Properties,com.hazelcast.function.FunctionEx,com.hazelcast.jet.kafka.TopicsConfig)[`TopicsConfig` parameter^].
+Note that initial offsets provided in `topicConfig` will always have priority over offsets stored in Kafka or associated with a given consumer group.
+Those offsets are used only when the job is started for the first time after submission.
+Afterwards, the regular fault tolerance mechanism described above is used. 
+This option is not supported when processing guarantees are disabled.
+
 == Transactional Guarantees
 
 As a sink, the Kafka connector provides exactly-once guarantees at the cost of using
@@ -102,6 +108,35 @@ properties.put("schema.registry.url", schemaRegistryUrl);
 
 Keep in mind that once the record deserialized, Jet still needs to know
 how to serialize/deserialize the record internally.
+
+== Explicit Avro Schema
+To use an Avro schema for `GenericRecord`, you must provide the following as parameters for the Kafka source and/or sink:
+
+* JSON representation of Avro schema
+* A `HazelcastKafkaAvroSerializer` as key/value serializer class
+* A `HazelcastKafkaAvroDeserializer` as key/value deserializer class
+
+The process will utilize the schema from properties, disregarding the schema from the record. An exception will be raised if the types of the record schema and properties schema are different.
+
+The parameters can be specified as shown in the following examples.
+
+Example source parameters:
+```java
+properties.put("key.deserializer", HazelcastKafkaAvroDeserializer.class);
+properties.put("value.deserializer", HazelcastKafkaAvroDeserializer.class);
+properties.put("keyAvroSchema", "{\"type\":\"record\",\"name\":\"key\",\"namespace\":\"schema\",\"fields\":[{\"name\":\"key\",\"type\":[\"null\",\"int\"],\"default\":null}]}");
+properties.put("valueAvroSchema", "{\"type\":\"record\",\"name\":\"value\",\"namespace\":\"schema\",\"fields\":[{\"name\":\"value\",\"type\":[\"null\",\"string\"],\"default\":null}]}");
+```
+
+Example sink parameters:
+```java
+properties.put("key.serializer", HazelcastKafkaAvroSerializer.class);
+properties.put("value.serializer", HazelcastKafkaAvroSerializer.class);
+properties.put("keyAvroSchema", "{\"type\":\"record\",\"name\":\"key\",\"namespace\":\"schema\",\"fields\":[{\"name\":\"key\",\"type\":[\"null\",\"int\"],\"default\":null}]}");
+properties.put("valueAvroSchema", "{\"type\":\"record\",\"name\":\"value\",\"namespace\":\"schema\",\"fields\":[{\"name\":\"value\",\"type\":[\"null\",\"string\"],\"default\":null}]}");
+```
+
+Keep in mind that you can use different serializer/deserializer for key and value.
 
 == Version Compatibility
 

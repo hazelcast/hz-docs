@@ -1,40 +1,42 @@
-name: Backport changes to all maintenance branches
+name: Backport changes to maintenance branches
 on:
  push:
   branches:
    - main
+   - v/*
 jobs:
-  backport:
-    strategy:
-      matrix:
-        branch: ['v/5.0', 'v/5.1', 'v/5.2', 'v/5.3']
+  get-maintenance-versions:
     runs-on: ubuntu-latest
+    outputs:
+      versions-and-branches: ${{ steps.get-maintenance-versions-and-branches.outputs.versions-and-branches }}
     steps:
-    
-      - name: checkout
-        uses: actions/checkout@v2
-        with:
-         fetch-depth: 0
-
-      - name: Set up git config
+      - id: get-maintenance-versions
+        uses: hazelcast/hazelcast/.github/actions/get-supported-maintenance-versions@master
+      - id: get-maintenance-versions-and-branches
         run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "<>"
-          
-      - name: Check PR for backport label
-        id: check_pr_labels
-        uses: shioyang/check-pr-labels-on-push-action@v1.0.3
-        with:
-         github-token: ${{ secrets.GITHUB_TOKEN }}
-         labels: '["backport to all versions"]'
-        
-      - name: See result
-        run: echo "${{ steps.check_pr_labels.outputs.result }}"
+          # Convert from versions -> branches (i.e. prepend "v/")
+          echo "versions-and-branches=$(jq --compact-output 'map({version: ., branch: "v/\(.)"})' <<< '${{ steps.get-maintenance-versions.outputs.versions }}')" >> ${GITHUB_OUTPUT}
 
-      - name: Checkout maintenance branch and cherry-pick
-        if: ${{ steps.check_pr_labels.outputs.result == 'true' }}
-        run: |
-          git fetch
-          git checkout ${{ matrix.branch }}
-          git cherry-pick -x --strategy=recursive -X theirs $GITHUB_SHA
-          git push
+  backport-to-all-branch:
+    needs: get-maintenance-versions
+    strategy:
+      fail-fast: false
+      matrix:
+        version-and-branch: ${{ fromJSON(needs.get-maintenance-versions.outputs.versions-and-branches) }}
+    uses: ./.github/workflows/backport-workflow.yml
+    with:
+      label-to-check-for: '["backport to all versions"]'
+      target-branch: ${{ matrix.version-and-branch.branch }}
+    secrets: inherit
+
+  backport-to-specified-branch:
+    needs: get-maintenance-versions
+    strategy:
+      fail-fast: false
+      matrix:
+        version-and-branch: ${{ fromJSON(needs.get-maintenance-versions.outputs.versions-and-branches) }}
+    uses: ./.github/workflows/backport-workflow.yml
+    with:
+      label-to-check-for: '["backport to ${{ matrix.version-and-branch.version }}"]'
+      target-branch: ${{ matrix.version-and-branch.branch }}
+    secrets: inherit

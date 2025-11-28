@@ -127,12 +127,30 @@ This section helps determine whether a change is **safe**, **requires caution**,
 Schema changes fall into five broad categories:
 
 1. Adding or removing a field
+   - Adding an *optional* field is compatible with Compact: older writers won’t set it and newer readers will see the default value.
+   - Adding a *mandatory* field is not compatible, because older data has no value for it and Compact provides no way to enforce or synthesize one.
+   - Removing a field is compatible as long as readers treat missing values as absent; otherwise you may need a migration step.
 2. Changing a field type
+   - Widening a type (for example, `int` → `long`) can be compatible if the stored values remain representable in the new type.
+   - Narrowing a type (for example, `long` → `int`) is not compatible because existing data may not fit.
+   - Changing across unrelated types (for example, `string` → `int`, or scalar → collection) is incompatible and requires migration.
 3. Renaming or changing the meaning of a field
+   - Compact treats field names as part of the schema contract, so renaming is *not* compatible—older data still carries the old field name.
+   - Semantic changes (the field keeps the same name but its meaning or expected invariants change) can break consumers even if the schema is technically compatible. In these cases a migration step or versioned type is usually required.
 4. Evolving nested records or collections
+   - Nested Compact objects follow the same rules as top-level records: additive optional fields are compatible; renames, type narrowing, or structural changes (e.g., list ↔ map, list of A ↔ list of B) are not.
+   - Because nested schemas have their own fingerprints, incompatibilities propagate transitively—if a nested type changes incompatibly, the parent becomes incompatible as well.
 5. Changing partitioning keys
+   - Partition keys influence data placement, so changing them is not a serialization-level concern but a cluster-level one.
+   - Compact won’t prevent such changes, but existing data will remain partitioned under the old key until migrated. Any change in meaning or structure of the key field typically requires a controlled migration or a versioned map.
 
 Each category has different implications for Compact serialization, compatibility, and data migration.
+
+[NOTE]
+====
+Changing partition keys is not a Compact-level compatibility issue, but it is a critical part of overall schema evolution.
+Any change to how keys are derived or interpreted affects data locality, query routing, and migration strategy, so it must be planned alongside serialization changes.
+====
 
 === Decision table
 

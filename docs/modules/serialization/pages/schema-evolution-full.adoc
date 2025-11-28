@@ -170,17 +170,17 @@ Any change to how keys are derived or interpreted affects data locality, query r
 
 | **Widen type** (for example, `int` → `long`, `float` → `double`)
 | Backward compatible
-| Keep the same map; verify all readers can handle the new type
-| Widening increases precision; existing data can be read safely by new members.
+| Keep the same map; verify all readers can handle the new type.
+| Widening increases the value range without changing the meaning of existing data, so it is not a semantic change. All previously stored values are still valid. Compact, however, does not perform implicit numeric widening: old entries may store the field as `INT32` while newer code expects `INT64`, and read methods must match the actual `FieldKind`. Readers should inspect the field kind at runtime and call the matching accessor (`readInt32`, `readInt64`, etc.), applying the widening in user code if needed. This approach keeps old and new data readable even when different schema versions coexist.
 
 | **Narrow type** (for example, `long` → `int`)
 | Incompatible
 | Create a new map and migrate data
-| Narrowing can truncate data or cause deserialization errors.
+| Narrowing a numeric type is not inherently supported by Compact because the stored field kind may differ from what newer code expects, and the change reduces the valid value range. Readers must inspect the actual `FieldKind` and choose the matching accessor (`readInt64`, `readInt32`, etc.) before applying any conversion. Unlike widening, narrowing is a specific semantic change: existing values may no longer be representable, so explicit range checks are required. How to handle out-of-range values—truncate, clamp, reject, or skip—must be defined by the application, as Compact does not enforce any policy here.
 
 | **Rename field** (for example, `customerId` → `accountId`)
 | Incompatible
-| Create a new map and run a migration pipeline
+| Create a new map and migrate the data
 | Renamed fields appear as new fields to old readers and they also can not find the original field expected; original data is not mapped automatically.
 
 | **Semantic change** (same field, different meaning)

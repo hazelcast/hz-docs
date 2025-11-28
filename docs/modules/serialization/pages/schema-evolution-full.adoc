@@ -15,7 +15,7 @@ Schema evolution in Hazelcast focuses on three goals:
 
 Hazelcast achieves this through **Compact serialization**, which stores object schemas as independent metadata and identifies each version using a unique 64-bit fingerprint. When an object changes, Hazelcast detects the new schema automatically, assigns it a distinct fingerprint, and propagates it across the cluster. As a result, multiple versions of a class can safely coexist and interoperate during rolling upgrades, migrations, or client refreshes.
 
-Both old and new schemas are linked to the same logical object type (for example, a Java class) through a shared "type name" defined in the serializer (`typeName`). The type name uniquely identifies the object type across schema versions and is typically the fully qualified class name in Java.
+Both old and new schemas are linked to the same logical object type (for example, a Java class) through a shared "type name" defined in the serializer (`typeName`). This identifier is stable across schema versions and is what the system uses to recognize that different versions describe the same conceptual entity. The identifier can be anything that’s guaranteed to be unique—such as a namespaced string, a URI, or, in Java-based systems, a fully qualified class name.
 
 While most schema changes can be made safely, **backward incompatibility** may occur when a change prevents old readers from interpreting previously written data correctly. This typically happens in cases such as field renames (changing a field’s name rather than adding/removing it), narrowing a type (for example, `long` to `int`), altering a field’s semantic meaning, or modifying the partitioning key used for data routing. When backward incompatibility is introduced, migration strategies must be applied—such as deploying a temporary pipeline or migration job to transform existing data, introducing versioned maps (`Order_v1`, `Order_v2`), or scheduling controlled rollouts with data export and reimport. These approaches ensure data integrity and consistent behavior during cluster upgrades or schema transitions.
 
@@ -36,10 +36,10 @@ While most schema changes can be made safely, **backward incompatibility** may o
 | A 64-bit identifier derived from the schema definition using a link:https://en.wikipedia.org/wiki/Rabin_fingerprint[Rabin Fingerprint] algorithm. Any change to a schema produces a new fingerprint.
 
 | `Backward Compatibility`
-| The ability of newer code (reader) to correctly read data serialized by older code (writer).
+| Newer readers can correctly process data written by older writers. (Unknown fields aren’t an issue here because older data doesn’t contain newer fields.)
 
 | `Forward Compatibility`
-| The ability of older code (reader) to correctly read data serialized by newer code (writer), ignoring unknown fields.
+| Older readers can correctly process data written by newer writers. This usually relies on the reader safely ignoring fields it doesn’t understand.
 
 | `FieldKind`
 | The internal representation of a field’s data type in Compact serialization (e.g., `INT32`, `STRING`, `DECIMAL`, `ARRAY_OF_INT64`).

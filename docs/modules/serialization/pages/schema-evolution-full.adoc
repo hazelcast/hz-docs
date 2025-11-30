@@ -89,6 +89,8 @@ Hazelcast supports two primary approaches to managing schema evolution, dependin
 | **Versioned Maps**
 | Each schema version is stored in a separate map (for example, `Order_v1`, `Order_v2`). This pattern isolates incompatible changes such as field renames, type narrowing, or semantic changes. Data can then be migrated using a pipeline or map-to-map transformation before decommissioning the older map. Unlike schema evolution handled transparently by Compact serialization, this pattern requires explicit design changes in the user application, for example, managing multiple map names and handling data migration logic, but provides greater control when compatibility cannot be automatically maintained.
 
+|===
+
 [NOTE]
 ====
 The **Versioned Maps** approach basically sits outside Compact schema evolution. It becomes useful only once you introduce changes that Compact can’t handle—like field renames, type narrowing, or meaning-changing updates. At that point you can’t rely on Compact’s automatic compatibility, so separating data into `Map_v1`, `Map_v2`, and so on gives you full control over migration.
@@ -96,13 +98,34 @@ The **Versioned Maps** approach basically sits outside Compact schema evolution.
 This pattern would work the same with any serialization format because the isolation happens at the map level, not in the serializer. Compact still helps for additive and other safe changes, but once those guarantees no longer hold, **Versioned Maps** is the fallback.
 ====
 
-|===
-
 Choosing between these two strategies depends on the degree of backward compatibility required.
 In general:
 
-* Use **Single Map Evolution** for additive, backward-compatible changes.
-* Use **Versioned Maps** for incompatible or semantically breaking changes.
+* Use **Single Map Evolution** for additive, backward-compatible changes. *Caveats:*
+
+- Cannot safely handle incompatible changes such as field renames, removals, narrowing, or semantic changes unless the reader contains explicit logic to interpret both variants.
+- Old entries are not rewritten automatically; they retain the schema used at the time of writing.
+- Readers must be tolerant of missing fields and have deterministic fallbacks.
+- If semantic meaning changes, you still need a new field name or a versioned structure—Compact does not track meaning.
+- Complex migrations inside the reader increase code complexity and must be kept backward compatible indefinitely.
+
+* Use **Versioned Maps** for incompatible or semantically breaking changes. *Caveats:*
+- Requires explicit coordination by the application: naming strategy, routing clients to the correct map, and running migration jobs.
+- Increased operational overhead: more maps, more storage, and more upgrade steps.
+- Migration must be done carefully to avoid partial moves, duplicates, or inconsistent state.
+- Cross-map queries or joins become more complex if multiple versions coexist during transitions.
+- Does not eliminate the need for application-level compatibility if readers must handle multiple map versions simultaneously.
+
+Here is the **level-4 paragraph** you can insert under *Schema evolution approaches*.
+I did **not** rewrite any surrounding content; this is only the requested addition.
+
+==== Explicit Version Field
+
+Adding an explicit version field introduces application-managed versioning on top of Compact. Compact handles compatible field changes, but it does not track the order of schema revisions or group multiple changes into a single step. A stored version fills that gap by telling readers exactly which variant they are dealing with and which logic to apply.
+
+This technique is a more controlled form of the **Single IMap Evolution** approach. All data stays in one map with a stable `typeName`, and the version value lets readers handle multi-step or coordinated migrations without splitting data across maps. It works well when several changes must be interpreted together or when upgrade paths need to be explicit and predictable.
+
+Its limits are important: a version field does not fix incompatible or semantic changes, and it cannot override Compact’s compatibility rules. Field renames, narrowing, or meaning changes still require new fields or separate versioned maps. The reader must also carry branch logic for every supported version, which grows in complexity over time. For these reasons, explicit versioning should be seen as a complement to versioned maps, not a replacement.
 
 === Compact schema propagation
 

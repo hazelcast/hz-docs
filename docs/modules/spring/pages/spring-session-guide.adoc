@@ -44,6 +44,31 @@ To migrate your application from using Spring Session Hazelcast 3.x to new Hazel
 
 . Change GroupId to `com.hazelcast` and artifactId to `hazelcast-spring-session`.
 . Update your code and change the packages. All Hazelcast-specific classes were moved from `org.springframework.session.hazelcast` to `com.hazelcast.spring.session`.
+. Remove this configuration of PrincipalNameExtractor:
++
+[source,java]
+----
+AttributeConfig attributeConfig = new AttributeConfig()
+        .setName(Hazelcast4IndexedSessionRepository.PRINCIPAL_NAME_ATTRIBUTE)
+        .setExtractorClassName(Hazelcast4PrincipalNameExtractor.class.getName());
+config.getMapConfig(SESSIONS_MAP_NAME)
+            .addAttributeConfig(attributeConfig);
+----
+. Change serialization configuration: replace:
++
+[source,java]
+----
+SerializerConfig serializerConfig = new SerializerConfig();
+    serializerConfig.setImplementation(new HazelcastSessionSerializer()).setTypeClass(MapSession.class);
+    config.getSerializationConfig().addSerializerConfig(serializerConfig);
+----
+with a call:
++
+[source,java]
+----
+config = HazelcastSessionConfiguration.applySerializationConfig(config);
+----
+. Index configuration for `PRINCIPAL_ATTRIBUTE_NAME` **if** no other IMap customization is wanted.
 
 [[security-spring-configuration]]
 == Spring configuration

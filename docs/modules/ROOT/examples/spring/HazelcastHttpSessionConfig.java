@@ -33,6 +33,7 @@ import com.hazelcast.spring.session.config.annotation.web.http.EnableHazelcastHt
 @Configuration
 public class HazelcastHttpSessionConfig {
 
+
 	@Bean
 	public HazelcastInstance hazelcastInstance() {
 		Config config = new Config();

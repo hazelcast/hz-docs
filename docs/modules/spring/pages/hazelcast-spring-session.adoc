@@ -161,3 +161,80 @@ Can be used if user have pre-existing IMap configuration applied and does not wa
 | Customizes session map configuration (MapConfig). If using client-server architecture, the customized `MapConfig` will not override pre-existing map configuration (if existing).
 
 |===
+
+== Supported topologies
+
+Hazelcast Spring Session supports two topologies.
+
+=== Client-server
+
+In this topology the web application uses Hazelcast clients (TODO link) to connect to Hazelcast cluster on a separate JVM, potentially completely separate machines. Lite members also can be used to on the webapp side.
+
+image:HzSS-Client-Server.png[Hazelcast Spring Session with Client-Server topology]
+
+For such topology you have to:
+
+ . client (Spring Boot application) side:
+create a `@Bean` of type `ClientConfig` or of the type `HazelcastInstance`, that will return the result of `HazelcastClient.newHazelcastClient` method.
+
+ . server (Hazelcast member) side:
+    .. deploy Hazelcast Spring Session jar onto the classpath (with Spring context and Spring Security jars as well).
+    .. configure serializers (optional) - for best performance you should add to your Hazelcast configuration:
++
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<serialization>
+    <compact-serialization>
+        <serializers>
+            <serializer>com.hazelcast.spring.session.HazelcastSessionCompactSerializer</serializer>
+            <serializer>com.hazelcast.spring.session.AttributeValueCompactSerializer</serializer>
+        </serializers>
+    </compact-serialization>
+</serialization>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+serialization:
+  compact-serialization:
+    serializers:
+      - serializer: com.hazelcast.spring.session.HazelcastSessionCompactSerializer
+      - serializer: com.hazelcast.spring.session.AttributeValueCompactSerializer
+----
+--
+
+Java::
++
+--
+[source,java]
+----
+import com.hazelcast.spring.session.AttributeValueCompactSerializer;
+import com.hazelcast.spring.session.HazelcastSessionCompactSerializer;
+// ...
+config.getSerializationConfig().getCompactSerializationConfig()
+            .addSerializer(new AttributeValueCompactSerializer())
+            .addSerializer(new HazelcastSessionCompactSerializer());
+----
+
+Alternatively you can use helper method:
+[source,java]
+----
+import com.hazelcast.spring.session.HazelcastSessionConfiguration;
+// ...
+HazelcastSessionConfiguration.applySerializationConfig(config);
+----
+--
+====
+
+Server side changes are optional; you can make no changes, make changes of point a or make changes from both a and b.
+
+=== Embedded

@@ -1,0 +1,163 @@
+= Hazelcast Spring Session configuration overview
+
+Hazelcast Spring Session is a library that allows you to store session information of your Spring Boot application in Hazelcast's IMap. This gives you benefits of Hazelcast: resilence of the storage, high availability and great performance.
+
+== Dependencies
+
+If you use Maven, add following dependencies:
+
+.pom.xml
+[source,xml]
+[subs="verbatim,attributes"]
+----
+<dependencies>
+	<!-- ... -->
+
+	<dependency>
+		<groupId>com.hazelcast</groupId>
+		<artifactId>hazelcast</artifactId>
+		<version>{os-version}</version>
+	</dependency>
+	<dependency>
+		<groupId>org.springframework</groupId>
+		<artifactId>spring-web</artifactId>
+		<version>7.0.0</version>
+	</dependency>
+	<dependency>
+		<groupId>com.hazelcast</groupId>
+		<artifactId>hazelcast-spring-session</artifactId>
+		<version>4.0.0</version>
+	</dependency>
+</dependencies>
+----
+
+=== Note on migration from Spring Session Hazelcast 3.x
+
+From version 4.0, the Hazelcast integration with Spring Session is owned by the Hazelcast team.
+
+To migrate your application from using Spring Session Hazelcast 3.x to new Hazelcast Spring Session 4.x:
+
+. Change GroupId to `com.hazelcast` and artifactId to `hazelcast-spring-session`.
+. Update your code and change the packages. All Hazelcast-specific classes were moved from `org.springframework.session.hazelcast` to `com.hazelcast.spring.session`.
+. Remove this configuration of PrincipalNameExtractor:
++
+[source,java]
+----
+AttributeConfig attributeConfig = new AttributeConfig()
+        .setName(Hazelcast4IndexedSessionRepository.PRINCIPAL_NAME_ATTRIBUTE)
+        .setExtractorClassName(Hazelcast4PrincipalNameExtractor.class.getName());
+config.getMapConfig(SESSIONS_MAP_NAME)
+            .addAttributeConfig(attributeConfig);
+----
+. Change serialization configuration: replace:
++
+[source,java]
+----
+SerializerConfig serializerConfig = new SerializerConfig();
+    serializerConfig.setImplementation(new HazelcastSessionSerializer()).setTypeClass(MapSession.class);
+    config.getSerializationConfig().addSerializerConfig(serializerConfig);
+----
+with a call:
++
+[source,java]
+----
+config = HazelcastSessionConfiguration.applySerializationConfig(config);
+----
+. Index configuration for `PRINCIPAL_ATTRIBUTE_NAME` **if** no other IMap customization is wanted.
+
+[[security-spring-configuration]]
+== Spring configuration
+
+After adding the required dependencies, we can create our Spring configuration.
+The Spring configuration is responsible for creating a servlet filter that replaces the `HttpSession` implementation with an implementation backed by Spring Session.
+To do so, add the following Spring Configuration:
+
+[source,java]
+----
+include::ROOT:example$/spring/HazelcastHttpSessionConfig.java[tags=config]
+----
+<1> The `@EnableHazelcastHttpSession` annotation creates a Spring bean named `springSessionRepositoryFilter` that implements `Filter`.
+The filter is in charge of replacing the `HttpSession` implementation to be backed by Spring Session.
+In this instance, Spring Session is backed by Hazelcast.
+<2> In order to serialize `BackingMapSession` objects efficiently, `HazelcastSessionCompactSerializer` and `AttributeValueCompactSerializer` needs to be registered. If this is not set, Hazelcast won't be able to deserialize session data.
+<3> For best performance when using Hazelcast Spring Session with Spring Security, an index on `HazelcastIndexedSessionRepository.PRINCIPAL_NAME_ATTRIBUTE` must be added. This step is optional though in Hazelcast Spring Session 4.0, as `HazelcastIndexedSessionRepository` will try to add this index automatically. If you want to customize your `MapConfig`, you need to add this index manually as overriding `MapConfig` by `HazelcastIndexedSessionRepository` is not possible.
+<4> We create a `HazelcastInstance` that connects Spring Session to Hazelcast.
+By default, the application starts and connects to an embedded instance of Hazelcast.
+
+== Customization options
+
+While basic configuration is pretty simple, users have more options to customize if they want to.
+
+To customize the SessionRepository your application will be using, you need to declare a bean of type `SessionRepositoryCustomizer<HazelcastIndexedSessionRepository>`, for example:
+
+[source,java]
+----
+@Bean
+public SessionRepositoryCustomizer<HazelcastIndexedSessionRepository> customizeSessionRepo() {
+    return (sessionRepository) -> {
+        // here you can customize sessionRepository by calling the setter methods, for example:
+        sessionRepository.setFlushMode(FlushMode.IMMEDIATE);
+        sessionRepository.setSaveMode(SaveMode.ALWAYS);
+        sessionRepository.setDeployedOnAllMembers(false);
+    };
+}
+----
+
+Some of the customization options:
+
+[cols="1m,1m,3",options="header"]
+|===
+| Method/property | Default Value | Description
+
+| flushMode
+| FlushMode.ON_SAVE
+| Decides when changes in the session will be persisted. Possible options:
+
+ - `ON_SAVE` - `repository.save()` will persist the changes
+ - `IMMEDIATE` - changes will be persisted immediately, without the need to call `repository.save()`
+
+| defaultMaxInactiveInterval
+| 30 minutes
+| Set the maximum inactive interval in between requests before  session will be invalidated. A negative time indicates that the session will never time out.
+
+| sessionMapName
+| `spring:session:sessions`
+| Name of IMap used to store sessions.
+
+| saveMode
+| `SaveMode.ON_SET_ATTRIBUTE`
+| Configures when changes to session attributes will be saved. Possible values:
+
+ - `ON_SET_ATTRIBUTE` - save only changes made to the session; best if you want to minimize risk of attribute override in highly concurrent environments
+ - `ON_GET_ATTRIBUTE` - same as `ON_SET_ATTRIBUTE` plus save is performed also on read attributes.
+ - `ALWAYS` - always save all session attributes (even when not newly added nor read).
+
+| deployedOnAllMembers
+| true
+| Setting this property to `true` will make session change processing be done on server side (in other words, on Hazelcast members storing the data), which minimizes network traffic, however it requires Hazelcast Spring Session jar to be deployed on all Hazelcast members in the cluster as it will mean `SessionUpdateEntryProcessor` will need to be deserialized on cluster members.
+
+Setting the property to `false` will increase the network traffic and make session change processing slower (more steps involved: lock session key -> get fresh value -> process changes -> set new value -> unlock instead of just one step: send EntryProcessor to cluster), but will allow you to use Hazelcast Spring Session without the need of any server (member)-side changes.
+
+| indexResolver
+| `new DelegatingIndexResolver<>(new PrincipalNameIndexResolver<>())`
+| Sets the IndexResolver to use when querying for `FindByIndexNameSessionRepository#PRINCIPAL_NAME_INDEX_NAME`.
+
+| sessionIdGenerator
+| `UuidSessionIdGenerator.getInstance()`
+| Decides how session IDs for new sessions will be generated.
+
+| applicationEventPublisher
+| no-op
+| Allows to set custom ApplicationEventPublisher, that will be used to publish `AbstractSessionEvent`: `SessionCreatedEvent`,
+`SessionExpiredEvent` and `SessionDeletedEvent`.
+
+| disableSessionMapAutoConfiguration
+| -
+| If called, the autoconfiguration of IMap storing session data won't be performed and index on `HazelcastIndexedSessionRepository#PRINCIPAL_NAME_ATTRIBUTE` will not be created, potentially harming performance of the application.
+Can be used if user have pre-existing IMap configuration applied and does not want to convert it to `sessionMapConfigCustomizer`.
+
+| sessionMapConfigCustomizer
+| ConsumerEx.noop()
+| Customizes session map configuration (MapConfig). If using client-server architecture, the customized `MapConfig` will not override pre-existing map configuration (if existing).
+
+|===

@@ -168,7 +168,7 @@ Hazelcast Spring Session supports two topologies.
 
 === Client-server
 
-In this topology the web application uses Hazelcast clients (TODO link) to connect to Hazelcast cluster on a separate JVM, potentially completely separate machines. Lite members also can be used to on the webapp side.
+In this topology the web application uses xref:clients:client-overview.adoc[Hazelcast clients] to connect to Hazelcast cluster on a separate JVM, potentially completely separate machines. Lite members also can be used to on the webapp side.
 
 image:HzSS-Client-Server.png[Hazelcast Spring Session with Client-Server topology, 50%]
 
@@ -238,3 +238,69 @@ HazelcastSessionConfiguration.applySerializationConfig(config);
 Server side changes are optional; you can make no changes, make changes of point a or make changes from both a and b.
 
 === Embedded
+
+In this topology every web application instance embeds Hazelcast instance. Data is therefore stored on the same JVMs as webapps.
+
+image:HzSS-Embedded.png[Hazelcast Spring Session with Embedded topology, 50%]
+
+This topology is the easiest to start with as it does not require separate cluster JVMs, however scaling will be harder as Hazelcast members will scale with webapps nodes.
+
+In such configuration, you must configure serialization:
+[tabs]
+====
+Java::
++
+--
+You can use helper method (preferred):
+[source,java]
+----
+import com.hazelcast.spring.session.HazelcastSessionConfiguration;
+// ...
+HazelcastSessionConfiguration.applySerializationConfig(config);
+----
+Alternatively, you can manually add specific serializers:
+[source,java]
+----
+import com.hazelcast.spring.session.AttributeValueCompactSerializer;
+import com.hazelcast.spring.session.HazelcastSessionCompactSerializer;
+// ...
+config.getSerializationConfig().getCompactSerializationConfig()
+            .addSerializer(new AttributeValueCompactSerializer())
+            .addSerializer(new HazelcastSessionCompactSerializer());
+----
+
+
+--
+
+XML::
++
+--
+[source,xml]
+----
+<serialization>
+    <compact-serialization>
+        <serializers>
+            <serializer>com.hazelcast.spring.session.HazelcastSessionCompactSerializer</serializer>
+            <serializer>com.hazelcast.spring.session.AttributeValueCompactSerializer</serializer>
+        </serializers>
+    </compact-serialization>
+</serialization>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+serialization:
+  compact-serialization:
+    serializers:
+      - serializer: com.hazelcast.spring.session.HazelcastSessionCompactSerializer
+      - serializer: com.hazelcast.spring.session.AttributeValueCompactSerializer
+----
+--
+
+====
+
+The `deployedOnAllMembers` option of `HazelcastIndexedSessionRepository` should stay on default value of `true`, as in embedded mode every mode will always have Hazelcast Spring Session jar on the classpath.

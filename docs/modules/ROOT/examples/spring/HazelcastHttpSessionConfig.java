@@ -37,7 +37,7 @@ public class HazelcastHttpSessionConfig {
 	@Bean
 	public HazelcastInstance hazelcastInstance() {
 		Config config = new Config();
-        HazelcastSessionConfiguration.applySerializationConfig(config); // <2>
+		HazelcastSessionConfiguration.applySerializationConfig(config); // <2>
 		config.getMapConfig(HazelcastIndexedSessionRepository.DEFAULT_SESSION_MAP_NAME) // <3>
 			.addIndexConfig(
 					new IndexConfig(IndexType.HASH, HazelcastIndexedSessionRepository.PRINCIPAL_NAME_ATTRIBUTE));

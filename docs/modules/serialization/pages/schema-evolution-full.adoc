@@ -123,7 +123,7 @@ I did **not** rewrite any surrounding content; this is only the requested additi
 
 Adding an explicit version field introduces application-managed versioning on top of Compact. Compact handles compatible field changes, but it does not track the order of schema revisions or group multiple changes into a single step. A stored version fills that gap by telling readers exactly which variant they are dealing with and which logic to apply.
 
-This technique is a more controlled form of the **Single IMap Evolution** approach. All data stays in one map with a stable `typeName`, and the version value lets readers handle multi-step or coordinated migrations without splitting data across maps. It works well when several changes must be interpreted together or when upgrade paths need to be explicit and predictable.
+This technique is a more controlled form of the **Single IMap Evolution** approach. All data stays in one map with a stable `typeName`, and the version value lets readers handle multi-step or coordinated migrations without splitting data across maps. It works well when several changes must be interpreted together or when upgrade paths need to be explicit and predictable. However, some Hazelcast features only do partial deserialization (for example SQL, some index lookups, or Predicate API queries). These paths often don’t call your custom reader code. So even if your full reader knows how to handle versioned data, these features may still see the raw fields without running the migration logic. For example, if v2 adds a new field and the new reader fills a default value when reading v1 records, SQL queries might still see the old schema directly and skip that defaulting logic.
 
 Its limits are important: a version field does not fix incompatible or semantic changes, and it cannot override Compact’s compatibility rules. Field renames, narrowing, or meaning changes still require new fields or separate versioned maps. The reader must also carry branch logic for every supported version, which grows in complexity over time. For these reasons, explicit versioning should be seen as a complement to versioned maps, not a replacement.
 
@@ -175,7 +175,25 @@ Changing partition keys is not a Compact-level compatibility issue, but it is a 
 Any change to how keys are derived or interpreted affects data locality, query routing, and migration strategy, so it must be planned alongside serialization changes.
 ====
 
+=== Staged rollouts
+
+Beyond the common upgrade paths described here, in some circumstances the use staged rollouts can reduce risks during schema transitions.
+A common approach is to
+
+1. deploy new readers that understand both old and new schema (forward compatible). Keep writers on old schema.
+2. deploy writers to new schema once readers are fully rolled out.
+3. Optional: background migration/backfill for old data.
+
+With this, no component ever sees data that it can't read.
+
+Other variations of increasing complexity are possible depending on the use case, but they're out of scope for this documentation.
+Any staged rollout relies on coordinated deployment rather than Compact Serialization itself, and is useful when schema changes must be introduced gradually while keeping writer logic simple and deterministic.
+
 === Decision table
+
+The table below outlines the main recommendations when choosing a migration strategy for different types of schema changes.
+It isn’t meant to prescribe a single process; real migrations often depend on the state of the system, the rollout plan,
+and how old and new serializers coexist. Treat it as a practical reference to help decide which approach fits a given situation.
 
 [cols="1,2,2,2", options="header"]
 |===

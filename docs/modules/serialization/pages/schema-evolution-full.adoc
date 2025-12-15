@@ -590,7 +590,7 @@ Edge cases to take into account when migrating
 1. Bulk vs tail race: older data can overwrite newer tail updates for the same key.
 2. Delete vs upsert ordering: a delete event from the journal could arrive before/after a bulk upsert and incorrectly remove a fresh value or resurrect a deleted one.
 3. At-least-once duplicates: retries can appy the same write more than once.
-4. Key reuse: a key deleted in V1 later gets re-created; ordering must be still correct
+4. Key reuse: a key deleted in V1 later gets re-created; ordering must be still correct.
 5. Job restarts: after a restart, the tail resumes and bult may still be running, reintroducing (1)-(3)
 
 To handle these cases, use a per-key `version` that always increases (for example, from a link:https://docs.hazelcast.com/hazelcast/latest/data-structures/iatomiclong[`IAtomicLong`]). Apply updates only when `incoming.version` is greater than `existing.version`, using a `EntryProcessor` instead of direct writes or removes. This ensures tail data always overrides bulk data and makes race conditions, deletes, retries, restarts, and key reuse predictable.

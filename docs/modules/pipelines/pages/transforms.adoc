@@ -4,17 +4,19 @@
 
 {description}
 
+[#_stateless_transforms]
 ==  Stateless transforms
 
-Stateless transforms do not have any notion of _state_, meaning that all items must be processed independently of any previous items. 
+Stateless transforms do not have any notion of _state_, meaning that all items must be processed independently of any previous items.
 
 These methods transform the input into the correct shape that is required by further,
-more complex ones. The key feature of these transforms is that
+more complex ones.The key feature of these transforms is that
 they do not have side-effects and they treat each item in isolation.
 
+[#_map]
 === map
 
-Mapping is the simplest kind of stateless transformation. It simply
+Mapping is the simplest kind of stateless transformation.It simply
 applies a function to the input item, and passes the output to the next
 stage.
 
@@ -23,6 +25,7 @@ stage.
 StreamStage<String> names = stage.map(name -> name.toLowerCase());
 ----
 
+[#_filter]
 === filter
 
 Similar to `map`, the `filter` is a stateless operator that applies a
@@ -32,6 +35,7 @@ predicate to the input to decide whether to pass it to the output.
 BatchStage<String> names = stage.filter(name -> !name.isEmpty());
 ```
 
+[#_flatMap]
 === flatMap
 
 `flatMap` is equivalent to `map`, with the difference that instead of
@@ -737,8 +741,29 @@ just receives the data in the correct order and has O(1) memory needs.
 
 === mapStateful
 
-mapStateful is an extension of the simple xref:transforms.adoc#stateless-transforms#map[map]
+`mapStateful` is an extension of the xref:transforms.adoc#_map[map]
 transform. It adds the capability to optionally retain mutable state.
+
+The non-keyed `mapStateful` operation attaches a stateful mapping stage to a pipeline that maintains a single shared state object per processor instance.
+The state object is created using `createFn` and is passed to `mapFn` together with each input item.
+The function can update the state and emit a single output item (or null if no output is needed).
+
+For each grouping key, Jet maintains a dedicated state object created by the supplied `createFn`.
+Every incoming item is processed by `mapFn`, which receives the current state, the grouping key, and the item.
+The function can update the state and emit a single output item (or null if no output is needed).
+
+If a positive `ttl` is configured, Jet automatically evicts inactive state objects based on event time.
+Each state tracks the highest timestamp observed for its key.As watermarks advance, Jet evicts states whose timestamps are older than watermark - ttl.
+
+When a state is evicted due to TTL expiration, Jet invokes the optional `onEvictFn`,
+which can emit a final result derived from the state (for example, a session summary or aggregated total).
+
+In addition to TTL-based eviction, `mapStateful` supports explicit early eviction using `forceEvictPredicate`.
+This predicate is evaluated after processing each input item. If it returns true, the state is removed immediately, without waiting for TTL expiration.
+In this case, `onEvictFn` is not invoked.
+
+Early eviction is useful when the logical lifecycle of a state ends before its TTL expires, such as when a session closes, a transaction completes, or a terminal event is observed.
+This helps reduce memory usage and avoids retaining unnecessary state under high load.
 
 The major use case of stateful mapping is recognizing a pattern in the
 event stream, such as matching start-transaction with end-transaction
@@ -812,6 +837,159 @@ You will note that we also had to set an expiry time on the states
 eventually run out of memory as we accumulate more and more
 transactions.
 
+Here is an example showing how to improve the previous example by evicting the state earlier:
+```java
+p.readFrom(KafkaSources.kafka(.., "transaction-events"))
+ .withNativeTimestamps(0)
+ .groupingKey(event -> event.getTransactionId())
+ .mapStateful(MINUTES.toMillis(10),
+        () -> new TransactionEvent[2],
+   (state, id, event) -> {
+        if (event.type() == TRANSACTION_START) {
+            state[0] = event;
+        } else if (event.type() == TRANSACTION_END) {
+            state[1] = event;
+        }
+        if (state[0] != null && state[1] != null) {
+            // we have both start and end events
+            long duration = state[1].timestamp() - state[0].timestamp();
+            return MapUtil.entry(event.transactionId(), duration);
+        }
+        // we don't have both events, do nothing for now.
+        return null;
+    },
+    (state, id, event)-> {
+        // End of transaction received; this state is no longer needed
+        return state[1] != null;
+    }
+    (state, id, currentWatermark) ->
+        // if we have not received both events after 10 minutes,
+        // we will emit a timeout entry
+        (state[0] == null || state[1] == null)
+            ? MapUtil.entry(id, TIMED_OUT)
+            : null
+ ).writeTo(Sinks.logger());
+```
+
+=== flatMapStateful
+
+`flatMapStateful` is an extension of xref:transforms.adoc#_flatMap[flatMap]
+transform. It adds the capability to optionally retain mutable state.
+
+The non-keyed `flatMapStateful` operation attaches a stateful flat-mapping stage to a pipeline that maintains a single shared state object per processor instance.
+The state object is created using `createFn` and is passed to `flatMapFn` together with each input item.
+The function can update the state and emit zero, one, or multiple output items using a `Traverser`.
+
+For each grouping key, Jet maintains a separate state object created by `createFn`.
+For every incoming item, Jet invokes `flatMapFn` with the current state, the grouping key, and the item.
+The function can update the state and emit zero, one, or multiple output items via a Traverser.
+The state object is included in job snapshots and therefore survives job restarts; for this reason, it must be serializable.
+
+If a positive `ttl` is configured, Jet automatically evicts inactive state objects based on event time.
+Each state object tracks the highest timestamp observed for its key.
+When the watermark advances, Jet evicts all states whose timestamps are older than watermark - ttl.
+Just before eviction, Jet invokes `onEvictFn`, which can emit final output items derived from the state (for example, summary or punctuation records).
+
+In addition to TTL-based eviction, `flatMapStateful` supports explicit early eviction using `forceEvictPredicate`.
+This predicate is evaluated after each input item is processed. If it returns true, the state is removed immediately,
+without waiting for watermark progression, and `onEvictFn` is not invoked for that state.
+This is useful in scenarios where the logical lifecycle of the state ends earlier than its TTL, such as when a transaction completes, a session closes, or a terminal event is received.
+
+Early eviction helps reduce memory usage and avoids retaining large or no-longer-needed state until TTL-based cleanup occurs.
+
+This example processes a stream of transaction events. Each transaction produces multiple events (for example, item updates or intermediate steps).
+When a terminal `TRANSACTION_END` event is received, the accumulated state is emitted and immediately evicted using `forceEvictPredicate`,
+without waiting for TTL-based eviction.
+
+```java
+StreamStage<TransactionEvent> events = null;
+
+StreamStage<TransactionSummary> summaries = events
+        .groupingKey(TransactionEvent::getTransactionId)
+        .flatMapStateful(
+                MINUTES.toMillis(10),
+                TransactionState::new,
+                (state, txId, event) -> {
+                    switch (event.getType()) {
+                        case ITEM:
+                            state.items.add(event.getItem());
+                            return Traversers.empty();
+
+                        case TRANSACTION_END:
+                            return Traversers.singleton(
+                                    new TransactionSummary(txId, state.items)
+                            );
+
+                        default:
+                            return Traversers.empty();
+                    }
+                },
+                // Force eviction immediately after transaction end
+                (state, txId, event) ->
+                        event.getType() == EventType.TRANSACTION_END,
+                // TTL-based eviction (only used if TRANSACTION_END is never received)
+                (state, txId, wm) ->
+                        Traversers.singleton(
+                                new TransactionSummary(txId, state.items)
+                        )
+        );
+```
+=== filterStateful
+`filterStateful` is an extension of xref:transforms.adoc#_filter[filter]
+transform. It adds the capability to optionally retain mutable state.
+
+The non-keyed `filterStateful` operation attaches a stateful filtering stage to a pipeline that maintains a single shared state object per processor instance.
+The state object is created using `createFn` and is passed to `filterFn` together with each input item.
+The function can update the state and returns a boolean value that determines whether the item should pass downstream.
+
+For each grouping key, Jet maintains a separate, user-defined state object created by `createFn`.
+For every incoming item, Jet invokes `filterFn` with the current state and the item,
+allowing the state to be updated and deciding whether the item should pass downstream.
+
+If a positive `ttl` is configured, the state is considered stale once its `time-to-live` expires.
+Each state object tracks the maximum event timestamp observed for its key.
+When processing a new event, Jet compares this timestamp with the current watermark and evicts the state
+if it is older than watermark - ttl.
+
+In addition to TTL-based eviction, `filterStateful` supports explicit early eviction via `forceEvictPredicate`.
+This predicate is evaluated after each item is processed and allows the state to be removed immediately
+when it is no longer needed, for example after a logout or transaction completion event.
+Early eviction helps reduce memory usage and avoids retaining state unnecessarily until the watermark advances far enough to trigger TTL-based cleanup.
+
+This example processes a stream of user events and allows page view events only while the user session is active.
+•	A session becomes active on LOGIN
+•	PAGE_VIEW events are allowed only if the session is active
+•	On LOGOUT, the session state is immediately evicted using forceEvictPredicate
+
+```java
+StreamStage<UserEvent> events = null;
+
+StreamStage<UserEvent> filtered = events
+        .groupingKey(UserEvent::getUserId)
+        .filterStateful(
+                HOURS.toMillis(1),
+                () -> new boolean[1], // state[0] = sessionActive
+                (state, event) -> {
+                    switch (event.getType()) {
+                        case LOGIN:
+                            state[0] = true;
+                            return false; // do not emit LOGIN
+
+                        case PAGE_VIEW:
+                            return state[0]; // allow only if logged in
+
+                        case LOGOUT:
+                            return false; // do not emit LOGOUT
+
+                        default:
+                            return false;
+                    }
+                },
+                // Force eviction immediately on logout
+                (state, userId, event) ->
+                        event.getType() == EventType.LOGOUT
+        );
+```
 === co-group / join
 
 Co-grouping allows to join any number of inputs on a common key, which

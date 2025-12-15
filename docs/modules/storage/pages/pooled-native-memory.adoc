@@ -5,16 +5,16 @@ POOLED native memory uses internal memory pools to manage native memory blocks.
 
 include::storage:high-density-memory.adoc[tags=pooled-native-list]
 
-POOLED supports two manager types: a per-thread manager and a global manager.
+POOLED allocator has two manager types: a per-thread manager and a global manager.
 
-== 1. Per-thread Manager (Thread Local Pooling Memory Manager)
+== Per-thread manager (Thread Local Pooling Memory Manager)
 
-* A thread must register to the Pooling Memory Manager before it can use the Thread Local Pooling Memory Manager (TLPMM).
+* A thread (currently only partition threads) must register to the Pooling Memory Manager before it can use the Thread Local Pooling Memory Manager (TLPMM).
 * Once registered, the thread gets its own TLPMM, and all allocations and frees stay inside it.
 * Pages are never shared between threads.
 * Because memory is split across threads, one thread can run out of memory even when other threads still have free memory available.
 
-== 2. Global Manager (Global Pooling Memory Manager)
+== Global manager (Global Pooling Memory Manager)
 
 * A single global manager shared by all unregistered threads.
 * Pages are shared globally.
@@ -24,15 +24,15 @@ POOLED supports two manager types: a per-thread manager and a global manager.
 
 Fragmentation happens when the allocator cannot provide a block of the requested size, even though there is enough total free memory. There are two main types: internal fragmentation and external fragmentation.
 
-=== Internal Fragmentation
+=== Internal fragmentation
 
 The buddy memory allocation system may cause internal fragmentation depending on the size of the memory allocation request and configured page sizes. Since memory is allocated in block sizes that are a power-of-two, a request that does not exactly match the available block size will result in allocation of the next largest block, potentially leaving unused space. For example, when using 128 KB page sizes, a 68 KB request will result in the allocation of a 128 KB block, wasting 60 KB.
 
-=== External Fragmentation
+=== External fragmentation
 
 The buddy memory allocation system reduces external fragmentation by merging contiguous free buddy blocks of the same size into larger ones. However, it may still lead to external fragmentation if the system does not have large enough free blocks to allocate for the request. As a result, larger memory requests might fail, even if the total free memory is enough.
 
-==== External Fragmentation in per-thread manager (TLPMM)
+==== External fragmentation in per-thread manager (TLPMM)
 
 Because pages cannot be shared between threads, external fragmentation for TLPMM is more likely when:
 

@@ -46,7 +46,7 @@ features and implementations:
 To use the High-Density Memory Store, the native memory usage
 must be enabled using the programmatic or declarative configuration.
 Also, you can configure its size, memory allocator type, minimum
-block size, page size and metadata space percentage.
+block size, page size, and metadata space percentage.
 
 The following are the configuration element descriptions:
 
@@ -71,20 +71,19 @@ swap space left.
 you can set the allocator type to STANDARD in your native memory configuration.
 ** **POOLED**: This is the default option, Hazelcast's own pooling memory allocator.
 *** With this option, memory blocks are managed using internal memory pools.
-*** It allocates memory blocks, each of which has a 4MB page size by default,
-and splits them into chunks or merges them to create larger chunks when required.
+// tag::pooled-native-list[]
+*** Memory is allocated in blocks called pages, each of which is 4 MB in size by default. These pages are divided into chunks or merged to create larger chunks when required.
 Sizing of these chunks follows the https://en.wikipedia.org/wiki/Buddy_memory_allocation[buddy memory allocation^]
 algorithm, i.e., power-of-two sizing.
-*** It never frees memory blocks back to the operating system.
-It marks disposed memory blocks as available to be used later,
-meaning that these blocks are reusable.
-*** Memory allocation and deallocation operations (except the ones
-requiring larger sizes than the page size) do not interact with the
-operating system mostly.
-*** For memory allocation, it tries to find the requested memory size inside
-the internal memory pools. If it cannot be found, then it interacts with the operating system.
-*** Please note that the buddy memory allocation system may cause internal fragmentation depending on the size of the memory allocation request and configured page sizes. Since memory is allocated in block sizes that are a power-of-two, a request that does not exactly match the available block size will result in allocation of the next largest block, potentially leaving unused space. For example, when using 128 KB page sizes, a 68 KB request will result in the allocation of a 128 KB block, wasting 60 KB.
-*** Although the buddy memory allocation system reduces external fragmentation by merging contiguous and free buddy blocks of the same size into larger ones, it may still lead to external fragmentation if the system does not have sufficiently large free buddy blocks to allocate for the request. As a result, larger memory requests might be rejected, even if the total free memory is sufficient.
+*** The allocator never frees memory blocks back to the operating system.
+Instead, it marks disposed memory blocks as available for reuse, so future allocations can use them again. Because of this,
+memory allocation and deallocation operations (except the ones
+requiring larger sizes than the page size) mostly do not interact with the
+operating system.
+*** When memory is needed, the allocator first tries to find a suitable free block inside the internal pools. If it cannot be found, then it interacts with the operating system to request a new page.
+// end::pooled-native-list[]
+*** Note that the POOLED allocator may cause internal fragmentation because it allocates memory in power-of-two block sizes. Requests that do not match these sizes are allocated using the next larger power-of-two block, leaving part of the allocated memory unused.
+*** See xref:storage:pooled-native-memory-allocator.adoc[Pooled Native Memory] for details on pooling behavior, manager types, and fragmentation.
 * **minimum block size:** Minimum size of the blocks in bytes to split and
 fragment a page block to assign to an allocation request. It is used only
 by the **POOLED** memory allocator. Its default value is **16 bytes**.

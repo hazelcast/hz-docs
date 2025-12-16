@@ -1,0 +1,51 @@
+= POOLED native memory allocator
+:page-enterprise: true
+
+POOLED native memory allocator uses internal memory pools to manage native memory blocks.
+
+include::storage:high-density-memory.adoc[tags=pooled-native-list]
+
+POOLED allocator has two manager types: a per-thread manager and a global manager.
+
+== Per-thread manager (Thread Local Pooling Memory Manager)
+
+* A thread (currently only partition threads) is registered internally with the Pooling Memory Manager.
+* Once registered, the thread uses its own Thread Local Pooling Memory Manager (TLPMM), and all allocations and frees stay inside it.
+* Pages are never shared between threads.
+* Because memory is split across threads, one thread can run out of memory even when other threads still have free memory available.
+
+== Global manager (Global Pooling Memory Manager)
+
+* A single global manager shared by all threads.
+* Pages are shared globally.
+* High concurrency can cause contention, since many threads may compete for the same pool.
+
+== Fragmentation
+
+Fragmentation happens when the allocator cannot provide a block of the requested size, even though there is enough total free memory. There are two main types: internal fragmentation and external fragmentation.
+
+=== Internal fragmentation
+
+The buddy memory allocation system may cause internal fragmentation depending on the size of the memory allocation request and configured page sizes. Since memory is allocated in block sizes that are a power-of-two, a request that does not exactly match the available block size will result in allocation of the next largest block, potentially leaving unused space. For example, when using 128 KB page sizes, a 68 KB request will result in the allocation of a 128 KB block, wasting 60 KB.
+
+=== External fragmentation
+
+External fragmentation can occur as memory blocks are repeatedly split and freed by the buddy allocation system. Over time, this can leave free memory divided into smaller blocks that cannot always satisfy larger allocation requests. The allocator reduces external fragmentation by merging free blocks only when they are buddies (blocks of the same size that originated from the same split). Free blocks that are not buddies cannot merge, even if they are adjacent in memory, so they remain separate. Because of this, it is possible for a large allocation request to fail even when the total free memory appears enough.
+
+==== External fragmentation in per-thread manager (TLPMM)
+
+Because pages cannot be shared between threads, external fragmentation for TLPMM is more likely when:
+
+* The configured native memory capacity is small.
+* There is not enough memory available for each partition thread (for example, 2 GB configured native memory capacity and 8 partition threads means each thread will have ~256 MB).
+* The workload includes frequent put/remove operations or a mix of small and large entries or is heavily biased towards some partitions.
+
+Even if only a small amount of the memory is used, one partition thread may still run out of memory because it cannot borrow free blocks from others, and no free page is available from the native memory. As a result, a member can fail with NativeOutOfMemoryError even when total free memory appears large. This happens when a single thread's pool runs out of contiguous free blocks for the requested allocation size.
+
+To make fragmentation and memory usage easier to observe, the following details are provided in the Native OOME message:
+
+* **Max page fragmentation percentage across all threads**: Shows how far a memory pool is from being able to provide a full-page-sized block. It indicates the thread with the highest fragmentation level. The value ranges between 0% (no fragmentation) and 100% (high fragmentation).
+* **Imbalance memory distribution across threads**: Measures how unevenly memory is distributed across partition threads. It is calculated as the https://en.wikipedia.org/wiki/Coefficient_of_variation[Coefficient of Variation (CV)] of memory usage among threads. A low CV indicates balanced memory usage, a high CV indicates that some threads have much more or much less assigned memory than others, which can lead to early Native OOMEs.
+* **Total unusable free memory in all thread pools**: Shows the total amount of free memory that cannot currently be used for allocations because one of the threads has run out of usable memory due to insufficient free space or because its remaining memory is fragmented into blocks too small to satisfy allocation requests.
+* **Total allocated memory in all thread pools and global allocator**: Shows the total amount of allocated memory.
+* **Total allocated external memory in all thread pools and global allocator**: Shows the total amount of externally allocated memory. External allocation happens when the requested size is larger than the page size.

@@ -1,39 +1,66 @@
-= Installing Hazelcast {enterprise-product-name}
+= Install Hazelcast {enterprise-product-name}
 :description: To install Hazelcast {enterprise-product-name}, you can use Docker, the binary, or Java. To unlock the {enterprise-product-name} features, you must install your {enterprise-product-name} license key.
-:page-aliases: deploy:using-enterprise-edition.adoc, get-started-enterprise.adoc
+:page-aliases: deploy:using-enterprise-edition.adoc
+:page-enterprise: true
 
 {description}
 
 [NOTE]
 ====
-These instructions apply only to the licensed {enterprise-product-name} edition, which provides additional features such as the security suite and blue/green client deployment. If you have the {open-source-product-name} edition, follow the instructions in the xref:install-hazelcast.adoc[] topic.
+These instructions apply only to the licensed {enterprise-product-name}. If you have the {open-source-product-name} edition, follow the instructions in the xref:install-hazelcast.adoc[] topic.
 
 If you are moving members from an {open-source-product-name} cluster to an {enterprise-product-name} cluster of the same version, you can use rolling restarts to 
-move each member without downtime. For further information on moving members from an {open-source-product-name} cluster to a target {enterprise-product-name}, see 
-xref:migrate:community-to-enterprise.adoc[].
+move each member without downtime. See xref:migrate:rolling-restart.adoc[].
 ====
+// add see more info link
 
 For further information on the available editions and distributions, see the xref:editions.adoc[] topic.
 
-== Using the {enterprise-product-name} Docker Image
+== Use {enterprise-product-name} Docker image
 
 // tag::docker[]
 . link:https://docs.docker.com/get-docker/[Install Docker^].
 
-. Check that Docker is correctly installed.
+. Check that Docker is correctly installed, using the following command:
 +
 [source,bash]
 ----
 docker version
 ----
+If you don't see a version number, see the link:https://docs.docker.com/config/daemon/[Docker docs^] for troubleshooting information.
 
-. If you do not see a version number, see the link:https://docs.docker.com/config/daemon/[Docker docs^] for troubleshooting information.
+. Pull the latest Docker image
++
+[source,bash,subs="attributes+"]
+----
+docker pull hazelcast/hazelcast-enterprise:{ee-version}
+----
+
+. Check that Hazelcast Platform is correctly installed, using the following command:
++
+[source,bash]
+----
+hz -V
+----
+You should see something like:
++
+[source,bash,subs="attributes+"]
+----
+Version: {ee-version}
+----
+// prob redundant so commenting out
+// Step 1 complete - you have {enterprise-product-name} installed!
 // end::docker[]
-. xref:get-started-docker.adoc[Start the cluster].
 
-== Using the {enterprise-product-name} Binary
+== Use {enterprise-product-name} binary
 
+// tag::download-package-ee[]
+ifdef::snapshot[]
+. Download and extract the {enterprise-product-name} zip file from link:https://repository.hazelcast.com/snapshot/com/hazelcast/hazelcast-enterprise-distribution/{ee-version}[the Hazelcast repository].
+endif::[]
+ifndef::snapshot[]
 Download and extract the binaries.
+//do we need the snapshot option?
 
 // tag::download-package-ee[]
 [tabs] 
@@ -57,19 +84,25 @@ wget -O - 'https://repository.hazelcast.com/download/hazelcast-enterprise/hazelc
 Windows:: 
 +
 --
-ifdef::snapshot[]
-Download and extract the Hazelcast ZIP file from link:https://hazelcast.jfrog.io/ui/native/snapshot/com/hazelcast/hazelcast-enterprise-distribution/{ee-version}[the repository].
-endif::[]
-ifndef::snapshot[]
-Download and extract the link:https://repository.hazelcast.com/download/hazelcast-enterprise/hazelcast-enterprise-{ee-version}.zip[Hazelcast ZIP file].
-endif::[]
+Download and extract the link:https://repository.hazelcast.com/download/hazelcast-enterprise/hazelcast-enterprise-{ee-version}.zip[{ee-version} zip file].
 --
 ====
 // end::download-package-ee[]
 
-To start the cluster, see xref:get-started-binary.adoc[].
+. Check that Hazelcast Platform is correctly installed, using the following command:
++
+[source,bash]
+----
+hz -V
+----
+You should see something like:
++
+[source,bash,subs="attributes+"]
+----
+Version: {ee-version}
+----
 
-== Using {enterprise-product-name} Java
+== Use {enterprise-product-name} with Java
 
 include::install-hazelcast.adoc[tag=java]
 
@@ -134,38 +167,64 @@ endif::[]
 // end::maven-full-ee[]
 --
 
-. xref:get-started-java.adoc[Start the cluster].
+. Check that Hazelcast Platform is correctly installed, using the following command:
++
+[source,bash,subs="attributes+"]
+----
+hz -V
+----
+You should see something like:
++
+[source,shell,subs="attributes+"]
+----
+Version: {ee-version}
+----
 
-=== Using Modular Java
+=== Use modular Java
 
 include::install-hazelcast.adoc[tag=modular]
 
-== Getting an {enterprise-product-name} License Key
+.Run a member on the classpath
+[source,bash,subs="attributes+"]
+----
+java --add-modules java.se \
+  --add-exports java.base/jdk.internal.ref=ALL-UNNAMED \
+  --add-opens java.base/java.lang=ALL-UNNAMED \
+  --add-opens java.base/java.nio=ALL-UNNAMED \
+  --add-opens java.base/sun.nio.ch=ALL-UNNAMED \
+  --add-opens java.management/sun.management=ALL-UNNAMED \
+  --add-opens jdk.management/com.ibm.lang.management.internal=ALL-UNNAMED \
+  --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED \
+  -jar hazelcast-{os-version}.jar
+----
+
+.Run a member on the module path
+[source,bash]
+----
+java --add-modules java.se \
+  --add-exports java.base/jdk.internal.ref=com.hazelcast.core \
+  --add-opens java.base/java.lang=com.hazelcast.core \
+  --add-opens java.base/java.nio=com.hazelcast.core \
+  --add-opens java.base/sun.nio.ch=com.hazelcast.core \
+  --add-opens java.management/sun.management=com.hazelcast.core \
+  --add-opens jdk.management/com.ibm.lang.management.internal=com.hazelcast.core \
+  --add-opens jdk.management/com.sun.management.internal=com.hazelcast.core \
+  --module-path lib \ <1>
+  --module com.hazelcast.core/com.hazelcast.core.server.HazelcastMemberStarter
+----
+<1> This example expects the `hazelcast-{ee-version}.jar` file in the `lib` directory.
+// check enterprise refs in code sample
+
+== Get an {enterprise-product-name} license key
 
 include::deploy:enterprise-licenses.adoc[tag=get-license]
 
-== Installing an {enterprise-product-name} License Key
+== Install an {enterprise-product-name} license key
 
 include::deploy:enterprise-licenses.adoc[tag=install-license]
 
-== Next Steps
+== Next steps
 
 Learn more about xref:deploy:enterprise-licenses.adoc[{enterprise-product-name} license keys].
 
 Get started with the Hazelcast {enterprise-product-name} features with a series of xref:enterprise-overview.adoc[tutorials].
-
-.Explore the Hazelcast {enterprise-product-name} features in more detail
-[%collapsible]
-====
-* xref:security:overview.adoc[Security suite]
-* xref:wan:wan.adoc[]
-* xref:cp-subsystem:persistence.adoc[]
-* xref:kubernetes:deploying-in-kubernetes.adoc[Deploying in Openshift container platform]
-* xref:maintain-cluster:monitoring.adoc#clustered-jmx-and-rest-via-management-center[Clustered REST]
-* xref:maintain-cluster:monitoring.adoc#clustered-jmx-and-rest-via-management-center[Clustered JMX]
-* xref:maintain-cluster:rolling-upgrades.adoc[Rolling upgrades]
-* xref:storage:high-density-memory.adoc[]
-* xref:storage:persistence.adoc[]
-* xref:clients:java.adoc#blue-green-deployment-and-disaster-recovery[Blue/Green client support]
-* xref:pipelines:job-update.adoc[Job updates]
-====

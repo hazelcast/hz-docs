@@ -1,37 +1,14 @@
+
 name: Backport changes to maintenance branches
 on:
+ pull_request_target:
+  types: labeled
  push:
   branches:
    - main
    - v/*
 jobs:
-  get-maintenance-branches:
-    runs-on: ubuntu-latest
-    outputs:
-      branches: "['5.3', '5.4', '5.5']"
-    steps:
-      - run: exit 0
-
-  backport-to-all-branch:
-    needs: get-maintenance-branches
-    strategy:
-      fail-fast: false
-      matrix:
-        branch: ${{ fromJSON(needs.get-maintenance-branches.outputs.branches) }}
-    uses: ./.github/workflows/backport-workflow.yml
+  backport:
+    uses: hazelcast/backport/.github/workflows/backport.yml@master
     with:
-      label-to-check-for: '["backport to all versions"]'
-      target-branch: v/${{ matrix.branch }}
-    secrets: inherit
-
-  backport-to-specified-branch:
-    needs: get-maintenance-branches
-    strategy:
-      fail-fast: false
-      matrix:
-        branch: ${{ fromJSON(needs.get-maintenance-branches.outputs.branches) }}
-    uses: ./.github/workflows/backport-workflow.yml
-    with:
-      label-to-check-for: '["backport to ${{ matrix.branch }}"]'
-      target-branch: v/${{ matrix.branch }}
-    secrets: inherit
+      BACKPORT_PREFIX: "backport to"

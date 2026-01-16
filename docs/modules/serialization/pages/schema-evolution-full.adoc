@@ -1,0 +1,847 @@
+= Schema Evolution
+:description: This topic introduces schema evolution in Hazelcast Compact serialization and explains how to safely evolve object schemas across rolling upgrades, clients, and persisted clusters without data loss or downtime. It covers backward and forward compatibility, deterministic writes, versioned maps, MapStore and persistence considerations, SQL and index evolution, and best practices for zero-downtime migrations in distributed environments.
+
+{description}
+
+Schema evolution refers to Hazelcast’s ability to handle changes in the structure of serialized objects without requiring downtime, full data reloads, or all cluster members and clients to run the exact same version simultaneously.
+
+In distributed systems, data structures evolve as applications change. You might need to add a field to a class, widen a type, or modify a nested record. In traditional serialization formats, these changes can cause deserialization failures or inconsistent reads when old and new members coexist. Hazelcast Compact serialization resolves these challenges through **schema evolution**, enabling smooth coexistence of multiple schema versions for the same object type across the cluster.
+
+Schema evolution in Hazelcast focuses on three goals:
+
+1. **Backward compatibility**: New members can read data written by older members.
+2. **Forward compatibility**: Older members can read data written by newer members, remaining resilient to schema changes.
+3. **Operational continuity**: Schema evolution occurs without disrupting existing data, map entries, or persisted state.
+
+Hazelcast achieves this through **Compact serialization**, which stores object schemas as independent metadata and identifies each version using a unique 64-bit fingerprint. When an object changes, Hazelcast detects the new schema automatically, assigns it a distinct fingerprint, and propagates it across the cluster. As a result, multiple versions of a class can safely coexist and interoperate during rolling upgrades, migrations, or client refreshes.
+
+Both old and new schemas are linked to the same logical object type (for example, a Java class) through a shared "type name" defined in the serializer (`typeName`). This identifier is stable across schema versions and is what the system uses to recognize that different versions describe the same conceptual entity. The identifier can be anything that’s guaranteed to be unique—such as a namespaced string, a URI, or, in Java-based systems, a fully qualified class name.
+
+While most schema changes can be made safely, **backward incompatibility** may occur when a change prevents old readers from interpreting previously written data correctly. This typically happens in cases such as field renames (changing a field’s name rather than adding/removing it), narrowing a type (for example, `long` to `int`), altering a field’s semantic meaning, or modifying the partitioning key used for data routing. When backward incompatibility is introduced, migration strategies must be applied—such as deploying a temporary pipeline or migration job to transform existing data, introducing versioned maps (`Order_v1`, `Order_v2`), or scheduling controlled rollouts with data export and reimport. These approaches ensure data integrity and consistent behavior during cluster upgrades or schema transitions.
+
+[cols="1,3", options="header"]
+|===
+| Term | Definition
+
+| `Schema`
+| The structural definition of a serialized object, including its field names and types.
+
+| `Schema Evolution`
+| The process of changing a schema over time (adding, removing, or modifying fields) while maintaining compatibility with previous versions.
+
+| `typeName`
+| A unique, stable identifier associated with the Compact type. It binds all schema versions for a given logical type (e.g. the Java class fully qualified name).
+
+| `Fingerprint`
+| A 64-bit identifier derived from the schema definition using a link:https://en.wikipedia.org/wiki/Rabin_fingerprint[Rabin Fingerprint] algorithm. Any change to a schema produces a new fingerprint.
+
+| `Backward Compatibility`
+| Newer readers can correctly process data written by older writers. (Unknown fields aren’t an issue here because older data doesn’t contain newer fields.)
+
+| `Forward Compatibility`
+| Older readers can correctly process data written by newer writers. This usually relies on the reader safely ignoring fields it doesn’t understand.
+
+| `FieldKind`
+| The internal representation of a field’s data type in Compact serialization (e.g., `INT32`, `STRING`, `DECIMAL`, `ARRAY_OF_INT64`).
+
+|===
+
+[NOTE]
+====
+The following information applies to cases where Compact serialization is used. There's no guarantee that it works for other serializations supported by Hazelcast.
+====
+
+== Core principles and strategies
+
+Schema evolution in Hazelcast is guided by a set of core principles designed to ensure that data changes remain predictable, compatible, and easy to manage across rolling upgrades, mixed client versions, and persistent clusters.
+
+=== Stable `typeName`
+
+Each Compact type is identified by a `typeName`, which must remain the same throughout the lifetime of a class.
+The `typeName` forms the logical link between different schema versions of the same object. Changing it effectively creates a new Compact type, isolating the data written under the old schema.
+
+Maintaining a stable `typeName` allows new and old members to exchange data transparently, because Hazelcast treats each version of the same `typeName` as an evolution rather than a different entity.
+
+=== Deterministic writes
+
+Hazelcast derives a schema fingerprint from the fields written in the serializer’s `write` method.
+The structure and order of these writes must be **deterministic** — meaning they do not depend on runtime conditions or object state.
+
+Conditional writes, skipped fields, or dynamic field names can lead to multiple fingerprints being generated for logically identical objects, causing unexpected deserialization errors or redundant schema registrations.
+
+To ensure deterministic writes:
+
+* Always write all defined fields, even if their values are `null` or default.
+* Avoid conditional or state-dependent logic inside the `write` method.
+* Keep field names and their corresponding `FieldKind` stable between releases. If changes are unavoidable, treat them as schema-evolution events and let the reader inspect the field type at runtime to handle differences safely (if possible).
+
+=== Schema evolution approaches
+
+Hazelcast supports two primary approaches to managing schema evolution, depending on operational needs and compatibility requirements.
+
+[cols="1,3", options="header"]
+|===
+| Approach | Description
+
+| **Single IMap Evolution**
+| All schema changes occur within the same IMap and `typeName`. This lets members run with different schema versions at the same time while the cluster or application are being updated. It works well for additive or otherwise compatible changes, and can support more complex changes too if those can be handled correctly in the reader.
+
+| **Versioned Maps**
+| Each schema version is stored in a separate map (for example, `Order_v1`, `Order_v2`). This pattern isolates incompatible changes such as field renames, type narrowing, or semantic changes. Data can then be migrated using a pipeline or map-to-map transformation before decommissioning the older map. Unlike schema evolution handled transparently by Compact serialization, this pattern requires explicit design changes in the user application, for example, managing multiple map names and handling data migration logic, but provides greater control when compatibility cannot be automatically maintained.
+
+|===
+
+[NOTE]
+====
+The **Versioned Maps** approach basically sits outside Compact schema evolution. It becomes useful only once you introduce changes that Compact can’t handle—like field renames, type narrowing, or meaning-changing updates. At that point you can’t rely on Compact’s automatic compatibility, so separating data into `Map_v1`, `Map_v2`, and so on gives you full control over migration.
+
+This pattern would work the same with any serialization format because the isolation happens at the map level, not in the serializer. Compact still helps for additive and other safe changes, but once those guarantees no longer hold, **Versioned Maps** is the fallback.
+====
+
+Choosing between these two strategies depends on the degree of backward compatibility required.
+In general:
+
+* Use **Single Map Evolution** for additive, backward-compatible changes. *Caveats:*
+
+- Cannot safely handle incompatible changes such as field renames, removals, narrowing, or semantic changes unless the reader contains explicit logic to interpret both variants.
+- Old entries are not rewritten automatically; they retain the schema used at the time of writing.
+- Readers must be tolerant of missing fields and have deterministic fallbacks.
+- If semantic meaning changes, you still need a new field name or a versioned structure—Compact does not track meaning.
+- Complex migrations inside the reader increase code complexity and must be kept backward compatible indefinitely.
+
+* Use **Versioned Maps** for incompatible or semantically breaking changes. *Caveats:*
+- Requires explicit coordination by the application: naming strategy, routing clients to the correct map, and running migration jobs.
+- Increased operational overhead: more maps, more storage, and more upgrade steps.
+- Migration must be done carefully to avoid partial moves, duplicates, or inconsistent state.
+- Cross-map queries or joins become more complex if multiple versions coexist during transitions.
+- Does not eliminate the need for application-level compatibility if readers must handle multiple map versions simultaneously.
+
+Here is the **level-4 paragraph** you can insert under *Schema evolution approaches*.
+I did **not** rewrite any surrounding content; this is only the requested addition.
+
+==== Explicit Version Field
+
+Adding an explicit version field introduces application-managed versioning on top of Compact. Compact handles compatible field changes, but it does not track the order of schema revisions or group multiple changes into a single step. A stored version fills that gap by telling readers exactly which variant they are dealing with and which logic to apply.
+
+This technique is a more controlled form of the **Single IMap Evolution** approach. All data stays in one map with a stable `typeName`, and the version value lets readers handle multi-step or coordinated migrations without splitting data across maps. It works well when several changes must be interpreted together or when upgrade paths need to be explicit and predictable. However, some Hazelcast features only do partial deserialization (for example SQL, some index lookups, or Predicate API queries). These paths often don’t call your custom reader code. So even if your full reader knows how to handle versioned data, these features may still see the raw fields without running the migration logic. For example, if v2 adds a new field and the new reader fills a default value when reading v1 records, SQL queries might still see the old schema directly and skip that defaulting logic.
+
+Its limits are important: a version field does not fix incompatible or semantic changes, and it cannot override Compact’s compatibility rules. Field renames, narrowing, or meaning changes still require new fields or separate versioned maps. The reader must also carry branch logic for every supported version, which grows in complexity over time. For these reasons, explicit versioning should be seen as a complement to versioned maps, not a replacement.
+
+=== Compact schema propagation
+
+Each Compact schema version is identified by its fingerprint and propagated automatically across the cluster when new data is written.
+Members and clients cache these schemas locally and can fetch missing versions on demand.
+
+This distribution mechanism ensures that any member, regardless of when it was upgraded, can read Compact-serialized data, because schemas are always available even if class definitions differ across the cluster.
+
+=== Consistency and partitioning
+
+When Compact-serialized objects are used as map keys, any change to the fields that participate in partitioning (for example, the key field or composite key fields) alters the data distribution across the cluster.
+Such changes are considered **incompatible** and require migration or rekeying.
+Hazelcast treats these as structural rather than schema-level changes, and they must be handled through data transformation pipelines or controlled rebalancing processes.
+
+== Decision flow for schema changes
+
+When evolving Compact-serialized objects, different kinds of changes have different effects on compatibility and runtime behavior.
+This section helps determine whether a change is **safe**, **requires caution**, or **is incompatible** and needs migration.
+
+=== Overview
+
+Schema changes fall into five broad categories:
+
+1. Adding or removing a field
+   - Adding an *optional* field is compatible with Compact: older writers won’t set it and newer readers will see the default value.
+   - Adding a *mandatory* field is not compatible, because older data has no value for it and Compact provides no way to enforce or synthesize one.
+   - Removing a field is compatible as long as readers treat missing values as absent; otherwise you may need a migration step.
+2. Changing a field type
+   - Widening a type (for example, `int` → `long`) can be compatible if the stored values remain representable in the new type.
+   - Narrowing a type (for example, `long` → `int`) is not compatible because existing data may not fit.
+   - Changing across unrelated types (for example, `string` → `int`, or scalar → collection) is incompatible and requires migration.
+3. Renaming or changing the meaning of a field
+   - Compact treats field names as part of the schema contract, so renaming is *not* compatible—older data still carries the old field name.
+   - Semantic changes (the field keeps the same name but its meaning or expected invariants change) can break consumers even if the schema is technically compatible. In these cases a migration step or versioned type is usually required.
+4. Evolving nested records or collections
+   - Nested Compact objects follow the same rules as top-level records: additive optional fields are compatible; renames, type narrowing, or structural changes (e.g., list ↔ map, list of A ↔ list of B) are not.
+   - Because nested schemas have their own fingerprints, incompatibilities propagate transitively and if a nested type changes incompatibly, the parent becomes incompatible as well.
+5. Changing partitioning keys
+   - Partition keys influence data placement, so changing them is not a serialization-level concern but a cluster-level one.
+   - Compact won’t prevent such changes, but existing data will remain partitioned under the old key until migrated. Any change in meaning or structure of the key field typically requires a controlled migration or a versioned map.
+
+Each category has different implications for Compact serialization, compatibility, and data migration.
+
+[NOTE]
+====
+Changing partition keys is not a Compact-level compatibility issue, but it is a critical part of overall schema evolution.
+Any change to how keys are derived or interpreted affects data locality, query routing, and migration strategy, so it must be planned alongside serialization changes.
+====
+
+=== Staged rollouts
+
+Beyond the common upgrade paths described here, in some circumstances the use of staged rollouts can reduce risks during schema transitions.
+A common approach is to
+
+1. Deploy new readers that understand both old and new schema (forward compatible). Keep writers on old schema.
+2. Deploy writers to new schema once readers are fully rolled out.
+3. Optional: background migration/backfill for old data.
+
+With this, no component ever sees data that it can't read.
+
+Other variations of increasing complexity are possible depending on the use case, but they're out of scope for this documentation.
+Any staged rollout relies on coordinated deployment rather than Compact Serialization itself, and is useful when schema changes must be introduced gradually while keeping writer logic simple and deterministic.
+
+=== Decision table
+
+The table below outlines the main recommendations when choosing a migration strategy for different types of schema changes.
+It isn’t meant to prescribe a single process; real migrations often depend on the state of the system, the rollout plan,
+and how old and new serializers coexist. Treat it as a practical reference to help decide which approach fits a given situation.
+
+[cols="1,2,2,2", options="header"]
+|===
+| Change | Compatibility | Recommended Action | Notes
+
+| **Add a field**
+| Backward and forward compatible
+| Keep the same `typeName` and map
+| Old readers ignore the new field; new readers should check for field existence before reading.
+
+| **Remove a field**
+| Backward compatible
+| Keep the same map; newer readers must tolerate the field being absent
+| When removing a field, backward compatibility holds only once all readers stop depending on that field. The usual approach is to first deploy code that still writes the field but no longer reads it, so older data remains valid and newer logic doesn’t rely on the value. After every reader has been updated to ignore the field, you can safely stop writing it altogether. At that point the field is semantically removed, and you may optionally migrate stored entries to drop it physically and reduce memory usage.
+
+| **Widen type** (for example, `int` → `long`, `float` → `double`)
+| Backward compatible
+| Keep the same map; verify all readers can handle the new type.
+| Widening increases the value range without changing the meaning of existing data, so it is not a semantic change. All previously stored values are still valid. Compact, however, does not perform implicit numeric widening: old entries may store the field as `INT32` while newer code expects `INT64`, and read methods must match the actual `FieldKind`. Readers should inspect the field kind at runtime and call the matching accessor (`readInt32`, `readInt64`, etc.), applying the widening in user code if needed. This approach keeps old and new data readable even when different schema versions coexist.
+
+| **Narrow type** (for example, `long` → `int`)
+| Incompatible
+| Create a new map and migrate data
+| Narrowing a numeric type is not inherently supported by Compact because the stored field kind may differ from what newer code expects, and the change reduces the valid value range. Readers must inspect the actual `FieldKind` and choose the matching accessor (`readInt64`, `readInt32`, etc.) before applying any conversion. Unlike widening, narrowing is a specific semantic change: existing values may no longer be representable, so explicit range checks are required. How to handle out-of-range values—truncate, clamp, reject, or skip—must be defined by the application, as Compact does not enforce any policy here.
+
+| **Rename field** (for example, `customerId` → `accountId`)
+| Incompatible
+| Create a new map and migrate the data
+| Renamed fields appear as new fields to old readers and they also cannot find the original field expected; original data is not mapped automatically.
+
+| **Semantic change** (same field, different meaning)
+| Incompatible
+| Create a new map and migrate data
+| Schema compatibility does not cover meaning; migration ensures correctness.
+
+| **Nested record changed** (added an optional field)
+| Compatible
+| Keep the same map
+| Nested Compact objects follow the same rules as top-level records: adding an optional field is compatible. The nested schema’s fingerprint changes, but the parent can still read both the old and new nested versions.
+
+| **Nested record renamed or structurally altered**
+| Incompatible
+| Migrate to a new map
+| Treat nested type changes as separate schema evolutions.
+
+| **Field or element type changed to a different type family**
+(for example, `List<String>` → `List<Long>`, `int` → `String`)
+| Incompatible
+| Create a new map and migrate
+| Changing a field or collection element to an unrelated type family produces a different schema fingerprint and leads to read errors. Compact cannot reinterpret values across type families, so a new map and migration are required.
+
+| **Partitioning key change** (key field renamed, removed, or its value recomputed)
+| Incompatible
+| Create a new map with the new key definition and migrate data
+| Partitioning is not a Compact-level concern but a cluster-level one: the key determines data placement, so changing it requires a controlled migration and repartitioning. Readers and writers may handle the structural change, but existing entries remain on partitions determined by the old key, so the map must be rebuilt under the new key to restore correct placement.
+
+|===
+
+=== Example: Applying the decision flow to `Order`
+
+The following example illustrates how the `Order` type evolves across versions, showing which changes are compatible and when migration is required.
+
+==== V1 — Initial version
+
+The initial version defines a simple `Order` record.
+All fields are written deterministically with a stable `typeName`.
+
+[source,java]
+----
+package com.example.order;
+
+import com.hazelcast.nio.serialization.compact.*;
+import java.math.BigDecimal;
+
+public record Order(long id, long customerId, BigDecimal amount, String status) {}
+
+final class OrderSerializer implements CompactSerializer<Order> {
+
+    @Override
+    public String getTypeName() {
+        return "com.example.Order"; // stable across compatible versions
+    }
+
+    @Override
+    public Class<Order> getCompactClass() {
+        return Order.class;
+    }
+
+    @Override
+    public void write(CompactWriter w, Order o) {
+        w.writeInt64("id", o.id());
+        w.writeInt64("customerId", o.customerId());
+        w.writeDecimal("amount", o.amount());
+        w.writeString("status", o.status());
+    }
+
+    @Override
+    public Order read(CompactReader r) {
+        long id = r.readInt64("id");
+        long customerId = r.readInt64("customerId");
+        var amount = r.readDecimal("amount");
+        var status = r.readString("status");
+        return new Order(id, customerId, amount, status);
+    }
+}
+----
+
+==== V2 — Add a field (compatible change)
+
+In version 2, the `currency` field is added.
+This change is **additive** and both backward and forward compatible:
+
+* Old readers ignore the new field.
+* New readers check for the field’s existence before reading.
+
+[source,java]
+----
+package com.example.order;
+
+import com.hazelcast.nio.serialization.compact.*;
+import com.hazelcast.nio.serialization.FieldKind;
+import java.math.BigDecimal;
+
+public record OrderV2(long id, long customerId, BigDecimal amount, String status, String currency) {}
+
+final class OrderV2Serializer implements CompactSerializer<OrderV2> {
+
+    @Override
+    public String getTypeName() {
+        return "com.example.Order"; // same typeName (compatible evolution)
+    }
+
+    @Override
+    public Class<OrderV2> getCompactClass() {
+        return OrderV2.class;
+    }
+
+    @Override
+    public void write(CompactWriter w, OrderV2 o) {
+        w.writeInt64("id", o.id());
+        w.writeInt64("customerId", o.customerId());
+        w.writeDecimal("amount", o.amount());
+        w.writeString("status", o.status());
+        w.writeString("currency", o.currency());
+    }
+
+    @Override
+    public OrderV2 read(CompactReader r) {
+        long id = r.readInt64("id");
+        long customerId = r.readInt64("customerId");
+        var amount = r.readDecimal("amount");
+        var status = r.readString("status");
+
+        // read optional field if present
+        String currency = "GBP";
+        if (r.getFieldKind("currency") == FieldKind.STRING) {
+            currency = r.readString("currency");
+            if (currency == null) currency = "GBP";
+        }
+
+        return new OrderV2(id, customerId, amount, status, currency);
+    }
+}
+----
+
+This evolution requires no migration.
+Both V1 and V2 data can coexist in the same map, and clients continue to read and write normally.
+
+==== V3 — Breaking change (requires migration)
+
+Version 3 introduces two incompatible changes:
+
+* The field `customerId` is renamed to `accountId`.
+* The partitioning key changes to use `(accountId, id)`.
+
+These changes make the schema **backward incompatible**, so the new version uses a different `typeName` and a separate map.
+
+[source,java]
+----
+package com.example.order.v3;
+
+import com.hazelcast.nio.serialization.compact.*;
+import java.math.BigDecimal;
+
+public record OrderV3(long id, long accountId, BigDecimal amount, String status, String currency) {}
+
+public record OrderKeyV3(long accountId, long id) {}
+
+final class OrderV3Serializer implements CompactSerializer<OrderV3> {
+
+    @Override
+    public String getTypeName() {
+        return "com.example.OrderV3"; // new typeName to isolate schema
+    }
+
+    @Override
+    public Class<OrderV3> getCompactClass() {
+        return OrderV3.class;
+    }
+
+    @Override
+    public void write(CompactWriter w, OrderV3 o) {
+        w.writeInt64("id", o.id());
+        w.writeInt64("accountId", o.accountId());
+        w.writeDecimal("amount", o.amount());
+        w.writeString("status", o.status());
+        w.writeString("currency", o.currency());
+    }
+
+    @Override
+    public OrderV3 read(CompactReader r) {
+        long id = r.readInt64("id");
+        long accountId = r.readInt64("accountId");
+        var amount = r.readDecimal("amount");
+        var status = r.readString("status");
+        var currency = r.readString("currency");
+        return new OrderV3(id, accountId, amount, status, currency);
+    }
+}
+----
+
+Because the schema and partitioning key have changed, the new version must be stored in a new map, for example, `orders_v3`.
+Existing data from `orders` must be migrated explicitly.
+
+==== Migrating from V2 to V3
+
+Use a Jet pipeline to transform and rekey data from `orders` (V2) to `orders_v3` (V3).
+
+[source,java]
+----
+package com.example.order.migration;
+
+import com.example.order.OrderV2;
+import com.example.order.v3.*;
+import com.hazelcast.jet.pipeline.*;
+
+public final class OrdersToV3Migration {
+
+    public static void run(HazelcastInstance hz) {
+        Pipeline p = Pipeline.create();
+
+        p.readFrom(Sources.<Long, OrderV2>map("orders"))
+         .map(e -> {
+             OrderV2 v2 = e.getValue();
+             long id = v2.id();
+             long accountId = v2.customerId();   // renamed field
+             return Util.entry(
+                 new OrderKeyV3(accountId, id),  // new partitioning key
+                 new OrderV3(id, accountId, v2.amount(), v2.status(), v2.currency())
+             );
+         })
+         .writeTo(Sinks.map("orders_v3"));
+
+        hz.getJet().newJob(p).join();
+    }
+}
+----
+
+==== Verification and cleanup
+
+After migration:
+
+1. Verify record counts and key distributions between `orders` and `orders_v3`.
+2. Update client applications to use `orders_v3`.
+3. Remove or archive the old map after validation.
+
+==== Summary
+
+* **V1 to V2:** Additive, compatible change: same map and `typeName`.
+* **V2 to V3:** Rename and partitioning change: incompatible, new map and migration required.
+* Stable `typeName`s, deterministic writes, and explicit migration steps ensure safe schema evolution and predictable behavior.
+
+== Integrate schema evolution with MapStore
+
+When a map is backed by a MapStore, schema evolution affects both the in-memory data and the external persistence layer.
+Coordinating schema changes with MapStore operations and migration pipelines is critical to prevent data loss or inconsistency during upgrades.
+
+=== Compatible schema changes
+
+For additive or type-widening changes (for example, adding a `currency` field):
+
+* Keep the same map and `typeName`.
+* Allow old and new members to coexist during rolling upgrades.
+* Ensure the new MapStore implementation can **read old records** and **write the full superset of fields**.
+* Default missing fields deterministically when loading data (for example, `currency = "GBP"`).
+
+This approach allows MapStore to act as a bridge between schema versions until all members are upgraded.
+
+=== Incompatible schema changes
+
+For backward-incompatible changes, the existing map and external store cannot safely hold mixed data.
+
+In these cases:
+
+* Create a **new map** (`orders_v3`) with a new `typeName` and a corresponding `v3` MapStore implementation.
+* Use a **Jet pipeline** to migrate data from the old map to the new one.
+
+=== Synchronising MapStore and migration pipelines
+
+When both the MapStore and Jet pipeline operate on the same target map, the order of operations determines which value persists.
+Understanding how these mechanisms interact helps ensure predictable outcomes.
+
+* **MapStore Loading:**
+If a key is not in memory, Hazelcast may call the MapStore’s `load` or `loadAll` methods to fetch it from the external system.
+Once loaded, that entry resides in memory until evicted or updated.
+
+* **Pipeline Writes:**
+When a Jet pipeline writes to a map (using `Sinks.map`, `Sinks.mapWithMerging`, `Sinks.mapWithUpdating`, or `Sinks.mapWithEntryProcessor`),
+it overwrites the value for that key in memory.
+The operation _should_ be idempotent: restarts or retries do not create duplicates.
+
+**Conflict resolution rules:**
+
+[cols="1,3", options="header"]
+|===
+| Scenario | Behavior
+
+| Key not yet loaded by MapStore 
+| Hazelcast first loads the value from the external store, then the pipeline overwrites it. 
+
+| Key already in memory 
+| The pipeline overwrites the in-memory value and may trigger a `store` if write-through is enabled. 
+
+| MapStore loading and pipeline writing simultaneously 
+| The operations are serialized by Hazelcast on the same key and last one wins.
+
+|===
+
+If conflict resolution is required (for example, partial field merging or conditional updates), use:
+
+* `Sinks.mapWithMerging()` with a merge function, or
+* `Sinks.mapWithEntryProcessor()` to apply custom merging logic.
+
+=== Migration pipeline with continuous synchronization
+
+The migration pipelines copy all existing entries from the old map to the new map and keeps the new map up to date
+by consuming updates from the source map’s event journal until old clients are removed.
+
+[source,java]
+----
+// Step 1: snapshot new entries
+Pipeline tail = Pipeline.create();
+
+StreamStage<Map.Entry<Long, OrderV2>> journal = tail
+        .readFrom(Sources.<Long, Order>mapJournal(hz.getMap("orders"), JournalInitialPosition.START_FROM_CURRENT))
+        .withIngestionTimestamps();
+
+// upserts
+journal.filter((PredicateEx<Map.Entry<Long, OrderV2>>) e -> e.getValue() != null)
+       .map(e -> Map.entry(e.getKey(), OrderV3.fromV2(e.getValue()))
+       .writeTo(Sinks.map("orders_v3"));
+
+// deletes
+journal.filter(new ValueIsNullFilter())
+       .writeTo(Sinks.fromProcessor("v3-remove-sink", MapRemoveP.metaSupplier("orders_v3")));
+
+JobConfig cfg = new JobConfig()
+        .setName("tail-v2-to-v3")
+        .setProcessingGuarantee(ProcessingGuarantee.AT_LEAST_ONCE);
+
+hz.getJet().newJob(tail, cfg);
+
+// Step 2: snapshot existing entries (batch)
+Pipeline bulk = Pipeline.create();
+bulk.readFrom(Sources.<Long, OrderV2>map("orders"))
+    .map( e -> Map.entry(e.getKey(), OrderV3.fromV2(e.getValue()))
+    .writeTo(Sinks.map("order_v3"));
+
+JobConfig cfg = new JobConfig()
+        .setName("bulk-v2-to-v3-jet")
+        .setProcessingGuarantee(ProcessingGuarantee.AT_LEAST_ONCE);
+
+hz.getJet().newJob(bulk, cfg).join();
+
+----
+
+This migration approach:
+
+* Starts a pipeline to stream updates via the origin map's event journal, keeping the new map in sync.
+* Then starts migrating all existing records (once the MapStore has finished loading).
+* Ensures no data is lost while old clients are still writing to the old schema.
+
+When all clients have switched to the new version:
+
+1. Stop writes to the old map.
+2. Cancel the migration job.
+3. Validate record counts and consistency.
+4. Retire or archive the old map.
+
+==== Edge cases
+
+Edge cases to take into account when migrating:
+
+1. Bulk vs tail race: older data can overwrite newer tail updates for the same key.
+2. Delete vs upsert ordering: a delete event from the journal could arrive before/after a bulk upsert and incorrectly remove a fresh value or resurrect a deleted one.
+3. At-least-once duplicates: retries can appy the same write more than once.
+4. Key reuse: a key deleted in V1 later gets re-created; ordering must be still correct.
+5. Job restarts: after a restart, the tail resumes and bulk may still be running, reintroducing (1)-(3)
+
+To handle these cases, use a per-key `version` that always increases (for example, from a link:https://docs.hazelcast.com/hazelcast/latest/data-structures/iatomiclong[`IAtomicLong`]). Apply updates only when `incoming.version` is greater than `existing.version`, using a `EntryProcessor` instead of direct writes or removes. This ensures tail data always overrides bulk data and makes race conditions, deletes, retries, restarts, and key reuse predictable.
+
+[source,java]
+----
+IAtomicLong versionGen = hz.getCPSubsystem().getAtomicLong("orders_v3_version");
+
+Pipeline bulk = Pipeline.create();
+
+// Configure the job
+JobConfig bulkJobCfg = new JobConfig();
+bulkJobCfg.setName("bulk-v2-to-v3");
+bulkJobCfg.setProcessingGuarantee(ProcessingGuarantee.AT_LEAST_ONCE);
+
+bulk.readFrom(Sources.<Long, OrderV2>map("orders"))
+    .writeTo(Sinks.mapWithEntryProcessor(
+        "orders_v3",
+        Map.Entry::getKey,
+        e -> {
+            long version = versionGen.incrementAndGet();
+            OrderV3 v3 = OrderV3.fromV2(e.getValue());
+            V3Row newRow = new V3Row(v2, version, false);
+
+            return (EntryProcessor<Long, V3Row, Void>) entry -> {
+                V3Row current = entry.getValue();
+                long currentVer = current == null ? Long.MIN_VALUE : current.version();
+                if (version > currentVer) {
+                    entry.setValue(newRow);
+                }
+                return null;
+            };
+        }
+    ));
+
+jet.newJob(bulk, bulkJobCfg).join();
+----
+
+The tail pipeline will follow a similar approach.
+
+=== Zero-downtime migration summary
+
+* Use additive schema changes wherever possible.
+* For incompatible changes, use a new map and MapStore implementation.
+* The pipeline overwrites any loaded or existing value: implement merging if required.
+* Continue synchronizing through the event journal until legacy clients are retired.
+* Optionally validate data integrity before removing the old map.
+
+== Integrate schema evolution with Near Cache
+
+When Near Cache is enabled on a map or client, Compact’s schema evolution does not affect Near Cache behavior.
+
+Each Near Cache entry is stored as a serialized binary representation of the object, typically in the client or member process that owns the cache.
+Because Near Cache is scoped per map, its lifecycle and contents are isolated from other maps and schemas.
+
+When schema changes are introduced, old clients continue using their existing map (for example, `orders`), while new clients may use either the evolved records in the same map or a new map (for example, `orders_v3`).
+Since each map maintains its own Near Cache, cached data remains valid and operations continue normally.
+
+In summary:
+
+* Near Cache entries are independent per map and unaffected by schema changes in other maps.
+* Old clients using the original schema continue to operate with their existing Near Cache.
+* New clients use their own cache for the evolved schema or new map.
+
+== When persistence is enabled
+
+When Hazelcast Persistence (Hot Restart) is enabled, Compact schemas are stored alongside the map data.
+Each record references the exact schema fingerprint used when it was written, allowing Hazelcast to restore the cluster to its previous state after a restart.
+
+=== How it works
+
+* Hazelcast saves both the binary data and the Compact schema definitions to disk.
+* On restart, the same schemas are loaded before the data is restored.
+* Every schema is identified by a 64-bit fingerprint — this must match between shutdown and restart for recovery to succeed.
+
+If class definitions change but the fingerprints differ, Hazelcast cannot deserialize the persisted data.
+
+=== Compatible schema changes
+
+Additive or type-widening changes (for example, adding a new field) are compatible with persisted data.
+
+* Old entries remain readable.
+* New entries use the updated schema.
+* Hazelcast persists all known schema versions, allowing both to coexist safely.
+
+You can safely perform rolling upgrades without clearing persistence when changes are backward compatible.
+
+=== Incompatible schema changes
+
+For incompatible changes (for example, field renames, type narrowing, or new partitioning keys),
+the old data on disk cannot be read by the new schema.
+
+In these cases:
+
+* Create a **new map** for the new schema (for example, `orders_v3`).
+* The old map keeps its existing persisted data and schema.
+* The new map starts clean with its own persistence store.
+* Migrate data at runtime using a Jet or SQL pipeline if needed.
+
+Because each map has its own persistence directory, the old and new schemas remain completely isolated —
+there is no conflict between them.
+
+Alternatively, delete the persistence directory and reload the map via MapStore or other means.
+
+== SQL and mapping evolution
+
+When using Hazelcast SQL, schema evolution affects how queries, field names, and mappings behave.
+SQL mappings define how a map’s key and value structures are exposed as columns.
+When Compact schemas change, you may need to evolve these mappings to reflect new or renamed fields.
+
+=== Compatible schema changes
+
+For additive or type-widening changes, existing mappings and queries continue to work without modification.
+
+* Existing fields remain accessible under the same column names.
+* New fields can be added to the mapping at any time.
+* Queries that don’t reference the new field continue to work unchanged.
+* New fields become queryable as soon as new entries using the extended schema exist.
+
+Example:
+
+[source,sql]
+----
+-- Existing queries continue to work
+SELECT id, customerId, amount FROM orders;
+
+-- Querying a newly added field
+SELECT id, currency FROM orders WHERE currency = 'GBP';
+----
+
+If you define explicit columns in your mapping, update it to include the new field:
+
+[source,sql]
+----
+CREATE OR REPLACE MAPPING orders
+TYPE IMap
+OPTIONS (
+  'keyFormat' = 'bigint',
+  'valueFormat' = 'compact',
+  'valueCompactTypeName' = 'com.example.Order'
+)
+COLUMNS (
+  id BIGINT EXTERNAL NAME "this.id",
+  customerId BIGINT EXTERNAL NAME "this.customerId",
+  amount DECIMAL EXTERNAL NAME "this.amount",
+  status VARCHAR EXTERNAL NAME "this.status",
+  currency VARCHAR EXTERNAL NAME "this.currency" -- new field
+);
+----
+
+No data migration is needed; the schema extension is handled automatically at runtime.
+
+=== Hitting old records after recreating a mapping with new fields
+
+When you update an SQL mapping to include an extra field that did not exist in older Compact schemas, queries over **old records** behave predictably:
+
+* **Missing fields read as `NULL`.**
+If a row’s underlying Compact schema has no such field, the column resolves to `NULL` at query time. This is schema-on-read; it does not error.
+
+* **Filters and expressions follow SQL three-valued logic.**
+Predicates like `WHERE currency = 'GBP'` will **exclude** rows where `currency` is `NULL`. Use `IS NULL`, `COALESCE`, or explicit backfill if you want different behavior.
+
+* **Aggregations handle `NULL`s normally.**
+`COUNT(currency)` ignores `NULL`s; `COUNT(*)` counts all rows; `SUM`/`AVG` ignore `NULL`s.
+
+* **Type must be compatible across versions.**
+If you widened the type (e.g., `INT` → `BIGINT`), SQL will unify correctly. Narrowing across mixed rows can fail and should be avoided or migrated.
+
+=== Incompatible schema changes
+
+Backward-incompatible changes (for example, field renames, type narrowing, or new key structures)
+require a new map and a new SQL mapping.
+
+Example: evolving `orders` to `orders_v3`, renaming `customerId` to `accountId` and introducing a composite key.
+
+[source,sql]
+----
+CREATE MAPPING orders_v3
+TYPE IMap
+OPTIONS (
+  'keyFormat' = 'compact',
+  'keyCompactTypeName' = 'com.example.order.v3.OrderKeyV3',
+  'valueFormat' = 'compact',
+  'valueCompactTypeName' = 'com.example.order.v3.OrderV3'
+)
+COLUMNS (
+  accountId BIGINT EXTERNAL NAME "__key.accountId",
+  id BIGINT EXTERNAL NAME "__key.id",
+  amount DECIMAL EXTERNAL NAME "this.amount",
+  status VARCHAR EXTERNAL NAME "this.status",
+  currency VARCHAR EXTERNAL NAME "this.currency"
+);
+----
+
+Old queries continue to work on the old map (`orders`), and new queries can target the new map (`orders_v3`).
+
+[source,sql]
+----
+-- Old schema
+SELECT id, customerId, amount FROM orders;
+
+-- New schema
+SELECT id, accountId, amount FROM orders_v3;
+----
+
+Each versioned map has its own mapping and query surface, so schema incompatibility never breaks existing queries.
+
+=== Using Views for a stable SQL layer
+
+If you want to expose a single SQL interface while migrating between versions, create a VIEW that merges both schemas:
+
+[source,sql]
+----
+CREATE OR REPLACE VIEW orders_latest AS
+SELECT id, customerId, amount, status, currency FROM orders
+UNION ALL
+SELECT id, accountId AS customerId, amount, status, currency FROM orders_v3;
+----
+
+Applications can query `orders_latest` without needing to know which schema version is active.
+
+== Index evolution
+
+Schema changes can affect how indexes are defined and used.
+This section explains when you can keep existing indexes, when you must recreate them, and how to handle indexes during migrations.
+
+=== Compatible schema changes
+
+Additive or type-widening changes (for example, adding `currency` or widening `int` → `bigint`) do not invalidate existing indexes on unchanged fields.
+
+* Indexes on old fields continue to work.
+* You may add new indexes for newly introduced fields at any time.
+
+=== Incompatible schema changes
+
+Backward-incompatible changes (field rename, removal, type narrowing, or new key structure) require new index definitions aligned with the new schema.
+
+* **Field rename/removal:** drop the old index and create a new one on the new field.
+* **Type narrowing:** avoid in place; migrate to a new map and define indexes there.
+* **Partitioning/key change (e.g. composite key):** create indexes on the **new map** only.
+
+[NOTE]
+====
+Indexes are scoped per map. Versioned maps (for example, `orders` and `orders_v3`) hold independent index metadata; define indexes separately for each.
+Create these indexes on the **target map first** (so queries are efficient as data arrives).
+====
+
+== Caveats and warnings
+
+- Certain field kinds (e.g. ARRAY_OF_COMPACT, COMPACT) have restricted evolution semantics (cannot change element kind or switch between nullable/non-nullable).
+- Default handling in Compact serialization:
+   - When a newer schema adds fields, Hazelcast automatically assigns type-specific defaults (`0`, `false`, or `null`) when reading older data that does not include those fields.
+   - When a schema removes fields, readers simply stop accessing them. Compact does not synthesize default values or alter the stored binary; the data still carries its full original schema, including fields the reader no longer cares about. A `CompactSerializer.read()` implementation only reads the fields it expects, and any stored-but-ignored fields remain in the binary untouched.
+   - Developers can implement explicit default values in their serializer logic to handle newly added fields more gracefully. This allows domain-specific defaults (for example, a default status code or timestamp) to be used instead of Hazelcast’s generic type defaults, ensuring consistent behavior across schema versions.

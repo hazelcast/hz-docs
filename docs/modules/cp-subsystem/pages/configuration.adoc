@@ -106,20 +106,7 @@ On startup, any CP member with any priority can become a leader and `cp-member-p
 
 Only CP members that are part of a CP group can become leaders. CP members that are not in a CP group do not participate in the leadership rebalancing task. For example, you start a cluster with the CP group size set to three and all members with priority 0. Later, you configure a new CP member with priority 100. Even though it has a higher priority, the new CP member never becomes a leader because the CP group is full. The new CP member is eligible for leadership only when a CP member leaves the CP group and the new CP member takes the previous member's place.
 
-IMPORTANT: <<cp-member-priority, `cp-member-priority`>> does not override the Raft leadership election process: it is a hint rather than a rule. Consequently, it is possible that a member with a low priority becomes leader for a period until the background leadership rebalancing task transfers the leadership to a member with a higher priority. The leadership rebalancing task runs approximately every 60 seconds; however, a custom frequency can be defined by the system property `hazelcast.raft.leadership.rebalance.period`. If necessary, you can also <<autostepdown, configure members to transfer leadership>> to another member if elected.
-
-[[autostepdown]]
-== Configure members to transfer leadership
-
-In some deployment scenarios, you may want to prevent a CP group member from becoming the leader. For example, if your CP group is distributed across two local data centers and one remote data center for geographic redundancy, there may be a significantly higher latency to the remote data center.
-
-image:autostepdown-deployment.svg[Distributed CP Group deployment]
-
-If the CP group leader is in one of the local data centers -- and there are enough local followers to achieve quorum -- the leader will not need to wait for acknowledgements from followers in the remote data center and so the increased latency will have no impact. If the leader is in the remote data center, there will be a higher latency for client operations and this will reduce the maximum throughput achievable. To maximize throughput, you can force CP members in the remote data center to automatically transfer leadership to another member by enabling <<auto-step-down-when-leader, `auto-step-down-when-leader`>>. The increased latency will then only have an impact if a remote data center member is needed to achieve quorum.
-
-In the Raft algorithm, a member must become leader if it has the most recent log in the group. In this case, a member with <<auto-step-down-when-leader, `auto-step-down-when-leader`>> enabled will become leader but immediately trigger the leadership rebalancing task, and will reject client operations. If the leadership rebalancing task fails, it will retry automatically. Client operations continue to be rejected until a new leader is elected.
-
-Reducing the number of leadership candidates reduces the fault tolerance of the CP Subsystem. You should therefore only enable this feature if it is necessary to achieve your throughput requirements, and you should enable it on as few members as possible. This feature does not apply to the `METADATA` group, which is not sensitive to latency.
+IMPORTANT: <<cp-member-priority, `cp-member-priority`>> does not override the Raft leadership election process: it is a hint rather than a rule. Consequently, it is possible that a member with a low priority becomes leader for a period until the background leadership rebalancing task transfers the leadership to a member with a higher priority. The leadership rebalancing task runs approximately every 60 seconds; however, a custom frequency can be defined by the system property `hazelcast.raft.leadership.rebalance.period`.
 
 [[sessions]]
 == Configure CP sessions
@@ -1565,49 +1552,6 @@ Config config = new Config();
 
 config.getCPSubsystemConfig()
 .setCPMemberPriority(5)
-----
---
-====
-
-|[[auto-step-down-when-leader]]`auto-step-down-when-leader`
-|Whether this member should automatically step down if elected leader. If enabled, `cp-member-priority` must be set to zero or below. If set on all members in a group, the CP Subsystem will fail with an `IllegalStateException`.
-
-|false
-|
-[tabs]
-====
-XML::
-+
---
-[source,xml]
-----
-<hazelcast>
-  <cp-subsystem>
-    <auto-step-down-when-leader>true
-    </auto-step-down-when-leader>
-  </cp-subsystem>
-</hazelcast>
-----
---
-YAML::
-+
---
-[source,yaml]
-----
-hazelcast:
-  cp-subsystem:
-    auto-step-down-when-leader: true
-----
---
-Java::
-+
---
-[source,java]
-----
-Config config = new Config();
-
-config.getCPSubsystemConfig()
-.setautoStepDownWhenLeader(true)
 ----
 --
 ====

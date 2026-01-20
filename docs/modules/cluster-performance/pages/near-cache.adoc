@@ -565,13 +565,20 @@ Note that `max-idle-seconds` and `time-to-live-seconds` are configured under the
 
 == Near Cache invalidation
 
-Invalidation is the process of removing an entry from the Near Cache when its value is updated or
+Invalidation is the process of removing an entry from the Near Cache when its value is updated, or
 it is removed from the original data structure (to prevent stale reads).
 Near Cache invalidation happens asynchronously at the cluster level, but synchronously at the current member.
 This means that the Near Cache is invalidated within the whole cluster after the modifying operation is finished,
 but updated from the current member before the modifying operation is done.
 A modifying operation can be an EntryProcessor, an explicit update or remove as well as an expiration or eviction.
-Generally, whenever the state of an entry changes in the record store by updating its value or removing it, the invalidation event is sent for that entry.
+Generally, whenever the state of an entry changes in the record store by updating its value or removing it,
+the invalidation event is sent for that entry.
+
+If an entry expires at the cluster, an invalidation event is also sent for that entry to the clients subscribed.
+If there are a lot of expirations happening in the cluster, it may create a lot of invalidation events. Batching
+the invalidation events as described below may help in such expiration scenarios. Expiry of the entry at the cluster is
+different from client near cache time to live configuration. Client <<near-cache-expiration, near cache `time-to-live-seconds` configuration>>
+does not cause any invalidation events at the cluster, but it is only local to that client.
 
 Invalidations can be sent from members to client Near Caches or to member Near Caches, either individually or in batches.
 Default behavior is sending in batches. If there are lots of mutating operations such as put/remove on data structures,
@@ -588,11 +595,6 @@ a background process sends them periodically. Its default value is `10` seconds.
 
 If there are a lot of clients or many mutating operations, batching should remain enabled and
 the batch size should be configured with the `hazelcast.map.invalidation.batch.size` system property to a suitable value.
-
-NOTE: Near Cache invalidation is triggered only by user-initiated entry updates or removals. System operations (such as IMap
-expirations or evictions) do NOT trigger Near Cache invalidation. Since evictions are typically acceptable for Near Cache use
-cases, this behavior is intentional. If you need entries to expire from the Near Cache, configure expiration directly on the
-Near Cache itself.
 
 == Near Cache consistency
 

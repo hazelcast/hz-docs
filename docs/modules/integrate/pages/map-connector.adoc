@@ -210,3 +210,25 @@ p.readFrom(Sources.map(personCache,
     Projections.singleAttribute("name"))
 );
 ```
+
+== Specific IMap Sinks
+This section describes some specific sinks related to IMap.
+
+=== Flush IMap Sink
+The `EnterpriseSinks.mapFlushSink` method forces the flush of the specified IMap to its configured MapStore when a snapshot is taken.
+Unlike other sink methods, the flush does not occur on new entry processing, but only when a snapshot is triggered.
+This ensures that all pending write-behind updates are persisted before the snapshot is committed or the job completes.
+
+This sink is available only in Hazelcast Enterprise Edition.
+
+Example usage:
+
+```java
+// target-map has write-behind MapStore configured
+p.readFrom(Sources.map("source-imap"))
+ .rebalance(Map.Entry::getKey) // optional: ensure correct partitioning
+ .mapUsingServiceAsync(ServiceFactories.iMapService("target-map"),
+     (map, entry) ->
+         map.putAsync(entry.getKey(), entry.getValue()).toCompletableFuture())
+ .writeTo(EnterpriseSinks.mapFlushSink("target-map", true));
+```

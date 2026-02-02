@@ -134,6 +134,81 @@ src.mapUsingService(serviceFactory,
         (formatter, tstamp) -> formatter.format(Instant.ofEpochMilli(tstamp)));
 ```
 
+== Using Compact Serialization with Pipelines
+
+xref:serialization:compact-serialization.adoc[Compact serialization] provides an efficient,
+schema-based serialization mechanism for your data objects. While Compact serialization
+has the highest priority in Hazelcast's serialization service, there are important caveats
+to understand when using it with Jet pipelines.
+
+=== Java Serializable Takes Precedence for Lambdas and Functions
+
+Pipeline definitions, including lambda expressions and function objects, are serialized
+using standard Java serialization (`java.io.Serializable`). This is because the pipeline
+definition itself must be sent to cluster members before the Hazelcast serialization
+service is involved.
+
+When an object implements `Serializable`, Java serialization is used directly and does
+not delegate to Hazelcast's serialization service. This means:
+
+* All fields of a `Serializable` object must also be `Serializable`
+* Compact serializers registered for field types are not used during Java serialization
+* This applies even if the field's class has a registered `CompactSerializer`
+
+=== Entry Processors and Captured Variables
+
+This behavior is particularly relevant when using `Sinks.mapWithEntryProcessor()`.
+The `EntryProcessor` interface extends `Serializable`, so any custom entry processor
+and all its fields must be Java serializable.
+
+Consider this example where `OrderStatus` has a registered Compact serializer:
+
+```java
+// OrderStatus has a CompactSerializer registered, but this still fails
+// because MergeEntryProcessor implements Serializable (via EntryProcessor)
+public class MergeEntryProcessor implements EntryProcessor<String, Order, Order> {
+    // This field must be Serializable, even though OrderStatus has a CompactSerializer
+    private final OrderStatus newStatus;
+
+    public MergeEntryProcessor(OrderStatus newStatus) {
+        this.newStatus = newStatus;
+    }
+
+    @Override
+    public Order process(Entry<String, Order> entry) {
+        Order order = entry.getValue();
+        order.setStatus(newStatus);
+        entry.setValue(order);
+        return order;
+    }
+}
+```
+
+In this case, `OrderStatus` must implement `Serializable` in addition to having a
+Compact serializer, because Java's `ObjectOutputStream` does not know about Hazelcast's
+Compact serialization.
+
+The same applies to lambdas that capture Compact-serializable variables:
+
+```java
+// orderStatus has a CompactSerializer, but capturing it in a lambda
+// requires it to also implement Serializable
+OrderStatus status = new OrderStatus("SHIPPED");
+pipeline.readFrom(source)
+    .filter(order -> order.getStatus().equals(status));
+```
+
+=== Workarounds
+
+To use Compact-serializable objects with pipelines:
+
+1. **Use service factories**: For non-serializable dependencies, use `mapUsingService()`
+to create objects on the target member rather than capturing them in lambdas.
+
+2. **Implement both interfaces**: Have your classes implement `Serializable` in addition
+   to registering a Compact serializer. The Compact serializer is still used when
+   Hazelcast serializes objects for storage in maps or transmission between members.
+
 == Serialization of Data Types
 
 The objects you store in xref:data-structures:distributed-data-structures.adoc[Hazelcast data structures] must be serializable.

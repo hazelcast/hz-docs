@@ -210,3 +210,33 @@ p.readFrom(Sources.map(personCache,
     Projections.singleAttribute("name"))
 );
 ```
+
+[#_map_transforms]
+== Map Transforms
+
+You can use IMap to perform transformations of the items in the pipeline.
+The simplest `mapUsingIMap` transformation is available in the xref:pipelines:transforms.adoc#_mapusingimap[stage API itself].
+
+More advanced transformations are provided in `IMapExtension` ([.enterprise]*Enterprise*):
+
+- `mapUsingPutIfAbsent`: performs `putIfAbsent` and provides previous value to custom mapping function
+
+All these transformations provide AT_LEAST_ONCE processing guarantees.
+They are not transactional, but rely on sources to retry events in case of failure.
+
+The following example records first occurrence of a key from given bucket
+and detects subsequent occurrences allowing to react differently to them.
+
+[source,java]
+----
+import static com.hazelcast.jet.pipeline.IMapExtension.iMapExtension;
+
+Pipeline p = Pipeline.create();
+p.readFrom(TestSources.items(1, 2, 3, 11, 12, 13))
+    .using(iMapExtension())
+    .mapUsingPutIfAbsent("some-map",
+            e -> e % 10,
+            e -> e,
+            Tuple3::tuple3)
+    .writeTo(sinkList());
+----

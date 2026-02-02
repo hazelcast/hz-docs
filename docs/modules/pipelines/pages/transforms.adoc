@@ -301,8 +301,8 @@ module file that declares `transform_list`:
 
 ```java
 StreamStage<String> sourceStage = sourceStage();
-StreamStage<String> pythonMapped = sourceStage.apply(PythonTransforms.mapUsingPython(
-  new PythonServiceConfig().setHandlerFile("path/to/handler.py")));
+StreamStage<String> pythonMapped = sourceStage.using(PythonExtension.python()).map(
+  new PythonServiceConfig().setHandlerFile("path/to/handler.py"));
 ```
 
 And here's an example of `handler.py`:
@@ -319,10 +319,9 @@ name the Python module that declares `transform_list`:
 
 ```java
 StreamStage<String> sourceStage = sourceStage();
-StreamStage<String> pythonMapped = sourceStage.apply(PythonTransforms.mapUsingPython(
+StreamStage<String> pythonMapped = sourceStage.using(PythonExtension.python()).map(
   new PythonServiceConfig().setBaseDir("path/to/python_project")
-    .setHandlerModule("jet_handler"))
-);
+    .setHandlerModule("jet_handler"));
 ```
 
 Normally your Python code will make use of non-standard libraries. Hazelcast
@@ -1069,7 +1068,78 @@ side-effects: it logs every item it receives. Since the logging happens
 on the machine that is processing the item, this transform is primarily
 intended to be used during development.
 
-== customTransform
+== Custom transforms
+
+Pipeline API cannot cover all possible use cases but gives a few ways in which custom transformations can be added to the pipeline.
+They differ in their main intended purpose:
+
+- `apply` for reuse of common pipeline fragments or simple logic
+- `using` for more comprehensive fluent API for integration with other services or complex logic
+- `customTransform` for a low-level use of Jet features
+
+=== apply
+
+`stage.apply` allows you to extract common pipeline transformations into a reusable method
+and then use that method without interrupting the chained pipeline expression.
+
+For example, say you have this code:
+
+[source,java]
+----
+StreamStage<String> input = pipeline.readFrom(textSource);
+StreamStage<String> cleanedUp = input
+    .map(String::toLowerCase)
+    .filter(s -> s.startsWith("success"));
+----
+
+You can capture the map and filter steps into a common "cleanup" transformation:
+
+[source,java]
+----
+StreamStage<String> cleanUp(StreamStage<String> input) {
+    return input.map(String::toLowerCase)
+                .filter(s -> s.startsWith("success"));
+}
+----
+
+NOTE: When defining the custom transformation you must decide if it should be applicable to `StreamStage` or `BatchStage`.
+
+Now you can insert this transformation as just another step in your pipeline:
+
+[source,java]
+----
+StreamStage<String> tokens = pipeline
+    .readFrom(textSource)
+    .apply(this::cleanUp)
+    .flatMap(line -> traverseArray(line.split("\\W+")));
+----
+
+=== using
+
+`stage.using` enables use of stage extension that provides additional capabilities to the pipeline
+remaining as a convenient fluent API chained expression.
+
+There are some extensions available in the Hazelcast distribution:
+
+.Extensions
+|===
+|Extension |	Module	| Batch/Streaming | Description
+
+|PythonExtension
+|`hazelcast-jet-python`
+|batch, streaming
+|Fluent API for Python invocation
+
+|IMapExtension ([.enterprise]*Enterprise*)
+|`hazelcast-enterprise`
+|batch, streaming
+|Convenience methods for using IMaps in pipeline transformations
+
+|===
+
+It is also possible to implement custom extensions. For a tutorial see xref:custom-extension.adoc[].
+
+=== customTransform
 
 All the data processing in a pipeline happens inside the
 implementations of the `Processor` interface, a central part of the Jet API. With `stage.customTransform` you can provide your own

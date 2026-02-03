@@ -195,13 +195,11 @@ partial-start automatically on the members that have either the most recent or m
 
 You can make a cluster wait for a period of time before repartitioning after one or more members fail to rejoin. When a cluster stores lots of persisted data, it may take a long time to repartition the data after a member leaves the cluster. But, you may expect members to shut down and restart quickly, in which case the cluster doesn't need to repartition the data as soon as a member leaves. You can delay repartitioning for as long as you expect members to rejoin the cluster.
 
-NOTE: If you are running Hazelcast on Kubernetes, see xref:kubernetes:kubernetes-persistence.adoc[] for platform-specific guidance on rebalance delay configuration.
-
-NOTE: If you're planning a cluster-wide shutdown, you also can stop members from repartitioning by putting the cluster in a `FROZEN` state. See xref:maintain-cluster:cluster-member-states.adoc[].
-
 To delay repartitioning during a single member failure, configure a _rebalance delay_, using the <<persistence-rebalance-delay-seconds, `rebalance-delay-seconds`>> option.
 
 WARNING: If your cluster also stores in-memory data that is not persisted, do not configure a rebalance delay. Clusters do not repartition in-memory data if a member rejoins within the delay. As a result, any data that is not persisted will be lost if the member restarts within the delay, including backups.
+
+WARNING: If you are running Hazelcast on Kubernetes, do not configure a rebalance delay. See xref:kubernetes:kubernetes-persistence.adoc[] for guidance.
 
 Consider the following scenario:
 
@@ -218,6 +216,8 @@ While the member is down, operations on partitions that are owned by that member
 If member B does not restart within the rebalance delay, the cluster recovers member B's data from backups and
 repartitions the data among the remaining members (members A and C
 in this case). If member B is later restarted, it recovers its persisted data from disk and brings it up-to-date with data from members A and C. If Merkle trees are enabled on available data structures, members use those to request only missing persisted data. For details about how members use Merkle trees, see <<synch-data, Synchronizing Persisted Data Faster>>.
+
+NOTE: If you are planning a cluster-wide shutdown, you also can stop members from repartitioning by putting the cluster in a `FROZEN` state. See xref:maintain-cluster:cluster-member-states.adoc[].
 
 [[sync-data]]
 == Synchronizing Persisted Data Faster

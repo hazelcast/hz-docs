@@ -1,0 +1,135 @@
+= CPMap Purge
+:page-aliases: cpmap-purge.adoc
+
+== Overview
+
+Starting with *Hazelcast 5.7*, Hazelcast supports purging entries from CPMaps via
+`CPDataStructureManagementService`.
+
+The purge operation removes entries that are *older than a specified duration*.
+It is intended for controlled cleanup of long-lived CPMaps.
+
+Purge characteristics:
+
+* Explicit (user-invoked)
+* Linearizable
+* Asynchronous
+* Disabled by default
+
+== License Requirement
+
+The CPMap purge management API requires a license that includes:
+
+* `ADVANCED_CP`
+
+Without this license, purge operations fail with
+`UnsupportedOperationException`.
+
+== API
+
+[source,java]
+----
+CompletableFuture<BiTuple<Integer, Integer>> purgeCPMap(String mapName, Duration age);
+----
+
+=== Parameters
+
+[cols="1,3",options="header"]
+|===
+|Parameter |Description
+|`mapName` |Name of the CPMap
+|`age` |Entries older than `now - age` are eligible for purge
+|===
+
+=== Return Value
+
+Returns a `CompletableFuture` that completes with a `BiTuple`:
+
+* **first** – number of entries purged
+* **second** – the greatest remaining purge-eligible timestamp, or `-1` if none exist
+
+== Configuration Requirements
+
+Purging must be enabled explicitly per CPMap.
+
+[source,java]
+----
+CPMapConfig config = new CPMapConfig("my-cp-map");
+config.setPurgeEnabled(true);
+----
+
+If purge is not enabled, the operation fails with
+`UnsupportedOperationException`.
+
+== Preconditions and Exceptions
+
+[cols="2,2",options="header"]
+|===
+|Condition |Result
+|Cluster version < 5.7 |`UnsupportedOperationException`
+|Purge not enabled |`UnsupportedOperationException`
+|No CP group exists |`IllegalArgumentException`
+|`mapName` or `age` is `null` |`NullPointerException`
+|===
+
+CP groups are created lazily. If a CPMap has never been accessed, purge fails.
+
+== Semantics
+
+* Entries are evaluated by *creation or last update timestamp*
+* Entries newer than the specified age are retained
+* Purge is linearizable with respect to other CPMap operations
+* Purge does not run automatically or in the background
+
+=== Timestamp and Clock Semantics
+
+Each CPMap operation is assigned a timestamp by the current CP group leader.
+Purge decisions rely on these leader-assigned timestamps.
+
+Clock considerations:
+
+* A monotonic clock is recommended on CP members
+* Backward clock movement may delay purging
+* Clock drift affects purge timing only
+* CP safety and correctness are not impacted
+
+== Usage Considerations
+
+=== Small or Zero Durations
+
+Using very small durations (including `Duration.ZERO`) may purge most or all
+entries. Applications should validate parameters before invocation.
+
+== Metrics and Observability
+
+Hazelcast exposes purge metrics through Management Center and external monitoring
+systems (for example, Prometheus and Grafana).
+
+Monitoring is recommended for large CPMaps or frequent purge usage.
+
+== Large CPMaps and Operational Impact
+
+Purge is a *state-mutating Raft operation* and generates Raft log entries.
+Long-running purges may delay heartbeat processing and increase the likelihood of
+leader elections if Raft timeouts are aggressive.
+
+== Best Practices
+
+* Enable purge only where needed
+* Prefer frequent, incremental purges
+* Run purge during low cluster activity
+* Monitor purge duration and leader changes
+* Use conservative Raft election timeouts for large CP state
+
+== Summary
+
+[cols="2,2",options="header"]
+|===
+|Aspect |Description
+|Introduced in |Hazelcast 5.7
+|Enabled by default |No
+|Invocation |Manual
+|Consistency |Linearizable
+|Asynchronous |Yes
+|License |ADVANCED_CP required
+|===

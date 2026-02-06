@@ -3,7 +3,16 @@
 It is possible to implement custom reusable Pipeline API stage extensions.
 This tutorial is based on `PythonExtension` available in Hazelcast and walks step-by-step
 how it is created.
-You can check the whole production-ready implementation in the Hazelcast repository.
+
+== Before you begin
+
+`PythonExtension` already exists, but in order to recreate it in steps according to this tutorial, you will need:
+
+1. A Java project with dependency to `hazelcast` and `hazelcast-jet-python` modules
+2. Python in version compatible with Jet (see xref:transforms.adoc#_mapusingpython[mapUsingPython requirements])
+3. A Python script with function to invoke
+
+You can reuse setup from xref:python.adoc#_before_you_begin[Apply a Custom Transform with Python] tutorial.
 
 == Step 1. Define supported stage types
 
@@ -53,11 +62,11 @@ so that `map` method returns correct stage type (stream or batch) for further ch
 
 == Step 3. Define entry point for the extension
 
-Static parameterless method *(1)* is a recommended way to provide entry point to the extension for `stage.using` invocation
+Static parameterless method *(1)* is a recommended way to provide entry point to the extension for `stage.using()` invocation
 as it can be statically imported and produces a readable, fluent syntax.
 
-Note that the method provides implementations for different stage types *(2)* - appropriate implementation will be chosen automatically.
-If there are generic types (e.g. stream item type), they should be properly inferred avoiding the need to specify them explicitly.
+Note that the method provides implementations for different stage types *(2)* - Java compiler will choose appropriate variant automatically.
+If there are generic types (e.g. stream item type), the compiler will infer them properly avoiding the need to specify them explicitly.
 
 [source,java]
 ----
@@ -147,7 +156,10 @@ public void streamStage_mapUsingPython_extension() {
     var stage = p.readFrom(TestSources.items(items)).addTimestamps(x -> 0, 0);
 
     // When
-    var mapped = stage.using(python()).map(cfg).setLocalParallelism(2);     // (1)
+    var mapped = stage.using(python())
+                      .map(cfg)                    // (1)
+                      .setName("python-echo")      // (2)
+                      .setLocalParallelism(2);
 
     // Then
     mapped.writeTo(AssertionSinks.assertAnyOrder(
@@ -158,7 +170,8 @@ public void streamStage_mapUsingPython_extension() {
 ----
 
 The extension invocation *(1)* is very simple: `stage.using(python()).map(cfg)`.
-Note that `setLocalParallelism` is not provided by Python extension but by standard Stage interface.
+
+`map` returns one of the standard `Stage` interfaces, so you can customize it in the same way as with standard transforms *(2)*, by giving it a more specific name (`setName`) or configuring parallelism (`setLocalParallelism`).
 
 == Step 6. Add more capabilities
 
@@ -175,5 +188,15 @@ var mapped = sourceStage.using(python())
         .handlerModule("echo")
         .handlerFunction("handle")
         .maxBatchSize(1)
-        .map().setLocalParallelism(2);
+        .map().setName("python-echo").setLocalParallelism(2);
 ----
+
+== Summary
+
+In this tutorial, you learned how to implement and use custom stage extension in Jet Pipeline API.
+
+== Next steps
+
+1. Review the `PythonExtension` production-ready implementation in the Hazelcast repository
+2. Check other available xref:transforms.adoc#_using[stage extensions]
+3. Implement your own extension to simplify your pipeline, wrap a complex service or reuse some logic

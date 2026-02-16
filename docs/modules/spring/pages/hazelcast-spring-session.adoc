@@ -51,13 +51,13 @@ dependencies {
 
 TIP: Hazelcast Spring Session uses the same major version number as Spring Boot it was created for. For Spring Boot 4.x, the compatible Hazelcast Spring Session will be always 4.x.
 
-=== Migrate from Spring Session Hazelcast 3.x
+== Migrate from Spring Session Hazelcast 3.x
 
 From version 4.0, the Hazelcast integration with Spring Session is owned by the Hazelcast team.
 
 To migrate your application from using Spring Session Hazelcast 3.x to the new Hazelcast Spring Session 4.x:
 
-. Change the GroupId to `com.hazelcast` and artifactId to `hazelcast-spring-session`.
+. Change the GroupId to `com.hazelcast.spring` and artifactId to `hazelcast-spring-session`.
 . Update your code and change the packages. All Hazelcast-specific classes were moved from `org.springframework.session.hazelcast` to `com.hazelcast.spring.session`.
 . Remove this configuration for `PrincipalNameExtractor`:
 +
@@ -74,8 +74,8 @@ config.getMapConfig(SESSIONS_MAP_NAME)
 [source,java]
 ----
 SerializerConfig serializerConfig = new SerializerConfig();
-    serializerConfig.setImplementation(new HazelcastSessionSerializer()).setTypeClass(MapSession.class);
-    config.getSerializationConfig().addSerializerConfig(serializerConfig);
+serializerConfig.setImplementation(new HazelcastSessionSerializer()).setTypeClass(MapSession.class);
+config.getSerializationConfig().addSerializerConfig(serializerConfig);
 ----
 With a call:
 +
@@ -83,8 +83,22 @@ With a call:
 ----
 config = HazelcastSessionConfiguration.applySerializationConfig(config);
 ----
-. Index configuration for `PRINCIPAL_ATTRIBUTE_NAME` **if** no other IMap customization is wanted.
++
+Please note, that this call should be done before instance creation (before the call to `Hazelcast.newHazelcastInstance`).
+. Remove index configuration for `PRINCIPAL_ATTRIBUTE_NAME` **if** no other IMap customization is wanted; it will be configured automatically. If you want to further customize session IMap, you can:
+- create whole `MapConfig` manually and then create an index of type `HASH` on `principalName` attribute
+- or you can create a bean of type `SessionMapCustomizer` to apply your customizations on predefined `MapConfig`.
 
+=== List of breaking changes
+
+4.0.0 is a major release and it contains some breaking changes:
+
+- Group ID and artifact ID were changed to `com.hazelcast.spring` / `hazelcast-spring-session`.
+- Main package was changed from `org.springframework.session.hazelcast` to `com.hazelcast.spring.session`.
+- Serialization was reworked completely; it no longer uses an optional `HazelcastSessionSerializer`, but relies on Compact Serialization with two new serializers: `com.hazelcast.spring.session.AttributeValueCompactSerializer` and `com.hazelcast.spring.session.HazelcastSessionCompactSerializer`. Additionally serializer of `SessionUpdateEntryProcessor` will be configured automatically on server nodes if jar is deployed on server nodes.
+- The binary representation of the data was changed; Instead of using Spring's `MapSession`, it uses `com.hazelcast.spring.session.BackingMapSession` with attributes stored as `com.hazelcast.spring.session.AttributeValue`. This change was done to enable true client-server deployments, without the need for any custom code deployment on server nodes for classes used as session attributes.
+- Method `void setDefaultMaxInactiveInterval(Integer defaultMaxInactiveInterval)` in `HazelcastIndexedSessionRepository` was removed; please use an alternative with `Duration` as a parameter.
+- Most of the setter methods in `HazelcastIndexedSessionRepository` return now `HazelcastIndexedSessionRepository` (`this`) for fluent API.
 
 == Supported topologies
 

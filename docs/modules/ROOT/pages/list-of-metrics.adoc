@@ -1,18 +1,24 @@
 = List of Hazelcast Metrics
 [[appendix]]
 
-The table below lists the metrics with their explanations in grouped by their relevant subjects.
+The tables below list Hazelcast metrics and descriptions, grouped by subject.
+This page includes both member-side and client-side metrics.
 
-The metrics are collected per member and specific to the local member from which
-you collect them. For example, the distributed data structure metrics
-reflect the local statistics of that data structure for the portion
-held in that member.
+Unless noted otherwise, metrics are member-side and local to the instance that reports them.
+For members, distributed data structure metrics reflect the local statistics
+for the partition data held on that member.
 
-Some metrics may store cluster-wide agreed value, that is, they may show the values obtained
-by communicating with other members in the cluster. This type of
-metrics reflect the member's local view of the cluster (consider split-brain scenarios). The `clusterStartTime` is an example of this type of
-metrics, and its value in the local member is obtained by communicating
-with the master member.
+Some metrics represent cluster-wide agreed values obtained by communicating
+with other members in the cluster. In those cases, each value still reflects
+the local member's current view of the cluster (for example, in split-brain
+scenarios). The `clusterStartTime` metric is one example; on a local member,
+its value is obtained from the master member.
+
+Metric names on this page are canonical names. Some metrics are exposed with
+different prefixes depending on where they are collected (member, client, or
+subsystem). Sections that have prefix variants call them out explicitly.
+
+NOTE: If you use Management Center to export cluster-wide metrics to Prometheus, Management Center reformats the metrics to align with Prometheus best practice recommendations. See xref:{page-latest-supported-mc}@management-center:integrate:prometheus-monitoring.adoc[Prometheus Monitoring].
 
 .Streaming Engine Cluster-Wide Metrics
 [%collapsible]
@@ -23,9 +29,9 @@ with the master member.
 
 |blockingWorkerCount
 |Number of non-cooperative workers employed.
-.6+|_none_
+.7+|_none_
 
-Each Hazelcast member will have one instance of this metric.
+Each Hazelcast member will have one instance of each of these metrics.
 
 |jobs.submitted
 |Number of computational jobs submitted.
@@ -38,13 +44,16 @@ Each Hazelcast member will have one instance of this metric.
 
 |jobs.executionStarted
 |Number of computational job executions started. Each job can
-execute multiple times, for example when it’s restarted or
+execute multiple times, for example when it's restarted or
 suspended and then resumed.
 
 |jobs.executionTerminated
 |Number of computational job executions finished. Each job can
-execute multiple times, for example when it’s restarted or
+execute multiple times, for example when it's restarted or
 suspended and then resumed.
+
+|jobs.executionCompleted
+|Number of computational job executions completed (successfully or otherwise).
 
 |iterationCount
 |The total number of iterations the driver of tasklets in
@@ -55,8 +64,9 @@ if there are many tasklets assigned to the processor. Lower
 value affects the latency.
 .2+|_cooperativeWorker_
 
-Each Hazelcast member will have one of this metric for each of its
+Each Hazelcast member will have one instance of each of these metrics for each of its
 cooperative worker threads.
+
 
 |taskletCount
 |The number of assigned tasklets to cooperative thread N.
@@ -241,139 +251,201 @@ the watermark already having passed their windows.
 .Map
 [%collapsible]
 ====
-[cols="4,1,6a"]
+[cols="4,1,6a,1"]
 |===
 | Name
 | Unit
 | Description
+| Reset
 
 |`map.backupCount`
 |count
 |Number of backups per entry
+| C
 
 |`map.backupEntryCount`
 |count
 |Number of backup entries held by the member
+| C
 
 |`map.backupEntryMemoryCost`
 |bytes
 |Memory cost of backup entries in this member
+| C
 
 |`map.creationTime`
 |ms
 |Creation time of the map on the member
+| N
 
 |`map.dirtyEntryCount`
 |count
 |Number of updated but not persisted yet entries, dirty entries, that the member owns
+| N
+
+|`map.entrySetCount`
+|count
+|Number of entry set operations on this member
+| N
 
 |`map.evictionCount`
 |count
 |Number of evictions happened on locally owned entries, backups are not included
+| C
 
 |`map.expirationCount`
 |count
 |Number of expirations happened on locally owned entries, backups are not included
+| C
 
 |`map.getCount`
 |count
-|Number of local get operations on the map; it is incremented for every get operation even if the entries do not exist.
+|Number of local get operations on the map; it is incremented for every get operation even if the entries do not exist
+| N
 
 |`map.heapCost`
 |count
 |Total heap cost for the map on this member
+| C
 
 |`map.hits`
 |count
-|Number of reads of the locally owned entries; it is incremented for every read by any type of operation (get, set, put). So the entries should exist.
+|Number of reads of the locally owned entries; it is incremented for every read by any type of operation (get, set, put). So the entries should exist
+| C
 
 |`map.indexedQueryCount`
 |count
 |Total number of indexed local queries performed on the map
+| N
+
+|`map.indexesSkippedQueryCount`
+|count
+|Total number of local queries performed on the map which cannot use indexes
+| N
+
+|`map.noMatchingIndexQueryCount`
+|count
+|Total number of local queries performed on the map which had no matching index
+| N
 
 |`map.lastAccessTime`
 |ms
 |Last access (read) time of the locally owned entries
+| C
 
 |`map.lastUpdateTime`
 |ms
 |Last update time of the locally owned entries
+| C
 
 |`map.lockedEntryCount`
 |count
 |Number of locked entries that the member owns
+| C
 
 |`map.merkleTreesCost`
 |count
 |Total heap cost of the Merkle trees used
+| N
 
 |`map.numberOfEvents`
 |count
 |Number of local events received on the map
+| N
 
 |`map.numberOfOtherOperations`
 |count
 |Total number of other operations performed on this member
+| N
 
 |`map.ownedEntryCount`
 |count
 |Number of map entries owned by the member
+| C
 
 |`map.ownedEntryMemoryCost`
 |bytes
 |Memory cost of owned map entries on this member
+| C
 
 |`map.putCount`
 |count
 |Number of local put operations on the map
+| N
 
 |`map.queryCount`
 |count
 |Number of queries executed on the map (it may be imprecise for queries involving partition predicates (PartitionPredicate) on the off-heap storage)
+| N
+
+|`map.queryLimiterHitCount`
+|count
+|Number of times the query result size limiter was hit on this member
+| N
 
 |`map.removeCount`
 |count
 |Number of local remove operations on the map
+| N
 
 |`map.setCount`
 |count
 |Number of local set operations on the map
+| N
 
 |`map.totalGetLatency`
 |ms
 |Total latency of local get operations on the map
+| N
 
 |`map.totalMaxGetLatency`
 |ms
 |Maximum latency of local get operations on the map
+| N
 
 |`map.totalMaxPutLatency`
 |ms
 |Maximum latency of local put operations on the map
+| N
 
 |`map.totalMaxRemoveLatency`
 |ms
 |Maximum latency of local remove operations on the map
+| N
 
 |`map.totalMaxSetLatency`
 |ms
 |Maximum latency of local set operations on the map
+| N
 
 |`map.totalPutLatency`
 |ms
 |Total latency of local put operations on the map
+| N
 
 |`map.totalRemoveLatency`
 |ms
 |Total latency of local remove operations on the map
+| N
 
 |`map.totalSetLatency`
 |ms
 |Total latency of local set operations on the map
+| N
 
-3+a|
-The above `*latency` metrics are only measured for the members and they are not representing the overall performance of the cluster.
-We recommend monitoring the average latency for each operation, for example, `map.totalGetLatency` / `map.getCount` and `map.totalSetLatency` / `map.setCount`.
+|`map.valuesCount`
+|count
+|Number of values operations on this member
+| N
+
+|`map.store.offloaded.operations.waitingToBeProcessedCount`
+|count
+|Number of offloaded map store operations waiting to be processed
+| N
+
+4+a|
+The above `*latency` metrics are only measured for the members and they do not represent the overall performance of the cluster.
+Hazelcast recommends monitoring the average latency for each operation, for example, `map.totalGetLatency` / `map.getCount` and `map.totalSetLatency` / `map.setCount`.
 Increased average latency is a sign that the cluster would experience performance problems, or there is a spike in the load.
 The following may be the reasons:
 
@@ -386,50 +458,82 @@ This is because the cluster has to communicate with more members, which can add 
 |`map.index.averageHitLatency`
 |ns
 |Average hit latency for the index on this member
+| N
 
 |`map.index.averageHitSelectivity`
 |percent
 |Average selectivity of the hits served by the index on this member (the returned value is in the range from 0.0 to 1.0 - values close to 1.0 indicate a high selectivity meaning the index is efficient; values close to 0.0 indicate a low selectivity meaning the index efficiency is approaching an efficiency of a simple full scan)
+| N
 
 |`map.index.creationTime`
 |ms
 |Creation time of the index on this member
+| N
 
 |`map.index.hitCount`
 |count
 |Total number of index hits (the value of this metric may be greater than the `map.index.queryCount` since a single query may hit the same index more than once)
+| N
 
 |`map.index.insertCount`
 |count
 |Number of insert operations performed on the index
+| N
 
 |`map.index.memoryCost`
 |bytes
 |Local memory cost of the index (for on-heap indexes in OBJECT or BINARY formats, the returned value is just a best-effort approximation and doesn't indicate a precise on-heap memory usage of the index)
+| N
 
 |`map.index.queryCount`
 |count
 |Total number of queries served by the index
+| N
 
 |`map.index.removeCount`
 |count
 |Number of remove operations performed on the index
+| N
 
 |`map.index.totalInsertLatency`
 |ns
 |Total latency of insert operations performed on the index
+| N
 
 |`map.index.totalRemoveLatency`
 |ns
 |Total latency of remove operations performed on the index
+| N
 
 |`map.index.totalUpdateLatency`
 |ns
-|Total latency of update operations performed on the index.
+|Total latency of update operations performed on the index
+| N
 
 |`map.index.updateCount`
 |count
 |Number of update operations performed on the index
+| N
+
+|`map.index.partitionsIndexed`
+|count
+|Number of partitions the index is built for on the local member
+| N
+
+|`map.index.partitionUpdatesStarted`
+|count
+|Number of times a partition set change started for the index
+| N
+
+|`map.index.partitionUpdatesFinished`
+|count
+|Number of times a partition set change completed for the index
+| N
+
+|`map.index.notReadyQueryCount`
+|count
+|Number of queries which matched the index during a partition set change
+| N
 |===
 ====
 
@@ -532,6 +636,17 @@ and some invocations may be translated to `set` if there is only 1 entry.
 |`vectorCollection.searchCount`
 |count
 |Number of search operations coordinated by this member on the vector collection
+
+|`vectorCollection.searchIndexQueryCount`
+|count
+|Number of actual searches on vector index instance (partition) in this vector collection, aggregated for all indexes on the collection.
+
+Includes search retries caused by concurrent modifications and other reasons.
+If retries were not needed it should be equal to `searchCount * non-empty partitions count`. In case of retries it will be larger.
+
+|`vectorCollection.searchIndexVisitedNodes`
+|count
+|Number of graph nodes visited during searches. It is equal to the number of distance/score calculations during searches.
 
 |`vectorCollection.searchResultsCount`
 |count
@@ -652,6 +767,18 @@ This is because the cluster has to communicate with more members, which can add 
 |count
 |Number of dirty (updated but not persisted yet) entries that the member owns
 
+|`multiMap.entrySetCount`
+|count
+|Number of entry set operations on this member
+
+|`multiMap.evictionCount`
+|count
+|Number of evictions completed on locally owned entries, backups are not included
+
+|`multiMap.expirationCount`
+|count
+|Number of expirations completed on locally owned entries, backups are not included
+
 |`multiMap.getCount`
 |count
 |Number of local get operations on the multimap
@@ -667,6 +794,14 @@ This is because the cluster has to communicate with more members, which can add 
 |`multiMap.indexedQueryCount`
 |count
 |Total number of indexed local queries performed on the multimap
+
+|`multiMap.indexesSkippedQueryCount`
+|count
+|Total number of local queries performed on the multimap which cannot use indexes
+
+|`multiMap.noMatchingIndexQueryCount`
+|count
+|Total number of local queries performed on the multimap which had no matching index
 
 |`multiMap.lastAccessTime`
 |ms
@@ -708,6 +843,10 @@ This is because the cluster has to communicate with more members, which can add 
 |count
 |Number of local queries executed on the multimap (it may be imprecise for queries involving partition predicates (PartitionPredicate) on the off-heap storage)
 
+|`multiMap.queryLimiterHitCount`
+|count
+|Number of times the query result size limiter was hit on this member
+
 |`multiMap.removeCount`
 |count
 |Number of local remove operations on the multimap
@@ -747,6 +886,10 @@ This is because the cluster has to communicate with more members, which can add 
 |`multiMap.totalSetLatency`
 |ms
 |Total latency of local set operations
+
+|`multiMap.valuesCount`
+|count
+|Number of values operations on this member
 |===
 ====
 
@@ -762,6 +905,10 @@ This is because the cluster has to communicate with more members, which can add 
 |`replicatedMap.creationTime`
 |ms
 |Creation time of this replicated map on this member
+
+|`replicatedMap.entrySetCount`
+|count
+|Number of entry set operations on this member
 
 |`replicatedMap.getCount`
 |count
@@ -830,6 +977,10 @@ This is because the cluster has to communicate with more members, which can add 
 |`replicatedMap.total`
 |count
 |Total number of operations on this member
+
+|`replicatedMap.valuesCount`
+|count
+|Number of values operations on this member
 |===
 ====
 
@@ -1253,6 +1404,8 @@ This is because the cluster has to communicate with more members, which can add 
 .Clients
 [%collapsible]
 ====
+Scope: member-side only. These metrics describe clients connected to the local member.
+
 [cols="4,1,6a"]
 |===
 | Name
@@ -1272,6 +1425,8 @@ This is because the cluster has to communicate with more members, which can add 
 .Client Invocations
 [%collapsible]
 ====
+Scope: client-side only.
+
 [cols="4,1,6a"]
 |===
 | Name
@@ -1368,6 +1523,7 @@ This is because the cluster has to communicate with more members, which can add 
 |`cp.session.version`
 |count
 |Version number of the CP session, basically it shows how many times the session heartbeat is received
+
 |===
 
 NOTE: CP Subsystem metrics are {enterprise-product-name} only.
@@ -1441,6 +1597,8 @@ We also have a `summary` section per object type which provides live and destroy
 .Listeners
 [%collapsible]
 ====
+Scope: client-side only.
+
 [cols="4,1,6a"]
 |===
 | Name
@@ -1519,6 +1677,18 @@ We also have a `summary` section per object type which provides live and destroy
 .Memory
 [%collapsible]
 ====
+The names in this table use canonical `memory.` metric names.
+
+Prefix and scope variants:
+
+* Open Source member and client instance memory metrics: `memory.`
+* Enterprise member aggregate HD memory metrics: `memory.` or `memorymanager.`
+* Enterprise member per-memory-manager metrics: `memorymanager.stats.`
+
+The same metric values can be exposed under multiple prefixes.
+Depending on the configured memory allocation type, `memorymanager.stats.`
+values can overlap with `memorymanager.` values.
+
 [cols="4,1,6a"]
 |===
 | Name
@@ -1578,6 +1748,11 @@ We also have a `summary` section per object type which provides live and destroy
 .High-Density (HD) Memory Store
 [%collapsible]
 ====
+Scope: member-side only. {enterprise-product-name} only.
+
+These metrics are provided for data structures using HD memory. They will be
+prefixed with the relevant data structure prefix (e.g. `map.`).
+
 [cols="4,1,6a"]
 |===
 | Name
@@ -1605,6 +1780,12 @@ We also have a `summary` section per object type which provides live and destroy
 .Near Cache
 [%collapsible]
 ====
+Scope: member-side and client-side.
+
+The names in this table use the client prefix form (`nearcache.`). For
+member-side Near Cache metrics, use `map.nearcache.` with the same suffix.
+The same metric values and semantics apply on both sides.
+
 [cols="4,1,6a"]
 |===
 | Name
@@ -2368,6 +2549,10 @@ Based on your latency tolerance in your business use case, you can define a thre
 |count
 |Number of times that I/O exceptions are thrown during selection
 
+|`tcp.inputThread/outputThread.selectorRebuildCount`
+|count
+|Number of times the selector was recreated on this NioThread
+
 |`tcp.inputThread/outputThread.taskQueueSize`
 |count
 |Number of pending tasks on the queue of NioThread
@@ -2480,6 +2665,10 @@ Based on your latency tolerance in your business use case, you can define a thre
 |`wan.outboundQueueSize`
 |count
 |Total number of WAN events currently placed in the WAN queues of primary partitions on this member
+
+|`wan.queueFillPercent`
+|percent
+|Percentage of the WAN replication queue that is filled
 
 |`wan.removeCount`
 |count

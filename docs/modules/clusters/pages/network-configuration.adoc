@@ -9,21 +9,24 @@ available configurations that you can perform under the `network` element.
 [[public-address]]
 == Public Address
 
-`public-address` overrides the public address of a member. By default, a member
-selects its socket address as its public address.
+`public-address` overrides the address that a member advertises to other members
+and clients. By default, a member advertises its socket address.
 
-`public-address`
-can be set to any reachable address or hostname that clients should use to connect to the member.
+`public-address` is a Hazelcast configuration value (`host:port`), not a specific
+infrastructure object such as a "public IP address". It can be any reachable
+address or hostname that other members and clients should use to connect.
+
 Common use cases include:
 
 * **NAT environments**: When members are behind NAT, set the public address to the
-  externally visible address so that other members and clients can reach them.
+  externally visible `host:port` so that other members and clients can reach them.
 * **Private cloud deployments**: When the member's socket address is not directly
   accessible from outside the private network.
 
 The value can be specified as either:
 
-* An IP address with port: `11.22.33.44:5555`
+* A public IP address with port: `11.22.33.44:5555`
+* A private IP address with port: `10.10.1.25:5701`
 * A hostname with port: `member1.example.com:5555`
 
 See the following examples.
@@ -66,17 +69,19 @@ config.getNetworkConfig()
 
 === How Public Address Affects Hazelcast Features
 
-The `public-address` setting is primarily used for client connections. It does not change
-how members communicate with each other internally. Understanding this distinction is
-important when configuring your cluster:
+The `public-address` setting controls which endpoint a member advertises. Members
+still bind and listen on their local bind address, but peers and clients connect
+using advertised addresses. Understanding this distinction is important when
+configuring your cluster:
 
 [cols="1,3"]
 |===
 |Feature |Behavior with Public Address
 
 |**Member-to-member communication**
-|Always uses the primary member address (bind address), not the public address.
-Members within the cluster communicate directly using their internal addresses.
+|Members listen on their bind address, but discover and connect to each other
+using advertised addresses. If `public-address` is set, other members use that
+value.
 
 |**Client connections**
 |Clients can use the public address to connect to members. This requires either
@@ -95,7 +100,7 @@ For clients to use members' public addresses, configure the
 `hazelcast.discovery.public.ip.enabled` property on the client:
 
 * `true`: The client always uses public addresses reported by members. If the member does not declare
-a public IP, the client will fallback to using the private IPs as reported by the member list.
+  a public address, the client falls back to private IPs as reported by the member list.
 * `false`: The client always uses private (internal) addresses reported by members.
 * Not set (default): The client attempts to infer which address type to use based on
   reachability. See xref:clients:java.adoc#client-system-properties[Client System Properties]

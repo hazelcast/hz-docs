@@ -3,24 +3,18 @@
 
 == Overview
 
-Starting with *Hazelcast 5.7*, Hazelcast supports purging entries from `CPMap`s via
-`CPDataStructureManagementService`.
+Starting with *Hazelcast 5.7*, Hazelcast supports purging entries
+from `CPMap`s via `CPDataStructureManagementService`. A `CPMap` must
+be explicitly enrolled into purge semantics using configuration.
+By default, a `CPMap` is not configured to support purge semantics.
 
 The purge operation removes entries that are *older than a specified duration*.
 It is intended for controlled cleanup of long-lived `CPMap`s.
 
-Purge characteristics:
-
-* Explicit (user-invoked)
-* Linearizable
-* Asynchronous
-* Disabled by default
-
 == License Requirement
 
-The CPMap purge management API requires a license that includes:
-
-* `ADVANCED_CP`
+The `CPMap` purge management API (`CPDataStructureManagementService`)
+requires a license that includes the `ADVANCED_CP` feature.
 
 Without this license, purge operations fail with
 `UnsupportedOperationException`.
@@ -48,18 +42,87 @@ Returns a `CompletableFuture` that completes with a `BiTuple`:
 * **first** – number of entries purged
 * **second** – the greatest remaining purge-eligible timestamp, or `-1` if none exist
 
-== Configuration Requirements
+### Usage Example
 
-Purging must be enabled explicitly per CPMap.
+The following example purges entries older than 5 days from a `CPMap`:
 
 [source,java]
 ----
-CPMapConfig config = new CPMapConfig("my-cp-map");
-config.setPurgeEnabled(true);
+HazelcastInstance hzMemberInstance = Hazelcast.newHazelcastInstance();
+
+String MAP = "my-cp-map";
+
+CompletableFuture<BiTuple<Integer, Integer>> future =
+hzMemberInstance.getCPSubsystem()
+.getCPDataStructureManagementService()
+.purgeCPMap(MAP, Duration.ofDays(5));
+
+future.thenAccept(result -> {
+int purgedEntryCount = result.element1();
+int greatestRemainingEligibleTimestamp = result.element2();
+
+System.out.println("Purged entries: " + purgedEntryCount);
+System.out.println("Greatest remaining eligible timestamp: "
+        + greatestRemainingEligibleTimestamp);
+
+});
 ----
 
-If purge is not enabled, the operation fails with
-`UnsupportedOperationException`.
+The returned `CompletableFuture` completes when the purge operation
+is committed to the CP group.
+
+The result contains:
+
+* **element1** – number of entries removed
+* **element2** – the greatest remaining purge-eligible timestamp, or `-1` if none exist
+
+## Configuration Requirements
+
+Purging must be enabled explicitly for each `CPMap`.
+By default, purge support is disabled.
+
+If purge is not enabled for a given `CPMap`, invoking
+`purgeCPMap()` results in an `UnsupportedOperationException`.
+
+---
+
+### Configuring via XML
+
+[source,xml]
+<cp-subsystem>
+    ...
+    <maps>
+        <map>
+            <name>myCpMapName</name>
+            <purge-enabled>true</purge-enabled>
+        </map>
+    </maps>
+    ...
+</cp-subsystem>
+
+### Configuring via YAML
+
+[source,yaml]
+  cp-subsystem:
+   ...
+    maps:
+      myCpMapName:
+        purge-enabled: true
+
+### Configuring Programmatically
+
+[source,java]
+----
+Config config = new Config();
+CPSubsystemConfig cpSubsystemConfig = config.getCPSubsystemConfig();
+
+CPMapConfig cpMapConfig = new CPMapConfig("my-cp-map-name");
+cpMapConfig.setPurgeEnabled(true);
+
+----
+
+*** The configuration must be applied before the cluster starts.
+Changing purge settings at runtime is not supported.
 
 == Preconditions and Exceptions
 
@@ -107,6 +170,37 @@ systems (for example, Prometheus and Grafana).
 
 Monitoring is recommended for large `CPMap`s or frequent purge usage.
 
+Here is the updated **Metrics and Observability** section with explanations of the purge-related metrics included.
+
+You can replace the existing section with the following:
+
+---
+
+## Metrics and Observability
+
+Hazelcast exposes purge metrics through Management Center and external monitoring
+systems (for example, Prometheus and Grafana).
+
+Monitoring is strongly recommended for large `CPMap`s or when purge is invoked
+frequently, since purge is a state-mutating Raft operation.
+
+The following metrics are available for `CPMap` purge:
+
+### `pendingPurgeCount`
+Current number of purge-able entries.
+
+### `lastPurgedCount`
+Number of entries removed during the most recently completed purge operation.
+
+### `totalPurgedCount`
+Cumulative number of entries removed since the node started.
+
+### `lastPurgeDurationNanos`
+Duration (in nanoseconds) of the most recently completed purge.
+
+### `maxPurgeDurationNanos`
+Maximum observed purge duration (in nanoseconds) since node startup.
+
 == Large CPMaps and Operational Impact
 
 Purge is a *state-mutating Raft operation* and generates Raft log entries.
@@ -116,7 +210,6 @@ leader elections if Raft timeouts are aggressive.
 == Best Practices
 
 * Enable purge only where needed
-* Prefer frequent, incremental purges
 * Run purge during low cluster activity
 * Monitor purge duration and leader changes
 * Use conservative Raft election timeouts for large CP state

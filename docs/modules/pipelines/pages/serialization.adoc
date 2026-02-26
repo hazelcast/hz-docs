@@ -162,6 +162,10 @@ This sink accepts `toEntryProcessorFn`, a function that creates an `EntryProcess
 Because `toEntryProcessorFn` is part of the pipeline definition, it is serialized with Java serialization.
 Only variables captured by `toEntryProcessorFn` must be Java-serializable.
 
+Other `IMap` sinks that accept lambdas follow the same captured variable rule,
+but `Sinks.mapWithEntryProcessor()` adds one extra level of indirection because you pass
+a factory for `EntryProcessor` instances.
+
 The following examples omit unrelated method parameters for brevity:
 
 ```java
@@ -209,6 +213,15 @@ Compact and Java serialization can both be involved in the same pipeline, but at
 * For pipeline definition objects (for example lambdas and captured variables), Java serialization rules apply.
 * For runtime data movement and storage, Compact serialization rules apply.
 * If a class is used in both contexts, it may need both a Java serialization compatible form and a Compact serializer.
+
+=== Compact Serializers and Jet Jobs
+
+When using Compact serialization with Jet, keep the following limits and recommendations in mind:
+
+* Unlike `StreamSerializer`, `CompactSerializer` is currently not supported for single-job registration with `JobConfig.registerSerializer()`.
+* Explicit `CompactSerializer` implementations must be registered in member configuration.
+* Avoid Zero Config Compact Serialization for classes attached to jobs, because repeated job classloading can lead to classloader leaks and `ClassCastException`.
+* Prefer keeping Compact-serializable DTOs and related classes on the member classpath.
 
 == Serialization of Data Types
 

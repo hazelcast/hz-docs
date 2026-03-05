@@ -102,7 +102,13 @@ We'll assume you're using an IDE. Create a blank Java project named
 This code generates a stream of numbers and lets Python take their
 square roots. Make sure to set the right path in the `.baseDir` line:
 
-```java
+[tabs]
+====
+New API (`PythonExtension`)::
++
+--
+[source,java]
+----
 package org.example;
 
 import com.hazelcast.core.Hazelcast;
@@ -131,7 +137,41 @@ public class JetJob {
     hz.getJet().newJob(pipeline, cfg);
   }
 }
-```
+----
+--
+Old API (`PythonTransforms`)::
++
+[source,java]
+----
+package org.example;
+
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.jet.config.JobConfig;
+import com.hazelcast.jet.pipeline.*;
+import com.hazelcast.jet.pipeline.test.TestSources;
+import com.hazelcast.jet.python.PythonServiceConfig;
+
+import static com.hazelcast.jet.python.PythonTransforms.mapUsingPython;
+
+public class JetJob {
+  public static void main(String[] args) {
+    Pipeline pipeline = Pipeline.create();
+    pipeline.readFrom(TestSources.itemStream(10, (ts, seq) -> String.valueOf(seq)))
+    .withoutTimestamps()
+    .apply(mapUsingPython(new PythonServiceConfig()
+            .setBaseDir("<python_src>")
+            .setHandlerModule("take_sqrt")))
+    .setLocalParallelism(1)
+    .writeTo(Sinks.logger());
+
+    JobConfig cfg = new JobConfig().setName("python-function");
+    HazelcastInstance hz = Hazelcast.bootstrappedInstance();
+    hz.getJet().newJob(pipeline, cfg);
+  }
+}
+----
+====
 
 You may run this code from your IDE and it will work, but it will create
 its own Hazelcast member. `bin/hz-cli` directory is in the distribution which is downloaded before. To run it on the

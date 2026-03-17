@@ -115,9 +115,13 @@ In some deployment scenarios, you may want to prevent a CP group member from bec
 
 image:autostepdown-deployment.svg[Distributed CP Group deployment]
 
-If the CP group leader is in one of the local data centers -- and there are enough local followers to achieve quorum -- the leader will not need to wait for acknowledgements from followers in the remote data center and so the increased latency will have no impact. If the leader is in the remote data center, there will be a higher latency for client operations and this will reduce the maximum throughput achievable. To maximize throughput, you can force CP members in the remote data center to automatically transfer leadership to another member by enabling <<auto-step-down-when-leader, `auto-step-down-when-leader`>>. The increased latency will then only have an impact if a remote data center member is needed to achieve quorum.
+If the CP group leader is in one of the local data centers -- and there are enough local followers to achieve quorum -- the leader will not need to wait for acknowledgements from followers in the remote data center and so the increased latency will have no impact. If the leader is in the remote data center, there will be a higher latency for client operations and this will reduce the maximum throughput achievable. To avoid this scenario, you can enable <<auto-step-down-when-leader, `auto-step-down-when-leader`>> to force CP members in the remote data center to automatically transfer leadership to another member. The increased latency will then only have an impact if a remote data center member is needed to achieve quorum.
 
-In the Raft algorithm, a member must become leader if it has the most recent log in the group. In this case, a member with <<auto-step-down-when-leader, `auto-step-down-when-leader`>> enabled will become leader but immediately trigger the leadership rebalancing task, and will reject client operations. If the leadership rebalancing task fails, it will retry automatically. Client operations continue to be rejected until a new leader is elected.
+In the Raft algorithm, a member must become leader if it has the most recent log in the group. In this case, a member with `auto-step-down-when-leader` enabled will become leader and transfer the latest state to another member. It will then trigger the leadership rebalancing task, and will reject client operations. If the leadership rebalancing task fails, it will retry automatically. Client operations continue to be rejected until a new leader is elected.
+
+If two members are equally up-to-date, they are equally likely to become leader. To avoid `auto-step-down` members becoming leader in this scenario, the CP Subsystem extends the Raft algorithm with a pre-vote mechanism. If a voter receives a pre-vote request from an `auto-step-down` candidate, it will reject the request when the voter's log term and log index are equal to the candidate's. This prevents the election, reducing churn.
+
+TIP: You can observe leadership transitions by searching for `LEADER (TRANSFERRING_LEADERSHIP)` in the logs. See xref:maintain-cluster:logging.adoc[].
 
 Reducing the number of leadership candidates reduces the fault tolerance of the CP Subsystem. You should therefore only enable this feature if it is necessary to achieve your throughput requirements, and you should enable it on as few members as possible. This feature does not apply to the `METADATA` group, which is not sensitive to latency.
 
@@ -1570,7 +1574,7 @@ config.getCPSubsystemConfig()
 ====
 
 |[[auto-step-down-when-leader]]`auto-step-down-when-leader`
-|Whether this member should automatically step down if elected leader. If enabled, `cp-member-priority` must be set to zero or below. If set on all members in a group, the CP Subsystem will fail with an `IllegalStateException`.
+|Whether this member should automatically step down if elected leader. If enabled, `cp-member-priority` must be set to zero or below. This can only be enabled on a minority of CP members in a group (for example, two out of five). Operations that would cause this limit to be exceeded are rejected.
 
 |false
 |

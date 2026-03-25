@@ -1,10 +1,68 @@
 = Enterprise Edition Release Notes
 :description: These release notes list any new features, enhancements, fixes, security issues and breaking changes that were made for Hazelcast Platform {enterprise-product-name}.
 :page-enterprise: true
+:page-aliases: release-notes:5-6-1.adoc
 
 {description}
 
 For help downloading Hazelcast {enterprise-product-name}, see xref:getting-started:install-enterprise.adoc[] or https://hazelcast.com/trial-request/?utm_source=docs-website[request a trial license key].
+
+== 5.6.1
+
+**Release date**: 2026-03-25
+
+* <<enhancements>>
+* <<fixes>>
+* <<deprecations>>
+* <<security>>
+* <<contributors>>
+
+=== Enhancements
+
+* *Improved clarity of “Max native memory size per partition” warning in member logs*: Enhanced the warning message logged when the calculated native memory size per partition exceeds the recommended threshold. The updated message now makes the calculation basis explicit, clarifies the rationale behind the recommendation, and advises when the warning can be safely ignored.
+
+* *Improved Map and Cache Event Journal cleanup to prevent memory leaks*: Enhanced the cleanup process for event journals to prevent unbounded heap growth on backup replicas. Cleanup now runs on both primary and backup replicas before add operations. A new cluster property, `hazelcast.journal.cleanup.threshold`, was also introduced to trigger cleanup when the journal’s remaining capacity drops below a configured threshold.
+
+=== Fixes
+
+* *Fixed database errors and potential data loss after cluster network recovery*: Resolved an issue where reconnecting nodes could cause duplicate database write operations when using a write-behind MapStore. During a split-brain recovery, the system could keep old background tasks running alongside new ones, leading to database conflicts and lost updates. The fix ensures that old tasks are properly stopped during the merge process. This guarantees that only a single process writes to the database, ensuring reliable data persistence and preventing database errors.
+
+* *Improved validation for null client cluster name configuration*: Resolved an issue where setting a `null` cluster name via `ClientConfig#setClusterName(null)` resulted in a `NullPointerException` during client connection with an unclear error message. The fix introduces fail-fast validation that throws an `IllegalArgumentException` when a null cluster name is configured, helping users identify the configuration problem earlier and with a clearer error message.
+
+* *Fixed premature database writes for the first entry in write-behind maps*: Resolved an issue where the first item added to a write-behind map could be flushed to the external data store before the configured write delay had expired. This rare behavior occurred when the internal queue initialization and the initial data insertion happened within the exact same millisecond, causing a timing collision. The fix ensures that the configured write delay is strictly respected for all entries, preventing unexpected early database writes and maintaining consistent write-behind behavior.
+
+* *Fixed IMap mutations failing after graceful shutdown when persistence is enabled*: Resolved an issue where certain shutdown-and-migration scenarios could leave stale records in the persistence store, later crashing the GC thread and causing subsequent `IMap` updates to fail until the member is restarted. The fix ensures persisted state is cleaned up correctly during migration so `IMap` operations remain reliable.
+
+* *Improved IMap destruction to reduce tail latency and prevent data leaks*: Resolved an issue where destroying large NATIVE memory IMaps could enqueue destroy operations for all partitions at once, causing partition threads to process long blocks of destroy tasks and delaying other partitioned operations. The fix introduces batched execution of partition destroy operations, allowing normal operations to run between batches and significantly reducing tail latency. Additionally, the change prevents a potential data leak scenario where partition migrations during destruction could leave map data undeleted.
+
+* *Fixed CP Subsystem snapshot aliasing on restore*: Under certain conditions, the initialization of CP Session IDs was inconsistent, causing a new follower to encounter exceptions while catching up from the RaftLog. This issue creates Session ID litter, which will eventually resolve once a CP leadership change occurs. The defect is not a regression and does not impact data replication or memory usage.
+
+* *Fixed cluster data migration failures if TRACE logging was enabled*: Resolved an issue where the cluster could get stuck while moving data between nodes. This occurred because an internal error could be triggered when the system attempted to write diagnostic logs at the exact same time as other background tasks were completing. The fix ensures that the internal logging mechanism safely handles simultaneous operations, allowing data migrations to complete smoothly and reliably.
+
+* *Fixed potential CP Subsystem state inconsistency after snapshot restore*: Resolved an issue where restored CP Subsystem state could be unintentionally changed by ongoing operations, leading to inconsistent behavior after recovery. The fix ensures that recovered data is no longer unintentionally modified by ongoing cluster operations.
+
+=== Security
+
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2025-33042[CVE-2025-33042] in Avro*: Fixed a vulnerability by upgrading the Avro and Parquet dependencies.
+
+* *Security Advisory regarding Elasticsearch 7*: https://nvd.nist.gov/vuln/detail/CVE-2025-66566[CVE-2025-66566] has been identified in Elasticsearch 7. As Elasticsearch 7 is currently End of Life (EOL), no upstream fix is available from the vendor. We strongly recommend that users evaluate the security risks associated with this CVE. Support for Elasticsearch 7 will be removed in a future version of Hazelcast.
+
+* *Fixed unrestricted attribute access during query lookups*: Resolved an issue where query lookups could access attributes that should not be exposed during query evaluation. The fix adds configurable restrictions on which attributes can be accessed, improving security and giving users more control over query behavior.
+
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2025-12183[CVE-2025-12183] in LZ4 Java*: Fixed a vulnerability by upgrading the LZ4 Java dependency.
+
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2025-59419[CVE-2025-59419] in Netty*: Fixed a vulnerability by upgrading the Netty dependency.
+
+* *Resolved https://nvd.nist.gov/vuln/detail/CVE-2026-22731[CVE-2026-22731], https://nvd.nist.gov/vuln/detail/CVE-2026-22733[CVE-2026-22733], https://nvd.nist.gov/vuln/detail/CVE-2026-22737[CVE-2026-22737], and https://nvd.nist.gov/vuln/detail/CVE-2026-22735[CVE-2026-22735] in Spring Boot*: Fixed vulnerabilities by upgrading the Spring Boot dependency.
+
+* *Resolved https://github.com/advisories/GHSA-72hv-8253-57qq[GHSA-72hv-8253-57qq] in Jackson*: Fixed a vulnerability by upgrading the Jackson dependency.
+
+=== Contributors
+
+We would like to thank the contributors from our open source community
+who worked on this release:
+
+* https://github.com/brianjones[Brian Jones]
 
 == 5.6.0
 

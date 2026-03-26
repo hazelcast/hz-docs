@@ -111,19 +111,23 @@ IMPORTANT: <<cp-member-priority, `cp-member-priority`>> does not override the Ra
 [[autostepdown]]
 == Configure members to transfer leadership
 
-In some deployment scenarios, you may want to prevent a CP group member from becoming the leader. For example, if your CP group is distributed across two local data centers and one remote data center for geographic redundancy, there may be a significantly higher latency to the remote data center.
+In some deployment scenarios, you may want to prevent a CP group member from becoming the leader. For example, if your CP group is distributed across two local data centers and one remote data center for geographic redundancy, there may be a higher latency to the remote data center. The following diagram shows an example deployment distributed across three data centers.
 
-image:autostepdown-deployment.svg[Distributed CP Group deployment]
+image:autostepdown-deployment.svg[CP Group deployment with multiple data centers]
 
-If the CP group leader is in one of the local data centers -- and there are enough local followers to achieve quorum -- the leader will not need to wait for acknowledgements from followers in the remote data center and so the increased latency will have no impact. If the leader is in the remote data center, there will be a higher latency because each quorum calculation will be limited by the slowest roundtrip time, reducing throughput. There may also be increased latency between clients and the remote data center. To avoid this scenario, you can enable <<auto-step-down-when-leader, `auto-step-down-when-leader`>> to force CP members in the remote data center to automatically transfer leadership to another member. The increased latency will then only have an impact if a remote data center member is needed to achieve quorum.
+If the CP group leader is in one of the local data centers -- and there are enough local followers to achieve quorum -- the leader will not need to wait for acknowledgements from follower(s) in the remote data center and so the increased latency will have no impact. If the leader is in the remote data center, there will be a higher latency because each quorum calculation will be limited by the slowest roundtrip time, reducing throughput. There will also be an increased risk of instability and election timeouts due to longer snapshot transfer windows from the leader, and there may be higher latency between clients and the remote data center.
 
-In the Raft algorithm, a member *must* become leader if it has the most recent log in the group (https://raft.github.io/raft.pdf[In Search of an Understandable Consensus Algorithm] section 5.4.1, _Election restriction_). In this case, a member with `auto-step-down-when-leader` enabled will become leader to safely transfer leadership to another member. Client operations are rejected, but they are retried internally and should succeed once a new leader is elected.
+To avoid this scenario, you can enable <<auto-step-down-when-leader, `auto-step-down-when-leader`>> to force CP members in the remote data center to automatically transfer leadership to another member. The increased latency will then only have an impact if a remote member is needed to achieve quorum.
 
-If two members are equally up-to-date, they are equally viable leadership candidates. To help avoid `auto-step-down` members becoming leader in this scenario, a voter can reject a pre-vote request from an `auto-step-down` candidate when the log term and log index are the same. This biases elections towards members that do not have `auto-step-down` configured.
+IMPORTANT: Reducing the number of leadership candidates can improve stability in certain deployment scenarios, but it reduces availability and fault tolerance. You should therefore only enable this feature if it is necessary to achieve your throughput requirements, and you should enable it on as few members as possible (up to a maximum of `(N - 1) / 2`). 
+
+In the Raft algorithm election process, a member *must* become leader if it has the most up-to-date log in the group (https://raft.github.io/raft.pdf[In Search of an Understandable Consensus Algorithm] section 5.4.1, _Election restriction_). It is possible that the only available candidate is a member with `auto-step-down-when-leader` enabled. In this case, the `auto-step-down` member will become leader to safely transfer its up-to-date log to another member. The `auto-step-down` member rejects client operations, but they are retried internally and should succeed once the new leader is elected.
+
+If two members are equally up-to-date, they are equally viable leadership candidates in an election. To help avoid `auto-step-down` members becoming leader in this scenario, a voter can reject a pre-vote request from an `auto-step-down` candidate when the log term and log index are the same as its own. This biases elections towards members that do not have `auto-step-down` configured.
 
 TIP: You can observe leadership transitions by searching for `LEADER (TRANSFERRING_LEADERSHIP)` in the logs. See xref:maintain-cluster:logging.adoc[].
 
-Reducing the number of leadership candidates reduces the fault tolerance of the CP Subsystem. You should therefore only enable this feature if it is necessary to achieve your throughput requirements, and you should enable it on as few members as possible (up to a maximum of `(N - 1) / 2`). This feature does not apply to the `METADATA` group, which is not sensitive to latency.
+This feature does not apply to the `METADATA` group, which is not sensitive to latency.
 
 [[sessions]]
 == Configure CP sessions

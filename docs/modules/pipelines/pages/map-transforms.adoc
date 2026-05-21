@@ -1,7 +1,7 @@
 = Map Transforms
 
-You can use IMap to perform transformations of the items in the pipeline.
-The simplest `mapUsingIMap` transformation is available in the xref:pipelines:transforms.adoc#_mapusingimap[stage API itself].
+You can use IMap to perform transformations of the items in the pipeline, for example to lookup dictionary values or enrich the data.
+The simplest xref:pipelines:transforms.adoc#_mapusingimap[`mapUsingIMap` transformation] is available in the stage API itself.
 
 [#_map_transforms]
 == IMapExtension ([.enterprise]*{enterprise-product-name}*)
@@ -12,6 +12,17 @@ More advanced transformations are provided in `IMapExtension`:
 
 All these transformations provide `AT_LEAST_ŃONCE` processing guarantees.
 They are not transactional, but rely on sources to retry events in case of failure.
+
+It is possible to customize some parameters of the transformation:
+
+- `maxConcurrentOps` - sets maximum number of concurrent async operations
+- `doNotPreserveOrder` - disables preservation of ordering of the input items
+
+These parameters must be configured before `mapUsingPutIfAbsent` is invoked.
+Some standard stage parameters can also be configured for the created stage:
+- `setName` - more meaningful stage name
+- `setLocalParallelism` - local parallelism of the stage
+
 
 The following example records first occurrence of a key from given bucket
 and detects subsequent occurrences allowing to react differently to them.
@@ -50,3 +61,23 @@ Notice that some entries appear in different order due to parallelism, but the i
 Final IMap contents: [1=1, 2=2, 3=3]
 ----
 
+The following example demonstrates how to use all available settings:
+
+[source,java]
+----
+import static com.hazelcast.jet.pipeline.IMapExtension.iMapExtension;
+
+Pipeline p = Pipeline.create();
+p.readFrom(TestSources.items(1, 2, 3, 11, 12, 13, 21, 22, 23))
+    .rebalance(e -> e % 10)
+    .using(iMapExtension())
+    .doNotPreserveOrder()
+    .maxConcurrentOps(32)
+    .mapUsingPutIfAbsent("some-map",
+            e -> e % 10,
+            e -> e,
+            Tuple3::tuple3)
+    .setName("store-first-by-bucket")
+    .setLocalParallelism(8)
+    .writeTo(Sinks.logger());
+----

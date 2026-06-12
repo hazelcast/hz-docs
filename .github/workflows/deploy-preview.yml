@@ -21,12 +21,30 @@ jobs:
         run: npm ci
 
       - name: Build site
-        run: npm run build
+        run: |
+           node_modules/.bin/load-global-playbook \
+              -r hazelcast/hz-docs \
+              -b "${BRANCH}"
+            node_modules/.bin/antora \
+               --to-dir docs \
+               --log-level=warn \
+               --log-failure-level=warn \
+               --fetch global-antora-playbook.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          BRANCH: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.ref_name }}
 
       - name: Deploy to Netlify
-        run: npx netlify-cli deploy --no-build --dir=docs --context=deploy-preview
+        id: netlify-deploy
+        run: |
+          DEPLOY_OUTPUT=$(npx netlify-cli deploy --no-build --dir=docs --json)
+          echo "deploy_url=$(echo "${DEPLOY_OUTPUT}" | jq -r '.deploy_url')" >> "${GITHUB_OUTPUT}"
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0  # v3.0.4
+        with:
+          message: "Preview deployment: ${{ steps.netlify-deploy.outputs.deploy_url }}"

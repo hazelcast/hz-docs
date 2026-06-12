@@ -1,15 +1,35 @@
 name: Deploy preview
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [main, 'v/*']
   workflow_dispatch:
 
 jobs:
+  check_for_membership:
+    runs-on: ubuntu-latest
+    name: Check PR author membership
+    outputs:
+      check-result: ${{ steps.composite.outputs.check-result }}
+    steps:
+      - name: Action for membership check
+        id: composite
+        uses: hazelcast/hazelcast-tpm/membership@main
+        with:
+          member-name: ${{ github.triggering_actor }}
+          token: ${{ secrets.GH_TOKEN }}
+
   build-and-deploy:
     runs-on: ubuntu-latest
+    needs: check_for_membership
 
     steps:
+      - name: Detect untrusted community PR
+        if: ${{ needs.check_for_membership.outputs.check-result == 'false' && github.event.pull_request.user.login != 'dependabot[bot]' }}
+        run: |
+          echo "::error::Untrusted external PR. Must be reviewed and executed by Hazelcast"
+          exit 1
+
       - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v6
@@ -32,7 +52,7 @@ jobs:
                --fetch global-antora-playbook.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          BRANCH: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.ref_name }}
+          BRANCH: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref || github.ref_name }}
 
       - name: Deploy to Netlify
         id: netlify-deploy
@@ -44,7 +64,7 @@ jobs:
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
 
       - name: Comment preview URL on PR
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request_target'
         uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0  # v3.0.4
         with:
           message: "Preview deployment: ${{ steps.netlify-deploy.outputs.deploy_url }}"

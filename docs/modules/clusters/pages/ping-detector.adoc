@@ -40,10 +40,15 @@ the above requirement, on Linux, you have the ability to define extra capabiliti
 to a single process, which would allow the process to interact with the RAW sockets.
 This interaction is achieved via the capability `cap_net_raw`
 (see https://linux.die.net/man/7/capabilities[https://linux.die.net/man/7/capabilities^]).
-To enable this capability run the following command:
+To enable this capability, either run Hazelcast with `cap_net_raw` ambient capabilities (preferred):
++
+`sudo capsh --caps="cap_net_raw,cap_setgid,cap_setuid+eip" --keep=1 --user=hazelcast --addamb=cap_net_raw -- -c "hz start"`
++
+Or set capabilities directly on the Java executable:
 +
 `sudo setcap cap_net_raw=+ep <JDK_HOME>/jre/bin/java`
 +
+But note that choosing this latter option enables RAW socket capabilities for all Java programs, not just Hazelcast.
 * **When running with custom capabilities, the dynamic linker on Linux rejects
 loading the libs from untrusted paths.** Since you have now `cap_net_raw` as a
 custom capability for a process, it becomes suspicious to the dynamic linker
@@ -65,11 +70,11 @@ To be able to use the Ping Failure Detector, you can configure it
 using the `icmp` element in your Hazelcast declarative configuration
 file, e.g., `hazelcast.xml`. An example is shown below:
 
-[tabs] 
-==== 
-XML:: 
-+ 
--- 
+[tabs]
+====
+XML::
++
+--
 [source,xml]
 ----
 <hazelcast>

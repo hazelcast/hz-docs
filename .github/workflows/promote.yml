@@ -1,0 +1,115 @@
+name: Promote Release
+run-name: ${{ github.workflow }} (`${{ inputs.VERSION }}`@${{ inputs.ENVIRONMENT }})
+
+on:
+  # Called from release orchestrator
+  workflow_dispatch:
+    inputs:
+      VERSION:
+        description: 'The version to promote (e.g. `5.4.1`)'
+        required: true
+      RELEASE_TYPE:
+        description: 'What should be promoted'
+        required: true
+        type: choice
+        options:
+          - ALL
+          - OSS
+          - EE
+      ENVIRONMENT:
+        description: 'Environment to use'
+        required: true
+        type: environment
+      distinct_id:
+        description: 'Required exclusively for automated execution to track status of workflow execution'
+        required: false
+
+jobs:
+  prepare:
+    # we need to use GH runners for now as there's a GH issue with triggering jobs on ubicloud in a private sandbox fork ff
+    runs-on: ubuntu-slim
+    steps:
+        # https://github.com
+      - name: Logging distinct ID (${{ inputs.distinct_id }})
+        run: echo "${DISTINCT_ID}"
+        env:
+          DISTINCT_ID: ${{ inputs.distinct_id }}
+
+  promote:
+    # we need to use GH runners for now as there's a GH issue with triggering jobs on ubicloud in a private sandbox fork
+    runs-on: ${{ github.event.repository.fork && 'ubuntu-latest' || 'ubicloud-standard-2' }}
+    needs: prepare
+    environment:
+      name: ${{ inputs.ENVIRONMENT }}
+      deployment: false
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
+    env:
+      RELEASE_VERSION: ${{ inputs.VERSION }}
+    steps:
+      - name: Checkout `release` branch
+        uses: actions/checkout@v7
+        with:
+          path: ${{ env.RELEASE_VERSION }}
+
+      - name: Checkout `main` automation scripts
+        uses: actions/checkout@v7
+        with:
+          path: src-scripts
+
+      - name: Get release info
+        id: get-rel-info
+        uses: hazelcast/mono-actions/release-info@DI-719-migrate-antora-1
+        with:
+          release-version: ${{ env.RELEASE_VERSION }}
+          jfrog-files-repo: ${{ vars.JFROG_PREPROD_FILES_REPO }}
+          github-token: ${{ secrets.GH_TOKEN }}
+          aws-role-to-assume: ${{ vars.AWS_HAZELCAST_OIDC_GITHUB_ACTIONS_ROLE_ARN }}
+
+      - name: Install ruamel.yaml
+        run: python3 -m pip install ruamel.yaml packaging
+
+      - name: Merge Antora Pull Requests
+        working-directory: ${{ env.RELEASE_VERSION }}
+        shell: python
+        run: |
+          from os import getenv
+          import antora_updater as updater
+
+          updater.merge_pull_requests(
+              is_rel_major_minor=getenv("IS_REL_MAJOR_MINOR"),
+              release_version=getenv("RELEASE_VERSION"),
+              master_version=getenv("MASTER_VERSION"),
+              rel_major_minor=getenv("REL_MAJOR_MINOR"),
+              is_patch_release=getenv("IS_PATCH_RELEASE")
+          )
+        env:
+          MASTER_VERSION: ${{ steps.get-rel-info.outputs.master-version }}
+          REL_MAJOR_MINOR: ${{ steps.get-rel-info.outputs.rel-major-minor }}
+          IS_REL_MAJOR_MINOR: ${{ steps.get-rel-info.outputs.is-rel-major-minor }}
+          IS_PATCH_RELEASE: ${{ steps.get-rel-info.outputs.is-patch-release }}
+          PYTHONPATH: ${{ github.workspace }}/src-scripts/.github/scripts
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Create v/branch from release branch
+        shell: python
+        working-directory: ${{ env.RELEASE_VERSION }}
+        run: |
+          from os import getenv
+          import antora_updater as updater
+
+          updater.create_v_branch(
+              release_version=getenv("RELEASE_VERSION"),
+              rel_major_minor=getenv("REL_MAJOR_MINOR"),
+              is_beta_release=getenv("IS_BETA_RELEASE"),
+              is_patch_release=getenv("IS_PATCH_RELEASE")
+          )
+        env:
+          REL_MAJOR_MINOR: ${{ steps.get-rel-info.outputs.rel-major-minor }}
+          IS_BETA_RELEASE: ${{ steps.get-rel-info.outputs.is-beta-release }}
+          IS_PATCH_RELEASE: ${{ steps.get-rel-info.outputs.is-patch-release }}
+          PYTHONPATH: ${{ github.workspace }}/src-scripts/.github/scripts
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+

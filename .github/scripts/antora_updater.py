@@ -79,9 +79,14 @@ def process_antora(
     is_main:bool
 ) -> None:
 
+    # Using https://yaml.dev/doc/ruamel.yaml/
     yaml: YAML = YAML()
+    # Preserve original single/double quotess
     yaml.preserve_quotes = True
+    # Preserve indentations as per current `antora.yml` layout
+    # See https://yaml.dev/doc/ruamel.yaml/detail/#Indentation_of_block_sequences
     yaml.indent(mapping=2, sequence=4, offset=2)
+    # Extend line wrapping limit to prevent premature line breaks
     yaml.width = 4096
     
     with open(ANTORA_FILE, 'r+') as f:

@@ -8,7 +8,7 @@ For help downloading Hazelcast {enterprise-product-name}, see xref:getting-start
 
 == 5.5.10
 
-**Release date**: TODO
+**Release date**: 2026-07-16
 
 This is a maintenance release for {enterprise-product-name}.
 
@@ -16,11 +16,39 @@ For help downloading Hazelcast {enterprise-product-name}, see xref:getting-start
 
 === Security
 
-TODO
+* **Improved permission checks for IMap `ServiceFactory` used in Jet pipelines:** Resolved an issue where some mutating IMap operations executed through the `ServiceFactory` did not enforce the required permissions. As a result, Jet jobs submitted by users without sufficient permissions may now fail when performing IMap operations that require permissions beyond read access.
+
+* **Fixed missing permission checks for `EntryProcessor` execution through `ExecutorService`:** Resolved an issue where `EntryProcessor` operations submitted via `submitToKey`, `submitToKeys`, or `executeOnKeys` from an `ExecutorService` callable only validated the `remove` permission, while the required `put` permission was not enforced.
+
+* **Enforced permission checks for IMap projection and aggregation operations:** New `IMap.project()` and `IMap.aggregate()` permissions have been introduced and these operations are rejected if the corresponding permissions are not granted. **Action required**: users with fine-grained security must update their configurations to explicitly include these permissions where needed, otherwise these operations will fail.
+
+* **Added configurable class restrictions for Zero Config Compact Serialization (ZCCS):** Introduced optional allowlist/blocklist controls using `JavaSerializationFilterConfig` to restrict which classes can be used with ZCCS, mitigating risks from unsafe deserialization. Users are encouraged to configure restrictions to improve security ahead of stricter defaults in a future major release.
+
+* **Fixed unrestricted attribute access during query lookups:** Resolved an issue where query lookups could access attributes that should not be exposed during query evaluation. The fix adds configurable restrictions on which attributes can be accessed, improving security and giving users more control over query behavior.
+
+* **Enforced stricter checks on classes in SQL:** Resolved an issue where restrictions on classnames used in SQL mappings and types were not checked in some cases.
+
+* **Enforced checks on classes in `JsonUtil` deserialization:** Some classes (unlikely to be used) are no longer allowed to be deserialized using `JsonUtil`. Customers using the `com.hazelcast.jet.json.JsonUtil` class are recommended to review the Javadoc for more secure alternative methods.
+
+* **Ensured SQL is enabled before deserializing messages:** Applied additional hardening to prevent SQL parameters from being deserialized when SQL is not enabled.
+
+* **Enforced checks on classes used in client protocol:** In some situations it was possible to instantiate arbitrary classes in client protocol error conditions. Strict filtering has been implemented to prevent this issue.
+
+* **Improved validation for serializable Jet functions:** Added additional validation to prevent serializable functions from connecting to attacker-controlled clusters or arbitrary addresses without a valid execution context.
 
 * **Removed exposure from experimental declarative pipeline functionality:** Addressed a permissions issue in the Enterprise declarative pipeline component that could allow unauthorized Jet job submission and access to sources or sinks such as files, maps, Kafka, and JDBC when Jet/SQL was enabled.
 
 * **Prevented arbitrary file read through Jet `FileSources`:** Hardened Jet `FileSources` usage in serializable contexts to prevent crafted operations from reading files from members, including configuration, secrets, or data stored on disk.
+
+* **Resolved https://nvd.nist.gov/vuln/detail/CVE-2025-33042[CVE-2025-33042] in Avro:** Fixed a vulnerability by upgrading the Avro and Parquet dependencies.
+
+* **Resolved https://nvd.nist.gov/vuln/detail/CVE-2026-34478[CVE-2026-34478], https://nvd.nist.gov/vuln/detail/CVE-2026-34480[CVE-2026-34480], and https://nvd.nist.gov/vuln/detail/CVE-2026-34481[CVE-2026-34481] in Apache Log4j:** Addressed potential security risks related to improper request handling and input processing.
+
+* **Resolved https://nvd.nist.gov/vuln/detail/CVE-2026-42198[CVE-2026-42198] in PostgreSQL JDBC driver:** Fixed a vulnerability by upgrading the `pgjdbc` dependency.
+
+* **Resolved high-severity vulnerabilities in third-party dependencies:** Upgraded affected dependencies to address reported vulnerabilities, including Jackson Core async parser DoS https://github.com/advisories/GHSA-72hv-8253-57qq[GHSA-72hv-8253-57qq], LZ4-Java https://nvd.nist.gov/vuln/detail/CVE-2025-66566[CVE-2025-66566], Tomcat https://nvd.nist.gov/vuln/detail/CVE-2025-66614[CVE-2025-66614] and https://nvd.nist.gov/vuln/detail/CVE-2026-24734[CVE-2026-24734], and Spring Boot https://nvd.nist.gov/vuln/detail/CVE-2026-40973[CVE-2026-40973].
+
+* **Resolved high and critical CVEs identified by security scans:** Updated affected components to resolve high and critical CVEs https://nvd.nist.gov/vuln/detail/CVE-2026-2332[CVE-2026-2332], https://nvd.nist.gov/vuln/detail/CVE-2026-41293[CVE-2026-41293], https://nvd.nist.gov/vuln/detail/CVE-2026-42579[CVE-2026-42579], https://nvd.nist.gov/vuln/detail/CVE-2026-42581[CVE-2026-42581], https://nvd.nist.gov/vuln/detail/CVE-2026-42584[CVE-2026-42584], https://nvd.nist.gov/vuln/detail/CVE-2026-43512[CVE-2026-43512], https://nvd.nist.gov/vuln/detail/CVE-2026-43515[CVE-2026-43515], https://nvd.nist.gov/vuln/detail/CVE-2025-37731[CVE-2025-37731], https://nvd.nist.gov/vuln/detail/CVE-2025-67030[CVE-2025-67030], https://nvd.nist.gov/vuln/detail/CVE-2025-67721[CVE-2025-67721], https://nvd.nist.gov/vuln/detail/CVE-2026-33870[CVE-2026-33870], https://nvd.nist.gov/vuln/detail/CVE-2026-33871[CVE-2026-33871], https://nvd.nist.gov/vuln/detail/CVE-2026-41284[CVE-2026-41284], https://nvd.nist.gov/vuln/detail/CVE-2026-41838[CVE-2026-41838], https://nvd.nist.gov/vuln/detail/CVE-2026-41842[CVE-2026-41842], https://nvd.nist.gov/vuln/detail/CVE-2026-41848[CVE-2026-41848], https://nvd.nist.gov/vuln/detail/CVE-2026-41850[CVE-2026-41850], https://nvd.nist.gov/vuln/detail/CVE-2026-41851[CVE-2026-41851], https://nvd.nist.gov/vuln/detail/CVE-2026-42498[CVE-2026-42498], https://nvd.nist.gov/vuln/detail/CVE-2026-42578[CVE-2026-42578], https://nvd.nist.gov/vuln/detail/CVE-2026-42582[CVE-2026-42582], https://nvd.nist.gov/vuln/detail/CVE-2026-42583[CVE-2026-42583], https://nvd.nist.gov/vuln/detail/CVE-2026-42585[CVE-2026-42585], https://nvd.nist.gov/vuln/detail/CVE-2026-42586[CVE-2026-42586], https://nvd.nist.gov/vuln/detail/CVE-2026-42587[CVE-2026-42587], https://nvd.nist.gov/vuln/detail/CVE-2026-43513[CVE-2026-43513], https://nvd.nist.gov/vuln/detail/CVE-2026-44248[CVE-2026-44248], and https://nvd.nist.gov/vuln/detail/CVE-2026-5795[CVE-2026-5795].
 
 === Fixes
 

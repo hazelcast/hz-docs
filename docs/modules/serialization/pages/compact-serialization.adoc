@@ -111,7 +111,7 @@ Client.newHazelcastClient(
     compact: {
         serializers: [
             new FooSerializer()
-        ] 
+        ]
 )
 ----
 --
@@ -511,10 +511,10 @@ struct hz_serializer<employee> : public compact_serializer
     static employee read(compact_reader& reader)
     {
         employee e;
-        
+
         e.id = reader.read_int64("id");
         e.name = reader.read_string("name");
-        
+
         return e;
     }
 
@@ -522,9 +522,9 @@ struct hz_serializer<employee> : public compact_serializer
     {
         writer.write_int64("id", e.id);
         writer.write_string("name", e.name);
-    } 
+    }
 
-    static std::string type_name() { return "employee"; }    
+    static std::string type_name() { return "employee"; }
 };
 ----
 --
@@ -1037,8 +1037,8 @@ When Hazelcast cannot associate a class with any other serialization mechanism, 
 throwing an exception directly, it tries to use zero-configuration Compact serialization
 as a last effort.
 
-Hazelcast tries to extract a schema out of the class. If successful, it registers the 
-zero-config serializer associated with the extracted schema and uses it while serializing 
+Hazelcast tries to extract a schema out of the class. If successful, it registers the
+zero-config serializer associated with the extracted schema and uses it while serializing
 and deserializing instances of that class. If the automatic schema extraction fails,
 Hazelcast throws an exception.
 
@@ -1131,6 +1131,86 @@ module org.example.Foo {
     opens org.example to com.hazelcast.core;
 }
 ----
+
+[[zero-config-filter]]
+== Restricting Classes for Zero-Config Compact Serialization
+
+Zero-config Compact serialization uses reflection to serialize any class that does not have another registered serializer. To control which classes are eligible for this, and to prevent classes from being serialized unintentionally, configure a filter that allows or blocks classes.
+
+The filter uses an allowlist and a blocklist. This is the same format as the xref:sql:sql-reflection-configuration.adoc[SQL Java reflection filter]. You can allow or block classes by fully qualified class name, package name, or class-name prefix. The filter can be set on both members and clients.
+
+When a filter is configured:
+
+* If a class is on the blocklist, serializing an object of that class throws an exception.
+* If a class is on the blocklist, deserializing its data returns a `GenericRecord` instead of an instance of the class, rather than throwing an exception.
+* If the allowlist is non-empty, only classes on the allowlist (and not on the blocklist) are eligible for zero-config Compact serialization.
+
+Without a configured filter, Hazelcast applies a built-in blocklist of internal classes. This does not cover your own classes, so for the strongest protection, we suggest defining an allowlist containing only the classes your application needs.
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+  ...
+  <serialization>
+    <compact-serialization>
+      <zero-config-filter defaults-disabled="false">
+        <whitelist>
+          <class>example.Foo</class>
+          <package>com.acme.app</package>
+          <prefix>com.acme.</prefix>
+        </whitelist>
+        <blacklist>
+          <class>com.acme.app.BeanComparator</class>
+        </blacklist>
+      </zero-config-filter>
+    </compact-serialization>
+  </serialization>
+  ...
+</hazelcast>
+----
+--
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  serialization:
+    compact-serialization:
+      zero-config-filter:
+        defaults-disabled: false
+        whitelist:
+          class:
+            - example.Foo
+          package:
+            - com.acme.app
+          prefix:
+            - com.acme.
+        blacklist:
+          class:
+            - com.acme.app.BeanComparator
+----
+--
+Java::
++
+--
+[source,java]
+----
+Config config = new Config();
+JavaSerializationFilterConfig filter = new JavaSerializationFilterConfig();
+filter.getWhitelist().addClasses("example.Foo");
+filter.getWhitelist().addPackages("com.acme.app");
+filter.getWhitelist().addPrefixes("com.acme.");
+filter.getBlacklist().addClasses("com.acme.app.BeanComparator");
+config.getSerializationConfig().getCompactSerializationConfig().setZeroConfigFilter(filter);
+----
+--
+====
 
 == Schema Evolution
 
@@ -1255,7 +1335,7 @@ public class Employee {
 [source,cs]
 ----
 public record Employee(
-    long Id, 
+    long Id,
     string Name,
     int Age // newly-added field
 );
@@ -1354,7 +1434,7 @@ public class EmployeeSerializer : ICompactSerializer<Employee>
     {
         var id = reader.ReadInt64("id");
         var name = reader.ReadString("name");
-        // the new 'age' field is there, but the old reader does not 
+        // the new 'age' field is there, but the old reader does not
         // know anything about it, and ignores the field.
         return new Employee(id, name);
     }
@@ -1375,14 +1455,14 @@ struct hz_serializer<employee> : compact_serializer
     employee& read(compact_reader& reader)
     {
         employee e;
-        
+
         e.id = reader.read_int32("id");
         e.name = reader.read_string("name");
         // The new "age" field is there, but the old reader does not
         // know anything about it. Hence, it will simply ignore that field.
         return e;
     }
-    
+
     // ...
 };
 ----
@@ -1507,10 +1587,10 @@ struct hz_serializer<employee> : compact_serializer
     employee& read(compact_reader& reader)
     {
         employee e;
-        
+
         e.id = reader.read_int64("id");
         e.name = reader.read_string("name");
-        
+
         // read the "age" field if it exists, else use the default value 0
         // reader.read_int32("age") would throw if the "age" field
         // does not exist in data.
@@ -1520,7 +1600,7 @@ struct hz_serializer<employee> : compact_serializer
         } else {
             e.age = 0;
         }
-        
+
         return e;
     }
 };

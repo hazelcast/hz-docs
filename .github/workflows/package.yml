@@ -1,0 +1,100 @@
+name: Package Release
+run-name: ${{ github.workflow }} (`${{ inputs.VERSION }}`@${{ inputs.ENVIRONMENT }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      VERSION:
+        description: 'The version to build (e.g. `5.4.1`)'
+        required: true
+      RELEASE_TYPE:
+        description: 'What should be built'
+        required: true
+        type: choice
+        options:
+          - ALL
+          - OSS
+          - EE
+      ENVIRONMENT:
+        description: 'Environment to use'
+        required: true
+        type: environment
+      distinct_id:
+        description: 'Required exclusively for automated execution to track status of workflow execution'
+        required: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-slim
+    steps:
+      - name: Logging distinct ID (${{ inputs.distinct_id }})
+        run: echo "${DISTINCT_ID}"
+        env:
+          DISTINCT_ID: ${{ inputs.distinct_id }}
+
+  package:
+    runs-on: ubuntu-latest
+    needs: prepare
+    environment:
+      name: ${{ inputs.ENVIRONMENT }}
+      deployment: false
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - name: Checkout `release` branch
+        uses: actions/checkout@v7
+        with:
+          path: ${{ inputs.VERSION }}
+
+      - name: Checkout `main` automation scripts
+        uses: actions/checkout@v7
+        with:
+          path: src-scripts
+
+      - name: Get release info
+        id: get-rel-info
+        uses: hazelcast/mono-actions/release-info@DI-719-migrate-antora-1
+        with:
+          release-version: ${{ inputs.VERSION }}
+          jfrog-files-repo: ${{ vars.JFROG_PREPROD_FILES_REPO }}
+          github-token: ${{ secrets.GH_TOKEN }}
+          aws-role-to-assume: ${{ vars.AWS_HAZELCAST_OIDC_GITHUB_ACTIONS_ROLE_ARN }}
+
+      - name: Install ruamel.yaml
+        run: python3 -m pip install ruamel.yaml packaging
+
+      - name: Configure git
+        working-directory: ${{ inputs.VERSION }}
+        run: |
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+
+      - name: Update antora.yml with Pull Requests
+        shell: python
+        working-directory: ${{ inputs.VERSION }}
+        run: |
+          from os import getenv
+          import antora_updater as antora
+
+          antora.update(
+              release_ver=getenv("RELEASE_VERSION"),
+              rel_major_minor=getenv("REL_MAJOR_MINOR"),
+              master_version=getenv("MASTER_VERSION"),
+              master_major_minor=getenv("MASTER_MAJOR_MINOR"),
+              is_latest_stable_release=getenv("IS_LATEST_STABLE_RELEASE"),
+              is_beta_release=getenv("IS_BETA_RELEASE"),
+              is_rel_major_minor=getenv("IS_REL_MAJOR_MINOR"),
+              is_patch_release=getenv("IS_PATCH_RELEASE")
+          )
+        env:
+          RELEASE_VERSION: ${{ inputs.VERSION }}
+          REL_MAJOR_MINOR: ${{ steps.get-rel-info.outputs.rel-major-minor }}
+          MASTER_VERSION: ${{ steps.get-rel-info.outputs.master-version }}
+          MASTER_MAJOR_MINOR: ${{ steps.get-rel-info.outputs.master-major-minor }}
+          IS_LATEST_STABLE_RELEASE: ${{ steps.get-rel-info.outputs.is-latest-stable-release }}
+          IS_BETA_RELEASE: ${{ steps.get-rel-info.outputs.is-beta-release }}
+          IS_REL_MAJOR_MINOR: ${{ steps.get-rel-info.outputs.is-rel-major-minor }}
+          IS_PATCH_RELEASE: ${{ steps.get-rel-info.outputs.is-patch-release }}
+          PYTHONPATH: ${{ github.workspace }}/src-scripts/.github/scripts
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}

@@ -1137,15 +1137,19 @@ module org.example.Foo {
 
 Zero-config Compact serialization uses reflection to serialize any class that does not have another registered serializer. To control which classes are eligible for this, and to prevent classes from being serialized unintentionally, configure a filter that allows or blocks classes.
 
-The filter uses an allowlist and a blocklist. This is the same format as the xref:sql:sql-reflection-configuration.adoc[SQL Java reflection filter]. You can allow or block classes by fully qualified class name, package name, or class-name prefix. The filter can be set on both members and clients.
+This filter applies only to zero-config Compact serialization. Classes that have an explicitly registered serializer are not affected by the filter, even if the filter would otherwise block them.
+
+The filter uses an allowlist and a blocklist, in the same format as the xref:serialization-configuration.adoc#untrusted-classes[Java serialization filter]. You can allow or block classes by fully qualified class name, package name, or class-name prefix. The filter can be set on both members and clients, and the configuration does not have to be the same on each.
 
 When a filter is configured:
 
 * If a class is on the blocklist, serializing an object of that class throws an exception.
-* If a class is on the blocklist, deserializing its data returns a `GenericRecord` instead of an instance of the class, rather than throwing an exception.
-* If the allowlist is non-empty, only classes on the allowlist (and not on the blocklist) are eligible for zero-config Compact serialization.
+* If a class is on the blocklist, deserializing its data returns a `GenericRecord` instead of an instance of the class, rather than throwing an exception. This means member-side code, such as an entry processor, can still access the data through the `GenericRecord`, and features that read individual fields, such as the Predicate API and SQL, can still process the data without deserializing it into an instance of the blocked class.
+* If the allowlist is non-empty, only classes on the allowlist which are not on the blocklist are eligible for zero-config Compact serialization.
 
 Without a configured filter, Hazelcast applies a built-in blocklist of internal classes. This does not cover your own classes, so for the strongest protection, we suggest defining an allowlist containing only the classes your application needs.
+
+To disable zero-config Compact serialization entirely, configure an empty allowlist and set `defaults-disabled` to `true`.
 
 [tabs]
 ====

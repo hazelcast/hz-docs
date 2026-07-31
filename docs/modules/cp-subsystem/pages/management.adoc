@@ -671,6 +671,20 @@ This method triggers a new CP discovery process round. However, if the new CP di
 
 WARNING: This method is **NOT** idempotent and multiple invocations can break the whole system. After calling this API, you must observe the system to see if the reset process is successfully completed or failed before making another call.
 
+=== Effect of a reset on existing proxies
+
+All CP groups that existed before the reset are destroyed; new groups are created on demand as proxies request them. CP proxies obtained before the reset remain bound to the destroyed groups, so operations on them fail, typically with
+`CPGroupDestroyedException`.
+
+Proxies are not rebound to the new groups automatically. A new CP group shares no history with the group it replaces, and silently redirecting operations to it would break the linearizable history the CP Subsystem guarantees. This differs from AP data
+structures.
+
+After the reset completes successfully, discard the CP proxies you are holding and obtain new ones. Members and clients do not need to be restarted.
+
+WARNING: Mutual exclusion does not hold across a reset. All CP sessions are wiped, so locks held and permits acquired beforehand cease to exist, and the holder is not
+notified, it finds out only when it next calls into the proxy and receives `IllegalMonitorStateException`. Another caller can acquire the same lock in the new
+group in the meantime.
+
 [tabs] 
 ====
 Management Center::

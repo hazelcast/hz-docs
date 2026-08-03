@@ -1,0 +1,33 @@
+name: Run release unit tests
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/scripts/*.py'
+      - '.github/workflows/package.yml'
+      - '.github/workflows/promote.yml'
+
+jobs:
+  test:
+    # Ignore automated release PR branches
+    if: ${{ !startsWith(github.head_ref, 'update_antora_') }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Python packages
+        run: python3 -m pip install ruamel.yaml packaging pytest
+
+      - name: Run unit tests
+        run: |
+          pytest .github/scripts/ --junit-xml=test-results/results.xml
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@d0a4676d0e0b938bc201470d88276b7c74c712b3 # v2.24.0
+        if: always()
+        with:
+          files: test-results/results.xml

@@ -24,6 +24,6 @@ final class OrderKey implements PartitionAware, Serializable {
                 + "orderId=" + orderId
                 + ", customerId=" + customerId
                 + '}';
-//end::orderkey[]
     }
 }
+//end::orderkey[]

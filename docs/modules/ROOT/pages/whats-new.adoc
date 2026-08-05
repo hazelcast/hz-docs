@@ -1,65 +1,92 @@
 = What's New in Hazelcast Platform
-:description: Here are the highlights of what's new and improved in Hazelcast Platform 5.4.
+:description: Here are the highlights of what's new and improved in Hazelcast Platform 5.7.
 [[whats-new]]
 
-NOTE: The What's New page for Hazelcast Platform 5.5 will be available when this version is released. For the last major release, see below.
+NOTE: The What's New page for Hazelcast Platform {version} will be available when this version is released. For the last major release, see below.
 
 {description}
 
-== Use CP Map for mission-critical workflows
-[.enterprise]*Enterprise* 
+Hazelcast Platform 5.7 strengthens the operational foundations that mission-critical systems rely on when real-time data has to be both fast and correct. The release advances the Jet streaming engine and the CP Subsystem, adds support for Java 25, brings dynamic diagnostic logging to general availability in Management Center 5.11, and extends Kubernetes-native operations through Platform Operator 5.17.
 
-A new CP Map data structure is the latest addition to our xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem]. Unlike traditional maps built for availability (AP), CP Maps guarantee data consistency even during network partitions, ensuring that every member within the cluster sees the same data. CP Maps are ideal for storing sensitive information or managing mission-critical workflows.
+== Production-hardened streaming microservices
 
-The CP Subsystem is the Hazelcast component that builds a strongly consistent layer for a set of distributed data structures. As well as network partitions, the CP Subsystem withstands server and client failures. xref:management-center:cp-subsystem:dashboard.adoc[Hazelcast Management Center] allows you to inspect the CP Subsystem as a whole – for individual data record access, you can use the Hazelcast Command Line Client (CLC).
+A growing number of Hazelcast customers are replacing sprawls of request-response microservices and separate data grids with chains of isolated, stateful Jet jobs running on a single cluster. Platform 5.7 makes that pattern operationally resilient at enterprise scale, with four specific improvements to the Jet streaming engine:
 
-For more information on how to use this new `CPMap` data structure, see xref:data-structures:cpmap.adoc[].
+* *User Code Namespaces* give each pipeline stage classloader isolation. Different stages can use different library versions, and any one stage can be hot-swapped without disturbing the others.
+* *Stage-to-stage handoff* through `MapJournal` and `IMap` now exposes first-class backpressure metrics and explicit signals when events are at risk of being overwritten. Inter-stage event loss becomes visible rather than silent.
+* *Per-processor state counts* are exposed, so operators can see memory pressure building before it causes a failure.
+* *Automatic job recovery* through routine cluster changes, including member replacement and rolling upgrades, removes manual operator intervention. Jobs configured with processing guarantees can be stopped, upgraded and resumed without data loss.
 
-== Manage resources effectively with User Code Namespaces
-[.enterprise]*Enterprise* 
+Together, these changes mean a failure in one stage does not cascade into the others. Each stage can fail, restart, or be upgraded independently, giving teams the isolation of microservices with the operational surface of a single platform.
 
-User Code Namespaces provide a container for Java classpath resources, such as user code and accompanying artifacts such as property files. This helps you effectively manage access to resources in different namespaces through either static or dynamic configuration. This is an Enterprise feature that extends and replaces the now deprecated xref:clusters:legacy-ucd.adoc[User Code Deployment] functionality.
+For more information, see xref:pipelines:overview.adoc[Building Data Pipelines] and xref:clusters:user-code-namespaces.adoc[User Code Namespaces].
 
-For more information on how to enable and configure User Code Namespaces, or migrate from User Code Deployment, see xref:clusters:user-code-namespaces.adoc[].
+== CP Leader Auto Step-Down
 
-== Connector updates
+*Enterprise*
 
-**Kafka Connect Source connector** is now generally available, which means that Kafka Connect sources can scale across the whole cluster instead of just a single member. For more information, see xref:integrate:kafka-connect-connectors.adoc[].
+In a distributed cluster, every strongly consistent operation pays the cost of wherever the cluster has placed its CP leader. A leader in the wrong data centre means every transaction across every service pays that latency tax.
 
-**Mongo SQL Connector (SQL over MongoDB)** is now generally available. With the addition of security support, you can now secure your data connection with TLS when creating MongoDB mappings over SQL. For more information, see xref:sql:mapping-to-mongo.adoc[].
+CP Leader Auto Step-Down in Platform 5.7 lets operators declare that specific members must never hold CP group leadership. Any such member elected as leader immediately triggers a new election, keeping leadership close to the workloads it serves. The feature is implemented without modifying the Raft protocol itself: leadership changes flow through the standard consensus mechanism, which preserves the CP Subsystem's linearizable guarantees and no-data-loss property throughout.
 
-**JDBC SQL Connector (SQL over JDBC)** is now generally available. In addition to MySQL and PostgreSQL, the JDBC SQL connector now also supports Oracle and Microsoft SQL Server databases. For more information, see xref:sql:mapping-to-jdbc.adoc#data-type-mapping-between-hazelcast-and-mssql[Mapping between Hazelcast and MSSQL].
+The CP member list in Management Center 5.11 clearly identifies flagged members, so operators can see at a glance which members are excluded from leadership.
 
-== Thread-Per-Core (TPC) now generally available (GA)
-[.enterprise]*Enterprise*
+NOTE: CP Leader Auto Step-Down requires the `ADVANCED_CP` feature to be enabled in the license key.
 
-Enable Thread-Per-Core (TPC) on both clients and cluster members to improve system performance, especially in environments where the number of CPU cores on your machines does not match the recommended hardware. TPC is an alternative to traditional Staged Event-Driven Architecture (SEDA) that supports easier scaling based on the number of available cores.
+For more information, see xref:cp-subsystem:cp-subsystem.adoc[CP Subsystem].
 
-For more information on how to enable and configure TPC, see xref:cluster-performance:thread-per-core-tpc.adoc[].
+== Java 25 support
 
-== Tiered Storage now generally available (GA)
-[.enterprise]*Enterprise* 
+Platform 5.7 adds support for Java 25, the latest Java LTS release, with no regressions against the prior LTS baseline across Oracle JDK, OpenJDK and the other JVM vendors Hazelcast supports. Benchmarks show no performance degradation, and in some workloads a measurable improvement. Management Center 5.11 is validated for Java 25 as well. The previously supported Java versions 17 and 21 continue to work with Platform 5.7, so adopting this release does not force a JVM upgrade.
 
-Tiered Storage ensures that frequently accessed (_high-hit_) data remains in fast memory and less frequently accessed (_low-hit_) data is stored on cheaper disks. We are delighted to confirm this functionality is now generally available as an Enterprise feature. 
+IMPORTANT: When running Hazelcast on Java 25, the `SecurityManager` is not functional due to ecosystem changes in the JDK.
 
-Tiered Storage uses an in-memory index to provide faster access to map entries. A dedicated memory manager decides which entries to store in the memory tier and which to store in the disk tier. If a map entry is not accessed for some time, it is flushed or _spilled_ to disk – if a map is frequently accessed, it stays in memory. Tiered Storage allows the cluster to hold more data than the total available RAM.
+NOTE: Docker users who want to run Hazelcast on Java 21 instead of the default Java 25 must pull a JDK-tagged image. For example, `hazelcast/hazelcast:latest-jdk21` will resolve to 5.7 built with JDK 21.
 
-For more information on how to enable and configure this feature, see xref:tiered-storage:overview.adoc[].
+== .NET and C++ client performance
 
-== Upgrade Requirements
+The Hazelcast .NET and C++ clients deliver significant performance improvements in 5.7. For detailed benchmark comparisons, see the client release notes.
 
-Hazelcast Platform 5.4 requires Java 17 or later.
+== Hazelcast Platform Release Notes
 
-== Release Notes
+For detailed release notes for Enterprise Edition and Community Edition that include new features and enhancements, breaking changes, deprecations and other fixes, see xref:release-notes:releases.adoc[Release Notes].
 
-For detailed release notes that include new features and enhancements, breaking changes, deprecations and other fixes, see xref:release-notes:5-4-0.adoc[5.4 Release Notes].
+To evaluate Hazelcast Enterprise Edition features, you can https://hazelcast.com/trial-request/?utm_source=docs-website[request a trial license key].
 
-== Hazelcast Command Line Client (CLC)
+== Management Center 5.11
 
-You can use the Hazelcast Command Line Client (CLC) to connect to and interact with clusters on Hazelcast Platform and Hazelcast Cloud directly from the command line or through scripts.
+Management Center 5.11 focuses on operational reliability, cloud-native deployment support, and security hardening:
 
-With Hazelcast CLC 5.3.7 you can now import a subset of the Java client configuration. You can also define custom template actions using advanced scripts, and add a success note when a project is created successfully.
+* *Dynamic diagnostic logging is now generally available.* Operators can enable, configure and disable diagnostics at runtime, on any member, without a cluster restart - removing what used to be one of the most painful steps in diagnosing live production issues.
+* *CP Leader Auto Step-Down* is visible in the CP member list, so operators can see which members are excluded from leadership.
+* *Automatic reconnection* when a cluster comes back online removes the manual step previously required after planned or unplanned restarts.
+* *JVM version details* are exposed in the Members table, making mixed-version deployments and Java rollout verification straightforward.
+* *Idempotent `mc-conf` security commands* support GitOps patterns where the same configuration script is applied repeatedly.
+* *Additional Near Cache invalidation metrics* are exposed through the Prometheus exporter.
+* *Security hardening:* an authorization-bypass issue found during penetration testing has been resolved, the MC server version can be suppressed from HTTP response headers, and routine dependency security updates have been applied.
 
-For detailed release notes that include new features and fixes, see xref:clc:ROOT:release-notes-5.3.7.adoc[Hazelcast CLC 5.3.7].
+For more information, see the https://docs.hazelcast.com/management-center/5.11/release-notes/releases[Management Center 5.11 Release Notes].
 
-To get started with Hazelcast CLC, see xref:clc:ROOT:install-clc.adoc[Installing the Hazelcast CLC].
+== Hazelcast Platform Operator for Kubernetes 5.17
+
+Operator 5.17 extends CRD coverage and closes several gaps in Kubernetes-managed deployments.
+
+Configuration surface improvements:
+
+* Custom `log4j2` configuration can now be supplied via the Hazelcast CR, bringing Operator-managed deployments in line with the logging customization available in standalone installations.
+* The Management Center Prometheus exporter is now configurable through the Operator rather than requiring separate MC configuration.
+* `envFrom` is supported, allowing environment variables to be injected from ConfigMaps or Secrets using the standard Kubernetes pattern.
+* Near Cache `serialize-keys` is now exposed in the CRD.
+
+Deployment pattern improvements:
+
+* Additional JARs can be deployed via the sidecar agent, extending the module deployment capability introduced in 5.16.
+* Kubernetes labels on Operator-managed resources can now be modified after initial deployment.
+* Management Center instance names are now namespace-qualified, which matters in multi-namespace deployments.
+
+IMPORTANT: Operator 5.17 fixes a TLS certificate rotation issue that has been present since Operator 5.15, where clients continued to connect with expired or invalid certificates after rotation. Customers running TLS on Operator 5.15 or 5.16 should prioritize this upgrade. In addition, configuration changes that should have triggered rolling updates but were silently ignored in earlier versions will now be applied correctly, so any pending changes will be applied on upgrade.
+
+NOTE: The Hazelcast Platform Operator defaults to Java 25 unless the deployment is pinned to a specific Java version.
+
+For more information, see the https://docs.hazelcast.com/operator/5.17/release-notes[Operator 5.17 Release Notes].
+

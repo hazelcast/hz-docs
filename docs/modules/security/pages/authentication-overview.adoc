@@ -1,0 +1,255 @@
+= Authentication overview
+:page-enterprise: true
+:page-aliases: security-realms.adoc
+
+NOTE: Authentication is the process of verifying the identity of a user, system, or entity before granting access to resources or services. It ensures that the person or system requesting access is who they claim to be, typically through credentials like passwords, biometrics, tokens, or multi-factor methods. Authentication is a critical security step in protecting data and systems from unauthorized access.
+
+In Hazelcast, Authentication is used to verify the incoming connection has valid credentials configured.
+Hazelcast supports several authentication types that can be configured for member-to-member, and client-to-member communication:
+
+* xref:simple-authentication.adoc[Simple] - users and roles are configured directly within the member configuration
+* xref:ldap-authentication.adoc[LDAP] - LDAP server is used to verify credentials and load roles
+* xref:kerberos-authentication.adoc[Kerberos] - service tickets are used for authentication
+* xref:tls-authentication.adoc[TLS] - information from client-side TLS certificates (when TLS mutual authentication is enabled) are used for role assignment
+* xref:jaas-authentication.adoc[Custom JAAS login modules] - if other Hazelcast provided authentication mechanisms don't fully cover user needs
+
+During the authentication roles can be also assigned to the connecting clients, which are later used for the <<Authorization>>.
+
+== Security realms
+
+Named security configurations called security realms are used to map an authentication mechanism to a Hazelcast protocol (client or member).
+Security realms enable you to define security configurations on the module which consumes it.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+
+[source,xml]
+----
+<hazelcast>
+    <security enabled="true">
+        <realms>
+            <realm name="simpleRealm">
+                <authentication>
+                    <simple>
+                        <user username="test" password="V3ryS3cr3tString">
+                            <role>monitor</role>
+                            <role>hazelcast</role>
+                        </user>
+                        <user username="man-center" password="HardToGuess">
+                            <role>root</role>
+                        </user>
+                    </simple>
+                </authentication>
+            </realm>
+        </realms>
+        <client-authentication realm="simpleRealm"/>
+    </security>
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  security:
+    enabled: true
+    realms:
+      - name: simpleRealm
+        authentication:
+          simple:
+            users:
+              - username: test
+                password: 'V3ryS3cr3tString'
+                roles:
+                  - monitor
+                  - hazelcast
+              - username: man-center
+                password: 'HardToGuess'
+                roles:
+                  - root
+----
+--
+
+Java::
++
+[source,java]
+----
+include::ROOT:example$/security/EnablingSecurity.java[tag=authn]
+----
+====
+
+Besides authentication, security realms can also contain xref:identity-configuration.adoc[Identity] and access-control-service configurations.
+
+
+== Common authentication options
+
+All Hazelcast provided authentication types support some common configuration parameters.
+
+[cols="1,1,3"]
+.Common Configuration Options
+|===
+| Option Name
+| Default Value
+| Description
+
+| `skip-role`
+| `false`
+| When set to `true`, the authentication mechanism won't assign roles during authentication but will only verify the credentials.
+
+| `skip-identity`
+| `false`
+| When set to `true`, the authentication mechanism won't use the remote party name after the authentication.
+
+| `skip-endpoint`
+| `false`
+| When set to `true`, the authentication mechanism won't use the remote party IP address name after authentication.
+
+|===
+
+For more advanced configuration options, see following sections.
+
+== Identity
+
+A security configuration element where members and clients have their own credentials configured is called an identity.
+This identity can be a username-password pair, a token, or a Kerberos ticket. For more information, see xref:identity-configuration.adoc[Identity configuration].
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+
+[source,xml]
+----
+<hazelcast>
+    <security enabled="true">
+        <realms>
+            <realm name="aRealm">
+                <authentication>
+                    <ldap>
+                        <!-- ... -->
+                    </ldap>
+                </authentication>
+                <identity>
+                    <username-password username="uid=hazelcast,ou=Services,dc=hazelcast,dc=com" password="theSecret"/>
+                </identity>
+            </realm>
+        </realms>
+        <member-authentication realm="aRealm"/>
+        <client-authentication realm="aRealm"/>
+    </security>
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  security:
+    enabled: true
+    realms:
+      - name: aRealm
+        authentication:
+          ldap:
+#           ...
+        identity:
+          username-password:
+            username: uid=hazelcast,ou=Services,dc=hazelcast,dc=com
+            password: theSecret
+    member-authentication:
+      realm: aRealm
+    client-authentication:
+      realm: aRealm
+
+----
+--
+
+Java::
++
+[source,java]
+----
+include::ROOT:example$/security/EnablingSecurity.java[tag=identity]
+----
+====
+
+
+== Authorization
+
+Authorization is supported by the Client protocol. Clients are assigned roles during authentication. Access is then controlled by
+permissions assigned to the roles.
+
+Authorization isn't supported in member-to-member communications. All members
+have unlimited access to the cluster data once they are authenticated.
+
+[tabs] 
+==== 
+XML:: 
++ 
+-- 
+
+[source,xml]
+----
+<hazelcast>
+    <security enabled="true">
+        <realms>
+            <realm name="aRealm">
+                <!-- ... -->
+            </realm>
+        </realms>
+        <client-authentication realm="aRealm"/>
+        <client-permissions>
+            <all-permissions principal="man-center"/>
+            <map-permission name="playground" principal="*">
+                <actions>
+                    <action>all</action>
+                </actions>
+            </map-permission>
+        </client-permissions>
+    </security>
+</hazelcast>
+----
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  security:
+    enabled: true
+    realms:
+      - name: aRealm  
+#       ...
+    client-authentication:
+      realm: aRealm
+    client-permissions:
+      all:
+        principal: man-center
+      map:
+        - name: playground
+          principal: *
+          actions:
+            - all
+
+----
+--
+
+Java::
++
+[source,java]
+----
+include::ROOT:example$/security/EnablingSecurity.java[tag=authz]
+----
+====
+
+For more information, see xref:client-authorization.adoc[].

@@ -16,16 +16,24 @@ Users can store any value they require as metadata. This could be additional cha
 
 == JVM configuration
 
-Vector collection indexing and search are computationally very intensive and can utilize SIMD instructions.
-For best performance using vector collections, use Java 21 and enable Vector API from Project Panama by adding `--add-modules jdk.incubator.vector` to xref:configuration:jvm-parameters.adoc[JVM parameters].
+The `VectorCollection` makes heavy use of operations over the `float` data type, e.g. computing the distance between `float` instances. 
+Most operations upon a `VectorCollection`, e.g. adding, searching and optimizing, result in such `float` operations being performed.
+The best performance for `VectorCollection` can be achieved by enabling the https://openjdk.org/jeps/338[Vector API] https://openjdk.org/jeps/448[preview] feature by specifying the flag `--add-modules jdk.incubator.vector` in xref:configuration:jvm-parameters.adoc[JVM parameters].
+The https://openjdk.org/jeps/338[Vector API] makes use of the underlying CPU's https://en.wikipedia.org/wiki/Single_instruction,_multiple_data[SIMD (Single Instruction Multiple Data)] hardware to accelerate operations over `float` instances.
+For example, on https://en.wikipedia.org/wiki/Advanced_Vector_Extensions[AVX2] enabled hardware with https://openjdk.org/jeps/338[Vector API] enabled, distance functions can be 2-4 times faster than when https://openjdk.org/jeps/338[Vector API] is not enabled.
+
+NOTE: The https://openjdk.org/jeps/338[Vector API] is still preview in Java 21, see https://openjdk.org/jeps/448[JEP 448].
 
 If you use Docker, you can use the following example command:
 
-```sh
-docker run -p 5701:5701 -e HZ_LICENSEKEY=<your_license_key> \
-       -e "JAVA_OPTS=--add-modules jdk.incubator.vector -Dhazelcast.partition.count=16" \
-       hazelcast/hazelcast-enterprise:latest-snapshot-slim-jdk21
-```
+[source,bash,subs="attributes+"]
+----
+docker run -p 5701:5701 -e HZ_LICENSEKEY=<YOUR_LICENSE_KEY> \
+     -e "JAVA_OPTS=--add-modules jdk.incubator.vector" \
+     hazelcast/hazelcast-enterprise:{ee-version}-slim
+----
+
+Replace the `<YOUR_LICENSE_KEY>` placeholder with your Hazelcast {enterprise-product-name} license key.
 
 == Configuration
 Collection configuration can be set dynamically during vector collection creation or statically during cluster configuration. Unlike other data structures, the configuration must be set up before the collection can be used.
@@ -50,6 +58,28 @@ Can include letters, numbers, and the symbols `-`, `_`, `*`.
 |Information about indexes configuration
 |Required
 |`NULL`
+
+|backup-count
+|Number of synchronous backups. See xref:data-structures:backing-up-maps.adoc#in-memory-backup-types[Backup Types]
+|Optional
+|`1`
+
+|async-backup-count
+|Number of asynchronous backups. See xref:data-structures:backing-up-maps.adoc#in-memory-backup-types[Backup Types]
+|Optional
+|`0`
+
+|merge-policy
+|Configuration of the merge policy for this vector collection. See the <<merge-policy>> section.
+|Optional
+|`PutIfAbsentMergePolicy` with `batchSize`=`100`
+
+|split-brain-protection-ref
+|Name of the split-brain protection configuration that you want this vector collection to use.
+See the <<split-brain-protection>> section.
+|Optional
+|`NULL`
+
 |===
 
 .Index configuration options
@@ -60,7 +90,7 @@ Can include letters, numbers, and the symbols `-`, `_`, `*`.
 |name
 |The name of the vector index.
 Can include letters, numbers, and the symbols `-` and `_`.
-|Required for single-index vector collections. Optional for multi-index collection
+|Required for multi-index vector collections. Optional for single-index collection
 |`NULL`
 
 |dimension
@@ -75,19 +105,19 @@ For further information on distance metrics, see the <<available-metrics, Availa
 |`N/A`
 
 |max-degree
-|Used to calculate the maximum number of neighbors per node. The calculation used is max-degree * 2
-|Required
-|`16`
+|Maximum number of neighbors per node. Note that the meaning of this parameter differs from that used in version 5.5.
+|Optional
+|`32`
 
 |ef-construction
 |The size of the search queue to use when finding nearest neighbors.
-|Required
+|Optional
 |`100`
 
 |use-deduplication
-|Whether or not to use vector deduplication.
+|Whether to use vector deduplication.
 When disabled, each added vector is treated as a distinct vector in the index, even if it is identical to an existing one. When enabled, the index consumes less space as duplicates share a vector, but the time required to add a vector increases.
-|Required
+|Optional
 |`TRUE`
 
 |===
@@ -111,8 +141,11 @@ When disabled, each added vector is treated as a distinct vector in the index, e
 |`(1 + dotProduct(v1, v2)) / 2`
 |===
 
-NOTE: The recommended method for computing cosine similarity is to normalize all vectors to unit length and use the DOT metric instead.
+TIP: The recommended method for computing cosine similarity is to normalize all vectors to unit length and use the DOT metric instead.
+The COSINE metric can be significantly slower than the DOT metric, especially when the xref:jvm-configuration[Vector API] is not enabled.
 
+WARNING: Do not rely on the exact value of the metric. 
+It is a floating point number and the exact value may depend on the order of operations and rounding during evaluation which can vary in different implementations (with or without vectorization) and in different Hazelcast versions.
 
 Configuration example:
 
@@ -125,6 +158,8 @@ XML::
 ----
 <hazelcast>
     <vector-collection name="books">
+        <backup-count>1</backup-count>
+        <async-backup-count>0</async-backup-count>
         <indexes>
             <index name="word2vec-index">
                 <dimension>6</dimension>
@@ -138,6 +173,8 @@ XML::
                 <use-deduplication>false</use-deduplication>
             </index>
         </indexes>
+        <merge-policy batch-size="200">PutIfAbsentMergePolicy</merge-policy>
+        <split-brain-protection-ref>splitbrainprotection-name</split-brain-protection-ref>
     </vector-collection>
 </hazelcast>
 ----
@@ -149,7 +186,9 @@ YAML::
 ----
 hazelcast:
   vector-collection:
-    vector-collection-name:
+    books:
+      backup-count: 1
+      async-backup-count: 0
       indexes:
         - name: word2vec-index
           dimension: 6
@@ -160,6 +199,10 @@ hazelcast:
           max-degree: 32
           ef-construction: 256
           use-deduplication: false
+      merge-policy:
+        batch-size: 200
+        class-name: PutIfAbsentMergePolicy
+      split-brain-protection-ref: splitbrainprotection-name
 ----
 --
 Java::
@@ -169,6 +212,8 @@ Java::
 ----
 Config config = new Config();
 VectorCollectionConfig collectionConfig = new VectorCollectionConfig("books")
+    .setBackupCount(1)
+    .setAsyncBackupCount(0)
     .addVectorIndexConfig(
             new VectorIndexConfig()
                 .setName("word2vec-index")
@@ -182,7 +227,11 @@ VectorCollectionConfig collectionConfig = new VectorCollectionConfig("books")
                 .setMaxDegree(32)
                 .setEfConstruction(256)
                 .setUseDeduplication(false)
-    );
+    ).setMergePolicyConfig(
+            new MergePolicyConfig()
+                .setBatchSize(200)
+                .setPolicy(PutIfAbsentMergePolicy.class.getName())
+    ).setSplitBrainProtectionName("splitbrainprotection-name");
 config.addVectorCollectionConfig(collectionConfig);
 ----
 --
@@ -191,14 +240,91 @@ Python::
 --
 [source,python]
 ----
-client.create_vector_collection_config("books", indexes=[
+client.create_vector_collection_config("books", backup_count=1, async_backup_count=0, indexes=[
     IndexConfig(name="word2vec-index", metric=Metric.DOT, dimension=6),
     IndexConfig(name="glove-index", metric=Metric.DOT, dimension=10,
                 max_degree=32, ef_construction=256, use_deduplication=False),
-])
+], merge_policy="PutIfAbsentMergePolicy", merge_batch_size=200, split_brain_protection_name="splitbrainprotection-name")
 ----
 --
 ====
+
+
+[[split-brain-protection]]
+=== Split-Brain Protection
+Vector collection can be configured to check for a minimum number of
+available members before applying vector collection operations (see the xref:network-partitioning:split-brain-protection.adoc[Split-Brain Protection section]).
+This is a check to avoid performing successful vector collection operations on all parts of a cluster during a network partition.
+
+The following methods support split-brain protection checks:
+
+* `WRITE`, `READ_WRITE`:
+** `putAsync`
+** `setAsync`
+** `putIfAbsentAsync`
+** `putAllAsync`
+** `removeAsync`
+** `deleteAsync`
+** `clearAsync`
+** `optimizeAsync`
+* `READ`, `READ_WRITE`:
+** `getAsync`
+** `size`
+** `searchAsync`
+
+The value of `split-brain-protection-ref` should be the split-brain protection configuration name which you
+configured under the `split-brain-protection` element as explained in the xref:network-partitioning:split-brain-protection.adoc[Split-Brain Protection documentation].
+
+[[merge-policy]]
+=== Configuring Merge Policy
+
+While recovering from a split-brain scenario, Vector Collection
+in the small cluster merges into the bigger cluster based on a configured
+merge policy. The merge policy resolves conflicts with different out-of-the-box strategies.
+It can be configured programmatically using the method
+https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/config/vector/VectorCollectionConfig.html#setMergePolicyConfig(com.hazelcast.config.MergePolicyConfig)[setMergePolicyConfig()^],
+or declaratively using the element `merge-policy`.
+The following example shows declarative configuration:
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+    ...
+    <vector-collection name="books">
+        <merge-policy batch-size="200">PutIfAbsentMergePolicy</merge-policy>
+    </vector-collection>
+    ...
+</hazelcast>
+----
+--
+
+YAML::
++
+[source,yaml]
+----
+hazelcast:
+  vector-collection:
+    books:
+      merge-policy:
+        batch-size: 200
+        class-name: PutIfAbsentMergePolicy
+----
+====
+
+Vector collection supports the following policies:
+
+* `DiscardMergePolicy`: The entry from the smaller cluster is discarded.
+* `PassThroughMergePolicy`: The entry from the smaller cluster wins.
+* `PutIfAbsentMergePolicy`: The entry from the smaller cluster wins if it doesn't exist in the cluster.
+
+Additionally, you can develop a custom merge policy by implementing
+the `SplitBrainMergePolicy` interface, as explained in
+xref:network-partitioning:split-brain-recovery.adoc#custom-merge-policies[Custom merge policies].
 
 == Create collection
 
@@ -223,7 +349,7 @@ VectorCollectionConfig collectionConfig = new VectorCollectionConfig("books")
                 .setDimension(6)
                 .setMetric(Metric.DOT)
     );
-VectorCollection vectorCollection = VectorCollection.getCollection(hazelcastInstance, vectorCollectionConfig);
+VectorCollection vectorCollection = VectorCollection.getCollection(hazelcastInstance, collectionConfig);
 ----
 --
 Python::
@@ -594,21 +720,30 @@ By default, the vector values are not included. To include the vector values, se
 
 |===
 
+NOTE: Using a larger `limit` may yield better results than with a smaller `limit` — for example, the nearest neighbor may only be found with a sufficiently large `limit`. 
+This can be unexpected if you are trying to compare search results that use a different `limit`, since one is not guaranteed to be a subset of another. 
+You can use hints to fine-tune search precision, especially with smaller `limit` values.
 
 .Available hints
-[cols="1,2",options="header"]
+[cols="1,2,1",options="header"]
 |===
-|Hint|Description
+|Hint|Description|Type
+
+|efSearch
+|Size of list of potential candidates during search. Larger value results in better precision but slower execution.
+|Integer
 
 |partitionLimit
 |Number of results to fetch from each partition.
+|Integer
 
 |memberLimit
 |Number of results to fetch from member in two-stage search.
+|Integer
 
 |singleStage
 |Force use of single stage search.
-
+|Boolean
 |===
 
 [tabs]
@@ -622,13 +757,14 @@ var options = SearchOptions.builder()
                 .limit(10)
                 .includeValue()
                 .includeVectors()
-                .hint("partitionLimit", 1)
+                .hint("efSearch", 32)
+                .hint("partitionLimit", 5)
                 .build();
 ----
 --
 ====
 
-INFORMATION: Hints allow fine-tuning for some aspects of search execution but are subject to change and may be removed in future versions.
+NOTE: Hints allow fine-tuning for some aspects of search execution but are subject to change and may be removed in future versions.
 
 == Manage collection
 
@@ -638,11 +774,12 @@ This section provides additional methods for managing the vector collection.
 
 An optimization operation could be needed in the following cases:
 
-* To permanently delete vectors that were marked for removal.
+* To permanently delete vectors that were marked for removal and free the memory occupied by them.
 * After adding a significant number of vectors.
-* When the collection returns fewer vectors than expected.
+* When the collection searches return fewer vectors than expected.
 
-WARNING: The optimization operation can be a time-consuming and resource-intensive process, and no mutating operations are allowed during this process.
+WARNING: The optimization operation can be a time-consuming and resource-intensive process.
+Latency spikes for some mutating operations may occur during optimization.
 
 [tabs]
 ====
@@ -692,17 +829,5 @@ As this is a beta version, Vector Collection has some limitations; the most sign
 
 1. The API could change in future versions
 2. The rolling-upgrade compatibility guarantees do not apply for vector collections. You might need to delete existing vector collections before migrating to a future version of Hazelcast
-3. The lack of fault tolerance, as backups cannot yet be configured. However, data in collections is migrated to other cluster members on graceful shutdown and a new member joining the cluster, which means that normal cluster maintenance (such as a rolling restart) is possible without data loss.
-4. Only on-heap storage of vector collections is available
+3. Only on-heap storage of vector collections is available
 
-
-== Known issue
-
-There is currently a known issue that has potential for causing a memory leak in Vector collections in some scenarios:
-
-1. Using `destroy` or `clear` on a non-empty vector collection.
-2. Making a vector collection partition empty by removing the last entry using `deleteAsync` or `removeAsync`.
-3. Updating the only entry in a vector collection partition using one of the `put`/`set` methods.
-4. Repeating migrations back and forth when a member is not restarted. This should not significantly affect rolling restart, provided sufficient heap margin. The leak may manifest itself when a subset of members is not restarted and the rest of them are repeatedly shut down or restarted gracefully.
-
-The workaround for scenarios 1 - 3 is to avoid those situations or restart the affected cluster. For scenario 4 the workaround is to restart the affected member or cluster. The restart can be graceful, which should not cause loss of data. 

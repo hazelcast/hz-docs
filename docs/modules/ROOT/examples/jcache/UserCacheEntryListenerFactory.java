@@ -1,3 +1,5 @@
+package jcache;
+
 import javax.cache.configuration.Factory;
 import javax.cache.event.CacheEntryListener;
 

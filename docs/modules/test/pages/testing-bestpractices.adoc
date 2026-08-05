@@ -1,0 +1,47 @@
+= Best practices
+:description: The following practices help improve test reliability, execution speed, and reproducibility when writing tests for Hazelcast-powered applications.
+
+{description}
+
+== Test isolation
+
+- Use randomly generated cluster names to avoid clashes between instances meant to belong to different clusters, especially when running tests concurrently.
+- Use randomly assigned ports for the member endpoints, in case a network stack is spawned.
+- Always clean up resources after each test using `factory.shutdownAll()` or `Hazelcast.shutdownAll()` in a teardown hook.
+
+== Cluster configuration
+
+- Use mock networking for tests by default: it avoids the need for real sockets and speeds up execution. In case a real network is required use `-Dhazelcast.test.use.network=true`.
+- Reserve real networking setups for network integration or system tests only.
+- Keep test clusters small (2–3 nodes) to validate partitioning, replication, and quorum logic efficiently.
+- Assert cluster size explicitly using `assertClusterSizeEventually(...)` before testing distributed operations relying on fully formed clusters.
+- Assert nodes state explicitly with `waitAllForSafeState(...)` to make sure that all nodes are ready to operate (partition state is `SAFE`)
+- Use a small number of partitions (for example `11`) in your cluster configuration to expedite the cluster creation and test execution.
+
+== Managing flakiness
+
+- Use `@Repeat` to detect flaky tests that might otherwise pass unreliably.
+- Enable thread dump logging on failure by setting `hazelcast.test.threadDumpOnFailure=true`.
+
+== Hazelcast test properties
+
+The following system properties can be configured to fine-tune test behavior:
+
+- `hazelcast.test.use.network=false`: This is the default value to use mock networking. Set to `true` to use real networking.
+- `hazelcast.test.threadDumpOnFailure=true`: Print thread dumps when a test fails to aid debugging.
+- `hazelcast.phone.home.enabled=false`: Disable phone home feature for clean test output.
+- `hazelcast.wait.seconds.before.join=1`: Reduce wait time before a member attempts to join the cluster.
+- `hazelcast.local.localAddress=127.0.0.1`: Bind test members to the loopback address to avoid conflicts.
+- `java.net.preferIPv4Stack=true`: Ensure consistent networking on dual-stack systems.
+
+It can also be useful to configure logging with:
+
+- `hazelcast.logging.type=log4j2`: Configures logging with the specified log library (supported: `jdk`, `log4j`, `log4j2`, `none)
+- `hazelcast.logging.details.enabled=true`: Logs name, IP address and version of the cluster
+
+See xref:configuration:configuring-with-system-properties.adoc[].
+
+== Miscellaneous
+
+- Test execution durations are printed automatically when using `HazelcastParallelClassRunner` or `HazelcastSerialClassRunner`.
+- When using `HazelcastParallelClassRunner` and tests fail with an error in initialization or instances aren't shut down, some (other) tests may not properly shut down the clients/instances created. Make sure your tests do so.

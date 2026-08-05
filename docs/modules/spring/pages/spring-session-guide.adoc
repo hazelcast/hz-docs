@@ -1,0 +1,177 @@
+= Spring Session and Spring Security guide
+
+This guide describes how to use Spring Session along with Spring Security when you use Hazelcast as your data store.
+It assumes that you have already applied Spring Security to your application.
+
+NOTE: You can find the completed guide in the <<hazelcast-spring-security-sample, Hazelcast Spring Security sample application>>.
+
+== Update dependencies
+
+Before you use Spring Session, you must update your dependencies.
+
+If you use Maven, you must add the following dependencies:
+
+.pom.xml
+[source,xml]
+[subs="verbatim,attributes"]
+----
+<dependencies>
+	<!-- ... -->
+
+	<dependency>
+		<groupId>com.hazelcast</groupId>
+		<artifactId>hazelcast</artifactId>
+		<version>{os-version}</version>
+	</dependency>
+	<dependency>
+		<groupId>org.springframework</groupId>
+		<artifactId>spring-web</artifactId>
+		<version>7.0.0</version>
+	</dependency>
+	<dependency>
+		<groupId>com.hazelcast.spring</groupId>
+		<artifactId>hazelcast-spring-session</artifactId>
+		<version>4.0.0-RC1</version>
+	</dependency>
+</dependencies>
+----
+
+[[security-spring-configuration]]
+== Spring configuration
+
+After adding the required dependencies, we can create our Spring configuration.
+The Spring configuration is responsible for creating a servlet filter that replaces the `HttpSession` implementation with an implementation backed by Spring Session.
+To do so, add the following Spring Configuration:
+
+[source,java]
+----
+include::ROOT:example$/spring/HazelcastHttpSessionConfig.java[tags=config]
+----
+<1> The `@EnableHazelcastHttpSession` annotation creates a Spring bean named `springSessionRepositoryFilter` that implements `Filter`.
+The filter is in charge of replacing the `HttpSession` implementation to be backed by Spring Session.
+In this instance, Spring Session is backed by Hazelcast.
+<2> To serialize `BackingMapSession` objects efficiently, `HazelcastSessionCompactSerializer` and `AttributeValueCompactSerializer` needs to be registered. If this is not set, Hazelcast won't be able to deserialize session data.
+<3> For the best performance when using Hazelcast Spring Session with Spring Security, an index on `HazelcastIndexedSessionRepository.PRINCIPAL_NAME_ATTRIBUTE` must be added. This step is optional from Hazelcast Spring Session 4.0, as `HazelcastIndexedSessionRepository` will try to add this index automatically. If you want to customize your `MapConfig`, you need to add this index manually as overriding `MapConfig` by `HazelcastIndexedSessionRepository` is not possible.
+<4> We create a `HazelcastInstance` that connects Spring Session to Hazelcast.
+By default, the application starts and connects to an embedded instance of Hazelcast.
+
+== Servlet container initialization
+
+The instructions detailed in the link:https://docs.spring.io/spring-session/reference/guides/java-security.html#security-spring-configuration[Spring docs] created a Spring bean named `springSessionRepositoryFilter` that implements `Filter`.
+The `springSessionRepositoryFilter` bean is responsible for replacing the `HttpSession` with a custom implementation that is backed by Spring Session.
+
+In order for our `Filter` to do its magic, Spring needs to load our `SessionConfig` class.
+Since our application is already loading Spring configuration by using our `SecurityInitializer` class, we can add our `SessionConfig` class to it.
+The following listing shows how to do so:
+
+[source,java]
+----
+public class SecurityInitializer extends AbstractSecurityWebApplicationInitializer {
+
+	public SecurityInitializer() {
+		super(SecurityConfig.class, SessionConfig.class);
+	}
+
+}
+----
+
+Last, we need to ensure that our Servlet Container (that is, Tomcat) uses our `springSessionRepositoryFilter` for every request.
+It is extremely important that Spring Session's `springSessionRepositoryFilter` is invoked before Spring Security's `springSecurityFilterChain`.
+Doing so ensures that the `HttpSession` that Spring Security uses is backed by Spring Session.
+Fortunately, Spring Session provides a utility class named `AbstractHttpSessionApplicationInitializer` that makes this doing so easy.
+The following example shows how to do so:
+
+[source,java]
+----
+public class Initializer extends AbstractHttpSessionApplicationInitializer {
+
+}
+----
+
+NOTE: The name of our class (`Initializer`) does not matter. What is important is that we extend `AbstractHttpSessionApplicationInitializer`.
+
+By extending `AbstractHttpSessionApplicationInitializer`, we ensure that the Spring Bean named `springSessionRepositoryFilter` is registered with our servlet container for every request before Spring Security's `springSecurityFilterChain`.
+
+// end::config[]
+
+[[hazelcast-spring-security-sample]]
+== Hazelcast Spring Security sample application
+
+This section describes how to work with the Hazelcast Spring Security sample application.
+
+=== Running the sample application
+
+You can run the sample by obtaining the link:https://github.com/hazelcast/hazelcast-code-samples/tree/master/spring/spring-session-servlet[source code] and invoking the following command:
+
+[source,shell]
+----
+$ cd spring/spring-session-servlet
+$ mvn jetty:run
+----
+
+NOTE: By default, Hazelcast runs in embedded mode with your application.
+However, if you want to connect to a standalone instance instead, you can configure it by following the instructions in xref:getting-started:get-started-cli.adoc[].
+
+You should now be able to access the application at http://localhost:8080/
+
+=== Exploring the Security Sample application
+
+You can now try using the application.
+To do so, enter the following to log in:
+
+* *Username* _user_
+* *Password* _password_
+
+Now click the *Login* button.
+You should now see a message indicating that your are logged in with the user entered previously.
+The user's information is stored in Hazelcast rather than Tomcat's `HttpSession` implementation.
+
+=== How does it work?
+
+Instead of using Tomcat's `HttpSession`, we persist the values in Hazelcast.
+Spring Session replaces the `HttpSession` with an implementation that is backed by a `Map` in Hazelcast.
+When Spring Security's `SecurityContextPersistenceFilter` saves the `SecurityContext` to the `HttpSession`, it is then persisted into Hazelcast.
+
+When a new `HttpSession` is created, Spring Session creates a cookie named `SESSION` in your browser. That cookie contains the ID of your session.
+You can view the cookies (with https://developers.google.com/web/tools/chrome-devtools/manage-data/cookies[Chrome] or https://developer.mozilla.org/en-US/docs/Tools/Storage_Inspector[Firefox]).
+
+=== Interacting with the data store
+
+You can remove the session by using the xref:clients:java.adoc[Java client],
+xref:clients:hazelcast-clients.adoc[one of the other clients], or xref:{page-latest-supported-mc}@management-center:getting-started:overview.adoc[Management Center].
+
+==== Using the console
+
+For example, to remove the session by using the Management Center console after connecting to your Hazelcast node, run the following commands:
+
+[source,shell]
+----
+	default> ns spring:session:sessions
+	spring:session:sessions> m.clear
+----
+
+Alternatively, you can also delete the explicit key. Enter the following into the console, being sure to replace `7e8383a4-082c-4ffe-a4bc-c40fd3363c5e` with the value of your `SESSION` cookie:
+
+[source,shell]
+----
+	spring:session:sessions> m.remove 7e8383a4-082c-4ffe-a4bc-c40fd3363c5e
+----
+
+Now visit the application at http://localhost:8080/ and observe that we are no longer authenticated.
+
+==== Using the REST API
+
+As described in the section of the documentation that cover other clients, there is a
+xref:wan:rest-api.adoc[REST API]
+provided by the Hazelcast node(s).
+
+For example, you could delete an individual key as follows (being sure to replace `7e8383a4-082c-4ffe-a4bc-c40fd3363c5e` with the value of your SESSION cookie):
+
+[source,shell]
+----
+	$ curl -v -X DELETE http://localhost:xxxxx/hazelcast/rest/maps/spring:session:sessions/7e8383a4-082c-4ffe-a4bc-c40fd3363c5e
+----
+
+TIP: The port number of the Hazelcast node is printed to the console on startup. Replace `xxxxx` with the port number.
+
+Now you can see that you are no longer authenticated with this session.

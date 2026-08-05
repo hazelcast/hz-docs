@@ -1,0 +1,283 @@
+= Common test utilities
+:description: This section describes Hazelcast's common test utilities across caching and streaming applications.
+
+{description}
+
+== Repeat tests
+
+Use `@Repeat(n)` (`com.hazelcast.test.annotation.Repeat`) to repeat a test multiple times. This is useful to execute a test multiple times to trigger flaky behavior. The test passes _only_ if all repeated executions succeed.
+
+[source,java]
+----
+@Repeat(5)
+@Test
+public void testFlakyBehaviour() {
+    // ...
+}
+----
+
+== Test runners
+
+Hazelcast provides custom runners:
+
+- `HazelcastSerialClassRunner`: runs tests sequentially.
+- `HazelcastParallelClassRunner`: runs tests in parallel.
+
+[source,java]
+----
+@RunWith(HazelcastParallelClassRunner.class)
+public class MyClusterTest extends HazelcastTestSupport {
+    // ...
+}
+----
+
+Tests using these runners may fail if some other test doesn't shutdown client or member instances correctly.
+
+== Isolate clusters by name
+
+Use `randomName()` to avoid interference when tests run in parallel.
+
+[source,java]
+----
+String clusterName = HazelcastTestSupport.randomName();
+Config config = new Config().setClusterName(clusterName);
+HazelcastInstance[] members = factory.newInstances(config, 2);
+
+ClientConfig clientConfig = new ClientConfig().setClusterName(clusterName);
+HazelcastInstance client = factory.newHazelcastClient(clientConfig);
+----
+
+=== Clean up resources
+
+At the end of each test or test class, use `shutdown()` on individual Hazelcast instances, or a factory's `shutdownAll()` method to clean up all Hazelcast instances.
+
+JUnit 4:
+[source,java]
+----
+@After
+public void tearDown() {
+    client.shutdown();
+    member1.shutdown();
+
+    // or
+    factory.shutdownAll();
+}
+----
+
+JUnit 5:
+[source,java]
+----
+@AfterAll
+static void tearDownCluster() {
+    client.shutdown();
+    member1.shutdown();
+
+    // or
+    factory.shutdownAll();
+}
+----
+
+Shutting down a single instance via `ìnstance.shutdown()` will trigger a graceful shutdown. The method `instance.getLifecycleService().terminate()` can be used to trigger an ungraceful termination, which can be used to mimic failure scenarios.
+
+== Test distributed logic
+
+It's possible to test distributed logic with a combination of Hazelcast test support and mock objects. This is useful to test the wiring of callbacks.
+
+=== Test map events
+
+For example, consider an event listener on an `IMap` to illustrate the pattern. You can test the invocation of the mocked listener and verify its invocation.
+
+[source,java]
+----
+import com.hazelcast.core.EntryEvent;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.map.listener.EntryUpdatedListener;
+import com.hazelcast.test.HazelcastTestSupport;
+import org.junit.Test;
+
+import static org.mockito.Mockito.*;
+
+public class MyMapListenerTest extends HazelcastTestSupport {
+
+    @Test
+    public void testUpdateTriggersListener() {
+        // create Hazelcast member
+        HazelcastInstance instance = createHazelcastInstance();
+
+        // create mock listener
+        EntryUpdatedListener<String, String> mockListener = mock(EntryUpdatedListener.class);
+
+        // register the listener
+        IMap<String, String> map = instance.getMap("test-map");
+        map.addEntryListener(mockListener, true);
+
+        // insert and update an entry
+        map.put("key1", "initial");
+        map.put("key1", "updated");
+
+        // verify the listener received the update
+        verify(mockListener, timeout(1000).times(1)).entryUpdated(any(EntryEvent.class));
+    }
+}
+----
+
+The following example tests the invocation of an asynchronous `MapStore`. When using Hazelcast `IMap` with `MapStore`, entries can be loaded from or persisted to an external data source. This example shows how to validate the integration between `IMap` and a `MapStore` using a real backing store and `TestHazelcastFactory` in a JUnit 5 context.
+
+[source,java]
+----
+import com.hazelcast.config.Config;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.MapStore;
+import com.hazelcast.test.TestHazelcastFactory;
+import org.junit.jupiter.api.*;
+
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+class MyMapStoreTest {
+
+    private static TestHazelcastFactory factory;
+    private static HazelcastInstance hz;
+
+    @BeforeAll
+    static void setup() {
+        factory = new TestHazelcastFactory();
+
+        // Create a mock MapStore that throws on load
+        @SuppressWarnings("unchecked")
+        MapStore<String, String> mockMapStore = mock(MapStore.class);
+        when(mockMapStore.load("fail")).thenThrow(new RuntimeException("Simulated failure"));
+        when(mockMapStore.load("key1")).thenReturn("value1");
+
+        // Configure Hazelcast to use the mock MapStore
+        Config config = new Config();
+        config.setClusterName(randomName());
+        config.getMapConfig("testMap")
+              .getMapStoreConfig()
+              .setEnabled(true)
+              .setImplementation(mockMapStore);
+
+        hz = factory.newHazelcastInstance(config);
+    }
+
+    @AfterAll
+    static void teardown() {
+        if (factory != null) {
+            factory.shutdownAll();
+        }
+    }
+
+    @Test
+    void testSuccessfulLoadFromMock() {
+        var map = hz.getMap<String, String>("testMap");
+
+        // This triggers MapStore.load("key1")
+        String result = map.get("key1");
+        assertEquals("value1", result);
+    }
+
+    @Test
+    void testLoadFailureHandled() {
+        var map = hz.getMap<String, String>("testMap");
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () -> {
+            map.get("fail"); // triggers MapStore.load("fail")
+        });
+
+        assertThatThrownBy(() ->  map.get("fail"))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("Simulated failure");
+    }
+
+    @Test
+    void testStoreIsInvoked() {
+        @SuppressWarnings("unchecked")
+        MapStore<String, String> mockMapStore = mock(MapStore.class);
+
+        // Configure and start another instance for the store test
+        Config config = new Config().setClusterName("store-test");
+        config.getMapConfig("storeMap")
+              .getMapStoreConfig()
+              .setEnabled(true)
+              .setImplementation(mockMapStore);
+
+        HazelcastInstance storeHz = factory.newHazelcastInstance(config);
+        var storeMap = storeHz.getMap<String, String>("storeMap");
+
+        storeMap.put("k2", "v2");
+
+        // Verify that store was called
+        verify(mockMapStore, timeout(1000)).store("k2", "v2");
+
+        storeHz.shutdown();
+    }
+}
+----
+
+=== Test member failure scenarios
+
+Application logic that handles scenarios where nodes fail or the cluster size changes can be tested by explicitly calling members' shutdown. In this example, we can capture and test the logic of a listener (mocked here for simplicity) programmed to react to a member being stopped:
+
+[source,java]
+----
+public class MyClusterFailureTest {
+
+    private HazelcastInstance client;
+    private HazelcastInstance member1;
+    private HazelcastInstance member2;
+    private MembershipListener mockListener;
+
+    @BeforeEach
+    void setupCluster() {
+        TestHazelcastFactory factory = new TestHazelcastFactory(2);
+        member1 = factory.newHazelcastInstance(getConfig("1"));
+        member2 = factory.newHazelcastInstance(getConfig("2"));
+
+        ClientConfig clientConfig = new ClientConfig();
+        mockListener = mock(MembershipListener.class);
+        ListenerConfig listenerConfig = new ListenerConfig(mockListener);
+        listenerConfig.setImplementation(mockListener);
+        clientConfig.addListenerConfig(listenerConfig);
+        client = factory.newHazelcastClient(clientConfig);
+    }
+
+    private static Config getConfig(String v) {
+        MemberAttributeConfig mAttr = new MemberAttributeConfig();
+        mAttr.setAttribute("m", v);
+        Config config = new Config();
+        config.setMemberAttributeConfig(mAttr);
+        return config;
+    }
+
+    @AfterEach
+    void tearDownCluster() {
+        if (client != null) {
+            client.shutdown();
+        }
+        if (factory != null) {
+            factory.shutdownAll();
+        }
+    }
+
+    @Test
+    public void testClusterFailure() {
+        assertClusterSizeEventually(2, client);
+        member1.getMap("testMap").put("key1", "value1");
+        assertEqualsEventually(() -> client.getMap("testMap").get("key1"), "value1");
+        // for graceful shutdown
+        member1.shutdown();
+        // for abrupt termination
+        // member1.getLifecycleService().terminate()
+        assertClusterSizeEventually(1, client);
+        member1 = null;
+        assertEqualsEventually(() -> client.getMap("testMap").get("key1"), "value1");
+        ArgumentCaptor<MembershipEvent> membershipCaptor = ArgumentCaptor.forClass(MembershipEvent.class);
+        verify(mockListener).memberRemoved(membershipCaptor.capture());
+        MembershipEvent membershipEvent = membershipCaptor.getValue();
+        assertEqualsEventually(() -> membershipEvent.getMember().getAttribute("m"), "1");
+    }
+}
+----

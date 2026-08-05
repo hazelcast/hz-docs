@@ -1,3 +1,5 @@
+package jcache;
+
 import javax.cache.integration.CacheLoader;
 import javax.cache.integration.CacheLoaderException;
 import java.io.Serializable;

@@ -18,7 +18,7 @@ import static com.hazelcast.examples.helper.CommonUtils.closeQuietly;
  * <li>the system property {@code -Dhazelcast.enterprise.license.key=<YOUR_LICENSE_KEY_HERE>}</li>
  * </ul>
  *
- * You can request a trial key at http://hazelcast.com/hazelcast-enterprise-trial
+ * You can request a trial key at http://hazelcast.com/hazelcast-enterprise-trial?utm_source=docs-website
  */
 public final class LicenseUtils {
 

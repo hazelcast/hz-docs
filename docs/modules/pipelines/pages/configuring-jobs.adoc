@@ -1,5 +1,5 @@
 = Configuring Jobs
-:description: Before submitting a job to a cluster, you can configure its name, whether to record metrics, and how it behaves when cluster members fail.
+:description: Before submitting a job to a cluster, you can configure its name, whether to record metrics, how it behaves when cluster members fail, and more.
 
 {description}
 
@@ -28,6 +28,11 @@ a|Depends on the source or sink.
 |positive `INT`
 |10000
 
+|requireSnapshotBeforeProcessing
+|When enabled, the job performs an initial snapshot before processing any data and transitions to RUNNING only after the snapshot completes successfully.
+|`boolean`
+|false
+
 |autoScaling
 |Enable jobs to scale automatically when new members are added to the cluster or existing members are removed from the cluster.
 |`boolean`
@@ -41,7 +46,7 @@ a|Depends on the source or sink.
 |suspendOnFailure
 |Sets what happens when a job execution fails. 
 
-- If enabled, the job will be suspended on failure. A snapshot of the job's computational state will be preserved. You can update the configuration of a suspended job and resume it link:https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/jet/config/DeltaJobConfig.html[programmatically] or xref:sql:alter-job.adoc[using SQL].
+- If enabled, the job will be suspended on failure. A snapshot of the job's computational state will be preserved. You can update the configuration of a suspended job and resume it link:https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/jet/config/DeltaJobConfig.html[programmatically] or xref:sql:alter-job.adoc[using SQL].
 - If disabled, the job will be terminated and the job snapshots will be deleted. 
 |`boolean`
 |true
@@ -50,6 +55,11 @@ a|Depends on the source or sink.
 |Name the snapshot from which to start the job.
 |`string`
 |''
+
+|userCodeNamespace
+|The User Code Namespace to associate these jobs with for access to custom resources, or `null` if not associated with one. xref:clusters:user-code-namespaces.adoc[{ucn}] must be enabled and the provided namespace configured.
+|`string`
+|null
 
 |===
 
@@ -169,3 +179,37 @@ cluster change depending on these two settings.
 |suspend job
 |===
 
+== Configure a User Code Namespace
+
+Normal Jet jobs can be configured to use a xref:clusters:user-code-namespaces.adoc[User Code Namespace] (UCN), which provides them
+access to custom resources associated with that UCN. {ucn} must be enabled and a namespace configured with the desired resources
+created before it can be used in jobs. Any data structures used in these jobs should also have their UCN configured to ensure
+operations for that data structure also have access to the necessary custom resources. Light jobs do not support UCN.
+
+{ucn} are managed separately to the Jet system, so these resources persist between individual jobs. This support allows for jobs to
+be submitted and updated while still being able to use the same custom resources within pipelines.
+
+WARNING: {ucn} can be dynamically updated at runtime, but it is recommended that namespaces associated with Jet jobs are not changed
+while those jobs are running. Doing so may cause job execution inconsistency between member nodes if jobs restart during the namespace update. If all related jobs are suspended, then the associated namespace can be safely updated before resuming jobs.
+
+The following is an example of how to associate a namespace with a job. The namespace must already be configured
+in the Hazelcast member configuration.
+
+[tabs]
+====
+Java::
++
+--
+[source,java]
+----
+JobConfig jobConfig = new JobConfig();
+jobConfig.setUserCodeNamespace("my_namespace");
+----
+--
+
+SQL::
++
+--
+NOTE: Definition of a UCN is not supported via SQL.
+--
+====

@@ -1,21 +1,32 @@
-= Enabling SpringAware Objects
+= Enable SpringAware data structures
 
-You can mark Hazelcast Distributed Objects with `@SpringAware` if the object wants to apply:
+You can mark Hazelcast distributed objects with Hazelcast's `@SpringAware` annotation. This enables the objects to apply:
 
-* bean properties
-* factory callbacks such as `ApplicationContextAware`, `BeanNameAware`
-* bean post-processing annotations such as `InitializingBean`, `@PostConstruct`.
+* Bean properties
+* Factory callbacks such as `ApplicationContextAware` and `BeanNameAware`
+* Bean post-processing annotations such as `InitializingBean` and `@PostConstruct`
 
-Hazelcast Distributed `ExecutorService`, or more generally any
-Hazelcast managed object, can benefit from these features. To enable
-SpringAware objects, you must first configure `HazelcastInstance` using
-*hazelcast* namespace as explained in <<configuring-spring, Configuring Spring>>
-and add `<hz:spring-aware />` tag.
+Any Hazelcast object can benefit from these features. For more information, see link:https://docs.spring.io/spring-framework/reference/core/beans/factory-nature.html[Customizing the Nature of a Bean] in the Spring Framework documentation.
 
-== SpringAware Examples
+== Configuration
 
-* Configure a Hazelcast Instance via Spring Configuration and define *someBean* as Spring Bean.
-* Add `<hz:spring-aware />` to Hazelcast configuration to enable @SpringAware.
+To enable SpringAware objects:
+
+. Configure a `HazelcastInstance` using the `hazelcast` namespace as described in xref:configuration.adoc#hazelcast-namespace[Configure Hazelcast in Spring].
+
+. Add the `<hz:spring-aware />` tag.
+// Should we have a Java equivalent here?
+
+NOTE: Spring-managed properties and fields are always `transient`.
+
+== SpringAware examples
+
+The following examples show how to use the `@SpringAware` annotation on different objects.
+
+=== Hazelcast instance
+
+. Configure a Hazelcast instance via Spring configuration and define `someBean` as a bean.
+. Add `<hz:spring-aware />` to Hazelcast configuration to enable `@SpringAware`.
 +
 [source,xml]
 ----
@@ -54,10 +65,9 @@ and add `<hz:spring-aware />` tag.
 </beans>
 ----
 
-**Distributed Map SpringAware Example:**
+=== IMap
 
-* Create a class called `SomeValue` which contains Spring Bean definitions
-like `ApplicationContext` and `SomeBean`.
+. Create a class called `SomeValue` that contains bean definitions `ApplicationContext` and `SomeBean`.
 +
 [source,java]
 ----
@@ -88,8 +98,7 @@ public class SomeValue implements Serializable, ApplicationContextAware {
 }
 ----
 +
-* Get `SomeValue` Object from Context and put it into Hazelcast Distributed Map
-on the first member.
+. Get `SomeValue` object from context and put it into the Hazelcast distributed map on the first member.
 +
 [source,java]
 ----
@@ -100,8 +109,7 @@ IMap<String, SomeValue> map = hazelcastInstance.getMap( "values" );
 map.put( "key", value );
 ----
 +
-* Read `SomeValue` Object from Hazelcast Distributed Map and assert
-that `init` method is called since it is annotated with `@PostConstruct`.
+. Read `SomeValue` object from the Hazelcast distributed map and assert that the `init` method is called because it is annotated with `@PostConstruct`.
 +
 [source,java]
 ----
@@ -112,10 +120,9 @@ SomeValue value = map.get( "key" );
 Assert.assertTrue( value.init );
 ----
 
-**ExecutorService SpringAware Example:**
+=== ExecutorService
 
-* Create a Callable Class called SomeTask which contains
-Spring Bean definitions like `ApplicationContext`, `SomeBean`.
+. Create a callable class called `SomeTask` that contains bean definitions `ApplicationContext` and `SomeBean`.
 +
 [source,java]
 ----
@@ -142,7 +149,7 @@ public class SomeTask
 }
 ----
 +
-* Submit `SomeTask` to two Hazelcast Members and assert that `someBean` is autowired.
+. Submit `SomeTask` to two Hazelcast Members and assert that `someBean` is autowired.
 +
 [source,java]
 ----
@@ -161,5 +168,3 @@ Future<Long> f2 = (Future<Long>) hazelcast.getExecutorService("executorService")
     .submitToMember(new SomeTask(), member);
 Assert.assertEquals(bean.value, f2.get().longValue());
 ----
-
-NOTE: Spring managed properties/fields are marked as `transient`.

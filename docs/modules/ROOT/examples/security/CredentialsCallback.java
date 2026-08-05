@@ -1,3 +1,5 @@
+package security;
+
 import com.hazelcast.security.Credentials;
 
 import javax.security.auth.callback.Callback;

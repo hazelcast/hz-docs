@@ -1,7 +1,149 @@
 = Node.js Client
 :page-api-reference: http://hazelcast.github.io/hazelcast-nodejs-client/api/{page-latest-supported-nodejs-client}/docs/
 
-Node.js Client implementation for Hazelcast. It is implemented using the Hazelcast Open Binary Client Protocol.
+== Overview
 
-See Hazelcast Node.js client's GitHub https://github.com/hazelcast/hazelcast-nodejs-client[repo^]
-for its documentation and https://github.com/hazelcast/hazelcast-nodejs-client/tree/master/code_samples[code samples^].
+This section provides information about the Node.js client for Hazelcast, and explains how to install and get started with the client.
+
+TIP: To learn how to get started quickly with the Hazelcast Node.js client, follow our xref:clients:nodejs-client-getting-started.adoc[Get started with Node.js] tutorial.
+
+The official Hazelcast Node.js client is a library that allows Node.js applications to connect to and interact with a Hazelcast cluster, enabling features such as distributed maps, caching, and more. It provides a promise-based API with built-in support for native JavaScript objects. The key features and benefits include:
+
+
+* Distributed, partitioned and queryable in-memory key-value store implementation, called **Map**
+* Eventually consistent cache implementation to store a subset of the Map data locally in the memory of the client, called **Near Cache**
+* Additional data structures and simple messaging constructs such as **Set**, **MultiMap**, **Queue**, **Topic**
+* Cluster-wide unique ID generator, called **FlakeIdGenerator**
+* Distributed, CRDT-based counter, called **PNCounter**
+* Distributed concurrency primitives from CP Subsystem, such as **FencedLock**, **Semaphore**, **AtomicLong**
+* Integration with https://cloud.hazelcast.com/[Hazelcast Cloud]
+* Support for serverless and traditional web service architectures with **Unisocket** and **Smart** operation modes
+* Ability to listen to client lifecycle, cluster state and distributed data structure events
+
+These features make the Hazelcast Node.js client a powerful tool for building distributed, high-performance Node.js applications to leverage Hazelcast's in-memory computing capabilities.
+
+TIP: For the latest Node.js API documentation, see http://hazelcast.github.io/hazelcast-nodejs-client/api/{page-latest-supported-nodejs-client}/docs/[Hazelcast Node.js Client docs].
+
+== Install the Node.js client
+
+This section explains how to set up a Hazelcast cluster and install the Hazelcast Node.js client.
+
+=== Set up a Hazelcast cluster
+
+The Hazelcast Node.js client requires a working Hazelcast cluster to run. The cluster handles storage and manipulation of the user data. Clients are a way to connect to the Hazelcast cluster and access the data.
+
+The quickest way to start a single member cluster for development purposes is to use our https://hub.docker.com/r/hazelcast/hazelcast/[Docker images].
+
+Launch a Hazelcast Docker Container by running the following command:
+
+```bash
+docker run -p 5701:5701 hazelcast/hazelcast
+```
+This command fetches the latest Hazelcast version. You can find all available tags
+https://hub.docker.com/r/hazelcast/hazelcast/tags[here].
+
+TIP: For a step-by-step guide, see the https://docs.hazelcast.com/hazelcast/latest/getting-started/get-started-docker[Start a local cluster in Docker] and https://docs.hazelcast.com/hazelcast/latest/getting-started/enterprise-overview[Get Started with Hazelcast Enterprise Edition] tutorials. 
+
+Alternatively, you can run standalone members by downloading and running distribution files from the Hazelcast website as follows:
+
+. Go to the download page and choose either the https://hazelcast.com/open-source-projects/downloads/[ZIP or TAR distribution] of Hazelcast.
+. Decompress the contents into the directory that you want to run members from.
+. Change into this directory and then start the Hazelcast member using the ``./bin/hz start`` command. 
+
+The Hazelcast log appears in the terminal showing that your 1-member cluster is ready to be used.
+
+=== Install the client library
+
+Use the `npm install` command to install the Hazelcast Node.js client library into your project. 
+
+```bash
+npm install hazelcast-client --save
+```
+After running this command, you can use the Hazelcast client in your Node.js code to access Hazelcast data structures and services. 
+
+== Use the client
+
+This section shows how to connect to a Hazelcast cluster and perform some basic operations using the client. 
+
+*Example: Connect to a Hazelcast cluster*
+
+Import the Client class from the Hazelcast Node.js client library. This creates a new Hazelcast client instance and connects to a Hazelcast cluster using the default configuration. The `await` keyword ensures that the code waits for the client to successfully connect before proceeding.
+
+```js
+const { Client } = require('hazelcast-client');
+const client = await Client.newHazelcastClient();
+```
+
+*Example: Get or create the 'distributed-map' on the cluster*
+
+```js
+const map = await client.getMap('distributed-map');
+```
+
+*Example: Put 'key', 'value' pair into the 'distributed-map'*
+
+```js
+await map.put('key', 'value');
+```
+
+*Example: Get the value associated with the given key from the cluster*
+
+```js
+const value = await map.get('key');
+console.log(value); // Outputs 'value'
+```
+
+*Example: Shut down the client*
+
+```js
+await client.shutdown();
+```
+
+NOTE: To see the complete code, see this https://github.com/hazelcast/hazelcast-nodejs-client/tree/master/code_samples/readme_sample.js[code sample].
+
+== Configure the client
+
+If you are running Hazelcast and the Node.js client on the same machine, the default configuration should work 'out of the box'. 
+However, if you run the client on a different computer to that of the cluster members, you may need to do some simple configuration, such as specifying member addresses, or customizing client properties.
+
+The following shows how to configure and connect a Hazelcast Node.js client to a specific Hazelcast cluster, listen for lifecycle events, and then shut down the client:
+
+```js
+const { Client } = require('hazelcast-client');
+
+const client = await Client.newHazelcastClient({
+    clusterName: 'cluster-name',
+    network: {
+        clusterMembers: [
+            '10.90.0.2:5701',
+            '10.90.0.3:5701'
+        ]
+    },
+    lifecycleListeners: [
+        (state) => {
+            console.log('Lifecycle Event >>> ' + state);
+        }
+    ]
+});
+
+console.log('Connected to cluster');
+await client.shutdown();
+```
+
+To learn more about supported configuration options, see the  
+https://github.com/hazelcast/hazelcast-nodejs-client/blob/master/DOCUMENTATION.md[Node.js client documentation]
+
+
+== Get support
+
+Join us in the https://hazelcastcommunity.slack.com/channels/nodejs-client[Node.js client channel]. 
+Get an invite via https://slack.hazelcast.com/[Slack].
+
+Raise an issue in the https://github.com/hazelcast/hazelcast-nodejs-client/issues[GitHub repository].
+
+== Next steps
+
+For more information, see: 
+
+- Hazelcast Node.js client GitHub https://github.com/hazelcast/hazelcast-nodejs-client[repo^]
+- https://github.com/hazelcast/hazelcast-nodejs-client/tree/master/code_samples[Code samples^]

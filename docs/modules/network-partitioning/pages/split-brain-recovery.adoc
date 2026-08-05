@@ -40,8 +40,7 @@ For more information, see the xref:consistency-and-replication:consistency.adoc[
 
 == Merge Policies
 
-Since Hazelcast 3.10 all merge policies implement
-the unified interface `com.hazelcast.spi.SplitBrainMergePolicy`.
+All merge policies implement the unified interface `com.hazelcast.spi.SplitBrainMergePolicy`.
 We provide the following out-of-the-box implementations:
 
 * `DiscardMergePolicy`: The entry from the smaller cluster is discarded.
@@ -55,6 +54,10 @@ the maximum register value of the two given instances.
 * `PassThroughMergePolicy`: the entry from the smaller cluster wins.
 * `PutIfAbsentMergePolicy`: The entry from the smaller cluster wins if
 it doesn't exist in the cluster.
+
+NOTE: When used with `IMap`, `HigherHitsMergePolicy`, `LatestAccessMergePolicy`, and `LatestUpdateMergePolicy`
+require `per-entry-stats-enabled` to be set to `true` in the map configuration. This option is `false` by default.
+The same requirement applies to custom `IMap` merge policies that require per-entry statistics merge types.
 
 Additionally, you can develop a custom merge policy by implementing
 the `SplitBrainMergePolicy` interface, as explained in the
@@ -76,6 +79,7 @@ The following data structures support split-brain recovery:
 * `Ringbuffer`
 * `CardinalityEstimator`
 * `ScheduledExecutorService`
+* `VectorCollection` [.enterprise]*{enterprise-product-name}*
 
 The statistic based out-of-the-box merge policies are only supported by
 `IMap`, `ICache`, `ReplicatedMap` and `MultiMap`.
@@ -118,6 +122,7 @@ XML::
 <hazelcast>
     ...
     <map name="default">
+        <per-entry-stats-enabled>true</per-entry-stats-enabled>
         <merge-policy batch-size="100">LatestUpdateMergePolicy</merge-policy>
     </map>
 
@@ -136,6 +141,10 @@ XML::
     <atomic-long name="default">
         <merge-policy>PutIfAbsentMergePolicy</merge-policy>
     </atomic-long>
+
+    <vector-collection name="default">
+        <merge-policy batch-size="100">PutIfAbsentMergePolicy</merge-policy>
+    </vector-collection>
     ...
 </hazelcast>
 ----
@@ -148,6 +157,7 @@ YAML::
 hazelcast:
   map:
     default:
+      per-entry-stats-enabled: true
       merge-policy:
         batch-size: 100
         class-name: LatestUpdateMergePolicy
@@ -169,6 +179,11 @@ hazelcast:
   atomic-long:
     default:
       merge-policy:
+        class-name: PutIfAbsentMergePolicy
+  vector-collection:
+    default:
+      merge-policy:
+        batch-size: 100
         class-name: PutIfAbsentMergePolicy
 ----
 ====
@@ -226,6 +241,7 @@ Config config = new Config()
   .addMapConfig(mapConfig);
 ----
 
+[#custom-merge-policies]
 == Custom Merge Policies
 
 To implement a custom merge policy you have to implement `com.hazelcast.spi.SplitBrainMergePolicy`:
@@ -243,6 +259,9 @@ public interface SplitBrainMergePolicy<V, T extends MergingValue<V>, R>
 
 NOTE: Please have in mind that `existingValue` can be `null`.
 This happens when a data structure or key-based entry was just created in the smaller cluster.
+
+NOTE: Custom merge policy classes must be present on the classpath of all member nodes. This can be achieved
+by updating the classpath for each node manually, or by using the {ucn} feature. See xref:clusters:user-code-namespaces.adoc[User Code Namespaces] for more information.
 
 === Merge Types
 
@@ -383,6 +402,10 @@ And the following table shows the merge types provided by each data structure:
 
 * `MergingEntry`
 | `ScheduledExecutorService`
+|
+
+* `MergingEntry`
+| `VectorCollection`
 |
 
 * `MergingEntry`

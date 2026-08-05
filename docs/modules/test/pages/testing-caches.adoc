@@ -1,0 +1,171 @@
+= Testing distributed applications
+:description: This guide explains how to write unit, component, integration, and in-JVM tests for Hazelcast clusters and clients using Hazelcast’s built-in test support utilities.
+
+{description}
+
+It covers:
+
+- Creating test clusters.
+- Managing members and clients in test code.
+- Injecting custom configurations.
+- Isolating tests and cleaning up resources.
+- Using assertion utilities for distributed state and asynchronous behavior.
+
+Hazelcast provides two primary test support classes:
+
+- `TestHazelcastFactory` to create Hazelcast client and server instances and manage their lifecycle.
+- `HazelcastTestSupport` provides utility methods to create instances and assert conditions. It uses internally the factory classes.
+
+For dependencies and test setup, see: xref:testing-setup.adoc[Testing setup].
+
+Both classes can be used with any test framework (JUnit, TestNG, etc.).
+
+
+== Important note on compatibility
+
+The `HazelcastTestSupport`, `JetTestSupport`, `TestHazelcastInstanceFactory`, and related factory classes are primarily maintained to support testing of Hazelcast’s core features. As such, their APIs may evolve over time, and they are not guaranteed to be stable across any versions. While they are suitable for use in your own test suites, be aware that internal changes may affect future compatibility.
+
+== Cluster creation and management
+
+`TestHazelcastFactory` can  be used directly to create Hazelcast instances and clients:
+
+[source,java]
+----
+class MyJupiterClusterTest {
+
+    private static TestHazelcastFactory factory;
+    private static HazelcastInstance member1;
+    private static HazelcastInstance member2;
+    private static HazelcastInstance client;
+
+    @BeforeAll
+    static void setupCluster() {
+        factory = new TestHazelcastFactory(2);
+        member1 = factory.newHazelcastInstance();
+        member2 = factory.newHazelcastInstance();
+        client = factory.newHazelcastClient();
+    }
+
+    @AfterAll
+    static void tearDownCluster() {
+        factory.shutdownAll();
+    }
+
+    @Test
+    void testClusterFormed() {
+        assertEquals(2, member1.getCluster().getMembers().size());
+    }
+}
+----
+
+To customise configuration:
+
+[source,java]
+----
+Config config = new Config().setProperty("hazelcast.some.property", "value");
+HazelcastInstance member1 = factory.newHazelcastInstance(config);
+HazelcastInstance member2 = factory.newHazelcastInstance(config);
+----
+
+== Configuration factories
+
+`HazelcastTestSupport` provides a set of static factory methods to create Config objects pre-tuned for test scenarios to reduce boilerplate.
+
+- `smallInstanceConfig()` creates a lightweight Config suitable for small test clusters. It reduces partition count and thread counts, while keeping Jet and metrics enabled.
+- `smallInstanceConfigWithoutJetAndMetrics()` creates a lightweight Config with reduced partition count and threads, but disables Jet and metrics entirely. This is useful if your tests don’t require Jet pipelines or metrics collection and you want to minimise overhead. Key adjustments:
+    - Partition count set to 11
+    - Reduced thread pool sizes (partition-operation=2, generic-operation=2, event=1)
+    - Logging set to log4j2
+    - Jet disabled
+    - Metrics disabled
+- `shrinkInstanceConfig(Config config)` takes an existing Config, applies the same resource-reduction settings as above, but keeps Jet and metrics enabled. Jet is configured with only 2 cooperative threads.
+- `regularInstanceConfig()` returns a default Config with Jet explicitly enabled. Use this if you want a full-featured cluster in tests but still need to control Jet availability.
+- `withoutNetworkJoin(Config config)` Disables automatic member discovery (TCP/IP join and auto-detection). Use this when you want isolated clusters in tests, created only via factories.
+
+== Create clients
+
+Use `TestHazelcastFactory` to create both member and client instances:
+
+[source,java]
+----
+TestHazelcastFactory factory = new TestHazelcastFactory(config, 2);
+HazelcastInstance[] members = factory.newInstances(2);
+HazelcastInstance client = factory.newHazelcastClient();
+----
+
+For example:
+
+[source,java]
+----
+public class MyClusterClientTest {
+
+    @Test
+    public void testClientPutAndGetAcrossCluster() throws Exception {
+        // given: a 2-node in-process cluster with client
+        TestHazelcastFactory factory = new TestHazelcastFactory(2);
+        HazelcastInstance member1 = factory.newHazelcastInstance();
+        HazelcastInstance member2 = factory.newHazelcastInstance();
+
+        HazelcastInstance client = factory.newHazelcastClient();
+
+        member2.getMap("map").put("key0", "value0");
+        // when: client puts an entry
+        IMap<String, String> clientMap = client.getMap("map");
+        clientMap.put("key1", "value1");
+
+        // then: client and cluster see the entry
+        assertTrueEventually(() -> assertEquals("value0", clientMap.get("key0")));
+        assertTrueEventually(() -> assertEquals("value1", clientMap.get("key1")));
+    }
+
+}
+----
+
+**IMPORTANT** make sure to shut down the instances:
+
+[source,java]
+----
+if (client!=null) client.shutdown();
+if (factory!=null) factory.shutdownAll();
+
+// alternatively, instances can be shutdown manually (useful to model scenarios where cluster size changes at runtime):
+member1.shutdown();
+member2.shutdown();
+----
+
+TIP: Perform the cleanup in an `@After` or `@AfterAll` annotated method to be sure that resources are correctly released.
+
+== Assertion methods
+
+`HazelcastTestSupport` offers a rich set of static assertion methods to validate both cluster state and asynchronous behavior. The following are the most commonly used ones:
+
+[source,java]
+----
+import static com.hazelcast.test.HazelcastTestSupport.assertClusterSize;
+import static com.hazelcast.test.HazelcastTestSupport.assertClusterSizeEventually;
+import static com.hazelcast.test.HazelcastTestSupport.assertTrueEventually;
+import static com.hazelcast.test.HazelcastTestSupport.assertOpenEventually;
+import static com.hazelcast.test.HazelcastTestSupport.assertAllInSafeState;
+// ...
+----
+
+The xref:testing-helpers.adoc[helpers summary] page lists all the available assertions. Some assertions are described below.
+
+=== Cluster topology assertions
+
+- `assertClusterSize(int expected, HazelcastInstance instance)`
+Immediately checks that the given instance sees exactly expected members in its cluster.
+- `assertClusterSizeEventually(int expected, HazelcastInstance instance)`
+Polls until the cluster reaches the expected size (or fails after a default timeout).
+
+=== Asynchronous condition assertions
+
+`assertTrueEventually(AssertTask task)` repeatedly invokes `task.run()` until it completes without throwing an exception, or a timeout is reached. Use this whenever you need to wait for an asynchronous condition to become true.
+
+[source,java]
+----
+// wait up to the default timeout for the map to contain 3 entries
+assertTrueEventually(() -> assertEquals(3, map.size()));
+assertTrueEventually(() -> assertFalse(map.containsKey("1")));
+----
+

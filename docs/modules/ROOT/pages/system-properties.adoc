@@ -6,7 +6,7 @@ See xref:configuration:configuring-with-system-properties.adoc[Configuring with 
 how to configure Hazelcast using these properties.
 
 NOTE: When you want to reconfigure a system property,
-you need to restart the members for which the property is modified.
+you need to xref:maintain-cluster:restart-cluster.adoc[restart] the members for which the property is modified.
 
 [cols="4,1,1,4a"]
 .System Properties
@@ -22,6 +22,11 @@ you need to restart the members for which the property is modified.
 |Specifies whether to run the aggregation accumulation for multiple entries in parallel.
 Each Hazelcast member executes the accumulation stage of an
 aggregation using a single thread by default. In most cases it is useful to do it in parallel.
+
+|`hazelcast.async.join.strategy.enabled`
+| true
+| bool
+| Controls the behaviour of `hazelcast.wait.seconds.before.join` and `hazelcast.max.wait.seconds.before.join`. If set to `true`, joining members will return immediately without blocking. The cluster remains in the same state until the configured timeouts have elapsed, and new members will behave like lite members. After the timeouts have elapsed and no new members are queued to join, cluster repartitioning is performed in the background. This async strategy reduces latency significantly for new members joining clusters.
 
 |`hazelcast.backpressure.backoff.timeout.millis`
 |60000
@@ -76,6 +81,11 @@ it cleans up the local resources that are owned by that client.
 |300
 |int
 |Time after which the member assumes the client is dead and closes its connections to the client.
+
+|`hazelcast.client.internal.skip.cluster.namecheck.during.connection`
+|false
+|bool
+|Allows clients to connect without matching the cluster name. This can help if you have a large number of existing clients and it would be impractical to update them. When enabled, cluster name validation is skipped during client authentication.
 
 |[[client-tpc-enabled]] `hazelcast.client.tpc.enabled`
 |false
@@ -216,7 +226,7 @@ along with this and the following diagnostic related system properties, see the 
 0 means this plugin is disabled.
 
 
-|`hazelcast.diagnostics.memberinfo.period.second`
+|`hazelcast.diagnostics.memberinfo.period.seconds`
 |60
 |long
 |Frequency, in seconds, at which the cluster information is dumped to the diagnostics log file.
@@ -403,7 +413,7 @@ See the xref:query:how-distributed-query-works.adoc#copying-indexes[Copying Inde
 |`hazelcast.init.cluster.version`
 |
 |string
-|Used to override the cluster version to use while a Hazlecast instance is not yet part of a cluster. The cluster version assumed before joining
+|Used to override the cluster version to use while a Hazelcast instance is not yet part of a cluster. The cluster version assumed before joining
 a cluster may affect the serialization format of the cluster discovery.
 The default is to use the member's codebase version. You may
 need to override it for your member to join a cluster running on a
@@ -559,6 +569,13 @@ idle CPU usage but may result in decreased latency. Higher values will increase 
 |int
 |Some JMX MBeans are cached  to reduce the overhead of calculating statistics. This parameter determines for how long the MBeans can go stale.
 
+|`hazelcast.journal.cleanup.threshold`
+| 1.0
+| float
+| The cleanup threshold for the event journal, expressed as a fraction of its capacity (a value between 0.0 and 1.0).
+When the remaining capacity falls below this threshold, a cleanup may be triggered during put operations to remove expired events (only if a xref:data-structures:event-journal.adoc#configuring-event-journal-ttl[time-to-live] for event journal is configured).
+A value of 0.0 means that no cleanup is performed, while a value of 1.0 means cleanup is triggered after each put operation.
+
 |`hazelcast.local.localAddress`
 |
 | string
@@ -698,7 +715,7 @@ seconds, or after this upper limit elapsed (whichever comes first). Once the
 pre-join phase ends, the master moves into the join phase, during which it
 will only admit members that have already tried joining during the pre-join
 phase and are still trying to. Once the join phase is complete, the master
-will again start admitting new members.
+will again start admitting new members. See `hazelcast.async.join.strategy.enabled` for how this behaviour can change.
 
 |`hazelcast.mc.executor.thread.count`
 |int
@@ -1009,10 +1026,52 @@ If a query exceeds this number of elements, a `QueryResultSizeExceededException`
 Its default value is -1, meaning it is disabled. See xref:data-structures:preventing-out-of-memory.adoc#setting-query-result-size-limit for a detailed explanation
 of setting a result size limit.
 
+| `hazelcast.rest.allow.config.templating`
+| false
+| bool
+| Enables xref:configuration:configuring-declaratively.adoc#variables[configuration variables or templating] for updating configuration over the {enterprise-product-name} xref:maintain-cluster:enterprise-rest-api.adoc[REST API].
+
 |`hazelcast.security.recommendations`
 |null
 |string
 |When set to any non-null value, security recommendations are logged at the `INFO` level during the member startup.
+
+|`hazelcast.serialization.compact.allowlist.classes`
+|
+|string
+|NOTE: We recommend configuring the zero-config Compact serialization filter through the xref:serialization:compact-serialization.adoc#zero-config-filter[`zero-config-filter` element] in your member or client configuration, rather than through these system properties. The system properties are provided mainly to ease upgrades from pre-5.7 versions that rely on them for hardened configuration.
+
+Comma-separated list of fully qualified class names to allow for xref:serialization:compact-serialization.adoc[zero-config Compact serialization] (ZCCS). If set, only classes on this list (and not on the blocklist) are eligible for ZCCS. Default is empty.
+
+|`hazelcast.serialization.compact.allowlist.packages`
+|
+|string
+|Comma-separated list of package names to allow for ZCCS. Only classes in the exact package (not sub-packages) are matched.
+
+|`hazelcast.serialization.compact.allowlist.prefixes`
+|
+|string
+|Comma-separated list of class-name prefixes to allow for ZCCS.
+
+|`hazelcast.serialization.compact.blocklist.classes`
+|
+|string
+|Comma-separated list of fully qualified class names to block from ZCCS. Default is empty.
+
+|`hazelcast.serialization.compact.blocklist.defaults`
+|true
+|bool
+|Controls whether the default blocklist of known-problematic classes is applied for ZCCS. Note that this property is `defaults`, not `defaultsDisabled` as seen for other configuration options.
+
+|`hazelcast.serialization.compact.blocklist.packages`
+|
+|string
+|Comma-separated list of package names to block from ZCCS. Only classes in the exact package (not sub-packages) are matched.
+
+|`hazelcast.serialization.compact.blocklist.prefixes`
+|
+|string
+|Comma-separated list of class-name prefixes to block from ZCCS.
 
 |`hazelcast.serialization.version`
 |
@@ -1064,11 +1123,12 @@ Stack traces are always reported to the Management Center, but by default, they 
 |int
 |Defines a threshold above which a running operation in `OperationService` is considered to be slow.
 These operations log a warning and are shown in the Management Center with detailed information, e.g., stacktrace.
+The value should be set at least 1000 ms. The detector cannot reliably detect all operations taking under 1000 ms.
 
 |`hazelcast.socket.bind.any`
 | true
 | bool
-| Bind both server-socket and client-sockets to any local interface.
+| Bind both server-socket and client-sockets to any local interface. For ZIP and TAR distributions, this is overridden by false in configuration files.
 
 |`hazelcast.socket.buffer.direct`
 | false
@@ -1168,7 +1228,7 @@ make their first join requests. Once `hazelcast.wait.seconds.before.join`
 elapses since the last first-timer join request (i.e., where the member hasn't
 made any previous join request), or the pre-join phase has lasted for
 `hazelcast.max.wait.seconds.before.join` seconds, the phase ends and the
-master starts forming the cluster.
+master starts forming the cluster. See `hazelcast.async.join.strategy.enabled` for how this behaviour can change.
 
 |`hazelcast.wan.consumer.ack.delay.backoff.init`
 |1

@@ -8,9 +8,11 @@ TIP: To get started with the REST API using Docker or Java, see xref:getting-sta
 
 Hazelcast provides a REST API that allows you to access your data structures and cluster using HTTP/HTTPS protocols.
 
+NOTE: The REST API allows you to manage the configuration of data structures, and configure and manage the cluster. As a control plane API for the cluster, it is used for configuration and operational purposes but it does not provide direct access to any data stored in distributed data structures.
+
 The REST API comes with an integrated Swagger UI for learning about the API and trying out API calls. For more info, see <<access-the-swagger-ui, Access the Swagger UI>>.
 
-include::clients:partial$rest-deprecation.adoc[]
+The Community Edition REST API has been deprecated and will be removed as of Hazelcast version 7.0. An improved Enterprise version of this feature is available and actively being developed.
 
 == Enable REST API
 
@@ -24,9 +26,9 @@ NOTE: The REST API comes packaged with Spring framework and FasterXML Jackson de
 
 REST service is disabled by default; to enable the REST service you must change the configuration as follows:
 
-[tabs] 
-==== 
-XML:: 
+[tabs]
+====
+XML::
 +
 --
 [source,xml]
@@ -64,11 +66,11 @@ The default port for the REST API is `8443`. To change it to another port, updat
 
 NOTE: If the port is occupied, the server instance will fail to start. To run multiple server instances with REST on the same machine, each instance should have a separate configuration file with a unique port assigned to it.
 
-[tabs] 
-==== 
-XML:: 
-+ 
--- 
+[tabs]
+====
+XML::
++
+--
 [source,xml]
 ----
 <hazelcast>
@@ -151,7 +153,7 @@ XML::
                         </user>
                     </simple>
                 </authentication>
-                <access-control-service> 
+                <access-control-service>
                     <factory-class-name>com.hazelcast.internal.rest.access.DefaultAccessControlServiceFactory</factory-class-name>
                 </access-control-service>
             </realm>
@@ -180,7 +182,7 @@ hazelcast:
                 password: 'restpassword'
                 roles:
                   - admin
-        access-control-service: 
+        access-control-service:
           factory-class-name: com.hazelcast.internal.rest.access.DefaultAccessControlServiceFactory
 ----
 
@@ -215,10 +217,10 @@ You must obtain a token to authenticate against the REST server. For more info, 
 
 == HTTPS Support
 
-You can configure TLS/SSL in the REST API. We use Spring Boot underneath to enable Spring web services, and the TLS/SSL related options correspond to the underlying Spring Boot TLS/SSL support capabilities.
+You can configure TLS in the REST API. We use Spring Boot underneath to enable Spring web services, and the TLS related options correspond to the underlying Spring Boot TLS support capabilities.
 
-The TLS/SSL configuration for the REST server is configured differently to the normal Hazelcast TLS/SSL configuration.
-For an example of the TLS/SSL configuration settings for REST, see the following code sample:
+The TLS configuration for the REST server is configured differently to the normal Hazelcast TLS configuration.
+For an example of the TLS configuration settings for REST, see the following code sample:
 
 [tabs]
 ====
@@ -413,7 +415,7 @@ On the Swagger page, each endpoint is listed with a caret icon on the right side
 
 image::rest-api-swagger-expanding-an-endpoint.png[Example Swagger UI showing cluster endpoint]
 
-After expanding the endpoint, let's send a request. Click **Try it out**. There are no parameters for this example but if there were you could enter these here. Click  **Execute** to send the request. 
+After expanding the endpoint, let's send a request. Click **Try it out**. There are no parameters for this example but if there were you could enter these here. Click  **Execute** to send the request.
 
 image::rest-api-swagger-clicking-execute-button.png[]
 
@@ -461,7 +463,7 @@ curl -X 'GET' \
 
 If successful the following response is returned:
 
-[source,json]
+[source,json,subs="attributes+"]
 ----
 {
   "members": [
@@ -470,7 +472,7 @@ If successful the following response is returned:
       "liteMember": false,
       "localMember": true,
       "uuid": "3d8b9c35-a35f-461a-9e7f-d64e3f1f0f03",
-      "memberVersion": "5.5.0"
+      "memberVersion": "{ee-version}"
     }
   ],
   "clientCount": 0,
@@ -530,7 +532,7 @@ curl -X 'POST' \
 
 === Destroy a CP Group
 
-You can send a `DELETE` request to the endpoint at `/hazelcast/rest/api/v1/cp/groups/{group-name}` to unconditionally destroy the given active CP group. For example, using cURL:
+You can send a `DELETE` request to the endpoint at `/hazelcast/rest/api/v1/cp/groups/\{group-name}` to unconditionally destroy the given active CP group. For example, using cURL:
 
 [source,shell]
 ----
@@ -540,7 +542,7 @@ curl -X 'DELETE' \
 ----
 
 * If successful, it will return a `200` response without body.
-* If you try to destroy METADATA group, it will return a `400` response: 
+* If you try to destroy METADATA group, it will return a `400` response:
 
 [source,json]
 ----
@@ -550,7 +552,7 @@ curl -X 'DELETE' \
 }
 ----
 
-* If CP subsystem is not enabled, it will return a `500` response:
+* If the CP Subsystem is not enabled, it will return a `500` response:
 
 [source,json]
 ----
@@ -567,7 +569,7 @@ TIP: For a short tutorial showing how to dynamically add a data structure using 
 
 The endpoint requires that you send a XML/YAML server configuration file with the required changes. The response will be two lists in JSON format:
 
-- The first `addedConfigs` list includes the newly added configuration among the configurations sent to the server. 
+- The first `addedConfigs` list includes the newly added configuration among the configurations sent to the server.
 - The second `ignoredConfigs` list includes ignored configurations which were in the sent configuration list but could not be applied by the server. These could include duplicates, or static configurations (which cannot be applied dynamically).
 
 Whether a dynamic configuration can be applied or not depends on the type of request. For some updates, you can change configuration parameters for an existing configuration; for other updates, you cannot change the configuration dynamically. For more detail on which configuration parameters can be changed dynamically and which cannot, see xref:configuration:dynamic-config.adoc[Dynamic Configuration for Members].
@@ -667,9 +669,11 @@ The response has a `statusCode` of `400`, and the response body adds further det
 ----
 {
   "statusCode": 400,
-  "message": "Cannot add a dynamic configuration 'MapConfig{name='my-map', inMemoryFormat='BINARY', metadataPolicy=CREATE_ON_UPDATE, backupCount=1, asyncBackupCount=0, timeToLiveSeconds=0, maxIdleSeconds=0, readBackupData=false, evictionConfig=EvictionConfig{size=2147483647, maxSizePolicy=PER_NODE, evictionPolicy=NONE, comparatorClassName=null, comparator=null}, merkleTree=MerkleTreeConfig{enabled=null, depth=10}, eventJournal=EventJournalConfig{enabled=false, capacity=10000, timeToLiveSeconds=0}, hotRestart=HotRestartConfig{enabled=false, fsync=false}, dataPersistenceConfig=DataPersistenceConfig{enabled=false, fsync=false}, nearCacheConfig=null, mapStoreConfig=MapStoreConfig{enabled=false, className='null', factoryClassName='null', writeDelaySeconds=0, writeBatchSize=1, implementation=null, factoryImplementation=null, properties={}, initialLoadMode=LAZY, writeCoalescing=true, offload=true}, mergePolicyConfig=MergePolicyConfig{policy='com.hazelcast.spi.merge.PutIfAbsentMergePolicy', batchSize=100}, wanReplicationRef=null, entryListenerConfigs=null, indexConfigs=null, attributeConfigs=null, splitBrainProtectionName=null, queryCacheConfigs=null, cacheDeserializedValues=INDEX_ONLY, statisticsEnabled=false, entryStatsEnabled=false, tieredStoreConfig=TieredStoreConfig{enabled=false, memoryTierConfig=MemoryTierConfig{capacity=256 MEGABYTES}, diskTierConfig=DiskTierConfig{enabled=false, deviceName='default-tiered-store-device'}}, partitioningAttributeConfigs=null, userCodeNamespace=null}' as there is already a conflicting configuration 'MapConfig{name='my-map', inMemoryFormat='BINARY', metadataPolicy=CREATE_ON_UPDATE, backupCount=2, asyncBackupCount=0, timeToLiveSeconds=0, maxIdleSeconds=0, readBackupData=false, evictionConfig=EvictionConfig{size=2147483647, maxSizePolicy=PER_NODE, evictionPolicy=NONE, comparatorClassName=null, comparator=null}, merkleTree=MerkleTreeConfig{enabled=null, depth=10}, eventJournal=EventJournalConfig{enabled=false, capacity=10000, timeToLiveSeconds=0}, hotRestart=HotRestartConfig{enabled=false, fsync=false}, dataPersistenceConfig=DataPersistenceConfig{enabled=false, fsync=false}, nearCacheConfig=null, mapStoreConfig=MapStoreConfig{enabled=false, className='null', factoryClassName='null', writeDelaySeconds=0, writeBatchSize=1, implementation=null, factoryImplementation=null, properties={}, initialLoadMode=LAZY, writeCoalescing=true, offload=true}, mergePolicyConfig=MergePolicyConfig{policy='com.hazelcast.spi.merge.PutIfAbsentMergePolicy', batchSize=100}, wanReplicationRef=null, entryListenerConfigs=null, indexConfigs=null, attributeConfigs=null, splitBrainProtectionName=null, queryCacheConfigs=null, cacheDeserializedValues=INDEX_ONLY, statisticsEnabled=true, entryStatsEnabled=false, tieredStoreConfig=TieredStoreConfig{enabled=false, memoryTierConfig=MemoryTierConfig{capacity=256 MEGABYTES}, diskTierConfig=DiskTierConfig{enabled=false, deviceName='default-tiered-store-device'}}, partitioningAttributeConfigs=null, userCodeNamespace=null}'"
+  "message": "Cannot add a dynamic configuration 'MapConfig{name='my-map', inMemoryFormat='BINARY', metadataPolicy=CREATE_ON_UPDATE, backupCount=1, asyncBackupCount=0, timeToLiveSeconds=0, maxIdleSeconds=0, readBackupData=false, evictionConfig=EvictionConfig{size=2147483647, maxSizePolicy=PER_NODE, evictionPolicy=NONE, comparatorClassName=null, comparator=null}, merkleTree=MerkleTreeConfig{enabled=null, depth=10}, eventJournal=EventJournalConfig{enabled=false, capacity=10000, timeToLiveSeconds=0}, hotRestart=HotRestartConfig{enabled=false, fsync=false}, dataPersistenceConfig=DataPersistenceConfig{enabled=false, fsync=false}, nearCacheConfig=null, mapStoreConfig=MapStoreConfig{enabled=false, className='null', factoryClassName='null', writeDelaySeconds=0, writeBatchSize=1, implementation=null, factoryImplementation=null, properties={}, initialLoadMode=LAZY, writeCoalescing=true, offload=true}, mergePolicyConfig=MergePolicyConfig{policy='com.hazelcast.spi.merge.PutIfAbsentMergePolicy', batchSize=100}, wanReplicationRef=null, entryListenerConfigs=null, indexConfigs=null, attributeConfigs=null, splitBrainProtectionName=null, queryCacheConfigs=null, cacheDeserializedValues=INDEX_ONLY, statisticsEnabled=false, entryStatsEnabled=false, partitioningAttributeConfigs=null, userCodeNamespace=null}' as there is already a conflicting configuration 'MapConfig{name='my-map', inMemoryFormat='BINARY', metadataPolicy=CREATE_ON_UPDATE, backupCount=2, asyncBackupCount=0, timeToLiveSeconds=0, maxIdleSeconds=0, readBackupData=false, evictionConfig=EvictionConfig{size=2147483647, maxSizePolicy=PER_NODE, evictionPolicy=NONE, comparatorClassName=null, comparator=null}, merkleTree=MerkleTreeConfig{enabled=null, depth=10}, eventJournal=EventJournalConfig{enabled=false, capacity=10000, timeToLiveSeconds=0}, hotRestart=HotRestartConfig{enabled=false, fsync=false}, dataPersistenceConfig=DataPersistenceConfig{enabled=false, fsync=false}, nearCacheConfig=null, mapStoreConfig=MapStoreConfig{enabled=false, className='null', factoryClassName='null', writeDelaySeconds=0, writeBatchSize=1, implementation=null, factoryImplementation=null, properties={}, initialLoadMode=LAZY, writeCoalescing=true, offload=true}, mergePolicyConfig=MergePolicyConfig{policy='com.hazelcast.spi.merge.PutIfAbsentMergePolicy', batchSize=100}, wanReplicationRef=null, entryListenerConfigs=null, indexConfigs=null, attributeConfigs=null, splitBrainProtectionName=null, queryCacheConfigs=null, cacheDeserializedValues=INDEX_ONLY, statisticsEnabled=true, entryStatsEnabled=false, partitioningAttributeConfigs=null, userCodeNamespace=null}'"
 }
 ----
+
+NOTE: For security reasons, xref:configuration:configuring-declaratively.adoc#variables[configuration variables] and templating are disabled by default in the {enterprise-product-name} REST API. You can enable them by starting members with the system property `-Dhazelcast.rest.allow.config.templating=true`.
 
 === Add new MapConfig without configuration change for an existing map
 As detailed above, you cannot add a map configuration with the same map name. If you send an update request with the same configuration and map name, this request will be ignored as there is no change. This example would look like the following:

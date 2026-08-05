@@ -47,8 +47,13 @@ These approaches are described in the following sections.
 [[synchronizing-wan-target-cluster]]
 == Full WAN Synchronization
 
-Full WAN synchronization sends all the data of an IMap to a target cluster to align the state of target IMap with source IMap.
-It is useful if two remote clusters lost their synchronizations due to overflow in the WAN queue or in restart scenarios.
+Full WAN synchronization updates or adds entries in the target IMap to match the source IMap, but does not remove entries that exist only in the target.
+If you are concerned about extraneous entries on the target IMap, you should consider clearing it before initiating a WAN synchronization.
+Clearing an IMap can be done programmatically by calling `IMap#clear()`, through Management Center's
+xref:{page-latest-supported-mc}@management-center:data-structures:map.adoc#clear-map[Clear Data action], 
+or using Hazelcast’s xref:maintain-cluster:rest-api-swagger#tag/Data-Controller/operation/clearMap[REST API].
+
+Full WAN synchronization is useful if two remote clusters lost their synchronizations due to overflow in the WAN queue or in restart scenarios.
 This is the default synchronization option.
 
 Full WAN Synchronization can be initiated through
@@ -133,7 +138,7 @@ synchronized, not even if `MapLoader` is configured.
 == Delta WAN Synchronization
 
 As explained in the previous section, the default <<synchronizing-wan-target-cluster, Full WAN Synchronization>> feature
-synchronizes  the maps in different clusters by transferring all the entries from the source to the target cluster.
+synchronizes the maps in different clusters by transferring all the entries from the source to the target cluster.
 This may be not efficient since some of the entries have remained unchanged on both clusters and
 do not require to be transferred. Also, for the entries to be transferred, they need to be copied to
 on-heap on the source cluster. This may cause spikes in the heap usage, especially if using large off-heap stores.
@@ -144,9 +149,9 @@ It is a data structure used for efficient comparison of the difference in the co
 The precision of this comparison is defined by Merkle tree's depth.
 Merkle tree hash exchanges can detect inconsistencies in the map data and
 synchronize only the different entries when using WAN synchronization, instead of sending all the map entries.
+As in a full WAN synchronization, entries that only exist in the target IMap are not removed.
 
 NOTE: Currently, Delta WAN Synchronization is implemented only for Hazelcast IMap.
-It will be implemented also for ICache in the future releases.
 
 [[requirements-for-delta-wan-sync]]
 === Requirements
@@ -165,7 +170,7 @@ To be able to use Delta WAN synchronization for a Hazelcast data structure:
 1 - Configure the WAN synchronization mechanism for your WAN publisher so that
 it uses the Merkle tree: If configuring declaratively, you can use the `consistency-check-strategy` sub-element of
 the `sync` element. If configuring programmatically, you can use the setter of the
-https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/config/WanSyncConfig.html[WanSyncConfig^] object.
+https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/config/WanSyncConfig.html[WanSyncConfig^] object.
 Here is a declarative example:
 
 [tabs] 
@@ -277,7 +282,7 @@ XML::
 ====
 
 You can programmatically configure it, too, using the
-https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/config/MerkleTreeConfig.html[MerkleTreeConfig^] object.
+https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/config/MerkleTreeConfig.html[MerkleTreeConfig^] object.
 
 Here is the full declarative configuration example showing how to
 enable Delta WAN Synchronization, bind it to a Hazelcast data structure (an IMap in this case) and specify its depth:
@@ -891,6 +896,16 @@ WAN event replication queues by providing a filtering API.
 Using this API, you can monitor WAN replication events of each data structure
 separately.
 
+WAN replication adheres strictly to the filtering rules defined, ensuring that only the
+specified data flows between clusters. Filters can be configured to include or exclude
+specific map entries based on criteria such as keys, values, or custom rules. This allows
+for precise control over where the data is transferred and can be configured for compliance,
+regulatory, or other business requirements.
+
+WARNING: WAN synchronization is designed to synchronize entire data sets between clusters
+without applying any filtering rules. It aims to recover or reestablish consistency across
+clusters by replicating all entries, regardless of existing filters.
+
 You can attach filters to your data structures using the `filter` element of
 `wan-replication-ref` configuration inside `hazelcast.xml` as shown below.
 You can also configure it using the programmatic configuration.
@@ -939,8 +954,8 @@ Map and Cache have different filter interfaces: `MapWanEventFilter` and
 `CacheWanEventFilter`. Both of these interfaces have the method `filter` which takes the following parameters:
 
 * `mapName`/`cacheName`: Name of the related data structure.
-* `entryView`: https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/core/EntryView.html[EntryView^]
-or https://docs.hazelcast.org/docs/{full-version}/javadoc/com/hazelcast/cache/CacheEntryView.html[CacheEntryView^] depending on the data structure.
+* `entryView`: https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/core/EntryView.html[EntryView^]
+or https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/cache/CacheEntryView.html[CacheEntryView^] depending on the data structure.
 * `eventType`: Enum type - `UPDATED(1)`, `REMOVED(2)` or `LOADED(3)` - depending on the event.
 
 NOTE: `LOADED` events are filtered out and not replicated to target cluster.
@@ -1149,7 +1164,7 @@ differently.
 
 The processing behavior is configured using the `consumer` element. It has the following sub-elements:
 
-* `persist-wan-replicated-data`: When set to `true`, an incoming event over WAN replication can be persisted to a database for example, otherwise it is not persisted. Default value is `false`.
+* `persist-wan-replicated-data`: When set to `true`, incoming WAN events received on the target cluster will be passed to the configured MapStore (if present), allowing the data to be persisted to the external system defined by the MapStore implementation. When set to `false` (the default), WAN events are applied only to the in-memory data structures and are not passed to MapStore, so no persistence to the external system occurs as a result of WAN replication. This setting allows you to control whether WAN-replicated data should be synchronized with your external data store via MapStore, or kept only in memory on the target cluster.
 
 [[securing-wan-connections]]
 == Securing the Connections for WAN Replication

@@ -1,0 +1,56 @@
+name: Compile Java source files
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '**/*.java'
+      - 'pom.xml'
+      - 'docs/antora.yml'
+      - '.github/workflows/maven-pr-builder.yaml'
+  schedule:
+    - cron: '15 2 * * 0'
+     
+jobs:
+  build:
+    # Ignore automated release PR branches
+    if: ${{ !startsWith(github.head_ref, 'update_antora_') }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Get Antora properties
+        id: get-antora-properties
+        run: |
+          extract_from_antora() {
+            yq .asciidoc.attributes.$1 docs/antora.yml 
+          }
+
+          echo "full-version=$(extract_from_antora full-version)" >> ${GITHUB_OUTPUT}
+          echo "minimum-java-version=$(extract_from_antora minimum-java-version)" >> ${GITHUB_OUTPUT}
+
+      - uses: actions/setup-java@v5
+        with:
+          java-version: '${{ steps.get-antora-properties.outputs.minimum-java-version }}'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Maven compile
+        run: |
+          mvn \
+            test \
+            --show-version \
+            --batch-mode \
+            --no-transfer-progress \
+            "-Dversion.hazelcast=${{ steps.get-antora-properties.outputs.full-version }}" \
+            "-Dmaven.compiler.release=${{ steps.get-antora-properties.outputs.minimum-java-version }}"
+
+      - name: Slack notification
+        uses: hazelcast/docker-actions/slack-notification@master
+        if: failure() && github.event_name == 'schedule'
+        with:
+          slack-webhook-url: ${{ inputs.SLACK_WEBHOOK }}
+          slack-channel: "#docs-notifications"
+          status: failure

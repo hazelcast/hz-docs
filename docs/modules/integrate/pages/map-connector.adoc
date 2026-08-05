@@ -2,6 +2,7 @@
 :description: A map is a distributed in-memory key-value data structure that can be used as a batch or streaming data source as well as a data sink.
 
 A map is a distributed in-memory key-value data structure that can be used as a batch or streaming data source as well as a data sink. See xref:data-structures:map.adoc[].
+IMaps can also be used in pipeline transforms, see xref:pipelines:map-transforms.adoc[].
 
 == Installing the Connector
 
@@ -11,11 +12,11 @@ distributions of Hazelcast.
 == Permissions
 [.enterprise]*{enterprise-product-name}*
 
-If xref:security:enabling-jaas.adoc[security] is enabled, you can set up permissions to restrict clients' access to these data structures.
+If xref:security:enable-security.adoc[security] is enabled, you can set up permissions to restrict clients' access to these data structures.
 
 For example, to read from map sources, you must add the `create` and `read` permissions for those maps. If you use the map connector to write to map sinks, you must add the `create` and `put` permissions for those maps.
 
-For details, see xref:security:native-client-security.adoc[].
+For details, see xref:security:client-authorization.adoc[].
 
 == Map as a Batch Source
 
@@ -117,6 +118,12 @@ For example, if there are many updates to just one key, with the default
 partition count of `271` and journal size of `100,000` the journal only
 has space for `370` events per partitions.
 
+Map journal source is a stateful source—it remembers the last processed offset.
+To prevent data loss with `at-least-once` or `exactly-once` job guarantees when using a map journal source set to `START_FROM_CURRENT`,
+enable `setRequireSnapshotBeforeProcessing` in the xref:pipelines:configuring-jobs.adoc#_job_configuration_options[job configuration].
+See additional details xref:hazelcast:fault-tolerance:fault-tolerance.adoc#_fault_tolerance.
+
+
 For a tutorial, see the xref:pipelines:stream-imap.adoc[].
 
 == Map as a Sink
@@ -188,6 +195,11 @@ setting their values to `null`. To put it another way, if these map sink
 variants set the entry’s value to null, the entry will be removed
 from the map.
 
+NOTE: Custom classes, such as an `EntryProcessor`, must be available to all members
+of the cluster. This can be done by adding the classes to each member's classpath
+directly, or by using {ucn}. If using {ucn}, ensure that the Job and underlying IMap
+are both associated with a namespace that contains the same `EntryProcessor` implementation.
+
 == Predicates and Projections
 
 If your use case calls for some filtering and/or transformation of the
@@ -204,4 +216,27 @@ p.readFrom(Sources.map(personCache,
     Predicates.greaterEqual("age", 21),
     Projections.singleAttribute("name"))
 );
+```
+
+== Specific IMap Sinks
+
+This section describes some specific sinks related to IMap.
+
+=== Flush IMap Sink
+[.enterprise]*{enterprise-product-name}*
+
+The `EnterpriseSinks.mapFlushSink` method forces the flush of the specified IMap to its configured MapStore when a snapshot is taken.
+Unlike other sink methods, the flush does not occur on new entry processing, but only when a snapshot is triggered.
+This ensures that all pending write-behind updates are persisted before the snapshot is committed or the job completes.
+
+Example usage:
+
+```java
+// target-map has write-behind MapStore configured
+p.readFrom(Sources.map("source-imap"))
+ .rebalance(Map.Entry::getKey) // optional: ensure correct partitioning
+ .mapUsingServiceAsync(ServiceFactories.iMapService("target-map"),
+     (map, entry) ->
+         map.putAsync(entry.getKey(), entry.getValue()).toCompletableFuture())
+ .writeTo(EnterpriseSinks.mapFlushSink("target-map", true));
 ```

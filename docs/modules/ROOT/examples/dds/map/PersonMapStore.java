@@ -9,7 +9,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
-import static java.lang.String.format;
 //tag::personms[]
 public class PersonMapStore implements MapStore<Long, Person> {
 
@@ -27,65 +26,73 @@ public class PersonMapStore implements MapStore<Long, Person> {
         }
     }
 
+    @Override
     public synchronized void delete(Long key) {
         System.out.println("Delete:" + key);
         try {
-            con.createStatement().executeUpdate(
-                    format("delete from person where id = %s", key));
+            PreparedStatement stmt = con.prepareStatement("delete from person where id = ?");
+            stmt.setLong(1, key);
+            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
 
+    @Override
     public synchronized void store(Long key, Person value) {
         try {
-            con.createStatement().executeUpdate(
-                    format("insert into person values(%s,'%s')", key, value.getName()));
+            PreparedStatement stmt = con.prepareStatement("insert into person (id, name) values (?, ?)");
+            stmt.setLong(1, key);
+            stmt.setString(2, value.getName());
+            stmt.executeUpdate();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
 
+    @Override
     public synchronized void storeAll(Map<Long, Person> map) {
         for (Map.Entry<Long, Person> entry : map.entrySet()) {
             store(entry.getKey(), entry.getValue());
         }
     }
 
+    @Override
     public synchronized void deleteAll(Collection<Long> keys) {
         for (Long key : keys) {
             delete(key);
         }
     }
 
+    @Override
     public synchronized Person load(Long key) {
         try {
-            ResultSet resultSet = con.createStatement().executeQuery(
-                    format("select name from person where id =%s", key));
-            try {
+            PreparedStatement stmt = con.prepareStatement("select name from person where id = ?");
+            stmt.setLong(1, key);
+            try (ResultSet resultSet = stmt.executeQuery()) {
                 if (!resultSet.next()) {
                     return null;
                 }
                 String name = resultSet.getString(1);
                 return new Person(key, name);
-            } finally {
-                resultSet.close();
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
 
+    @Override
     public synchronized Map<Long, Person> loadAll(Collection<Long> keys) {
-        Map<Long, Person> result = new HashMap<Long, Person>();
+        Map<Long, Person> result = new HashMap<>();
         for (Long key : keys) {
             result.put(key, load(key));
         }
         return result;
     }
 
+    @Override
     public Iterable<Long> loadAllKeys() {
-        return new StatementIterable<Long>(allKeysStatement);
+        return new StatementIterable<>(allKeysStatement);
     }
 }
 //end::personms[]

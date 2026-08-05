@@ -2,7 +2,7 @@ package com.hazelcast.client.config;
 
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClusterRoutingConfig;
-import com.hazelcast.client.impl.connection.tcp.RoutingMode;
+import com.hazelcast.client.config.RoutingMode;
 import com.hazelcast.config.AwsConfig;
 import com.hazelcast.core.HazelcastInstance;
 

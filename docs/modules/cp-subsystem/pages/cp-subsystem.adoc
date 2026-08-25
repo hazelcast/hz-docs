@@ -1,7 +1,6 @@
 = CP Subsystem
 :description: The CP Subsystem is a component of a Hazelcast cluster that builds a strongly consistent layer for a set of distributed data structures. The CP Subsystem withstands network partitions, server failures, and client failures.
 :page-aliases: unsafe-mode.adoc, fault-tolerance.adoc, discovery-process.adoc, sessions.adoc
-:page-enterprise: true
 
 {description}
 
@@ -25,7 +24,49 @@ The CP Subsystem supports the following Hazelcast data structures:
 * xref:data-structures:iatomicreference.adoc[Atomic reference]
 * xref:data-structures:icountdownlatch.adoc[Countdown latch]
 
-IMPORTANT: By default, CP data structures operate in <<Unsafe mode, unsafe mode>>. You must configure your cluster with  <<CP members>> to benefit from the strong consistency guarantees of the CP Subsystem.
+IMPORTANT: CP data structures require a running CP Subsystem. You must configure your cluster with <<CP members>> before you create any CP data structure. If no CP members are configured, CP data structures cannot be created.
+
+== Availability by edition
+
+CP Subsystem core and all CP data structures are available in {open-source-product-name}. They tolerate crash-stop failures as long as a majority of the CP group remains available.
+
+{enterprise-product-name} adds CP persistence, allowing members to restore their Raft state after individual member failures or cluster-wide crashes. It also provides additional operational controls.
+
+
+[cols="<40%,^20%,^20%,^20%", options="header"]
+|===
+|[align=left]*Capability* |[align=center]*{open-source-product-name}* |[align=center]*{enterprise-product-name}* |[align=center]*{enterprise-product-name} with ADVANCED_CP*
+
+|CP Subsystem core: CP members, CP groups, Raft consensus, sessions, discovery, and runtime fault tolerance
+|icon:check-circle[size=lg,role=success]
+|icon:check-circle[size=lg,role=success]
+|icon:check-circle[size=lg,role=success]
+
+|CP data structures: xref:data-structures:cpmap.adoc[CPMap], xref:data-structures:fencedlock.adoc[FencedLock], xref:data-structures:iatomiclong.adoc[IAtomicLong], xref:data-structures:isemaphore.adoc[ISemaphore], xref:data-structures:iatomicreference.adoc[IAtomicReference], and xref:data-structures:icountdownlatch.adoc[ICountDownLatch]
+|icon:check-circle[size=lg,role=success]
+|icon:check-circle[size=lg,role=success]
+|icon:check-circle[size=lg,role=success]
+
+|<<persistence, CP Subsystem Persistence>>
+|icon:times[size=lg,role=error]
+|icon:check-circle[size=lg,role=success]
+|icon:check-circle[size=lg,role=success]
+
+|<<kubernetes, CP Subsystem on Kubernetes>>
+|icon:times[size=lg,role=error]
+|icon:check-circle[size=lg,role=success]
+|icon:check-circle[size=lg,role=success]
+
+|xref:configuration.adoc#autostepdown[Leader auto step-down]
+|icon:times[size=lg,role=error]
+|icon:times[size=lg,role=error]
+|icon:check-circle[size=lg,role=success]
+
+|xref:clients:java.adoc#configuring-direct-to-leader-routing[CP direct-to-leader client routing]
+|icon:times[size=lg,role=error]
+|icon:times[size=lg,role=error]
+|icon:check-circle[size=lg,role=success]
+|===
 
 == CP members
 
@@ -43,18 +84,6 @@ When a member becomes a CP member, it generates an additional UUID that other CP
 - Responses from REST endpoints in the CP group
 - Member logs
 - Management Center
-
-=== Unsafe mode
-
-When a cluster is not configured with <<CP members>>, the CP Subsystem is disabled and any CP data structures operate in _unsafe mode_.
-
-In this mode, the following restrictions apply:
-
-- CP data structures use xref:consistency-and-replication:consistency.adoc[partitioning and lazy replication mechanisms] instead of the <<consensus, Raft consensus mechanism>>.
-- CP Subsystem management APIs are not available.
-- Split-brain protection is not supported.
-
-Unsafe mode does not provide strong consistency guarantees. For example, when you increment an atomic long in unsafe mode, even though you may receive a success response, operations such as increments can be lost if a member fails. As a result, unsafe mode is only suitable for development or testing.
 
 == CP groups
 
@@ -118,6 +147,8 @@ By default, the CP Subsystem works only in memory without persisting any state t
 
 === Persistence
 
+include::ROOT:partial$requires-enterprise.adoc[]
+
 CP Subsystem Persistence can be xref:configuration.adoc#persistence[enabled in the member configuration] to make CP members persist their local CP state to stable storage.
 
 CP Subsystem Persistence enables CP members to recover from member or cluster-wide crashes. As long as a majority of CP members are available after the recovery, the CP Subsystem remains operational, and guarantees that no committed operations are lost after recovery. When you restart a majority of CP members, they restore their local state and resume working as if they had never crashed.
@@ -149,6 +180,8 @@ NOTE: CP groups that have lost their majority must be force-destroyed immediatel
 * If the majority of the `METADATA` CP group permanently crash, it is equivalent to the permanent crash of the majority CP members of the whole CP Subsystem, even though other CP groups are running. Existing CP groups continue serving to incoming requests, but because the `METADATA` CP group is not available, no management tasks can be performed on the CP Subsystem. For example, a new CP group cannot be created. In this case, the only solution is to wipe out the whole CP Subsystem state by performing a force reset. See xref:management.adoc#cp-subsystem-management-apis[CP Subsystem Management].
 
 == Kubernetes
+
+include::ROOT:partial$requires-enterprise.adoc[]
 
 IMPORTANT: We strongly encourage using xref:kubernetes:deploying-in-kubernetes.adoc#hazelcast-platform-operator-for-kubernetesopenshift[Hazelcast Platform Operator,window=_blank] for Kubernetes deployments. If you choose to use Helm instead, use the official `hazelcast/hazelcast-enterprise` xref:kubernetes:deploying-in-kubernetes.adoc#helm-chart[Helm Chart,window=_blank] and configure within the limitations described in this section.
 

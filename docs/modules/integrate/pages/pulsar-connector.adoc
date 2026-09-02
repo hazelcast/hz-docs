@@ -20,7 +20,7 @@ If xref:security:enable-security.adoc[security] is enabled, your clients may nee
 
 == Configuration Options
 
-To read from Pulsar as a source you must provide at least Schema, projection function and topic
+To read from Pulsar as a source you must provide at least Schema, which Pulsar uses for given topic:
 
 [source,java]
 ----
@@ -35,7 +35,9 @@ p.readFrom(PulsarSources.pulsarConsumerBuilder(json(MyPojo.class))
 Each member of Hazelcast cluster will create a Pulsar Consumer with the same subscription name and subscription type "Shared",
 meaning that the reading will be spread across Hazelcast cluster.
 
-When used as a sink, then the only requirements are the serializers:
+You can also use `PulsarSources#pulsarConsumer` or `PulsarSources#pulsarReader`, which are the same as in old version from hazelcast-jet-contrib. We kept those for easy migration, but please be aware, that they will be removed at some point.
+
+When used as a sink, then the only requirement is again the Schema of target topic:
 
 [source,java]
 ----
@@ -43,7 +45,7 @@ When used as a sink, then the only requirements are the serializers:
 Pipeline p = Pipeline.create();
 p.readFrom(Sources.files("home/logs"))
  .map(line -> LogParser.parse(line))
- .map(log -> entry(log.service(), log.message()))
+ .map(log -> new LogEntry(log))
  .writeTo(PulsarSinks.builder(json(LogEntry.class))
                         .topic("logs")
                         .build());`
@@ -55,23 +57,9 @@ One of the most important features of using Pulsar as a source is that
 it's possible to replay data, which enables fault-tolerance. If the job
 has a processing guarantee configured, Hazelcast will periodically save
 the current offsets internally and then replay from the saved offset
-when the job is restarted. In this mode, Hazelcast will manually track and
-commit offsets, without interacting with the consumer groups feature of
-Pulsar.
+when the job is restarted. In this mode, Hazelcast will commit messages, keeping track of their offsets.
 
-If the processing guarantees are disabled, the source will start reading from
-default offsets that are set in the `auto.offset.reset` property. You can
-enable offset committing by assigning a `group.id`, enabling auto offset
-committing using `enable.auto.commit` and configuring
-`auto.commit.interval.ms` in the given properties. Refer to
-link:https://Pulsar.apache.org/22/documentation.html[Pulsar documentation]
-for the descriptions of these properties.
-
-You can also explicitly specify exact initial offsets for the Pulsar source using https://docs.hazelcast.org/docs/{os-version}/javadoc/com/hazelcast/jet/Pulsar/PulsarSources.html#Pulsar(java.util.Properties,com.hazelcast.function.FunctionEx,com.hazelcast.jet.Pulsar.TopicsConfig)[`TopicsConfig` parameter^].
-Note that initial offsets provided in `topicConfig` will always have priority over offsets stored in Pulsar or associated with a given consumer group.
-Those offsets are used only when the job is started for the first time after submission.
-Afterwards, the regular fault tolerance mechanism described above is used.
-This option is not supported when processing guarantees are disabled.
+If the processing guarantees are disabled, the source will start reading from earliest messages in the topic.
 
 Pulsar source is a stateful source—it remembers the last processed offset.
 To prevent data loss when using `at-least-once` or `exactly-once` job guarantees and Pulsar consumer configured to start from the `latest` offset,
@@ -81,7 +69,7 @@ See additional details xref:hazelcast:fault-tolerance:fault-tolerance.adoc#_faul
 == Transactional Guarantees
 
 As a sink, the Pulsar connector provides exactly-once guarantees at the cost of using
-Pulsar transactions. Hazelcast commits the produced records after each snapshot
+Pulsar transactions. Hazelcast commits the produced records messages each snapshot
 is completed. This greatly increases the latency because consumers see
 the records only after they are committed.
 
@@ -90,51 +78,6 @@ in the case of a failure some records could be duplicated. You
 can also configure jobs in exactly-once mode and decrease the guarantee
 just for a particular Pulsar sink.
 
-
-== Explicit Avro Schema
-To use an Avro schema for `GenericRecord`, you must provide the following as parameters for the Pulsar source and/or sink:
-
-* JSON representation of Avro schema
-* A `HazelcastPulsarAvroSerializer` as key/value serializer class
-* A `HazelcastPulsarAvroDeserializer` as key/value deserializer class
-
-The process will utilize the schema from properties, disregarding the schema from the record. An exception will be raised if the types of the record schema and properties schema are different.
-
-The parameters can be specified as shown in the following examples.
-
-Example source parameters:
-```java
-properties.put("key.deserializer", HazelcastPulsarAvroDeserializer.class);
-properties.put("value.deserializer", HazelcastPulsarAvroDeserializer.class);
-properties.put("keyAvroSchema", "{\"type\":\"record\",\"name\":\"key\",\"namespace\":\"schema\",\"fields\":[{\"name\":\"key\",\"type\":[\"null\",\"int\"],\"default\":null}]}");
-properties.put("valueAvroSchema", "{\"type\":\"record\",\"name\":\"value\",\"namespace\":\"schema\",\"fields\":[{\"name\":\"value\",\"type\":[\"null\",\"string\"],\"default\":null}]}");
-```
-
-Example sink parameters:
-```java
-properties.put("key.serializer", HazelcastPulsarAvroSerializer.class);
-properties.put("value.serializer", HazelcastPulsarAvroSerializer.class);
-properties.put("keyAvroSchema", "{\"type\":\"record\",\"name\":\"key\",\"namespace\":\"schema\",\"fields\":[{\"name\":\"key\",\"type\":[\"null\",\"int\"],\"default\":null}]}");
-properties.put("valueAvroSchema", "{\"type\":\"record\",\"name\":\"value\",\"namespace\":\"schema\",\"fields\":[{\"name\":\"value\",\"type\":[\"null\",\"string\"],\"default\":null}]}");
-```
-
-Keep in mind that you can use different serializer/deserializer for key and value.
-
 == Version Compatibility
 
-The Pulsar sink and source are based on version 2.2.0, this means Pulsar
-connector will work with any client and broker having version equal to
-or greater than 1.0.0.
-
-== Heterogeneous Messages
-
-This connector supports heterogeneous messages. For example, say you have these messages in your topic:
-
-```json
-{"name":"Alice","age":42}
-{"name":"Bob","age":43,"petName":"Zaz"}
-```
-
-If you map the column `petName`, it will have the value `null` for the
-entry with `key=1`. This scenario is supported. Similar behavior works
-with Avro format.
+The Pulsar sink and source are based on version 5.x while keeping support of 4.x.

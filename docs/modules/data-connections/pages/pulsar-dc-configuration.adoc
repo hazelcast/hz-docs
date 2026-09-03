@@ -1,0 +1,168 @@
+[[Pulsar]]
+=== Example Apache  Pulsar Data Connection
+
+[tabs]
+====
+XML::
++
+--
+[source,xml]
+----
+<hazelcast>
+  <data-connection name="my-pulsar">
+    <type>Pulsar</type>
+    <properties>
+      <property name="brokerUrl">pulsar://pulsar.mydomain.com:6650</property> <1>
+      <property name="httpServiceUrl">http://pulsar.mydomain.com:8080</property> <2>
+    </properties>
+    <shared>true</shared>
+  </data-connection>
+  <data-connection name="my-other-pulsar">
+    <type>Pulsar</type>
+    <properties>
+      <property name="brokerUrl">pulsar://pulsar.mydomain.com:6650</property> <1>
+      <property name="httpServiceUrl">http://pulsar.mydomain.com:8080</property> <2>
+      <property name="tenant">myTenant</property> <3>
+      <property name="namespace">myNamespace</property> <3>
+      <property name="enableTransactions">true</property> <4>
+    </properties>
+    <shared>true</shared>
+  </data-connection>
+</hazelcast>
+----
+<1> (Required) Broker URL, mandatory property.
+<2> (Optional) Broker HTTP Service - necessary for resource listing.
+<3> (Optional) Options to limit which resources are accessible using this DataConnection.
+<4> (Optional) If true, transactions will be enabled on the client. Default is false. Please note, that transactions must be first enabled in the broker configuration.
+--
+
+YAML::
++
+--
+[source,yaml]
+----
+hazelcast:
+  data-connection:
+    my-pulsar:
+      type: Pulsar
+      properties:
+        brokerUrl: pulsar://pulsar.mydomain.com:6650 <1>
+        httpServiceUrl: http://pulsar.mydomain.com:8080 <2>
+      shared: true
+    my-other-mongodb:
+      type: Mongo
+      properties:
+        brokerUrl: pulsar://pulsar.mydomain.com:6650 <1>
+        httpServiceUrl: http://pulsar.mydomain.com:8080 <2>
+        tenant: myTenant <3>
+        namespace: myNamespace <3>
+        enableTransactions: true <4>
+      shared: true
+----
+<1> (Required) Broker URL, mandatory property.
+<2> (Optional) Broker HTTP Service - necessary for resource listing.
+<3> (Optional) Options to limit which resources are accessible using this DataConnection.
+<4> (Optional) If true, transactions will be enabled on the client. Default is false. Please note, that transactions must be first enabled in the broker configuration.
+--
+
+Java::
++
+--
+[source,java]
+----
+config
+  .addDataConnectionConfig(
+    new DataConnectionConfig("my-pulsar")
+      .setType("Pulsar")
+      .setProperty("brokerUrl", "pulsar://pulsar.mydomain.com:6650") <1>
+      .setProperty("httpServiceUrl", "http://pulsar.mydomain.com:8080") <2>
+      .setShared(true)
+  )
+  .addDataConnectionConfig(
+    new DataConnectionConfig("my-other-pulsar")
+      .setType("Pulsar")
+      .setProperty("brokerUrl", "pulsar://pulsar.mydomain.com:6650") <1>
+      .setProperty("httpServiceUrl", "http://pulsar.mydomain.com:8080") <2>
+      .setProperty("tenant", "myTenant") <3>
+      .setProperty("namespace", "myNamespace") <3>
+      .setProperty("enableTransactions", "true") <4>
+      .setShared(true)
+  );
+----
+<1> (Required) Broker URL, mandatory property.
+<2> (Optional) Broker HTTP Service - necessary for resource listing.
+<3> (Optional) Options to limit which resources are accessible using this DataConnection.
+<4> (Optional) If true, transactions will be enabled on the client. Default is false. Please note, that transactions must be first enabled in the broker configuration.
+--
+SQL::
++
+--
+Data connections created in SQL behave differently from those defined in members' configuration files or in Java.
+
+- To retain SQL-defined data connections after a cluster restart, you must enable xref:storage:configuring-persistence.adoc#sql[SQL metadata persistence]. This feature is available in the {enterprise-product-name}.
+- You can create or drop a data connection using SQL commands. To update a data connection, you need to drop and then recreate it. 
+
+[source,SQL]
+----
+CREATE DATA CONNECTION my_mongodb
+TYPE Mongo
+SHARED
+OPTIONS (
+    'brokerUrl' = 'pulsar://pulsar.mydomain.com:6650' <1>
+    'httpServiceUrl' = 'http://pulsar.mydomain.com:8080 '<2>
+)
+----
+<1> (Required) Broker URL, mandatory property.
+<2> (Optional) Broker HTTP Service - necessary for resource listing.
+
+[source,SQL]
+----
+CREATE DATA CONNECTION my_mongodb
+TYPE Mongo
+SHARED
+OPTIONS (
+    'brokerUrl' = 'pulsar://pulsar.mydomain.com:6650' <1>
+    'httpServiceUrl' = 'http://pulsar.mydomain.com:8080 '<2>
+    'tenant' = 'myTenant' <3>
+    'namespace' = 'myNamespace' <3>
+    'enableTransactions' = 'true' <4>
+);
+----
+
+<1> (Required) Broker URL, mandatory property.
+<2> (Optional) Broker HTTP Service - necessary for resource listing.
+<3> (Optional) Options to limit which resources are accessible using this DataConnection.
+<4> (Optional) If true, transactions will be enabled on the client. Default is false. Please note, that transactions must be first enabled in the broker configuration.
+--
+====
+
+[cols="1,1,3,1"]
+|===
+| Property | Default value | Description | When to use
+
+|`brokerUrl`
+|
+| Pulsar Broker URL, in a form of `pulsar://myhost:port/`
+| Mandatory
+
+| `httpServiceUrl`
+|
+| URL of Pulsar's instance HTTP service, typically on port 8080. Example: `http://myhost:8080/`
+| If you want to be able to list resources via Data Connections (not just treat like a connection pool).
+
+| `tenant`
+|
+| If set, it limits which resources (topics) will be listed to only those of given tenant.
+| Only if you want to restrict access to subset of topics.
+
+| `namespace`
+|
+| If set, it limits which resources (topics) will be listed to only those of given namespace.
+| Only if you want to restrict access to subset of topics.
+
+| `enableTransactions`
+| false
+| Enables transaction for returned Pulsar Clients.
+| If you want to use transactions with clients returned by this Data Connection. *Must* be set to true if used with Pulsar sink / SQL "INSERT INTO" Pulsar topic with `EXACTLY_ONCE` processing guarantee.
+
+|===

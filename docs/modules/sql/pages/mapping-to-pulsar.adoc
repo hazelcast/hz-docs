@@ -1,0 +1,214 @@
+= Mapping to Pulsar
+:description: To query streams in Pulsar topics, you need to create a mapping with the Pulsar connector so that the SQL service knows how to access the messages.
+:page-aliases: sql:pulsar-connector.adoc
+
+{description}
+
+== What is the Pulsar Connector
+
+The Pulsar connector acts as a consumer or a producer so that you can create streaming queries that continuously query a given Pulsar topic, and also write to a Pulsar topic.
+
+== Installing the Connector
+
+This connector is included in the full distribution of Hazelcast.
+
+If you're using the slim distribution, you must add the link:https://search.maven.org/artifact/com.hazelcast.jet/hazelcast-jet-pulsar/{os-version}/jar[`hazelcast-jet-pulsar` module] to your member's classpath.
+
+The Pulsar connector is compatible with Pulsar version equal to
+or greater than 4.0.0.
+
+== Permissions
+[.enterprise]*{enterprise-product-name}*
+
+If xref:security:enable-security.adoc[security] is enabled, your clients may need permissions to use this connector. For details, see xref:pipelines:job-security.adoc[].
+
+== Creating a Pulsar Data Connection
+
+Before using Pulsar SQL connector, you must first create a data connection to your Pulsar cluster. It can be done via following code:
+
+[source,sql]
+----
+CREATE DATA CONNECTION myPulsar
+TYPE Pulsar
+OPTIONS (
+    'brokerUrl' = 'pulsar://localhost:6650',
+    'httpServiceUrl' = 'http://localhost:8080'
+)
+----
+
+== Creating a Pulsar Mapping
+
+To create a mapping to a Pulsar topic in SQL, you must use the `CREATE MAPPING` statement to tell the Pulsar connector the following:
+
+- The name of the topic
+- The data connection name
+
+[source,sql]
+----
+CREATE MAPPING my_topic <1>
+DATA CONNECTION myPulsar <2>
+OPTIONS (
+    'preferredLocalParallelism' = '2' <3>
+);
+----
+
+<1> The name of the Pulsar topic.
+<2> The name of Data Connection that will be used. Since we specify Data Connection, we can omit "TYPE" specification.
+<3> The preferred number of parallel consumer processors on each member for input mappings. If not specified, the default is `4`. This option is optional.
+
+NOTE: Any key/value pairs in the `OPTIONS()` function that are not recognized by Hazelcast and are prefixed with "pulsar." are passed directly to the Pulsar consumer/producer (with `pulsar.` prefix cut off).
+
+Each member of the Hazelcast cluster has a processor running a Pulsar connector for the mapping.
+For input mappings, preferred local parallelism is the number of parallel consumer processors you would prefer on each member.
+For balanced distributed processing, ensure that the local parallelism multiplied by the number of members in the cluster is a divisor of the total number of partitions in the input Pulsar topic.
+If this is not done, some processors will be assigned by Pulsar more input Pulsar topic partitions than others.
+Where there are more processors in the Hazelcast cluster than partitions in the input Pulsar topic, the additional processors will be idle and waste resources.
+
+When creating a Pulsar mapping, you must tell the Pulsar connector how to serialize/deserialize the keys and values in Pulsar messages.
+To read Pulsar messages, the Pulsar connector must be able to deserialize them. Similarly, to publish messages to Pulsar topics, the Pulsar connector must be able to serialize them. You can tell Hazelcast how to serialize/deserialize keys and values by specifying the `keyFormat` and `valueFormat` fields in the `OPTIONS()` function.
+
+The Pulsar connector supports serializers for the following formats:
+
+* <<primitive-messages, Primitive>>
+* <<avro-messages, Avro (valueFormat = `pulsarAvro`)>>
+* <<json-messages, JSON>> (values only)
+* <<java-messages, Java>>
+
+=== Primitive Messages
+
+For keys and values that are primitives, set the format as the SQL data type that corresponds to the primitive. For example, if the message key is an integer and the value is a
+string, use the `int` and `varchar` formats:
+
+```sql
+CREATE MAPPING my_topic
+TYPE Pulsar
+OPTIONS (
+    'keyFormat'='int',
+    'valueFormat'='varchar',
+    'bootstrap.servers' = '127.0.0.1:9092'
+);
+```
+
+The Pulsar connector will apply a suitable Schema automatically, for example `Schema.STRING`.
+
+=== Avro Messages
+For Avro messages, you need to specify `valueFormat` as `pulsarAvro`. This way the connector will know to treat objects as POJOs and write them with schema `Schema.AVRO(ClassName)`. The ClassName comes from one mandatory (for Avro only) option:
+'valueJavaClass', that contains the name of Java class representing your Avro objects.
+
+NOTE: Pulsar connector does not support Avro Schema Registry right now, this may change in the future.
+
+[source,sql]
+----
+CREATE MAPPING my_topic (
+    <1>
+    __key VARCHAR,
+    ticker VARCHAR,
+    amount BIGINT,
+    price DECIMAL
+)
+DATA CONNECTION myPulsar
+OPTIONS (
+    'keyFormat' = 'varchar',
+    'valueFormat' = 'pulsarAvro',
+    'valueJavaClass'='com.hazelcast.example.MyAvroObject' <2>
+);
+----
+
+<1> Column names
+<2> Java class that is representing Avro object.
+
+.Avro type conversion
+[cols="m,m"]
+|===
+| SQL Type | Avro Type
+
+a|`TINYINT`, `SMALLINT`, `INT`
+|INT
+
+|BIGINT
+|LONG
+
+|REAL
+|FLOAT
+
+|DOUBLE
+|DOUBLE
+
+|BOOLEAN
+|BOOLEAN
+
+a|`VARCHAR` and all other types
+|STRING
+
+|===
+
+All Avro types are a union of the `NULL` type and the actual type.
+
+=== JSON Messages
+
+If values are in the JSON format, configure the `valueFormat` field as xref:working-with-json.adoc[`json` or `json-flat`].
+
+.JSON
+[source,sql]
+----
+CREATE MAPPING my_topic
+DATA CONNECTION myPulsar
+OPTIONS (
+    'keyFormat' = 'bigint',
+    'valueFormat' = 'json');
+----
+
+.JSON-FLAT
+[source,sql]
+----
+CREATE MAPPING my_topic(
+    __key BIGINT,
+    ticker VARCHAR,
+    amount INT)
+DATA CONNECTION myPulsar
+OPTIONS (
+    'keyFormat' = 'bigint',
+    'valueFormat' = 'json-flat');
+----
+
+=== Java Messages
+
+Java serialization uses the
+Java objects exactly as the `Consumer` returns them. You can use
+this format for objects serialized using Java serialization or any other
+serialization method.
+
+For this format you must also specify the class name using `keyJavaClass` and
+`valueJavaClass` options, for example:
+
+[source,sql]
+----
+CREATE MAPPING my_topic
+DATA CONNECTION myPulsar
+OPTIONS (
+    'keyFormat' = 'java',
+    'keyJavaClass' = 'java.lang.Long',
+    'valueFormat' = 'java',
+    'valueJavaClass' = 'com.example.Person'
+----
+
+If the Java class corresponds to one of the basic data types (numbers,
+dates, strings), that type will be used for the key or value
+and mapped as a column named `__key` for keys and `this` for values. In
+the example above, the key will be mapped with the `BIGINT` type. In
+fact, the above `keyFormat` and `keyJavaClass` options are equivalent to
+`'keyFormat'='bigint'`.
+
+If the Java class is not one of the basic types, Hazelcast will analyze
+the class using reflection and use its properties as column names. It
+recognizes public fields and JavaBean-style getters. If some property
+has a non-primitive type, it will be mapped under the SQL `OBJECT` type.
+
+=== Mapping Column Names
+
+For `json-flat` and `pulsarAvro` formats, you must specify the columns names in the mapping.
+
+For keys, the format of the external name must be either `__key.<name>`
+for a field in the key or `this.<name>` for a field in the value.
+
+The column name defaults to `this.<columnName>`.

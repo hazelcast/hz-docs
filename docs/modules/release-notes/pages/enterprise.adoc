@@ -1,11 +1,85 @@
 = Enterprise Edition Release Notes
 :description: These release notes list any new features, enhancements, fixes, security issues and breaking changes that were made for Hazelcast Platform {enterprise-product-name}.
 :page-enterprise: true
-:page-aliases: release-notes:5-6-1.adoc
+:page-aliases: release-notes:5-6-1.adoc, release-notes:5-6-2.adoc
 
 {description}
 
 For help downloading Hazelcast {enterprise-product-name}, see xref:getting-started:install-enterprise.adoc[] or https://hazelcast.com/trial-request/?utm_source=docs-website[request a trial license key].
+
+== 5.6.2
+
+**Release date**: 2026-09-08
+
+* <<fixes>>
+* <<security>>
+* <<contributors>>
+
+=== Fixes
+
+* *Fixed IndexOutOfBoundsException in HD IMap SetOperation with MapStore and TTL*: Resolved an issue where a slow MapStore store operation could outlive an entry TTL and cause an `IndexOutOfBoundsException` while returning the old value for an HD IMap update. The fix prevents unexpected operation failures in this scenario.
+
+* *Fixed Kafka sink failures caused by duplicate transactional IDs*: Resolved an issue where Jet jobs writing to Kafka could suspend with `ProducerFencedException` when a newer producer with the same transactional ID fenced the current producer.
+
+* *Fixed potential MapStore data loss when a member fails during a flush*: Resolved an issue where manual flush operations could clear queues before the entries were persisted.
+
+* *Fixed persistence with MapStore after restart*: Prevented map operations from remaining blocked in the passive state when persistence and MapStore are both enabled after a cluster restart.
+
+* *Fixed missing OSGi package exports in Enterprise bundle*: Resolved an issue where several core Hazelcast packages were not exported correctly in the `MANIFEST.MF` starting from 5.5.0.
+
+* *Fixed failure during CP snapshot restore when upgrading from 5.5 to 5.6*: Resolved an issue where restoring Raft snapshots created in 5.5 could fail in 5.6 due to a missing conversion step in the snapshot processing path, causing repeated errors and blocking upgrades.
+
+* *Released retained WAN events*: Prevented the last drained event from remaining in the WAN event queue and consuming unnecessary resources.
+
+* *Fixed failures and inconsistent results in* `IMap.containsValue()` *for maps in HD Memory with TTL*: Resolved an issue where entry expiration during iteration could interfere with map traversal, causing operation failures and missed values. The fix ensures stable iteration by checking expiration instead of modifying entries during traversal, resulting in reliable results.
+
+* *Added shared `HttpClient` cache for `RestClient`*: Introduced a static cache to enable reuse of `HttpClient` instances across multiple `RestClient` instances, reducing overhead from repeated client creation.
+
+* *Fixed networking CPU spikes*: Prevented NIO threads from spinning when a member connection remains established but is dead.
+
+* *Clarified locking behavior*: Updated IMap and MultiMap class documentation.
+
+=== Security
+
+* *Enforced checks on classes used in client protocol*: In some situations it was possible to instantiate arbitrary classes in client protocol error conditions. Strict filtering has been implemented to prevent this issue.
+
+* *Improved validation for serializable Jet functions*: Added additional validation to prevent serializable functions from connecting to attacker-controlled clusters or arbitrary addresses without a valid execution context.
+
+* *Prevented arbitrary file read through Jet*: Hardened Jet usage in serializable contexts to prevent crafted operations from reading files from members, including configuration, secrets, or data stored on disk.
+
+* *Removed exposure from experimental declarative pipeline functionality*: Addressed a permissions issue in the Enterprise declarative pipeline component that could allow unauthorized Jet job submission and access to sources or sinks such as files, maps, Kafka, and JDBC when Jet/SQL was enabled.
+
+* *Enforced stricter checks on classes in SQL*: Resolved an issue where restrictions on classnames used in SQL mappings and types were not checked in some cases.
+
+* *Ensured SQL is enabled before deserializing messages*: Applied additional hardening to prevent SQL parameters from being deserialized when SQL is not enabled.
+
+* *Enforced checks on classes in JsonUtil deserialization*: Some classes, which are unlikely to be used, are no longer allowed to be deserialized using JsonUtil.
+
+* *Blocked Jackson serializable classes*: Prevented serializable Jackson classes from exposing information.
+
+* *Hardened Jet path and class-loading validation*: Fixed path traversal issues in Jet processor class loading and in file sinks.
+
+* *Blocked reflective access to additional classes*: Blocked further classes in the Predicate API and SQL paths to prevent reflective access to Hazelcast instances and sensitive objects.
+
+* *Hardened client deserialization*: Added default Java serialization protections and extended the zero-config Compact serialization blocklist.
+
+* *Hardened SQL object creation and method invocation*: Prevented unprivileged actions in IMap.
+
+* *Rejected malformed serialized arrays*: Added validation to detect truncated array data before allocating or deserializing unexpectedly large arrays.
+
+* *Resolved high-severity CVEs in third-party dependencies*: Upgraded affected dependencies to address reported vulnerabilities, including Apache Log4j https://nvd.nist.gov/vuln/detail/CVE-2026-34478[CVE-2026-34478], https://nvd.nist.gov/vuln/detail/CVE-2026-34480[CVE-2026-34480] and https://nvd.nist.gov/vuln/detail/CVE-2026-34481[CVE-2026-34481]; PostgreSQL JDBC driver https://nvd.nist.gov/vuln/detail/CVE-2026-42198[CVE-2026-42198]; and Spring and its transitive Tomcat dependency https://nvd.nist.gov/vuln/detail/CVE-2026-40973[CVE-2026-40973] and https://nvd.nist.gov/vuln/detail/CVE-2025-66614[CVE-2025-66614].
+
+* *Resolved vulnerabilities in Jackson*: Addressed reported vulnerabilities, including Jackson Core async parser DoS https://github.com/advisories/GHSA-72hv-8253-57qq[GHSA-72hv-8253-57qq] and https://nvd.nist.gov/vuln/detail/CVE-2026-54512[CVE-2026-54512] and https://nvd.nist.gov/vuln/detail/CVE-2026-54513[CVE-2026-54513].
+
+* *Resolved high and critical CVEs identified by security scans*: Addressed critical and high-severity vulnerabilities: https://nvd.nist.gov/vuln/detail/CVE-2026-41293[CVE-2026-41293], https://nvd.nist.gov/vuln/detail/CVE-2026-43512[CVE-2026-43512], https://nvd.nist.gov/vuln/detail/CVE-2026-43515[CVE-2026-43515], https://nvd.nist.gov/vuln/detail/CVE-2023-45859[CVE-2023-45859], https://nvd.nist.gov/vuln/detail/CVE-2023-45860[CVE-2023-45860], https://nvd.nist.gov/vuln/detail/CVE-2025-59250[CVE-2025-59250], https://nvd.nist.gov/vuln/detail/CVE-2026-0603[CVE-2026-0603], https://nvd.nist.gov/vuln/detail/CVE-2026-24734[CVE-2026-24734], https://nvd.nist.gov/vuln/detail/CVE-2026-24880[CVE-2026-24880], https://nvd.nist.gov/vuln/detail/CVE-2026-34483[CVE-2026-34483], https://nvd.nist.gov/vuln/detail/CVE-2026-34487[CVE-2026-34487], https://nvd.nist.gov/vuln/detail/CVE-2026-41284[CVE-2026-41284], https://nvd.nist.gov/vuln/detail/CVE-2026-42498[CVE-2026-42498], https://nvd.nist.gov/vuln/detail/CVE-2026-43513[CVE-2026-43513], and https://nvd.nist.gov/vuln/detail/CVE-2026-54291[CVE-2026-54291].
+
+=== Contributors
+
+We would like to thank the contributors from our open source community
+who worked on this release:
+
+* https://github.com/guss77[guss77]
+* https://github.com/Haricshore[Haricshore]
 
 == 5.6.1
 
@@ -112,7 +186,7 @@ For more details on new features, see xref:ROOT:whats-new.adoc[What's new].
 
 * *Vector Search (BETA) enhancements*:
 
-** *Fault tolerance*: Added support for synchronous and asynchronous backups and all standard fault tolerance mechanisms available in other AP data structures.  
+** *Fault tolerance*: Added support for synchronous and asynchronous backups and all standard fault tolerance mechanisms available in other AP data structures.
 
 ** *Split-brain protection*: Added split-brain protection support with configurable merge policies and custom merge policy capabilities for vector collections.
 
@@ -138,19 +212,19 @@ For more details on new features, see xref:ROOT:whats-new.adoc[What's new].
 +
 NOTE: Whilst in BETA, rolling upgrade compatibility guarantees do not apply to Vector collections. We recommend you delete existing vector collections before migrating to this version of Hazelcast. Vector collection by default uses 1 synchronous backup, but vector collection configurations created in the previous version do not have backups enabled. The meaning of `maxDegree` index parameter has been changed. To keep the same behavior as before, the value used in version 5.5 must be multiplied by 2.
 
-* *Enhanced IMap index observability with new metrics*: New metrics provide better visibility into index usage and potential causes of index misses (`map.indexesSkippedQueryCount`, `map.noMatchingIndexQueryCount`, `map.index.partitionsIndexed`, `map.index.partitionUpdatesStarted`, `map.index.partitionUpdatesFinished`, `map.index.notReadyQueryCount`). 
+* *Enhanced IMap index observability with new metrics*: New metrics provide better visibility into index usage and potential causes of index misses (`map.indexesSkippedQueryCount`, `map.noMatchingIndexQueryCount`, `map.index.partitionsIndexed`, `map.index.partitionUpdatesStarted`, `map.index.partitionUpdatesFinished`, `map.index.notReadyQueryCount`).
 
 * *Improved performance of IMap entry processor operations*: Enhanced the efficiency of `executeOnKey` and `executeOnEntries` by removing redundant serialization in the IMap module. This optimization reduces garbage generation and improves performance in some cases.
 
 * *Improved SQL job option handling for User Code Namespaces (UCN)*: SQL now correctly rejects the UCN job option when provided in statements, preventing potential errors in job execution.
 
-* *Exposed DataConnectionService API via HazelcastInstance*: The DataConnectionService is now more easily accessible within the HazelcastInstance interface, allowing for improved integration when configuring data connections. 
+* *Exposed DataConnectionService API via HazelcastInstance*: The DataConnectionService is now more easily accessible within the HazelcastInstance interface, allowing for improved integration when configuring data connections.
 
 * *Exposed TCP write queue metrics*: `tcp_connection_out_writeQueuePendingBytes` and  `priorityWriteQueuePendingBytes` metrics are now available by default, improving visibility into network performance without requiring diagnostic logging. This enhancement enables the monitoring of internal network queues. This information is available via the JMX endpoint on the members and via Management Center’s Prometheus Exporter.
 
 * *Improved observability of backup promotions*: Added logging for backup promotion statistics, including the number of promotions and the time taken. This improvement provides better visibility into promotion behavior and enables users to observe and benchmark promotion duration during resiliency testing or after a member crash.
 
-* *Exposed Hazelcast objects as Spring beans*: This update allows you to expose Hazelcast maps (IMap) and other distributed objects as Spring beans, improving consistency with XML-based configuration and simplifying Java configuration. Users can now easily autowire these objects without the need for custom bean definitions for each distributed object, enhancing integration and usability. 
+* *Exposed Hazelcast objects as Spring beans*: This update allows you to expose Hazelcast maps (IMap) and other distributed objects as Spring beans, improving consistency with XML-based configuration and simplifying Java configuration. Users can now easily autowire these objects without the need for custom bean definitions for each distributed object, enhancing integration and usability.
 
 * *Added Spring Cache integration with HazelcastCache*: Enhanced the HazelcastCache implementation with asynchronous retrieval via `CompletableFuture`. This improvement ensures better compatibility with Spring Cache and enables the use of non-blocking cache access patterns.
 
@@ -172,7 +246,7 @@ NOTE: Whilst in BETA, rolling upgrade compatibility guarantees do not apply to V
 
 * *Fixed REST API module configuration handling*: Adjusted the REST API module to rely only on explicitly imported Spring configurations rather than classpath-based autoconfiguration. This avoids unexpected behavior when third-party dependencies are present, as Spring autoconfiguration could introduce unwanted components.
 
-* *Fixed support for non-file-based keystores*: Fixed an issue where Hazelcast did not correctly handle keystore/truststore types that are not backed by files, such as PKCS11 used for Hardware Security Modules (HSM). These keystores are configured at the Java Security level and may not have a corresponding file on disk, which previously caused failures during SSL initialization. 
+* *Fixed support for non-file-based keystores*: Fixed an issue where Hazelcast did not correctly handle keystore/truststore types that are not backed by files, such as PKCS11 used for Hardware Security Modules (HSM). These keystores are configured at the Java Security level and may not have a corresponding file on disk, which previously caused failures during SSL initialization.
 
 * *Fixed issue with client schema fetching in compact serialization*: Resolved a problem where client operations using compact serialization could be blocked when fetching a missing schema from the cluster. The fix ensures smoother schema fetching and correct client behavior.
 
@@ -190,7 +264,7 @@ NOTE: Whilst in BETA, rolling upgrade compatibility guarantees do not apply to V
 
 * *Fixed over-aggressive backup acknowledgment*: Resolved an issue where backup acknowledgment compensation was applied in all cases, allowing invocations to complete before all synchronous backups were executed. When `hazelcast.operation.fail.on.indeterminate.state` or `hazelcast.client.operation.fail.on.indeterminate.state` is enabled, the fix disables this compensation to preserve guarantees that an exception is thrown if backup execution cannot be confirmed.
 
-* *Fixed misleading success on cluster shutdown before join completion*: Resolved an issue where attempting to shut down the cluster before the node had fully joined resulted in a misleading success message while the cluster remained active. This fix ensures that a CONFLICT HTTP is returned instead, preventing silent failures and ensuring users receive accurate status updates. 
+* *Fixed misleading success on cluster shutdown before join completion*: Resolved an issue where attempting to shut down the cluster before the node had fully joined resulted in a misleading success message while the cluster remained active. This fix ensures that a CONFLICT HTTP is returned instead, preventing silent failures and ensuring users receive accurate status updates.
 
 * *Fixed Kafka Connector Compatibility*: Resolved an issue where some Kafka Connect connectors were incompatible with Jet’s Kafka Connect connector due to Runtime > 3.9.0 missing kafka-clients utilities present in past versions. This caused connector failures during runtime. The fix ensures that the kafka-clients dependency is included, restoring compatibility for affected connectors.
 
@@ -217,7 +291,7 @@ NOTE: Whilst in BETA, rolling upgrade compatibility guarantees do not apply to V
 * *Resolved https://nvd.nist.gov/vuln/detail/CVE-2024-13009[CVE-2024-13009], https://nvd.nist.gov/vuln/detail/CVE-2024-45801[CVE-2024-45801], https://nvd.nist.gov/vuln/detail/CVE-2024-47875[CVE-CVE-2024-47875], and https://nvd.nist.gov/vuln/detail/CVE-2025-26791[CVE-2025-26791] in Jetty* - Fixed multiple vulnerabilities by upgrading to a secure version.
 
 * *Fixed sensitive data exposure in logs when using JAVA_OPTS*: Resolved an issue where sensitive values such as SSL passwords were logged in plain text when passed through JAVA_OPTS. A new maskOpts option has been introduced to specify which option keys should be masked. Only the listed keys are masked in logs, preventing accidental disclosure of sensitive information while maintaining visibility of non-sensitive options.
-	
+
 * *Implemented user account lockout for REST API authentication*: Added protection against brute-force login attempts on the REST API by introducing account lockout. After a configurable number of consecutive failed login attempts, the user account is locked for a configurable duration. This enhancement strengthens REST API security by limiting repeated unauthorized login attempts.
 
 * *Prevented caching of sensitive REST API configuration responses*: Resolved an issue where responses from the `GET /hazelcast/rest/api/v1/cluster/config` and `GET /hazelcast/rest/api/v1/cluster/config/\{member-uuid}` endpoints could be cached by browsers, potentially exposing sensitive data. The fix adds the `Cache-Control: no-store` header to these responses, ensuring sensitive configuration data is not stored.
@@ -225,6 +299,3 @@ NOTE: Whilst in BETA, rolling upgrade compatibility guarantees do not apply to V
 === Known issues
 
 There is currently a https://github.com/hazelcast/hazelcast/issues/26546[known compatibility issue between Spring Boot 4 and Hazelcast 5.6.0]. We recommend using Spring Boot 3 with Hazelcast 5.6.0, or using Hazelcast 5.5.z with Spring Boot 4, until this issue is resolved.
-
-
-

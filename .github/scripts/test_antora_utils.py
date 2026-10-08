@@ -99,31 +99,29 @@ class TestAntoraUtils(unittest.TestCase):
 
     @patch("antora_utils.run_command")
     def test_merge_github_pr_success(self, mock_run_command: MagicMock) -> None:
+        mock_prs_json = json.dumps([{"number": 42, "title": "Update branch main to 5.8.0"}])
+        mock_run_command.side_effect = [mock_prs_json, ""]
         repo = "hz-devops/hz-docs"
-        
-        with patch.dict(os.environ, {"GITHUB_REPOSITORY": repo}):
-            mock_prs_json = json.dumps([{"number": 42, "title": "Update branch main to 5.8.0"}])
-            mock_run_command.side_effect = [mock_prs_json, ""]
-  
-            antora_utils.merge_github_pr("main", "5.8.0")
 
-            mock_run_command.assert_has_calls([
-                call([
-                    "gh", "search", "prs",
-                    "--repo", repo,
-                    "--state", "open",
-                    "--base", "main",
-                    "--match", "title", "Update branch main to 5.8.0",
-                    "--json", "number,title"
-                ]),
-                call([
-                    "gh", "pr", "merge", "42",
-                    "--repo", repo,
-                    "--squash",
-                    "--admin",
-                    "--delete-branch"
-                ])
+        antora_utils.merge_github_pr("main", "5.8.0")
+
+        mock_run_command.assert_has_calls([
+            call([
+                "gh", "search", "prs",
+                "--repo", repo,
+                "--state", "open",
+                "--base", "main",
+                "--match", "title", "Update branch main to 5.8.0",
+                "--json", "number,title"
+            ]),
+            call([
+                "gh", "pr", "merge", "42",
+                "--repo", repo,
+                "--squash",
+                "--admin",
+                "--delete-branch"
             ])
+        ])
 
     @patch("antora_utils.run_command")
     def test_merge_github_pr_not_found(self, mock_run_command: MagicMock) -> None:

@@ -101,7 +101,7 @@ class TestAntoraUtils(unittest.TestCase):
     def test_merge_github_pr_success(self, mock_run_command: MagicMock) -> None:
         mock_prs_json = json.dumps([{"number": 42, "title": "Update branch main to 5.8.0"}])
         mock_run_command.side_effect = [mock_prs_json, ""]
-        repo = "hz-devops/hz-docs"
+        repo = os.environ.get("GITHUB_REPOSITORY", "hz-devops/hz-docs")
 
         antora_utils.merge_github_pr("main", "5.8.0")
 

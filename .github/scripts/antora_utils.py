@@ -115,12 +115,15 @@ def merge_github_pr(
     fail_on_missing: bool = True
 ) -> None:
 
+    repository = os.environ["GITHUB_REPOSITORY"]
     target_title = get_pr_title(base_branch, version)
+
     pr_list_output = run_command([
         "gh", "search", "prs",
+        "--repo", repository,
         "--state", "open",
         "--base", base_branch,
-        "--match", "title", f'"{target_title}"',
+        "--match", "title", target_title,
         "--json", "number,title"
     ])
 
@@ -147,6 +150,7 @@ def merge_github_pr(
     try:
         run_command([
             "gh", "pr", "merge", str(pr_number),
+            "--repo", repository,
             "--squash",
             "--admin",
             "--delete-branch"
